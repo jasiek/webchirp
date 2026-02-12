@@ -1,20 +1,23 @@
 /* global importScripts, loadPyodide */
 
 const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js";
+const CHIRP_CDN_BASE = "https://cdn.jsdelivr.net/gh/kk7ds/chirp@master";
+const CHIRP_FILE_INDEX_URL =
+  "https://data.jsdelivr.com/v1/package/gh/kk7ds/chirp@master/flat";
 
 const CHIRP_FILES = [
-  ["/chirp/chirp/__init__.py", "chirp/__init__.py"],
-  ["/chirp/chirp/errors.py", "chirp/errors.py"],
-  ["/chirp/chirp/util.py", "chirp/util.py"],
-  ["/chirp/chirp/memmap.py", "chirp/memmap.py"],
-  ["/chirp/chirp/chirp_common.py", "chirp/chirp_common.py"],
-  ["/chirp/chirp/directory.py", "chirp/directory.py"],
-  ["/chirp/chirp/pyPEG.py", "chirp/pyPEG.py"],
-  ["/chirp/chirp/bitwise_grammar.py", "chirp/bitwise_grammar.py"],
-  ["/chirp/chirp/bitwise.py", "chirp/bitwise.py"],
-  ["/chirp/chirp/settings.py", "chirp/settings.py"],
-  ["/chirp/chirp/drivers/generic_csv.py", "chirp/drivers/generic_csv.py"],
-  ["/chirp/chirp/drivers/h777.py", "chirp/drivers/h777.py"],
+  ["/chirp/__init__.py", "chirp/__init__.py"],
+  ["/chirp/errors.py", "chirp/errors.py"],
+  ["/chirp/util.py", "chirp/util.py"],
+  ["/chirp/memmap.py", "chirp/memmap.py"],
+  ["/chirp/chirp_common.py", "chirp/chirp_common.py"],
+  ["/chirp/directory.py", "chirp/directory.py"],
+  ["/chirp/pyPEG.py", "chirp/pyPEG.py"],
+  ["/chirp/bitwise_grammar.py", "chirp/bitwise_grammar.py"],
+  ["/chirp/bitwise.py", "chirp/bitwise.py"],
+  ["/chirp/settings.py", "chirp/settings.py"],
+  ["/chirp/drivers/generic_csv.py", "chirp/drivers/generic_csv.py"],
+  ["/chirp/drivers/h777.py", "chirp/drivers/h777.py"],
 ];
 
 let pyodide;
@@ -58,10 +61,19 @@ function mkdirp(path) {
   }
 }
 
-async function fetchText(path) {
+async function fetchLocalText(path) {
   const res = await fetch(path);
   if (!res.ok) {
     throw new Error(`Failed to fetch ${path}: ${res.status}`);
+  }
+  return await res.text();
+}
+
+async function fetchText(path) {
+  const url = path.startsWith("http") ? path : `${CHIRP_CDN_BASE}${path}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch ${url}: ${res.status}`);
   }
   return await res.text();
 }
@@ -114,12 +126,12 @@ function parseChirpImports(sourceText) {
 
 function moduleToSourcePath(moduleName) {
   if (moduleName === "chirp" || moduleName === "chirp.__init__") {
-    return "/chirp/chirp/__init__.py";
+    return "/chirp/__init__.py";
   }
   if (moduleName === "chirp.drivers") {
-    return "/chirp/chirp/drivers/__init__.py";
+    return "/chirp/drivers/__init__.py";
   }
-  return `/chirp/${moduleName.replace(/\./g, "/")}.py`;
+  return `/${moduleName.replace(/\./g, "/")}.py`;
 }
 
 function moduleToRuntimePath(moduleName) {
@@ -198,12 +210,17 @@ async function loadRadioCatalogFromSources() {
   if (radioCatalogCache) {
     return radioCatalogCache;
   }
-
-  const listing = await fetchText("/chirp/chirp/drivers/");
+  const indexRes = await fetch(CHIRP_FILE_INDEX_URL);
+  if (!indexRes.ok) {
+    throw new Error(`Failed to fetch ${CHIRP_FILE_INDEX_URL}: ${indexRes.status}`);
+  }
+  const indexJson = await indexRes.json();
   const modules = Array.from(
     new Set(
-      [...listing.matchAll(/href="([A-Za-z0-9_]+)\.py"/g)]
-        .map((m) => m[1])
+      (indexJson.files || [])
+        .map((f) => f.name || "")
+        .filter((name) => /^\/chirp\/drivers\/[A-Za-z0-9_]+\.py$/.test(name))
+        .map((name) => name.split("/").pop().replace(/\.py$/, ""))
         .filter((name) => !name.startsWith("__")),
     ),
   );
@@ -212,7 +229,7 @@ async function loadRadioCatalogFromSources() {
   await Promise.all(
     modules.map(async (moduleName) => {
       try {
-        const text = await fetchText(`/chirp/chirp/drivers/${moduleName}.py`);
+        const text = await fetchText(`/chirp/drivers/${moduleName}.py`);
         allRadios.push(...parseDriverFileForRadios(moduleName, text));
       } catch {
         // Ignore module parse failures.
@@ -246,7 +263,7 @@ async function ensurePyodide() {
           });
         }),
       );
-      const runtimePython = await fetchText("/web/python/runtime_bridge.py");
+      const runtimePython = await fetchLocalText("/web/python/runtime_bridge.py");
       await pyodide.runPythonAsync(runtimePython);
     })();
   }
