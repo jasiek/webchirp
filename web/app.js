@@ -17,7 +17,6 @@ const statusEl = document.querySelector("#status");
 const tableHead = document.querySelector("#mem-table thead");
 const tableBody = document.querySelector("#mem-table tbody");
 const fileInput = document.querySelector("#csv-file");
-const serialLogEl = document.querySelector("#serial-log");
 const debugOutputEl = document.querySelector("#debug-output");
 
 const worker = new Worker("/web/py-worker.js");
@@ -166,12 +165,7 @@ function setStatus(text) {
 }
 
 function logSerial(line) {
-  const text = String(line || "");
-  serialLogEl.textContent = `${new Date().toLocaleTimeString()} ${line}\n${serialLogEl.textContent}`
-    .split("\n")
-    .slice(0, 20)
-    .join("\n");
-  logDebug(`SERIAL ${text}`);
+  logDebug(`SERIAL ${String(line || "")}`);
 }
 
 function logDebug(line) {
