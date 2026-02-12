@@ -94,6 +94,12 @@ from js import (
 CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
 
 
+def _js_to_py(value):
+    if hasattr(value, "to_py"):
+        return value.to_py()
+    return value
+
+
 def parse_csv(csv_text: str):
     radio = CSVRadio(None, max_memory=999)
     radio.load_from(csv_text)
@@ -129,20 +135,20 @@ def normalize_rows(rows):
 
 async def webserial_connect(baudrate: int):
     result = await serial_open(int(baudrate))
-    return result
+    return _js_to_py(result)
 
 
 async def webserial_disconnect():
     result = await serial_close()
-    return result
+    return _js_to_py(result)
 
 
 async def webserial_txrx_hex(tx_hex: str, rx_bytes: int, timeout_ms: int):
     tx_result = await serial_write_hex(tx_hex)
     rx_result = await serial_read_hex(int(rx_bytes), int(timeout_ms))
     return {
-        "tx": tx_result,
-        "rx": rx_result,
+        "tx": _js_to_py(tx_result),
+        "rx": _js_to_py(rx_result),
     }
 
 
