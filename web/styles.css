@@ -60,7 +60,7 @@ button:hover {
 .main-layout {
   display: grid;
   grid-template-columns: 280px 1fr;
-  min-height: calc(100vh - 56px);
+  min-height: calc(100vh - 290px);
 }
 
 .left-panel {
@@ -123,6 +123,37 @@ button:hover {
 .editor-panel {
   padding: 1rem;
   overflow: auto;
+}
+
+.debug-panel {
+  border-top: 1px solid var(--border);
+  background: #e6edf8;
+  padding: 0.7rem 0.9rem 0.9rem;
+}
+
+.debug-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.debug-header h2 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+#debug-output {
+  width: 100%;
+  min-height: 170px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  background: #f9fbff;
+  color: var(--text);
+  padding: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 #mem-table {

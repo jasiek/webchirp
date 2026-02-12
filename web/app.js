@@ -18,6 +18,7 @@ const tableHead = document.querySelector("#mem-table thead");
 const tableBody = document.querySelector("#mem-table tbody");
 const fileInput = document.querySelector("#csv-file");
 const serialLogEl = document.querySelector("#serial-log");
+const debugOutputEl = document.querySelector("#debug-output");
 
 const worker = new Worker("/web/py-worker.js");
 let reqId = 0;
@@ -161,13 +162,24 @@ const serialBridge = new BrowserSerialBridge();
 
 function setStatus(text) {
   statusEl.textContent = text;
+  logDebug(`STATUS ${text}`);
 }
 
 function logSerial(line) {
+  const text = String(line || "");
   serialLogEl.textContent = `${new Date().toLocaleTimeString()} ${line}\n${serialLogEl.textContent}`
     .split("\n")
     .slice(0, 20)
     .join("\n");
+  logDebug(`SERIAL ${text}`);
+}
+
+function logDebug(line) {
+  const stamp = new Date().toISOString();
+  const text = `[${stamp}] ${String(line || "")}`;
+  const current = debugOutputEl.value ? `${debugOutputEl.value}\n` : "";
+  debugOutputEl.value = `${current}${text}`;
+  debugOutputEl.scrollTop = debugOutputEl.scrollHeight;
 }
 
 function callWorker(method, payload = {}) {
@@ -194,6 +206,7 @@ function callWorker(method, payload = {}) {
       if (event.data.ok) {
         resolve(event.data.data);
       } else {
+        logDebug(`WORKER ERROR ${event.data.error || "Worker failure"}`);
         reject(new Error(event.data.error || "Worker failure"));
       }
     };
@@ -412,6 +425,23 @@ document.querySelector("#serial-transaction").addEventListener("click", async ()
     setStatus(`Serial transaction failed: ${error.message}`);
     logSerial(`ERROR ${error.message}`);
   }
+});
+
+document.querySelector("#debug-clear").addEventListener("click", () => {
+  debugOutputEl.value = "";
+});
+
+worker.addEventListener("error", (event) => {
+  logDebug(`WORKER CRASH ${event.message}`);
+});
+
+window.addEventListener("error", (event) => {
+  logDebug(`WINDOW ERROR ${event.message}`);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const msg = event.reason?.message || String(event.reason || "Unhandled rejection");
+  logDebug(`PROMISE ERROR ${msg}`);
 });
 
 document.querySelector("#bf888-download").addEventListener("click", async () => {

@@ -51,6 +51,19 @@
           </table>
         </section>
       </main>
+
+      <section class="debug-panel">
+        <div class="debug-header">
+          <h2>Debug Output</h2>
+          <button id="debug-clear" type="button">Clear</button>
+        </div>
+        <textarea
+          id="debug-output"
+          readonly
+          spellcheck="false"
+          placeholder="Runtime logs will appear here..."
+        ></textarea>
+      </section>
     </div>
 
     <input id="csv-file" type="file" accept=".csv,text/csv" hidden />
