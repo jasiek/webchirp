@@ -38,6 +38,7 @@ For radio cloning:
 
 - Frontend: `/Users/jps/github/webchirp/web/index.html` + `/Users/jps/github/webchirp/web/app.js`
 - Python worker bridge: `/Users/jps/github/webchirp/web/py-worker.js`
+- Versioned Python runtime code (loaded by worker): `/Users/jps/github/webchirp/web/python/runtime_bridge.py`
 - CHIRP source loaded into Pyodide FS directly from the submodule:
   - `/chirp/chirp/__init__.py`
   - `/chirp/chirp/chirp_common.py`
