@@ -12,7 +12,7 @@ Prototype for running parts of [CHIRP](https://github.com/kk7ds/chirp) in the br
 - Web Serial bridge (browser serial in JS, called from Python in Pyodide)
 - Python-driven TX/RX serial transaction path (`serialConnect`, `serialTxRx`)
 - Radio make/model dropdowns populated from CHIRP driver source files
-- Selection-aware download/upload actions (currently implemented for h777-family live clone flow)
+- Selection-aware download/upload actions using selected CHIRP clone-mode driver
 
 ## Run the prototype
 
@@ -50,10 +50,9 @@ For radio cloning:
 
 This MVP proves in-browser execution of CHIRP Python logic for file-backed workflows.
 
-Live browser serial support is implemented for h777-family models (for example
-Baofeng BF-888 and related variants). Other CHIRP models are discoverable and
-selectable, but will report unsupported for live clone until their transport
-compatibility is implemented.
+Live browser serial now attempts to execute the selected CHIRP clone-mode
+driver (`sync_in`/`sync_out`) through a generalized pyserial-like bridge.
+Compatibility still depends on driver expectations and browser transport limits.
 
 ## Next phase (recommended)
 
