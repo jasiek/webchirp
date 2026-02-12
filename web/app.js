@@ -145,6 +145,23 @@ class BrowserSerialBridge {
     return bytes;
   }
 
+  async prepareClone(wantsDtr, wantsRts, settleMs) {
+    if (!this.port) {
+      throw new Error("Port is not connected.");
+    }
+    this.readBuffer = new Uint8Array(0);
+    try {
+      await this.port.setSignals({
+        dataTerminalReady: Boolean(wantsDtr),
+        requestToSend: Boolean(wantsRts),
+      });
+    } catch {
+      // Some adapters/browsers may not support control line changes.
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(settleMs || 0))));
+    return { prepared: true };
+  }
+
   async _startReadLoop() {
     while (this.port && this.reader) {
       try {
@@ -295,6 +312,18 @@ async function handleSerialRpc(msg) {
     if (op === "log") {
       logSerial(String(payload.message || ""));
       send(true, { logged: true }, null);
+      return;
+    }
+    if (op === "prepareClone") {
+      const res = await serialBridge.prepareClone(
+        payload.wantsDtr,
+        payload.wantsRts,
+        payload.settleMs,
+      );
+      logSerial(
+        `Prepared clone session (DTR=${Boolean(payload.wantsDtr)} RTS=${Boolean(payload.wantsRts)})`,
+      );
+      send(true, res, null);
       return;
     }
 

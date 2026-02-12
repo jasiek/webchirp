@@ -10,6 +10,7 @@ from chirp import chirp_common, errors, memmap
 from chirp.drivers.generic_csv import CSVRadio
 from js import (
     serial_close,
+    serial_prepare_clone,
     serial_log,
     serial_open,
     serial_read_bytes,
@@ -226,10 +227,21 @@ def _create_radio_for_serial(radio_cls):
     return radio
 
 
+def _prepare_clone_session(radio_cls):
+    _await_js(
+        serial_prepare_clone(
+            bool(getattr(radio_cls, "WANTS_DTR", True)),
+            bool(getattr(radio_cls, "WANTS_RTS", True)),
+            350,
+        )
+    )
+
+
 def _download_selected_radio_sync(module_name: str, class_name: str):
     radio_cls = _import_radio_class(module_name, class_name)
     _ensure_clone_mode_radio(radio_cls)
 
+    _prepare_clone_session(radio_cls)
     radio = _create_radio_for_serial(radio_cls)
     radio.sync_in()
     driver_key = f"{module_name}.{class_name}"
@@ -260,6 +272,7 @@ def _upload_selected_radio_sync(module_name: str, class_name: str, rows):
     pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
     pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
     radio.set_pipe(pipe)
+    _prepare_clone_session(radio_cls)
     _apply_rows_to_radio_instance(radio, rows)
     radio.sync_out()
     LAST_IMAGE_BY_DRIVER[driver_key] = (

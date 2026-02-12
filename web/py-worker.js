@@ -271,3 +271,9 @@ self.serial_log = (message) =>
   serialRpc("log", {
     message: String(message || ""),
   });
+self.serial_prepare_clone = (wantsDtr, wantsRts, settleMs) =>
+  serialRpc("prepareClone", {
+    wantsDtr: Boolean(wantsDtr),
+    wantsRts: Boolean(wantsRts),
+    settleMs: Number(settleMs || 350),
+  });
