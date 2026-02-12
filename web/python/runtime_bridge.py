@@ -276,12 +276,3 @@ async def download_selected_radio(module_name: str, class_name: str):
 
 async def upload_selected_radio(module_name: str, class_name: str, rows):
     return _upload_selected_radio_sync(module_name, class_name, rows)
-
-
-# Backward compatibility with existing UI methods.
-async def bf888_download():
-    return _download_selected_radio_sync("h777", "H777Radio")
-
-
-async def bf888_upload(rows):
-    return _upload_selected_radio_sync("h777", "H777Radio", rows)

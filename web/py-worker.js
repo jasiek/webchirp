@@ -194,21 +194,6 @@ async function handleCall(method, payload) {
     return JSON.parse(resultJson);
   }
 
-  if (method === "bf888Download") {
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(await bf888_download())",
-    );
-    return JSON.parse(resultJson);
-  }
-
-  if (method === "bf888Upload") {
-    pyodide.globals.set("_rows_json", JSON.stringify(payload.rows || []));
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(await bf888_upload(json.loads(_rows_json)))",
-    );
-    return JSON.parse(resultJson);
-  }
-
   if (method === "downloadSelectedRadio") {
     pyodide.globals.set("_sel_module", payload.module || "");
     pyodide.globals.set("_sel_class", payload.className || "");
