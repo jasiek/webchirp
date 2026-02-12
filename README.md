@@ -11,7 +11,8 @@ Prototype for running parts of [CHIRP](https://github.com/kk7ds/chirp) in the br
 - CSV export/normalization via CHIRP Python code
 - Web Serial bridge (browser serial in JS, called from Python in Pyodide)
 - Python-driven TX/RX serial transaction path (`serialConnect`, `serialTxRx`)
-- BF-888 protocol flow (download/upload) using CHIRP BF-888 logic and memory model
+- Radio make/model dropdowns populated from CHIRP driver source files
+- Selection-aware download/upload actions (currently implemented for h777-family live clone flow)
 
 ## Run the prototype
 
@@ -26,11 +27,12 @@ Open [http://localhost:8000/web/index.html](http://localhost:8000/web/index.html
 Serial access requires a browser with Web Serial support and a secure context
 (`http://localhost` works).
 
-For BF-888:
+For radio cloning:
 
-1. Click `Connect` at 9600 baud and select the programming port.
-2. Click `Download BF-888` to read channels into the table.
-3. Edit values and click `Upload BF-888` to write back.
+1. Choose `Radio make` and `Radio model` from dropdowns (loaded from CHIRP sources).
+2. Click `Connect` (baud is prefilled when available from selected driver).
+3. Click `Download Radio` to read channels into the table.
+4. Edit values and click `Upload Radio` to write back.
 
 ## Architecture
 
@@ -47,9 +49,10 @@ For BF-888:
 
 This MVP proves in-browser execution of CHIRP Python logic for file-backed workflows.
 
-BF-888 is wired with its protocol and memory image handling, but this is still
-a prototype path focused on one model. Other radios remain unsupported until
-their clone protocols and edge cases are implemented.
+Live browser serial support is implemented for h777-family models (for example
+Baofeng BF-888 and related variants). Other CHIRP models are discoverable and
+selectable, but will report unsupported for live clone until their transport
+compatibility is implemented.
 
 ## Next phase (recommended)
 

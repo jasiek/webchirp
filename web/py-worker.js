@@ -19,6 +19,7 @@ const CHIRP_FILES = [
 
 let pyodide;
 let bootstrapPromise;
+let radioCatalogCache = null;
 let rpcId = 0;
 const rpcPending = new Map();
 
@@ -49,6 +50,75 @@ async function fetchText(path) {
     throw new Error(`Failed to fetch ${path}: ${res.status}`);
   }
   return await res.text();
+}
+
+function parseDriverFileForRadios(moduleName, text) {
+  const radios = [];
+  const marker = "@directory.register";
+  let idx = 0;
+  while (true) {
+    const start = text.indexOf(marker, idx);
+    if (start === -1) {
+      break;
+    }
+    const next = text.indexOf(marker, start + marker.length);
+    const block = text.slice(start, next === -1 ? text.length : next);
+    idx = next === -1 ? text.length : next;
+
+    const classMatch = block.match(/class\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    const vendorMatch = block.match(/^\s*VENDOR\s*=\s*["']([^"']+)["']/m);
+    const modelMatch = block.match(/^\s*MODEL\s*=\s*["']([^"']+)["']/m);
+    const baudMatch = block.match(/^\s*BAUD_RATE\s*=\s*([0-9]+)/m);
+    if (!classMatch || !vendorMatch || !modelMatch) {
+      continue;
+    }
+
+    radios.push({
+      key: `${moduleName}:${classMatch[1]}`,
+      module: moduleName,
+      className: classMatch[1],
+      vendor: vendorMatch[1],
+      model: modelMatch[1],
+      baudRate: baudMatch ? Number(baudMatch[1]) : null,
+    });
+  }
+  return radios;
+}
+
+async function loadRadioCatalogFromSources() {
+  if (radioCatalogCache) {
+    return radioCatalogCache;
+  }
+
+  const listing = await fetchText("/chirp/chirp/drivers/");
+  const modules = Array.from(
+    new Set(
+      [...listing.matchAll(/href="([A-Za-z0-9_]+)\.py"/g)]
+        .map((m) => m[1])
+        .filter((name) => !name.startsWith("__")),
+    ),
+  );
+
+  const allRadios = [];
+  await Promise.all(
+    modules.map(async (moduleName) => {
+      try {
+        const text = await fetchText(`/chirp/chirp/drivers/${moduleName}.py`);
+        allRadios.push(...parseDriverFileForRadios(moduleName, text));
+      } catch {
+        // Ignore module parse failures.
+      }
+    }),
+  );
+
+  allRadios.sort((a, b) => {
+    const av = `${a.vendor}\u0000${a.model}`;
+    const bv = `${b.vendor}\u0000${b.model}`;
+    return av.localeCompare(bv);
+  });
+
+  radioCatalogCache = allRadios;
+  return radioCatalogCache;
 }
 
 async function ensurePyodide() {
@@ -300,6 +370,96 @@ async def bf888_upload(rows):
 
     await _h777_exit_programming_mode(pipe)
     return {"uploaded": True, "blocks": len(H777Radio._ranges)}
+
+
+def _import_radio_class(module_name: str, class_name: str):
+    module = __import__(f"chirp.drivers.{module_name}", fromlist=[class_name])
+    return getattr(module, class_name)
+
+
+def _radio_rows_from_mmap(radio_cls, mmap_bytes):
+    radio = radio_cls(memmap.MemoryMapBytes(mmap_bytes))
+    rf = radio.get_features()
+    lo, hi = rf.memory_bounds
+    rows = []
+    for number in range(int(lo), int(hi) + 1):
+        mem = radio.get_memory(number)
+        values = mem.to_csv()
+        row = {}
+        for header, value in zip(CSV_HEADERS, values):
+            row[header] = str(value)
+        rows.append(row)
+    return rows
+
+
+def _apply_rows_to_radio_instance(radio, rows):
+    csv_radio = CSVRadio(None, max_memory=999)
+    csv_radio.load_from(_rows_to_csv_text(rows))
+    rf = radio.get_features()
+    lo, hi = rf.memory_bounds
+    for row in rows:
+        try:
+            number = int(row.get("Location", "0") or 0)
+        except ValueError:
+            continue
+        if number < int(lo) or number > int(hi):
+            continue
+        mem = csv_radio.get_memory(number)
+        mem.number = number
+        if not mem.mode:
+            mem.mode = "FM"
+        radio.set_memory(mem)
+
+
+async def download_selected_radio(module_name: str, class_name: str):
+    radio_cls = _import_radio_class(module_name, class_name)
+    if not issubclass(radio_cls, H777Radio):
+        raise errors.RadioError(
+            f"Live browser serial is currently implemented for h777-family radios only. Selected: {module_name}.{class_name}"
+        )
+
+    pipe = WebSerialPipe()
+    ident = await _h777_enter_programming_mode(pipe, radio_cls.PROGRAM_CMD, radio_cls.IDENT)
+    data = b""
+    for addr in range(0, int(radio_cls._memsize), 8):
+        pipe.log(f"Reading 8 block at {addr:04x}")
+        data += await _h777_read_block(pipe, addr, 8)
+    await _h777_exit_programming_mode(pipe)
+
+    rows = _radio_rows_from_mmap(radio_cls, data)
+    return {
+        "ident": ident.hex().upper(),
+        "rows": rows,
+        "headers": CSV_HEADERS,
+    }
+
+
+async def upload_selected_radio(module_name: str, class_name: str, rows):
+    radio_cls = _import_radio_class(module_name, class_name)
+    if not issubclass(radio_cls, H777Radio):
+        raise errors.RadioError(
+            f"Live browser serial is currently implemented for h777-family radios only. Selected: {module_name}.{class_name}"
+        )
+
+    pipe = WebSerialPipe()
+    await _h777_enter_programming_mode(pipe, radio_cls.PROGRAM_CMD, radio_cls.IDENT)
+
+    base = b""
+    for addr in range(0, int(radio_cls._memsize), 8):
+        base += await _h777_read_block(pipe, addr, 8)
+
+    radio = radio_cls(memmap.MemoryMapBytes(base))
+    _apply_rows_to_radio_instance(radio, rows)
+
+    image = radio.get_mmap().get_byte_compatible().get_packed()
+    for start_addr, end_addr in radio_cls._ranges:
+        for addr in range(int(start_addr), int(end_addr), 8):
+            pipe.log(f"Writing 8 block at {addr:04x}")
+            block = image[addr:addr + 8]
+            await _h777_write_block(pipe, addr, block)
+
+    await _h777_exit_programming_mode(pipe)
+    return {"uploaded": True}
 `);
     })();
   }
@@ -308,6 +468,11 @@ async def bf888_upload(rows):
 }
 
 async function handleCall(method, payload) {
+  if (method === "listRadios") {
+    const radios = await loadRadioCatalogFromSources();
+    return { radios };
+  }
+
   await ensurePyodide();
 
   if (method === "parseCsv") {
@@ -362,6 +527,25 @@ async function handleCall(method, payload) {
     pyodide.globals.set("_rows_json", JSON.stringify(payload.rows || []));
     const resultJson = await pyodide.runPythonAsync(
       "json.dumps(await bf888_upload(json.loads(_rows_json)))",
+    );
+    return JSON.parse(resultJson);
+  }
+
+  if (method === "downloadSelectedRadio") {
+    pyodide.globals.set("_sel_module", payload.module || "");
+    pyodide.globals.set("_sel_class", payload.className || "");
+    const resultJson = await pyodide.runPythonAsync(
+      "json.dumps(await download_selected_radio(_sel_module, _sel_class))",
+    );
+    return JSON.parse(resultJson);
+  }
+
+  if (method === "uploadSelectedRadio") {
+    pyodide.globals.set("_sel_module", payload.module || "");
+    pyodide.globals.set("_sel_class", payload.className || "");
+    pyodide.globals.set("_rows_json", JSON.stringify(payload.rows || []));
+    const resultJson = await pyodide.runPythonAsync(
+      "json.dumps(await upload_selected_radio(_sel_module, _sel_class, json.loads(_rows_json)))",
     );
     return JSON.parse(resultJson);
   }

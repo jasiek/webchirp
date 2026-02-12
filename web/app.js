@@ -18,11 +18,16 @@ const tableHead = document.querySelector("#mem-table thead");
 const tableBody = document.querySelector("#mem-table tbody");
 const fileInput = document.querySelector("#csv-file");
 const debugOutputEl = document.querySelector("#debug-output");
+const radioMakeEl = document.querySelector("#radio-make");
+const radioModelEl = document.querySelector("#radio-model");
+const baudRateEl = document.querySelector("#baud-rate");
 
 const worker = new Worker("/web/py-worker.js");
 let reqId = 0;
 let currentHeaders = [];
 let currentRows = [];
+let radioCatalog = [];
+let selectedRadio = null;
 
 class BrowserSerialBridge {
   constructor() {
@@ -272,6 +277,62 @@ function getVisibleColumns(headers) {
   return VISIBLE_COLUMNS.filter((col) => headers.includes(col));
 }
 
+function makeModelLabel(radio) {
+  return `${radio.vendor} ${radio.model}`;
+}
+
+function uniqueVendors(radios) {
+  return Array.from(new Set(radios.map((r) => r.vendor))).sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
+function syncBaudToSelection() {
+  if (!selectedRadio || !selectedRadio.baudRate) {
+    return;
+  }
+  const br = Number(selectedRadio.baudRate);
+  if (Number.isFinite(br) && br > 0) {
+    baudRateEl.value = String(br);
+  }
+}
+
+function refreshModelOptions() {
+  const vendor = radioMakeEl.value;
+  const models = radioCatalog.filter((r) => r.vendor === vendor);
+  radioModelEl.innerHTML = "";
+
+  for (const radio of models) {
+    const option = document.createElement("option");
+    option.value = radio.key;
+    option.textContent = radio.model;
+    radioModelEl.appendChild(option);
+  }
+
+  const selectedKey = radioModelEl.value || models[0]?.key;
+  selectedRadio = models.find((r) => r.key === selectedKey) || null;
+  if (selectedRadio) {
+    radioModelEl.value = selectedRadio.key;
+    logDebug(`RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`);
+  }
+  syncBaudToSelection();
+}
+
+function refreshMakeOptions() {
+  const vendors = uniqueVendors(radioCatalog);
+  radioMakeEl.innerHTML = "";
+  for (const vendor of vendors) {
+    const option = document.createElement("option");
+    option.value = vendor;
+    option.textContent = vendor;
+    radioMakeEl.appendChild(option);
+  }
+  if (vendors.length > 0) {
+    radioMakeEl.value = vendors[0];
+  }
+  refreshModelOptions();
+}
+
 function renderTable() {
   const columns = getVisibleColumns(currentHeaders);
 
@@ -341,6 +402,10 @@ async function init() {
     } else {
       logSerial("Web Serial available.");
     }
+    const catalog = await callWorker("listRadios");
+    radioCatalog = catalog.radios || [];
+    refreshMakeOptions();
+    setStatus(`Loaded ${radioCatalog.length} radio definitions from CHIRP sources.`);
     await loadCsvText(DEFAULT_SAMPLE_CSV);
   } catch (error) {
     setStatus(`Initialization failed: ${error.message}`);
@@ -383,8 +448,21 @@ document.querySelector("#export-csv").addEventListener("click", async () => {
   }
 });
 
+radioMakeEl.addEventListener("change", () => {
+  refreshModelOptions();
+});
+
+radioModelEl.addEventListener("change", () => {
+  const key = radioModelEl.value;
+  selectedRadio = radioCatalog.find((r) => r.key === key) || null;
+  if (selectedRadio) {
+    logDebug(`RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`);
+  }
+  syncBaudToSelection();
+});
+
 document.querySelector("#serial-connect").addEventListener("click", async () => {
-  const baudRate = Number(document.querySelector("#baud-rate").value || 9600);
+  const baudRate = Number(baudRateEl.value || 9600);
   try {
     setStatus("Connecting serial...");
     const result = await callWorker("serialConnect", { baudRate });
@@ -438,28 +516,43 @@ window.addEventListener("unhandledrejection", (event) => {
   logDebug(`PROMISE ERROR ${msg}`);
 });
 
-document.querySelector("#bf888-download").addEventListener("click", async () => {
+document.querySelector("#radio-download").addEventListener("click", async () => {
+  if (!selectedRadio) {
+    setStatus("Select a radio make/model first.");
+    return;
+  }
   try {
-    setStatus("Downloading from BF-888...");
-    const result = await callWorker("bf888Download");
+    setStatus(`Downloading from ${makeModelLabel(selectedRadio)}...`);
+    const result = await callWorker("downloadSelectedRadio", {
+      module: selectedRadio.module,
+      className: selectedRadio.className,
+    });
     currentHeaders = result.headers;
     currentRows = result.rows;
     renderTable();
-    setStatus(`BF-888 download complete (${currentRows.length} channels).`);
-    logSerial(`BF-888 ident ${result.ident}`);
+    setStatus(`${makeModelLabel(selectedRadio)} download complete (${currentRows.length} channels).`);
+    logSerial(`IDENT ${result.ident}`);
   } catch (error) {
-    setStatus(`BF-888 download failed: ${error.message}`);
+    setStatus(`Download failed: ${error.message}`);
     logSerial(`ERROR ${error.message}`);
   }
 });
 
-document.querySelector("#bf888-upload").addEventListener("click", async () => {
+document.querySelector("#radio-upload").addEventListener("click", async () => {
+  if (!selectedRadio) {
+    setStatus("Select a radio make/model first.");
+    return;
+  }
   try {
-    setStatus("Uploading to BF-888...");
-    await callWorker("bf888Upload", { rows: currentRows });
-    setStatus("BF-888 upload complete.");
+    setStatus(`Uploading to ${makeModelLabel(selectedRadio)}...`);
+    await callWorker("uploadSelectedRadio", {
+      module: selectedRadio.module,
+      className: selectedRadio.className,
+      rows: currentRows,
+    });
+    setStatus(`${makeModelLabel(selectedRadio)} upload complete.`);
   } catch (error) {
-    setStatus(`BF-888 upload failed: ${error.message}`);
+    setStatus(`Upload failed: ${error.message}`);
     logSerial(`ERROR ${error.message}`);
   }
 });

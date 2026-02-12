@@ -24,6 +24,10 @@
           <p class="hint">MVP runs CHIRP's Generic CSV driver in-browser via Pyodide.</p>
           <hr />
           <h2>Serial Bridge</h2>
+          <label for="radio-make">Radio make</label>
+          <select id="radio-make"></select>
+          <label for="radio-model">Radio model</label>
+          <select id="radio-model"></select>
           <label for="baud-rate">Baud</label>
           <input id="baud-rate" type="number" value="9600" min="300" step="300" />
           <div class="serial-actions">
@@ -38,8 +42,8 @@
           <input id="rx-timeout" type="number" value="1200" min="50" step="50" />
           <button id="serial-transaction">Python TX/RX</button>
           <div class="serial-actions">
-            <button id="bf888-download">Download BF-888</button>
-            <button id="bf888-upload">Upload BF-888</button>
+            <button id="radio-download">Download Radio</button>
+            <button id="radio-upload">Upload Radio</button>
           </div>
         </aside>
 

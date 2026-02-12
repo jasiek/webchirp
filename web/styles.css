@@ -75,6 +75,8 @@ button:hover {
 }
 
 #baud-rate,
+#radio-make,
+#radio-model,
 #tx-hex,
 #rx-bytes,
 #rx-timeout {
