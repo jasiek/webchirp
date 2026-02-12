@@ -287,3 +287,114 @@ async def download_selected_radio(module_name: str, class_name: str):
 
 async def upload_selected_radio(module_name: str, class_name: str, rows):
     return _upload_selected_radio_sync(module_name, class_name, rows)
+
+
+def _mk_enum(values):
+    return [str(v) for v in values] if values else []
+
+
+def get_radio_column_metadata(module_name: str, class_name: str):
+    radio_cls = _import_radio_class(module_name, class_name)
+    try:
+        radio = radio_cls(None)
+    except Exception:
+        radio = radio_cls("")
+    rf = radio.get_features()
+    lo, hi = rf.memory_bounds
+
+    col = {}
+    col["Location"] = {
+        "kind": "int",
+        "editable": False,
+        "min": int(lo),
+        "max": int(hi),
+    }
+    col["Name"] = {
+        "kind": "text",
+        "editable": bool(rf.has_name),
+        "maxLength": int(rf.valid_name_length),
+        "validChars": str(rf.valid_characters),
+    }
+    col["Frequency"] = {
+        "kind": "freq",
+        "editable": True,
+        "bands": [[int(a), int(b)] for (a, b) in (rf.valid_bands or [])],
+    }
+    col["Duplex"] = {
+        "kind": "enum",
+        "editable": True,
+        "options": _mk_enum(rf.valid_duplexes),
+    }
+    col["Offset"] = {
+        "kind": "freq",
+        "editable": bool(rf.has_offset),
+        "bands": [[int(a), int(b)] for (a, b) in (rf.valid_bands or [])],
+    }
+    col["Tone"] = {
+        "kind": "enum",
+        "editable": True,
+        "options": _mk_enum(rf.valid_tmodes),
+    }
+    col["rToneFreq"] = {
+        "kind": "enum",
+        "editable": True,
+        "options": [f"{float(x):.1f}" for x in (rf.valid_tones or [])],
+    }
+    col["cToneFreq"] = {
+        "kind": "enum",
+        "editable": bool(rf.has_ctone),
+        "options": [f"{float(x):.1f}" for x in (rf.valid_tones or [])],
+    }
+    col["DtcsCode"] = {
+        "kind": "enum",
+        "editable": bool(rf.has_dtcs),
+        "options": [f"{int(x):03d}" for x in (rf.valid_dtcs_codes or [])],
+    }
+    col["RxDtcsCode"] = {
+        "kind": "enum",
+        "editable": bool(rf.has_rx_dtcs),
+        "options": [f"{int(x):03d}" for x in (rf.valid_dtcs_codes or [])],
+    }
+    col["DtcsPolarity"] = {
+        "kind": "enum",
+        "editable": bool(rf.has_dtcs_polarity),
+        "options": _mk_enum(rf.valid_dtcs_pols),
+    }
+    col["CrossMode"] = {
+        "kind": "enum",
+        "editable": bool(rf.has_cross),
+        "options": _mk_enum(rf.valid_cross_modes),
+    }
+    col["Mode"] = {
+        "kind": "enum",
+        "editable": bool(rf.has_mode),
+        "options": _mk_enum(rf.valid_modes),
+    }
+    col["TStep"] = {
+        "kind": "enum",
+        "editable": bool(rf.has_tuning_step),
+        "options": [f"{float(x):.2f}" for x in (rf.valid_tuning_steps or [])],
+    }
+    col["Skip"] = {
+        "kind": "enum",
+        "editable": True,
+        "options": _mk_enum(rf.valid_skips),
+    }
+    col["Power"] = {
+        "kind": "enum",
+        "editable": True,
+        "options": _mk_enum(rf.valid_power_levels),
+    }
+    col["Comment"] = {
+        "kind": "text",
+        "editable": bool(rf.has_comment),
+    }
+    col["URCALL"] = {"kind": "text", "editable": False}
+    col["RPT1CALL"] = {"kind": "text", "editable": False}
+    col["RPT2CALL"] = {"kind": "text", "editable": False}
+    col["DVCODE"] = {"kind": "text", "editable": False}
+
+    return {
+        "headers": list(CSV_HEADERS),
+        "columns": col,
+    }

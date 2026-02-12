@@ -186,7 +186,20 @@ button:hover {
   font-size: 0.85rem;
 }
 
+#mem-table td select {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
 #mem-table td input:focus {
+  outline: 1px solid var(--accent);
+  background: #f2f8ff;
+}
+
+#mem-table td select:focus {
   outline: 1px solid var(--accent);
   background: #f2f8ff;
 }

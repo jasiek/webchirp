@@ -1,18 +1,5 @@
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
 
-const VISIBLE_COLUMNS = [
-  "Location",
-  "Name",
-  "Frequency",
-  "Duplex",
-  "Offset",
-  "Tone",
-  "rToneFreq",
-  "cToneFreq",
-  "Mode",
-  "Comment",
-];
-
 const statusEl = document.querySelector("#status");
 const tableHead = document.querySelector("#mem-table thead");
 const tableBody = document.querySelector("#mem-table tbody");
@@ -28,6 +15,7 @@ let currentHeaders = [];
 let currentRows = [];
 let radioCatalog = [];
 let selectedRadio = null;
+let radioMetadata = { headers: [], columns: {} };
 
 class BrowserSerialBridge {
   constructor() {
@@ -333,10 +321,6 @@ async function handleSerialRpc(msg) {
   }
 }
 
-function getVisibleColumns(headers) {
-  return VISIBLE_COLUMNS.filter((col) => headers.includes(col));
-}
-
 function makeModelLabel(radio) {
   return `${radio.vendor} ${radio.model}`;
 }
@@ -394,7 +378,7 @@ function refreshMakeOptions() {
 }
 
 function renderTable() {
-  const columns = getVisibleColumns(currentHeaders);
+  const columns = currentHeaders.slice();
 
   tableHead.innerHTML = "";
   tableBody.innerHTML = "";
@@ -412,12 +396,8 @@ function renderTable() {
 
     columns.forEach((column) => {
       const td = document.createElement("td");
-      const input = document.createElement("input");
-      input.value = row[column] || "";
-      input.addEventListener("input", () => {
-        currentRows[rowIdx][column] = input.value;
-      });
-      td.appendChild(input);
+      const editor = createCellEditor(row, rowIdx, column);
+      td.appendChild(editor);
       tr.appendChild(td);
     });
 
@@ -425,10 +405,147 @@ function renderTable() {
   });
 }
 
+function parseFreqToHz(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return 0;
+  }
+  if (!/^\d+(\.\d+)?$/.test(text)) {
+    return null;
+  }
+  const n = Number.parseFloat(text);
+  if (!Number.isFinite(n)) {
+    return null;
+  }
+  return Math.round(n * 1_000_000);
+}
+
+function inAnyBand(hz, bands) {
+  if (!Array.isArray(bands) || bands.length === 0) {
+    return true;
+  }
+  return bands.some(([lo, hi]) => hz >= Number(lo) && hz < Number(hi));
+}
+
+function normalizeValue(column, value, meta, previous) {
+  let v = String(value ?? "");
+  if (!meta || meta.editable === false) {
+    return String(previous ?? v);
+  }
+
+  if (meta.kind === "text") {
+    if (meta.validChars) {
+      const allowed = new Set(String(meta.validChars).split(""));
+      v = v
+        .split("")
+        .filter((ch) => allowed.has(ch))
+        .join("");
+    }
+    if (Number.isFinite(meta.maxLength)) {
+      v = v.slice(0, Number(meta.maxLength));
+    }
+    return v;
+  }
+
+  if (meta.kind === "int") {
+    const parsed = Number.parseInt(v, 10);
+    if (Number.isNaN(parsed)) {
+      return String(previous ?? "");
+    }
+    let out = parsed;
+    if (Number.isFinite(meta.min)) {
+      out = Math.max(out, Number(meta.min));
+    }
+    if (Number.isFinite(meta.max)) {
+      out = Math.min(out, Number(meta.max));
+    }
+    return String(out);
+  }
+
+  if (meta.kind === "freq") {
+    const hz = parseFreqToHz(v);
+    if (hz === null) {
+      return String(previous ?? "");
+    }
+    if (!inAnyBand(hz, meta.bands || [])) {
+      return String(previous ?? "");
+    }
+    return v;
+  }
+
+  if (meta.kind === "enum") {
+    const options = Array.isArray(meta.options) ? meta.options.map(String) : [];
+    if (options.length > 0 && !options.includes(v)) {
+      return String(previous ?? options[0] ?? "");
+    }
+    return v;
+  }
+
+  return v;
+}
+
+function createCellEditor(row, rowIdx, column) {
+  const meta = radioMetadata.columns?.[column] || {};
+  const current = String(row[column] ?? "");
+  const readOnly = column === "Location" || meta.editable === false;
+  if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
+    const select = document.createElement("select");
+    const options = meta.options.map(String);
+    if (!options.includes(current)) {
+      options.unshift(current);
+    }
+    for (const opt of options) {
+      const optionEl = document.createElement("option");
+      optionEl.value = opt;
+      optionEl.textContent = opt;
+      select.appendChild(optionEl);
+    }
+    select.value = current;
+    select.disabled = readOnly;
+    select.addEventListener("change", () => {
+      const next = normalizeValue(column, select.value, meta, row[column]);
+      row[column] = next;
+      currentRows[rowIdx][column] = next;
+      select.value = next;
+    });
+    return select;
+  }
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = current;
+  input.readOnly = readOnly;
+  input.disabled = readOnly;
+  if (Number.isFinite(meta.maxLength)) {
+    input.maxLength = Number(meta.maxLength);
+  }
+  input.addEventListener("blur", () => {
+    const next = normalizeValue(column, input.value, meta, row[column]);
+    row[column] = next;
+    currentRows[rowIdx][column] = next;
+    input.value = next;
+  });
+  return input;
+}
+
+async function loadSelectedRadioMetadata() {
+  if (!selectedRadio) {
+    return;
+  }
+  const meta = await callWorker("getRadioMetadata", {
+    module: selectedRadio.module,
+    className: selectedRadio.className,
+  });
+  radioMetadata = meta || { headers: [], columns: {} };
+  currentHeaders = radioMetadata.headers?.length ? radioMetadata.headers : currentHeaders;
+}
+
 async function loadCsvText(csvText) {
   setStatus("Parsing CSV with CHIRP Python...");
   const parsed = await callWorker("parseCsv", { csvText });
-  currentHeaders = parsed.headers;
+  const headersFromMeta = radioMetadata.headers || [];
+  const parsedHeaders = parsed.headers || [];
+  currentHeaders = headersFromMeta.length ? headersFromMeta : parsedHeaders;
   currentRows = parsed.rows;
   renderTable();
 
@@ -465,6 +582,7 @@ async function init() {
     const catalog = await callWorker("listRadios");
     radioCatalog = catalog.radios || [];
     refreshMakeOptions();
+    await loadSelectedRadioMetadata();
     setStatus(`Loaded ${radioCatalog.length} radio definitions from CHIRP sources.`);
     await loadCsvText(DEFAULT_SAMPLE_CSV);
   } catch (error) {
@@ -510,6 +628,9 @@ document.querySelector("#export-csv").addEventListener("click", async () => {
 
 radioMakeEl.addEventListener("change", () => {
   refreshModelOptions();
+  loadSelectedRadioMetadata()
+    .then(() => renderTable())
+    .catch((error) => reportActionError("Metadata load", error));
 });
 
 radioModelEl.addEventListener("change", () => {
@@ -519,6 +640,9 @@ radioModelEl.addEventListener("change", () => {
     logDebug(`RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`);
   }
   syncBaudToSelection();
+  loadSelectedRadioMetadata()
+    .then(() => renderTable())
+    .catch((error) => reportActionError("Metadata load", error));
 });
 
 document.querySelector("#serial-connect").addEventListener("click", async () => {

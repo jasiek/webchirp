@@ -213,6 +213,15 @@ async function handleCall(method, payload) {
     return JSON.parse(resultJson);
   }
 
+  if (method === "getRadioMetadata") {
+    pyodide.globals.set("_sel_module", payload.module || "");
+    pyodide.globals.set("_sel_class", payload.className || "");
+    const resultJson = await pyodide.runPythonAsync(
+      "json.dumps(get_radio_column_metadata(_sel_module, _sel_class))",
+    );
+    return JSON.parse(resultJson);
+  }
+
   throw new Error(`Unknown method: ${method}`);
 }
 
