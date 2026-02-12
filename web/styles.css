@@ -57,6 +57,22 @@ button:hover {
   border-color: var(--accent);
 }
 
+.toolbar-link {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #9aa8bf;
+  background: linear-gradient(180deg, #f9fcff 0%, #dce6f4 100%);
+  color: var(--text);
+  padding: 0.45rem 0.75rem;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.toolbar-link:hover {
+  border-color: var(--accent);
+}
+
 .main-layout {
   display: grid;
   grid-template-columns: 280px 1fr;
