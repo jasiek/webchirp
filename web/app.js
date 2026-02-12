@@ -181,6 +181,37 @@ function logDebug(line) {
   debugOutputEl.scrollTop = debugOutputEl.scrollHeight;
 }
 
+function errorDetails(error) {
+  if (!error) {
+    return "Unknown error";
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (typeof error.stack === "string" && error.stack.length > 0) {
+    return error.stack;
+  }
+  if (typeof error.message === "string" && error.message.length > 0) {
+    return error.message;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function errorSummary(error) {
+  const firstLine = errorDetails(error).split("\n")[0].trim();
+  return firstLine || "Unknown error";
+}
+
+function reportActionError(action, error) {
+  const details = errorDetails(error);
+  logDebug(`${action.toUpperCase()} ERROR\n${details}`);
+  setStatus(`${action} failed (see Debug Output).`);
+}
+
 function callWorker(method, payload = {}) {
   const id = ++reqId;
   return new Promise((resolve, reject) => {
@@ -408,7 +439,7 @@ async function init() {
     setStatus(`Loaded ${radioCatalog.length} radio definitions from CHIRP sources.`);
     await loadCsvText(DEFAULT_SAMPLE_CSV);
   } catch (error) {
-    setStatus(`Initialization failed: ${error.message}`);
+    reportActionError("Initialization", error);
   }
 }
 
@@ -416,7 +447,7 @@ document.querySelector("#load-sample").addEventListener("click", async () => {
   try {
     await loadCsvText(DEFAULT_SAMPLE_CSV);
   } catch (error) {
-    setStatus(`Sample load failed: ${error.message}`);
+    reportActionError("Sample load", error);
   }
 });
 
@@ -434,7 +465,7 @@ fileInput.addEventListener("change", async () => {
     const csvText = await file.text();
     await loadCsvText(csvText);
   } catch (error) {
-    setStatus(`CSV import failed: ${error.message}`);
+    reportActionError("CSV import", error);
   } finally {
     fileInput.value = "";
   }
@@ -444,7 +475,7 @@ document.querySelector("#export-csv").addEventListener("click", async () => {
   try {
     await exportCsv();
   } catch (error) {
-    setStatus(`Export failed: ${error.message}`);
+    reportActionError("Export", error);
   }
 });
 
@@ -468,8 +499,8 @@ document.querySelector("#serial-connect").addEventListener("click", async () => 
     const result = await callWorker("serialConnect", { baudRate });
     setStatus(result.message || "Serial connected.");
   } catch (error) {
-    setStatus(`Serial connect failed: ${error.message}`);
-    logSerial(`ERROR ${error.message}`);
+    reportActionError("Serial connect", error);
+    logSerial(`ERROR ${errorSummary(error)}`);
   }
 });
 
@@ -478,8 +509,8 @@ document.querySelector("#serial-disconnect").addEventListener("click", async () 
     const result = await callWorker("serialDisconnect");
     setStatus(result.message || "Serial disconnected.");
   } catch (error) {
-    setStatus(`Serial disconnect failed: ${error.message}`);
-    logSerial(`ERROR ${error.message}`);
+    reportActionError("Serial disconnect", error);
+    logSerial(`ERROR ${errorSummary(error)}`);
   }
 });
 
@@ -494,8 +525,8 @@ document.querySelector("#serial-transaction").addEventListener("click", async ()
     setStatus("Python serial transaction complete.");
     logSerial(`PY TX ${result.tx.hex} | PY RX ${result.rx.hex || "<none>"}`);
   } catch (error) {
-    setStatus(`Serial transaction failed: ${error.message}`);
-    logSerial(`ERROR ${error.message}`);
+    reportActionError("Serial transaction", error);
+    logSerial(`ERROR ${errorSummary(error)}`);
   }
 });
 
@@ -533,8 +564,8 @@ document.querySelector("#radio-download").addEventListener("click", async () => 
     setStatus(`${makeModelLabel(selectedRadio)} download complete (${currentRows.length} channels).`);
     logSerial(`IDENT ${result.ident}`);
   } catch (error) {
-    setStatus(`Download failed: ${error.message}`);
-    logSerial(`ERROR ${error.message}`);
+    reportActionError("Download", error);
+    logSerial(`ERROR ${errorSummary(error)}`);
   }
 });
 
@@ -552,8 +583,8 @@ document.querySelector("#radio-upload").addEventListener("click", async () => {
     });
     setStatus(`${makeModelLabel(selectedRadio)} upload complete.`);
   } catch (error) {
-    setStatus(`Upload failed: ${error.message}`);
-    logSerial(`ERROR ${error.message}`);
+    reportActionError("Upload", error);
+    logSerial(`ERROR ${errorSummary(error)}`);
   }
 });
 
