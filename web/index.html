@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebCHIRP Prototype</title>
+    <link rel="stylesheet" href="/web/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="toolbar">
+        <h1>WebCHIRP</h1>
+        <div class="toolbar-actions">
+          <button id="load-sample">Load Sample</button>
+          <button id="import-csv">Import CSV</button>
+          <button id="export-csv">Export CSV</button>
+        </div>
+      </header>
+
+      <main class="main-layout">
+        <aside class="left-panel">
+          <h2>Session</h2>
+          <p id="status">Initializing Python runtime...</p>
+          <p class="hint">MVP runs CHIRP's Generic CSV driver in-browser via Pyodide.</p>
+          <hr />
+          <h2>Serial Bridge</h2>
+          <label for="baud-rate">Baud</label>
+          <input id="baud-rate" type="number" value="9600" min="300" step="300" />
+          <div class="serial-actions">
+            <button id="serial-connect">Connect</button>
+            <button id="serial-disconnect">Disconnect</button>
+          </div>
+          <label for="tx-hex">TX (hex)</label>
+          <input id="tx-hex" type="text" value="" placeholder="AA BB CC" />
+          <label for="rx-bytes">RX bytes</label>
+          <input id="rx-bytes" type="number" value="32" min="1" max="2048" />
+          <label for="rx-timeout">Timeout (ms)</label>
+          <input id="rx-timeout" type="number" value="1200" min="50" step="50" />
+          <button id="serial-transaction">Python TX/RX</button>
+          <div class="serial-actions">
+            <button id="bf888-download">Download BF-888</button>
+            <button id="bf888-upload">Upload BF-888</button>
+          </div>
+          <pre id="serial-log" class="serial-log">serial idle</pre>
+        </aside>
+
+        <section class="editor-panel">
+          <table id="mem-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+
+    <input id="csv-file" type="file" accept=".csv,text/csv" hidden />
+    <script type="module" src="/web/app.js"></script>
+  </body>
+</html>

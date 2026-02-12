@@ -1,0 +1,3 @@
+[submodule "chirp"]
+	path = chirp
+	url = https://github.com/kk7ds/chirp.git
