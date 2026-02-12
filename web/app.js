@@ -562,7 +562,9 @@ document.querySelector("#radio-download").addEventListener("click", async () => 
     currentRows = result.rows;
     renderTable();
     setStatus(`${makeModelLabel(selectedRadio)} download complete (${currentRows.length} channels).`);
-    logSerial(`IDENT ${result.ident}`);
+    if (result.ident) {
+      logSerial(`IDENT ${result.ident}`);
+    }
   } catch (error) {
     reportActionError("Download", error);
     logSerial(`ERROR ${errorSummary(error)}`);

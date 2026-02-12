@@ -177,9 +177,6 @@ def _radio_rows_from_instance(radio):
 
 
 def _apply_rows_to_radio_instance(radio, rows):
-    csv_radio = CSVRadio(None, max_memory=999)
-    csv_radio.load_from(_rows_to_csv_text(rows))
-
     valid_numbers = set(_iter_memory_numbers(radio))
     for row in rows:
         try:
@@ -188,8 +185,18 @@ def _apply_rows_to_radio_instance(radio, rows):
             continue
         if number not in valid_numbers:
             continue
+        freq_text = str(row.get("Frequency", "") or "").strip()
+        if not freq_text:
+            try:
+                radio.erase_memory(number)
+            except Exception:
+                continue
+            continue
+        vals = [str(row.get(h, "") or "") for h in CSV_HEADERS]
+        vals[0] = str(number)
         try:
-            mem = csv_radio.get_memory(number)
+            mem = chirp_common.Memory()
+            mem.really_from_csv(vals)
         except Exception:
             continue
         mem.number = number
@@ -200,15 +207,6 @@ def _apply_rows_to_radio_instance(radio, rows):
         except Exception:
             # Driver-specific validation may reject some values; keep going.
             continue
-
-
-def _rows_to_csv_text(rows):
-    out = io.StringIO(newline="")
-    writer = csv.writer(out)
-    writer.writerow(CSV_HEADERS)
-    for row in rows:
-        writer.writerow([row.get(h, "") for h in CSV_HEADERS])
-    return out.getvalue()
 
 
 def _ensure_clone_mode_radio(radio_cls):
