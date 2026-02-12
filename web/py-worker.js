@@ -398,3 +398,4 @@ self.serial_prepare_clone = (wantsDtr, wantsRts, settleMs) =>
     wantsRts: Boolean(wantsRts),
     settleMs: Number(settleMs || 350),
   });
+self.serial_reset_buffers = () => serialRpc("resetBuffers", {});

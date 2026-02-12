@@ -11,6 +11,7 @@ from chirp.drivers.generic_csv import CSVRadio
 from js import (
     serial_close,
     serial_prepare_clone,
+    serial_reset_buffers,
     serial_log,
     serial_open,
     serial_read_bytes,
@@ -121,6 +122,22 @@ class WebSerialPipe:
 
     def flush(self):
         return
+
+    def reset_input_buffer(self):
+        _await_js(serial_reset_buffers())
+
+    def reset_output_buffer(self):
+        return
+
+    def flushInput(self):
+        self.reset_input_buffer()
+
+    def flushOutput(self):
+        self.reset_output_buffer()
+
+    @property
+    def in_waiting(self):
+        return 0
 
     def close(self):
         return

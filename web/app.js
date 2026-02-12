@@ -314,6 +314,11 @@ async function handleSerialRpc(msg) {
       send(true, res, null);
       return;
     }
+    if (op === "resetBuffers") {
+      serialBridge.readBuffer = new Uint8Array(0);
+      send(true, { reset: true }, null);
+      return;
+    }
 
     throw new Error(`Unknown serial op: ${op}`);
   } catch (error) {
