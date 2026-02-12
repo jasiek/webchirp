@@ -24,6 +24,7 @@ except Exception:
     pyodide_run_sync = None
 
 CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
+LAST_IMAGE_BY_DRIVER = {}
 
 
 def _js_to_py(value):
@@ -233,6 +234,10 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
 
     radio = _create_radio_for_serial(radio_cls)
     radio.sync_in()
+    driver_key = f"{module_name}.{class_name}"
+    LAST_IMAGE_BY_DRIVER[driver_key] = (
+        radio.get_mmap().get_byte_compatible().get_packed()
+    )
 
     rows = _radio_rows_from_instance(radio)
     return {
@@ -244,12 +249,24 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
 def _upload_selected_radio_sync(module_name: str, class_name: str, rows):
     radio_cls = _import_radio_class(module_name, class_name)
     _ensure_clone_mode_radio(radio_cls)
-
-    radio = _create_radio_for_serial(radio_cls)
-    # Most drivers require an existing image before sync_out.
-    radio.sync_in()
+    driver_key = f"{module_name}.{class_name}"
+    base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
+    if not base_image:
+        raise RuntimeUnsupportedError(
+            "No cached radio image for this model. Download from radio first, then upload."
+        )
+    radio = radio_cls(memmap.MemoryMapBytes(base_image))
+    radio.status_fn = _status_to_log
+    pipe = WebSerialPipe(timeout=0.5)
+    pipe.baudrate = getattr(radio_cls, "BAUD_RATE", None)
+    pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
+    pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
+    radio.set_pipe(pipe)
     _apply_rows_to_radio_instance(radio, rows)
     radio.sync_out()
+    LAST_IMAGE_BY_DRIVER[driver_key] = (
+        radio.get_mmap().get_byte_compatible().get_packed()
+    )
     return {"uploaded": True}
 
 
