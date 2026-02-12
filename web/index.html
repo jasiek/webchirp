@@ -13,10 +13,19 @@
         <div class="toolbar-actions">
           <a
             class="toolbar-link"
-            href="https://github.com/kk7ds/chirp"
+            href="https://github.com/jasiek/webchirp"
             target="_blank"
             rel="noreferrer"
-            >CHIRP GitHub</a
+            >View on GitHub</a
+          >
+          <a
+            class="github-button"
+            href="https://github.com/jasiek/webchirp"
+            data-icon="octicon-star"
+            data-size="large"
+            data-show-count="true"
+            aria-label="Star jasiek/webchirp on GitHub"
+            >Star</a
           >
           <button id="load-sample">Load Sample</button>
           <button id="import-csv">Import CSV</button>
@@ -78,5 +87,6 @@
 
     <input id="csv-file" type="file" accept=".csv,text/csv" hidden />
     <script type="module" src="/web/app.js"></script>
+    <script async defer src="https://buttons.github.io/buttons.js"></script>
   </body>
 </html>

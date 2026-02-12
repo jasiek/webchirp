@@ -73,6 +73,10 @@ button:hover {
   border-color: var(--accent);
 }
 
+.toolbar-actions .github-button {
+  align-self: center;
+}
+
 .main-layout {
   display: grid;
   grid-template-columns: 280px 1fr;
