@@ -20,6 +20,20 @@ const CHIRP_FILES = [
 let pyodide;
 let bootstrapPromise;
 let radioCatalogCache = null;
+const loadedChirpModules = new Set([
+  "chirp.__init__",
+  "chirp.errors",
+  "chirp.util",
+  "chirp.memmap",
+  "chirp.chirp_common",
+  "chirp.directory",
+  "chirp.pyPEG",
+  "chirp.bitwise_grammar",
+  "chirp.bitwise",
+  "chirp.settings",
+  "chirp.drivers.generic_csv",
+  "chirp.drivers.h777",
+]);
 let rpcId = 0;
 const rpcPending = new Map();
 
@@ -50,6 +64,101 @@ async function fetchText(path) {
     throw new Error(`Failed to fetch ${path}: ${res.status}`);
   }
   return await res.text();
+}
+
+function parseChirpImports(sourceText) {
+  const deps = new Set();
+  const lines = sourceText.split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    let m = trimmed.match(/^from\s+chirp\.drivers\.([A-Za-z0-9_]+)\s+import\s+/);
+    if (m) {
+      deps.add(`chirp.drivers.${m[1]}`);
+      continue;
+    }
+    m = trimmed.match(/^from\s+chirp\.drivers\s+import\s+(.+)$/);
+    if (m) {
+      for (const part of m[1].split(",")) {
+        const name = part.trim().split(/\s+/)[0];
+        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+          deps.add(`chirp.drivers.${name}`);
+        }
+      }
+      continue;
+    }
+    m = trimmed.match(/^from\s+chirp\s+import\s+(.+)$/);
+    if (m) {
+      for (const part of m[1].split(",")) {
+        const name = part.trim().split(/\s+/)[0];
+        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+          deps.add(`chirp.${name}`);
+        }
+      }
+      continue;
+    }
+    m = trimmed.match(/^import\s+(.+)$/);
+    if (m) {
+      for (const part of m[1].split(",")) {
+        const item = part.trim().split(/\s+/)[0];
+        if (item === "chirp" || item.startsWith("chirp.")) {
+          deps.add(item === "chirp" ? "chirp.__init__" : item);
+        }
+      }
+    }
+  }
+  return [...deps];
+}
+
+function moduleToSourcePath(moduleName) {
+  if (moduleName === "chirp" || moduleName === "chirp.__init__") {
+    return "/chirp/chirp/__init__.py";
+  }
+  if (moduleName === "chirp.drivers") {
+    return "/chirp/chirp/drivers/__init__.py";
+  }
+  return `/chirp/${moduleName.replace(/\./g, "/")}.py`;
+}
+
+function moduleToRuntimePath(moduleName) {
+  if (moduleName === "chirp" || moduleName === "chirp.__init__") {
+    return "/webchirp_runtime/chirp/__init__.py";
+  }
+  if (moduleName === "chirp.drivers") {
+    return "/webchirp_runtime/chirp/drivers/__init__.py";
+  }
+  return `/webchirp_runtime/${moduleName.replace(/\./g, "/")}.py`;
+}
+
+async function ensureChirpModuleLoaded(moduleName) {
+  if (loadedChirpModules.has(moduleName)) {
+    return;
+  }
+  const sourcePath = moduleToSourcePath(moduleName);
+  const runtimePath = moduleToRuntimePath(moduleName);
+  const source = await fetchText(sourcePath);
+  const dir = runtimePath.split("/").slice(0, -1).join("/");
+  mkdirp(dir);
+  pyodide.FS.writeFile(runtimePath, source, { encoding: "utf8" });
+  loadedChirpModules.add(moduleName);
+
+  const deps = parseChirpImports(source);
+  for (const dep of deps) {
+    if (!dep.startsWith("chirp.wxui") && !dep.startsWith("chirp.cli")) {
+      try {
+        await ensureChirpModuleLoaded(dep);
+      } catch {
+        // Best effort dependency loading; import-time errors are surfaced later.
+      }
+    }
+  }
+}
+
+async function ensureSelectedRadioModules(moduleShortName) {
+  await ensurePyodide();
+  await ensureChirpModuleLoaded(`chirp.drivers.${moduleShortName}`);
 }
 
 function parseDriverFileForRadios(moduleName, text) {
@@ -195,6 +304,7 @@ async function handleCall(method, payload) {
   }
 
   if (method === "downloadSelectedRadio") {
+    await ensureSelectedRadioModules(payload.module || "");
     pyodide.globals.set("_sel_module", payload.module || "");
     pyodide.globals.set("_sel_class", payload.className || "");
     const resultJson = await pyodide.runPythonAsync(
@@ -204,6 +314,7 @@ async function handleCall(method, payload) {
   }
 
   if (method === "uploadSelectedRadio") {
+    await ensureSelectedRadioModules(payload.module || "");
     pyodide.globals.set("_sel_module", payload.module || "");
     pyodide.globals.set("_sel_class", payload.className || "");
     pyodide.globals.set("_rows_json", JSON.stringify(payload.rows || []));
@@ -214,6 +325,7 @@ async function handleCall(method, payload) {
   }
 
   if (method === "getRadioMetadata") {
+    await ensureSelectedRadioModules(payload.module || "");
     pyodide.globals.set("_sel_module", payload.module || "");
     pyodide.globals.set("_sel_class", payload.className || "");
     const resultJson = await pyodide.runPythonAsync(
