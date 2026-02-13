@@ -40,6 +40,7 @@ const loadedChirpModules = new Set([
 let rpcId = 0;
 const rpcPending = new Map();
 
+// Send a serial operation request to the main thread and await its result.
 function serialRpc(op, payload = {}) {
   const id = ++rpcId;
   return new Promise((resolve, reject) => {
@@ -48,6 +49,7 @@ function serialRpc(op, payload = {}) {
   });
 }
 
+// Create nested directories in the Pyodide virtual filesystem.
 function mkdirp(path) {
   const parts = path.split("/").filter(Boolean);
   let current = "";
@@ -61,6 +63,7 @@ function mkdirp(path) {
   }
 }
 
+// Fetch local app assets (used for project-owned runtime files).
 async function fetchLocalText(path) {
   const res = await fetch(path);
   if (!res.ok) {
@@ -69,6 +72,7 @@ async function fetchLocalText(path) {
   return await res.text();
 }
 
+// Fetch CHIRP source content from jsDelivr (or pass through full URLs).
 async function fetchText(path) {
   const url = path.startsWith("http") ? path : `${CHIRP_CDN_BASE}${path}`;
   const res = await fetch(url);
@@ -78,6 +82,7 @@ async function fetchText(path) {
   return await res.text();
 }
 
+// Parse CHIRP-style import lines to discover Python module dependencies.
 function parseChirpImports(sourceText) {
   const deps = new Set();
   const lines = sourceText.split("\n");
@@ -124,6 +129,7 @@ function parseChirpImports(sourceText) {
   return [...deps];
 }
 
+// Map a Python module name to a CHIRP source path on the CDN.
 function moduleToSourcePath(moduleName) {
   if (moduleName === "chirp" || moduleName === "chirp.__init__") {
     return "/chirp/__init__.py";
@@ -134,6 +140,7 @@ function moduleToSourcePath(moduleName) {
   return `/${moduleName.replace(/\./g, "/")}.py`;
 }
 
+// Map a Python module name to destination path in Pyodide FS.
 function moduleToRuntimePath(moduleName) {
   if (moduleName === "chirp" || moduleName === "chirp.__init__") {
     return "/webchirp_runtime/chirp/__init__.py";
@@ -144,6 +151,7 @@ function moduleToRuntimePath(moduleName) {
   return `/webchirp_runtime/${moduleName.replace(/\./g, "/")}.py`;
 }
 
+// Ensure a CHIRP module (and best-effort dependencies) is present in Pyodide.
 async function ensureChirpModuleLoaded(moduleName) {
   if (loadedChirpModules.has(moduleName)) {
     return;
@@ -168,11 +176,13 @@ async function ensureChirpModuleLoaded(moduleName) {
   }
 }
 
+// Ensure the selected radio driver module is loaded before invoking Python APIs.
 async function ensureSelectedRadioModules(moduleShortName) {
   await ensurePyodide();
   await ensureChirpModuleLoaded(`chirp.drivers.${moduleShortName}`);
 }
 
+// Extract registered radio classes (vendor/model/class) from driver source.
 function parseDriverFileForRadios(moduleName, text) {
   const radios = [];
   const marker = "@directory.register";
@@ -206,6 +216,7 @@ function parseDriverFileForRadios(moduleName, text) {
   return radios;
 }
 
+// Build and cache the radio catalog by scanning CHIRP driver files from CDN.
 async function loadRadioCatalogFromSources() {
   if (radioCatalogCache) {
     return radioCatalogCache;
@@ -247,6 +258,7 @@ async function loadRadioCatalogFromSources() {
   return radioCatalogCache;
 }
 
+// Lazily initialize Pyodide, preload core CHIRP files, and load runtime bridge.
 async function ensurePyodide() {
   if (!bootstrapPromise) {
     bootstrapPromise = (async () => {
@@ -271,6 +283,7 @@ async function ensurePyodide() {
   return bootstrapPromise;
 }
 
+// Dispatch a worker RPC method to the appropriate Pyodide/runtime operation.
 async function handleCall(method, payload) {
   if (method === "listRadios") {
     const radios = await loadRadioCatalogFromSources();
@@ -354,6 +367,7 @@ async function handleCall(method, payload) {
   throw new Error(`Unknown method: ${method}`);
 }
 
+// Worker message loop: handles serial RPC responses and API method calls.
 self.onmessage = async (event) => {
   const msg = event.data || {};
 
@@ -388,31 +402,40 @@ self.onmessage = async (event) => {
   }
 };
 
+// Expose serial open callback to Python runtime via js module bridge.
 self.serial_open = (baudRate) => serialRpc("open", { baudRate: Number(baudRate) });
+// Expose serial close callback to Python runtime via js module bridge.
 self.serial_close = () => serialRpc("close", {});
+// Expose hex write callback to Python runtime via js module bridge.
 self.serial_write_hex = (hex) => serialRpc("writeHex", { hex: String(hex || "") });
+// Expose hex read callback to Python runtime via js module bridge.
 self.serial_read_hex = (count, timeoutMs) =>
   serialRpc("readHex", {
     count: Number(count || 1),
     timeoutMs: Number(timeoutMs || 1200),
   });
+// Expose raw byte write callback to Python runtime via js module bridge.
 self.serial_write_bytes = (bytes) =>
   serialRpc("writeBytes", {
     bytes: Array.from(bytes || []),
   });
+// Expose raw byte read callback to Python runtime via js module bridge.
 self.serial_read_bytes = (count, timeoutMs) =>
   serialRpc("readBytes", {
     count: Number(count || 1),
     timeoutMs: Number(timeoutMs || 1200),
   });
+// Expose log callback so Python status/debug lines can be rendered in UI.
 self.serial_log = (message) =>
   serialRpc("log", {
     message: String(message || ""),
   });
+// Expose pre-clone session prep callback (line control + settle timing).
 self.serial_prepare_clone = (wantsDtr, wantsRts, settleMs) =>
   serialRpc("prepareClone", {
     wantsDtr: Boolean(wantsDtr),
     wantsRts: Boolean(wantsRts),
     settleMs: Number(settleMs || 350),
   });
+// Expose buffer reset callback for pyserial compatibility methods.
 self.serial_reset_buffers = () => serialRpc("resetBuffers", {});
