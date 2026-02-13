@@ -62,6 +62,16 @@ This repository now includes a command-line smoke test that performs:
 2. Clone `sync_out` of the downloaded image back to the same radio.
 3. Clone `sync_in` again and verify image diff is within a threshold.
 
+The smoke harness runs **from JavaScript in Node**, loads **Pyodide**, then
+loads `web/python/runtime_bridge.py` and CHIRP sources into the Pyodide FS,
+mirroring the browser architecture.
+
+Install dependencies once:
+
+```bash
+npm install
+```
+
 Run it with:
 
 ```bash
@@ -75,7 +85,6 @@ node scripts/smoke-radio-clone.mjs --module h777 --class H777Radio --port /dev/t
 ```
 
 Notes:
-- Requires Python `pyserial` locally: `python -m pip install pyserial`.
 - This is hardware-in-the-loop and may be flaky across cable/radio variants.
 - If a driver updates volatile bytes on each clone, increase `--max-diff-bytes`.
 

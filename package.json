@@ -5,5 +5,9 @@
   "scripts": {
     "build:dist": "node scripts/build-dist.mjs",
     "test:smoke:radio": "node scripts/smoke-radio-clone.mjs"
+  },
+  "dependencies": {
+    "pyodide": "^0.27.2",
+    "serialport": "^12.0.0"
   }
 }
