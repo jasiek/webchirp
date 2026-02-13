@@ -28,6 +28,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Commit after every change.
 - Keep commits small and scoped to one functional fix/refactor when practical.
 - Include clear commit messages that describe user-visible behavior or architectural impact.
+- Include the user's input/request text in every commit message for agent-authored changes.
 
 ## Validation
 Before committing, run relevant checks:
