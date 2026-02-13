@@ -54,6 +54,45 @@ Live browser serial now attempts to execute the selected CHIRP clone-mode
 driver (`sync_in`/`sync_out`) through a generalized pyserial-like bridge.
 Compatibility still depends on driver expectations and browser transport limits.
 
+## CLI smoke test (hardware-in-the-loop)
+
+This repository now includes a command-line smoke test that performs:
+
+1. Clone `sync_in` from a real radio.
+2. Clone `sync_out` of the downloaded image back to the same radio.
+3. Clone `sync_in` again and verify image diff is within a threshold.
+
+Run it with:
+
+```bash
+node scripts/smoke-radio-clone.mjs --module <driver_module> --class <DriverClass> --port <serial_port> --max-diff-bytes 0
+```
+
+Example:
+
+```bash
+node scripts/smoke-radio-clone.mjs --module h777 --class H777Radio --port /dev/tty.usbserial-0001 --max-diff-bytes 0
+```
+
+Notes:
+- Requires Python `pyserial` locally: `python -m pip install pyserial`.
+- This is hardware-in-the-loop and may be flaky across cable/radio variants.
+- If a driver updates volatile bytes on each clone, increase `--max-diff-bytes`.
+
+## Deployment staging (`dist/`)
+
+Build deployable static assets into `dist/`:
+
+```bash
+npm run build:dist
+```
+
+This stages:
+- `dist/index.html`
+- `dist/web/**`
+
+Use `dist/` as the source directory when copying files to S3 for deployment.
+
 ## Next phase (recommended)
 
 1. Validate BF-888 against multiple cable/radio variants and harden timeout/ACK retries.

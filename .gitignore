@@ -20,6 +20,9 @@ pnpm-debug.log*
 
 # Build artifacts
 dist/
+!dist/
+dist/*
+!dist/.gitkeep
 build/
 .tmp/
 tmp/

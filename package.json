@@ -1,0 +1,9 @@
+{
+  "name": "webchirp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:dist": "node scripts/build-dist.mjs",
+    "test:smoke:radio": "node scripts/smoke-radio-clone.mjs"
+  }
+}
