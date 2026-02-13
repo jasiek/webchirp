@@ -9,7 +9,6 @@ export function createUiController() {
   const debugOutputEl = document.querySelector("#debug-output");
   const radioMakeEl = document.querySelector("#radio-make");
   const radioModelEl = document.querySelector("#radio-model");
-  const baudRateEl = document.querySelector("#baud-rate");
 
   let callWorker = null;
   let currentHeaders = [];
@@ -95,17 +94,6 @@ export function createUiController() {
     );
   }
 
-  // Apply selected radio's default baud rate into the serial baud input.
-  function syncBaudToSelection() {
-    if (!selectedRadio || !selectedRadio.baudRate) {
-      return;
-    }
-    const br = Number(selectedRadio.baudRate);
-    if (Number.isFinite(br) && br > 0) {
-      baudRateEl.value = String(br);
-    }
-  }
-
   // Populate model dropdown for selected vendor and refresh selection state.
   function refreshModelOptions() {
     const vendor = radioMakeEl.value;
@@ -127,7 +115,6 @@ export function createUiController() {
         `RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
       );
     }
-    syncBaudToSelection();
   }
 
   // Populate make dropdown from catalog and initialize model options.
@@ -403,14 +390,13 @@ export function createUiController() {
           `RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
         );
       }
-      syncBaudToSelection();
       loadSelectedRadioMetadata()
         .then(() => renderTable())
         .catch((error) => reportActionError("Metadata load", error));
     });
 
     document.querySelector("#serial-connect").addEventListener("click", async () => {
-      const baudRate = Number(baudRateEl.value || 9600);
+      const baudRate = Number(selectedRadio?.baudRate || 9600);
       try {
         setStatus("Connecting serial...");
         const result = await requireCallWorker()("serialConnect", { baudRate });
