@@ -1,10 +1,15 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
+const REQUIRED_NODE_FLAGS = [
+  "--experimental-wasm-stack-switching",
+  "--experimental-wasm-jspi",
+];
 const CHIRP_FILES = [
   ["/chirp/__init__.py", "chirp/__init__.py"],
   ["/chirp/errors.py", "chirp/errors.py"],
@@ -26,6 +31,41 @@ function usage() {
 
 Example:
   node scripts/smoke-radio-clone.mjs --module h777 --class H777Radio --port /dev/tty.usbserial-0001 --max-diff-bytes 0`);
+}
+
+function hasNodeFlag(flag) {
+  if (process.execArgv.includes(flag)) {
+    return true;
+  }
+  const envOptions = String(process.env.NODE_OPTIONS || "");
+  return envOptions.split(/\s+/).filter(Boolean).includes(flag);
+}
+
+function ensureNodeRuntimeFlags() {
+  const missing = REQUIRED_NODE_FLAGS.filter((flag) => !hasNodeFlag(flag));
+  if (missing.length === 0) {
+    return;
+  }
+  if (process.env.WEBCHIRP_REEXEC_WASM_FLAGS === "1") {
+    throw new Error(
+      `Node runtime is missing required WebAssembly flags: ${missing.join(" ")}`,
+    );
+  }
+  const child = spawnSync(
+    process.execPath,
+    [...missing, ...process.execArgv, __filename, ...process.argv.slice(2)],
+    {
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        WEBCHIRP_REEXEC_WASM_FLAGS: "1",
+      },
+    },
+  );
+  if (child.error) {
+    throw child.error;
+  }
+  process.exit(child.status ?? 1);
 }
 
 function parseArgs(argv) {
@@ -244,6 +284,7 @@ function resolveChirpSourcePath(relPath) {
 }
 
 async function main() {
+  ensureNodeRuntimeFlags();
   const argv = process.argv.slice(2);
   if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) {
     usage();

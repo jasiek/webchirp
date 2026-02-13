@@ -72,6 +72,11 @@ Install dependencies once:
 npm install
 ```
 
+The smoke runner auto-restarts Node with the required WebAssembly flags for
+Pyodide synchronous JS bridging:
+- `--experimental-wasm-stack-switching`
+- `--experimental-wasm-jspi`
+
 Run it with:
 
 ```bash
