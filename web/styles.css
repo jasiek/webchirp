@@ -80,13 +80,20 @@ button:hover {
 .main-layout {
   display: grid;
   grid-template-columns: 280px 1fr;
-  min-height: calc(100vh - 290px);
+  flex: 1;
+  min-height: 0;
 }
 
 .left-panel {
   border-right: 1px solid var(--border);
   background: #eef3fb;
   padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.left-panel-main {
+  min-height: 0;
 }
 
 .left-panel h2 {
@@ -147,10 +154,10 @@ button:hover {
   overflow: auto;
 }
 
-.debug-panel {
+.sidebar-debug-panel {
+  margin-top: auto;
   border-top: 1px solid var(--border);
-  background: #e6edf8;
-  padding: 0.3rem 0.9rem 0.9rem;
+  padding-top: 0.35rem;
 }
 
 .debug-summary {
@@ -163,6 +170,12 @@ button:hover {
 
 .debug-body {
   margin-top: 0.3rem;
+}
+
+.debug-output-panel {
+  border-top: 1px solid var(--border);
+  background: #e6edf8;
+  padding: 0.7rem 0.9rem 0.9rem;
 }
 
 .debug-serial-tools {
@@ -193,7 +206,7 @@ button:hover {
 
 #debug-output {
   width: 100%;
-  min-height: 170px;
+  min-height: 180px;
   resize: vertical;
   border: 1px solid var(--border);
   background: #f9fbff;
@@ -253,11 +266,17 @@ button:hover {
 @media (max-width: 900px) {
   .main-layout {
     grid-template-columns: 1fr;
+    min-height: auto;
   }
 
   .left-panel {
+    display: block;
     border-right: none;
     border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-debug-panel {
+    margin-top: 0.8rem;
   }
 
   .debug-serial-tools {

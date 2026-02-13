@@ -35,25 +35,42 @@
 
       <main class="main-layout">
         <aside class="left-panel">
-          <h2>Session</h2>
-          <p id="status">Initializing Python runtime...</p>
-          <p class="hint">MVP runs CHIRP's Generic CSV driver in-browser via Pyodide.</p>
-          <hr />
-          <h2>Serial Bridge</h2>
-          <label for="radio-make">Radio make</label>
-          <select id="radio-make"></select>
-          <label for="radio-model">Radio model</label>
-          <select id="radio-model"></select>
-          <label for="baud-rate">Baud</label>
-          <input id="baud-rate" type="number" value="9600" min="300" step="300" />
-          <div class="serial-actions">
-            <button id="serial-connect">Connect</button>
-            <button id="serial-disconnect">Disconnect</button>
+          <div class="left-panel-main">
+            <h2>Session</h2>
+            <p id="status">Initializing Python runtime...</p>
+            <p class="hint">MVP runs CHIRP's Generic CSV driver in-browser via Pyodide.</p>
+            <hr />
+            <h2>Serial Bridge</h2>
+            <label for="radio-make">Radio make</label>
+            <select id="radio-make"></select>
+            <label for="radio-model">Radio model</label>
+            <select id="radio-model"></select>
+            <label for="baud-rate">Baud</label>
+            <input id="baud-rate" type="number" value="9600" min="300" step="300" />
+            <div class="serial-actions">
+              <button id="serial-connect">Connect</button>
+              <button id="serial-disconnect">Disconnect</button>
+            </div>
+            <div class="serial-actions">
+              <button id="radio-download">Download Radio</button>
+              <button id="radio-upload">Upload Radio</button>
+            </div>
           </div>
-          <div class="serial-actions">
-            <button id="radio-download">Download Radio</button>
-            <button id="radio-upload">Upload Radio</button>
-          </div>
+
+          <details class="sidebar-debug-panel" id="debug-panel">
+            <summary class="debug-summary">Debug Panel</summary>
+            <div class="debug-body">
+              <div class="debug-serial-tools">
+                <label for="tx-hex">TX (hex)</label>
+                <input id="tx-hex" type="text" value="" placeholder="AA BB CC" />
+                <label for="rx-bytes">RX bytes</label>
+                <input id="rx-bytes" type="number" value="32" min="1" max="2048" />
+                <label for="rx-timeout">Timeout (ms)</label>
+                <input id="rx-timeout" type="number" value="1200" min="50" step="50" />
+                <button id="serial-transaction">Python TX/RX</button>
+              </div>
+            </div>
+          </details>
         </aside>
 
         <section class="editor-panel">
@@ -64,30 +81,18 @@
         </section>
       </main>
 
-      <details class="debug-panel" id="debug-panel">
-        <summary class="debug-summary">Debug Panel</summary>
-        <div class="debug-body">
-          <div class="debug-serial-tools">
-            <label for="tx-hex">TX (hex)</label>
-            <input id="tx-hex" type="text" value="" placeholder="AA BB CC" />
-            <label for="rx-bytes">RX bytes</label>
-            <input id="rx-bytes" type="number" value="32" min="1" max="2048" />
-            <label for="rx-timeout">Timeout (ms)</label>
-            <input id="rx-timeout" type="number" value="1200" min="50" step="50" />
-            <button id="serial-transaction">Python TX/RX</button>
-          </div>
-          <div class="debug-header">
-            <h2>Debug Output</h2>
-            <button id="debug-clear" type="button">Clear</button>
-          </div>
-          <textarea
-            id="debug-output"
-            readonly
-            spellcheck="false"
-            placeholder="Runtime logs will appear here..."
-          ></textarea>
+      <section class="debug-output-panel">
+        <div class="debug-header">
+          <h2>Debug Output</h2>
+          <button id="debug-clear" type="button">Clear</button>
         </div>
-      </details>
+        <textarea
+          id="debug-output"
+          readonly
+          spellcheck="false"
+          placeholder="Runtime logs will appear here..."
+        ></textarea>
+      </section>
     </div>
 
     <input id="csv-file" type="file" accept=".csv,text/csv" hidden />
