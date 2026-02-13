@@ -1,7 +1,10 @@
 import asyncio
 import csv
 import io
+import importlib
+import importlib.abc
 import json
+import os
 import sys
 
 sys.path.insert(0, "/webchirp_runtime")
@@ -9,6 +12,7 @@ sys.path.insert(0, "/webchirp_runtime")
 from chirp import chirp_common, errors, memmap
 from chirp.drivers.generic_csv import CSVRadio
 from js import (
+    fetch_chirp_source,
     serial_close,
     serial_prepare_clone,
     serial_reset_buffers,
@@ -45,6 +49,63 @@ def _await_js(awaitable):
         "No synchronous Promise bridge available in this runtime; "
         "cannot execute blocking CHIRP serial drivers"
     )
+
+
+def _chirp_source_relpath(fullname: str) -> str:
+    if fullname in ("chirp", "chirp.__init__"):
+        return "/chirp/__init__.py"
+    if fullname == "chirp.drivers":
+        return "/chirp/drivers/__init__.py"
+    return "/" + fullname.replace(".", "/") + ".py"
+
+
+def _chirp_runtime_path(fullname: str) -> str:
+    if fullname in ("chirp", "chirp.__init__"):
+        return "/webchirp_runtime/chirp/__init__.py"
+    if fullname == "chirp.drivers":
+        return "/webchirp_runtime/chirp/drivers/__init__.py"
+    return "/webchirp_runtime/" + fullname.replace(".", "/") + ".py"
+
+
+def _ensure_chirp_module_file(fullname: str) -> None:
+    runtime_path = _chirp_runtime_path(fullname)
+    if os.path.exists(runtime_path):
+        return
+    source_relpath = _chirp_source_relpath(fullname)
+    source = _await_js(fetch_chirp_source(source_relpath))
+    if hasattr(source, "to_py"):
+        source = source.to_py()
+    os.makedirs(os.path.dirname(runtime_path), exist_ok=True)
+    with open(runtime_path, "w", encoding="utf-8") as f:
+        f.write(str(source))
+
+
+class ChirpCdnFinder(importlib.abc.MetaPathFinder):
+    """Lazy materializer for missing chirp.* modules from jsDelivr."""
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname != "chirp" and not fullname.startswith("chirp."):
+            return None
+        try:
+            _ensure_chirp_module_file(fullname)
+        except Exception:
+            # Let the normal import machinery raise if still unavailable.
+            return None
+        return None
+
+
+def _install_chirp_import_hook() -> None:
+    if any(isinstance(f, ChirpCdnFinder) for f in sys.meta_path):
+        return
+    # Prepend so missing chirp modules are materialized before PathFinder runs.
+    sys.meta_path.insert(0, ChirpCdnFinder())
+
+
+def ensure_radio_module(module_short_name: str) -> None:
+    importlib.import_module(f"chirp.drivers.{module_short_name}")
+
+
+_install_chirp_import_hook()
 
 
 def parse_csv(csv_text: str):

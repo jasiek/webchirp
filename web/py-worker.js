@@ -23,20 +23,6 @@ const CHIRP_FILES = [
 let pyodide;
 let bootstrapPromise;
 let radioCatalogCache = null;
-const loadedChirpModules = new Set([
-  "chirp.__init__",
-  "chirp.errors",
-  "chirp.util",
-  "chirp.memmap",
-  "chirp.chirp_common",
-  "chirp.directory",
-  "chirp.pyPEG",
-  "chirp.bitwise_grammar",
-  "chirp.bitwise",
-  "chirp.settings",
-  "chirp.drivers.generic_csv",
-  "chirp.drivers.h777",
-]);
 let rpcId = 0;
 const rpcPending = new Map();
 
@@ -82,104 +68,11 @@ async function fetchText(path) {
   return await res.text();
 }
 
-// Parse CHIRP-style import lines to discover Python module dependencies.
-function parseChirpImports(sourceText) {
-  const deps = new Set();
-  const lines = sourceText.split("\n");
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-    let m = trimmed.match(/^from\s+chirp\.drivers\.([A-Za-z0-9_]+)\s+import\s+/);
-    if (m) {
-      deps.add(`chirp.drivers.${m[1]}`);
-      continue;
-    }
-    m = trimmed.match(/^from\s+chirp\.drivers\s+import\s+(.+)$/);
-    if (m) {
-      for (const part of m[1].split(",")) {
-        const name = part.trim().split(/\s+/)[0];
-        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-          deps.add(`chirp.drivers.${name}`);
-        }
-      }
-      continue;
-    }
-    m = trimmed.match(/^from\s+chirp\s+import\s+(.+)$/);
-    if (m) {
-      for (const part of m[1].split(",")) {
-        const name = part.trim().split(/\s+/)[0];
-        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-          deps.add(`chirp.${name}`);
-        }
-      }
-      continue;
-    }
-    m = trimmed.match(/^import\s+(.+)$/);
-    if (m) {
-      for (const part of m[1].split(",")) {
-        const item = part.trim().split(/\s+/)[0];
-        if (item === "chirp" || item.startsWith("chirp.")) {
-          deps.add(item === "chirp" ? "chirp.__init__" : item);
-        }
-      }
-    }
-  }
-  return [...deps];
-}
-
-// Map a Python module name to a CHIRP source path on the CDN.
-function moduleToSourcePath(moduleName) {
-  if (moduleName === "chirp" || moduleName === "chirp.__init__") {
-    return "/chirp/__init__.py";
-  }
-  if (moduleName === "chirp.drivers") {
-    return "/chirp/drivers/__init__.py";
-  }
-  return `/${moduleName.replace(/\./g, "/")}.py`;
-}
-
-// Map a Python module name to destination path in Pyodide FS.
-function moduleToRuntimePath(moduleName) {
-  if (moduleName === "chirp" || moduleName === "chirp.__init__") {
-    return "/webchirp_runtime/chirp/__init__.py";
-  }
-  if (moduleName === "chirp.drivers") {
-    return "/webchirp_runtime/chirp/drivers/__init__.py";
-  }
-  return `/webchirp_runtime/${moduleName.replace(/\./g, "/")}.py`;
-}
-
-// Ensure a CHIRP module (and best-effort dependencies) is present in Pyodide.
-async function ensureChirpModuleLoaded(moduleName) {
-  if (loadedChirpModules.has(moduleName)) {
-    return;
-  }
-  const sourcePath = moduleToSourcePath(moduleName);
-  const runtimePath = moduleToRuntimePath(moduleName);
-  const source = await fetchText(sourcePath);
-  const dir = runtimePath.split("/").slice(0, -1).join("/");
-  mkdirp(dir);
-  pyodide.FS.writeFile(runtimePath, source, { encoding: "utf8" });
-  loadedChirpModules.add(moduleName);
-
-  const deps = parseChirpImports(source);
-  for (const dep of deps) {
-    if (!dep.startsWith("chirp.wxui") && !dep.startsWith("chirp.cli")) {
-      try {
-        await ensureChirpModuleLoaded(dep);
-      } catch {
-        // Best effort dependency loading; import-time errors are surfaced later.
-      }
-    }
-  }
-}
-
-// Ensure the selected radio driver module is loaded before invoking Python APIs.
+// Trigger runtime import of the selected driver; Python import hook fetches missing files.
 async function ensureSelectedRadioModules(moduleShortName) {
   await ensurePyodide();
-  await ensureChirpModuleLoaded(`chirp.drivers.${moduleShortName}`);
+  pyodide.globals.set("_sel_module_short", moduleShortName);
+  await pyodide.runPythonAsync("ensure_radio_module(_sel_module_short)");
 }
 
 // Extract registered radio classes (vendor/model/class) from driver source.
@@ -439,3 +332,5 @@ self.serial_prepare_clone = (wantsDtr, wantsRts, settleMs) =>
   });
 // Expose buffer reset callback for pyserial compatibility methods.
 self.serial_reset_buffers = () => serialRpc("resetBuffers", {});
+// Expose CHIRP source fetch callback used by Python import hook for lazy module loading.
+self.fetch_chirp_source = (path) => fetchText(String(path || ""));
