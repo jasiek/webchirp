@@ -18,6 +18,7 @@ let selectedRadio = null;
 let radioMetadata = { headers: [], columns: {} };
 
 class BrowserSerialBridge {
+  // Manage Web Serial lifecycle and provide buffered byte-oriented I/O helpers.
   constructor() {
     this.port = null;
     this.reader = null;
@@ -169,15 +170,18 @@ class BrowserSerialBridge {
 
 const serialBridge = new BrowserSerialBridge();
 
+// Update the visible status line and mirror it into the debug log stream.
 function setStatus(text) {
   statusEl.textContent = text;
   logDebug(`STATUS ${text}`);
 }
 
+// Record serial-related events in the central debug output stream.
 function logSerial(line) {
   logDebug(`SERIAL ${String(line || "")}`);
 }
 
+// Append a timestamped line to the bottom debug console panel.
 function logDebug(line) {
   const stamp = new Date().toISOString();
   const text = `[${stamp}] ${String(line || "")}`;
@@ -186,6 +190,7 @@ function logDebug(line) {
   debugOutputEl.scrollTop = debugOutputEl.scrollHeight;
 }
 
+// Normalize unknown error shapes into a detailed string for diagnostics.
 function errorDetails(error) {
   if (!error) {
     return "Unknown error";
@@ -206,17 +211,20 @@ function errorDetails(error) {
   }
 }
 
+// Extract a short first-line summary from a detailed error payload.
 function errorSummary(error) {
   const firstLine = errorDetails(error).split("\n")[0].trim();
   return firstLine || "Unknown error";
 }
 
+// Centralized UI + debug handling for action-level failures.
 function reportActionError(action, error) {
   const details = errorDetails(error);
   logDebug(`${action.toUpperCase()} ERROR\n${details}`);
   setStatus(`${action} failed (see Debug Output).`);
 }
 
+// Send an RPC call to the worker and await either success data or an error.
 function callWorker(method, payload = {}) {
   const id = ++reqId;
   return new Promise((resolve, reject) => {
@@ -251,6 +259,7 @@ function callWorker(method, payload = {}) {
   });
 }
 
+// Handle serial bridge RPC requests arriving from the worker.
 async function handleSerialRpc(msg) {
   const { id, op, payload } = msg;
   const send = (ok, data, error) =>
@@ -326,16 +335,19 @@ async function handleSerialRpc(msg) {
   }
 }
 
+// Build a short user-facing label for a selected radio catalog entry.
 function makeModelLabel(radio) {
   return `${radio.vendor} ${radio.model}`;
 }
 
+// Produce a sorted unique list of vendor names from the radio catalog.
 function uniqueVendors(radios) {
   return Array.from(new Set(radios.map((r) => r.vendor))).sort((a, b) =>
     a.localeCompare(b),
   );
 }
 
+// Apply selected radio's default baud rate into the serial baud input.
 function syncBaudToSelection() {
   if (!selectedRadio || !selectedRadio.baudRate) {
     return;
@@ -346,6 +358,7 @@ function syncBaudToSelection() {
   }
 }
 
+// Populate model dropdown for selected vendor and refresh selection state.
 function refreshModelOptions() {
   const vendor = radioMakeEl.value;
   const models = radioCatalog.filter((r) => r.vendor === vendor);
@@ -367,6 +380,7 @@ function refreshModelOptions() {
   syncBaudToSelection();
 }
 
+// Populate make dropdown from catalog and initialize model options.
 function refreshMakeOptions() {
   const vendors = uniqueVendors(radioCatalog);
   radioMakeEl.innerHTML = "";
@@ -382,6 +396,7 @@ function refreshMakeOptions() {
   refreshModelOptions();
 }
 
+// Render the editable channel table using current rows and metadata rules.
 function renderTable() {
   const columns = currentHeaders.slice();
 
@@ -410,6 +425,7 @@ function renderTable() {
   });
 }
 
+// Parse CHIRP-style frequency text (MHz) to integer Hz for validation checks.
 function parseFreqToHz(value) {
   const text = String(value || "").trim();
   if (!text) {
@@ -425,6 +441,7 @@ function parseFreqToHz(value) {
   return Math.round(n * 1_000_000);
 }
 
+// Check whether a frequency in Hz falls within any allowed CHIRP band range.
 function inAnyBand(hz, bands) {
   if (!Array.isArray(bands) || bands.length === 0) {
     return true;
@@ -432,6 +449,7 @@ function inAnyBand(hz, bands) {
   return bands.some(([lo, hi]) => hz >= Number(lo) && hz < Number(hi));
 }
 
+// Coerce and constrain edited cell values according to CHIRP column metadata.
 function normalizeValue(column, value, meta, previous) {
   let v = String(value ?? "");
   if (!meta || meta.editable === false) {
@@ -489,6 +507,7 @@ function normalizeValue(column, value, meta, previous) {
   return v;
 }
 
+// Create a table cell editor (input/select) based on CHIRP column metadata.
 function createCellEditor(row, rowIdx, column) {
   const meta = radioMetadata.columns?.[column] || {};
   const current = String(row[column] ?? "");
@@ -533,6 +552,7 @@ function createCellEditor(row, rowIdx, column) {
   return input;
 }
 
+// Load selected radio's CHIRP-derived column metadata from Python runtime.
 async function loadSelectedRadioMetadata() {
   if (!selectedRadio) {
     return;
@@ -545,6 +565,7 @@ async function loadSelectedRadioMetadata() {
   currentHeaders = radioMetadata.headers?.length ? radioMetadata.headers : currentHeaders;
 }
 
+// Parse CSV through Python runtime and refresh table rows and status text.
 async function loadCsvText(csvText) {
   setStatus("Parsing CSV with CHIRP Python...");
   const parsed = await callWorker("parseCsv", { csvText });
@@ -560,6 +581,7 @@ async function loadCsvText(csvText) {
   setStatus(`Loaded ${currentRows.length} channel(s)${issues}.`);
 }
 
+// Trigger client-side download of generated text content as a file.
 function downloadText(filename, text) {
   const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -570,6 +592,7 @@ function downloadText(filename, text) {
   URL.revokeObjectURL(url);
 }
 
+// Ask Python runtime to normalize current rows and export as CSV file.
 async function exportCsv() {
   setStatus("Normalizing rows with CHIRP Python...");
   const csvText = await callWorker("normalizeRows", { rows: currentRows });
@@ -577,6 +600,7 @@ async function exportCsv() {
   setStatus("Exported webchirp-export.csv");
 }
 
+// Bootstrap UI: capability checks, catalog load, metadata load, sample data.
 async function init() {
   try {
     if (!serialBridge.isSupported()) {
@@ -748,6 +772,7 @@ document.querySelector("#radio-upload").addEventListener("click", async () => {
   }
 });
 
+// Parse user-entered hex byte text into a Uint8Array for serial writes.
 function parseHex(input) {
   const text = String(input || "").trim();
   if (!text) {
@@ -768,12 +793,14 @@ function parseHex(input) {
   return out;
 }
 
+// Convert a byte array into uppercase space-delimited hex for display/logging.
 function bytesToHex(bytes) {
   return Array.from(bytes || [])
     .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
     .join(" ");
 }
 
+// Concatenate two Uint8Array buffers into one contiguous buffer.
 function concatUint8(a, b) {
   const out = new Uint8Array(a.length + b.length);
   out.set(a, 0);
