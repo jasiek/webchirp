@@ -50,13 +50,6 @@
             <button id="serial-connect">Connect</button>
             <button id="serial-disconnect">Disconnect</button>
           </div>
-          <label for="tx-hex">TX (hex)</label>
-          <input id="tx-hex" type="text" value="" placeholder="AA BB CC" />
-          <label for="rx-bytes">RX bytes</label>
-          <input id="rx-bytes" type="number" value="32" min="1" max="2048" />
-          <label for="rx-timeout">Timeout (ms)</label>
-          <input id="rx-timeout" type="number" value="1200" min="50" step="50" />
-          <button id="serial-transaction">Python TX/RX</button>
           <div class="serial-actions">
             <button id="radio-download">Download Radio</button>
             <button id="radio-upload">Upload Radio</button>
@@ -71,18 +64,30 @@
         </section>
       </main>
 
-      <section class="debug-panel">
-        <div class="debug-header">
-          <h2>Debug Output</h2>
-          <button id="debug-clear" type="button">Clear</button>
+      <details class="debug-panel" id="debug-panel">
+        <summary class="debug-summary">Debug Panel</summary>
+        <div class="debug-body">
+          <div class="debug-serial-tools">
+            <label for="tx-hex">TX (hex)</label>
+            <input id="tx-hex" type="text" value="" placeholder="AA BB CC" />
+            <label for="rx-bytes">RX bytes</label>
+            <input id="rx-bytes" type="number" value="32" min="1" max="2048" />
+            <label for="rx-timeout">Timeout (ms)</label>
+            <input id="rx-timeout" type="number" value="1200" min="50" step="50" />
+            <button id="serial-transaction">Python TX/RX</button>
+          </div>
+          <div class="debug-header">
+            <h2>Debug Output</h2>
+            <button id="debug-clear" type="button">Clear</button>
+          </div>
+          <textarea
+            id="debug-output"
+            readonly
+            spellcheck="false"
+            placeholder="Runtime logs will appear here..."
+          ></textarea>
         </div>
-        <textarea
-          id="debug-output"
-          readonly
-          spellcheck="false"
-          placeholder="Runtime logs will appear here..."
-        ></textarea>
-      </section>
+      </details>
     </div>
 
     <input id="csv-file" type="file" accept=".csv,text/csv" hidden />

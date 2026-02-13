@@ -150,7 +150,33 @@ button:hover {
 .debug-panel {
   border-top: 1px solid var(--border);
   background: #e6edf8;
-  padding: 0.7rem 0.9rem 0.9rem;
+  padding: 0.3rem 0.9rem 0.9rem;
+}
+
+.debug-summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  user-select: none;
+  padding: 0.45rem 0;
+}
+
+.debug-body {
+  margin-top: 0.3rem;
+}
+
+.debug-serial-tools {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.35rem 0.7rem;
+  align-items: center;
+  max-width: 520px;
+  margin-bottom: 0.7rem;
+}
+
+.debug-serial-tools button {
+  grid-column: 2;
+  justify-self: start;
 }
 
 .debug-header {
@@ -232,5 +258,14 @@ button:hover {
   .left-panel {
     border-right: none;
     border-bottom: 1px solid var(--border);
+  }
+
+  .debug-serial-tools {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .debug-serial-tools button {
+    grid-column: 1;
   }
 }
