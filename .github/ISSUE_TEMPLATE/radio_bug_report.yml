@@ -1,0 +1,94 @@
+name: Radio Bug Report
+description: Report a bug for a specific radio and environment
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please provide the details below so we can reproduce the issue.
+
+  - type: input
+    id: radio_make
+    attributes:
+      label: Radio make
+      description: Manufacturer name (for example, Yaesu, Icom, Kenwood)
+      placeholder: Yaesu
+    validations:
+      required: true
+
+  - type: input
+    id: radio_model
+    attributes:
+      label: Radio model
+      description: Exact model identifier
+      placeholder: FT-60R
+    validations:
+      required: true
+
+  - type: input
+    id: usb_device_name
+    attributes:
+      label: Connected USB device name
+      description: Port or device name used by the radio connection
+      placeholder: /dev/ttyUSB0 or COM14
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating_system
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: browser_and_version
+    attributes:
+      label: Browser and version
+      description: Include full browser name and version
+      placeholder: Firefox 122.0.1
+    validations:
+      required: true
+
+  - type: input
+    id: chirp_revision
+    attributes:
+      label: CHIRP revision
+      description: Use master or a specific commit SHA from the chirp submodule
+      placeholder: master or 1a2b3c4d
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide exact steps so we can reproduce the bug
+      placeholder: |
+        1. Connect radio
+        2. Select make/model
+        3. Click Download
+        4. Observe error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: Actual behavior
+      description: Include relevant messages from Debug Output if available
+    validations:
+      required: true
