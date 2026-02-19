@@ -20,7 +20,8 @@ export function createUiController() {
   let selectedRadio = null;
   let radioMetadata = { headers: [], columns: {} };
   let runtimeInfo = { chirpRevision: "master" };
-  let lastSerialDeviceName = "";
+  let lastUsbVendorId = "";
+  let lastUsbProductId = "";
   let lastErrorSummary = "";
 
   function setCallWorker(fn) {
@@ -131,8 +132,8 @@ export function createUiController() {
       title: issueTitle.slice(0, 240),
       radio_make: radioMake,
       radio_model: radioModel,
-      usb_device_name:
-        lastSerialDeviceName || "Unknown (Web Serial API does not expose COM/tty path)",
+      usb_vendor_id: lastUsbVendorId || "Unknown",
+      usb_product_id: lastUsbProductId || "Unknown",
       operating_system: detectOperatingSystem(),
       browser_and_version: detectBrowserVersion(),
       chirp_revision: runtimeInfo.chirpRevision || "master",
@@ -502,8 +503,16 @@ export function createUiController() {
         setStatus("Connecting serial...");
         const result = await requireCallWorker()("serialConnect", { baudRate });
         if (result?.deviceName) {
-          lastSerialDeviceName = result.deviceName;
-          logDebug(`SERIAL DEVICE ${lastSerialDeviceName}`);
+          logDebug(`SERIAL DEVICE ${result.deviceName}`);
+        }
+        if (result?.usbVendorId) {
+          lastUsbVendorId = result.usbVendorId;
+        }
+        if (result?.usbProductId) {
+          lastUsbProductId = result.usbProductId;
+        }
+        if (lastUsbVendorId || lastUsbProductId) {
+          logDebug(`SERIAL USB ID ${lastUsbVendorId || "unknown"}:${lastUsbProductId || "unknown"}`);
         }
         setStatus(result.message || "Serial connected.");
       } catch (error) {

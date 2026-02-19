@@ -64,6 +64,7 @@ export class BrowserSerialBridge {
       parity: "none",
       flowControl: "none",
     });
+    const identity = this._getPortIdentity(this.port);
     this.lastDeviceName = this._describePort(this.port);
     this.reader = this.port.readable.getReader();
     this.writer = this.port.writable.getWriter();
@@ -72,6 +73,8 @@ export class BrowserSerialBridge {
       connected: true,
       message: `Connected at ${baudRate} baud`,
       deviceName: this.lastDeviceName,
+      usbVendorId: identity.usbVendorId,
+      usbProductId: identity.usbProductId,
     };
   }
 
@@ -109,9 +112,12 @@ export class BrowserSerialBridge {
   }
 
   getPortInfo() {
+    const identity = this.port ? this._getPortIdentity(this.port) : {};
     return {
       connected: Boolean(this.port),
       deviceName: this.port ? this._describePort(this.port) : this.lastDeviceName,
+      usbVendorId: identity.usbVendorId,
+      usbProductId: identity.usbProductId,
     };
   }
 
@@ -198,13 +204,9 @@ export class BrowserSerialBridge {
   }
 
   _describePort(port) {
-    const info = port?.getInfo?.() || {};
-    const vid = Number.isInteger(info.usbVendorId)
-      ? `0x${info.usbVendorId.toString(16).padStart(4, "0").toUpperCase()}`
-      : null;
-    const pid = Number.isInteger(info.usbProductId)
-      ? `0x${info.usbProductId.toString(16).padStart(4, "0").toUpperCase()}`
-      : null;
+    const identity = this._getPortIdentity(port);
+    const vid = identity.usbVendorId;
+    const pid = identity.usbProductId;
     if (vid && pid) {
       return `USB VID:PID ${vid}:${pid}`;
     }
@@ -212,6 +214,17 @@ export class BrowserSerialBridge {
       return `USB VID ${vid}`;
     }
     return "Unknown (Web Serial API does not expose COM/tty path)";
+  }
+
+  _getPortIdentity(port) {
+    const info = port?.getInfo?.() || {};
+    const usbVendorId = Number.isInteger(info.usbVendorId)
+      ? `0x${info.usbVendorId.toString(16).padStart(4, "0").toUpperCase()}`
+      : null;
+    const usbProductId = Number.isInteger(info.usbProductId)
+      ? `0x${info.usbProductId.toString(16).padStart(4, "0").toUpperCase()}`
+      : null;
+    return { usbVendorId, usbProductId };
   }
 }
 

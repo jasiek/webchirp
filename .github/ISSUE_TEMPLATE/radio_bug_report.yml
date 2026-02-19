@@ -27,11 +27,20 @@ body:
       required: true
 
   - type: input
-    id: usb_device_name
+    id: usb_vendor_id
     attributes:
-      label: Connected USB device name
-      description: Port or device name used by the radio connection
-      placeholder: /dev/ttyUSB0 or COM14
+      label: USB vendor ID
+      description: USB vendor identifier reported by Web Serial
+      placeholder: "0x10C4"
+    validations:
+      required: true
+
+  - type: input
+    id: usb_product_id
+    attributes:
+      label: USB product ID
+      description: USB product identifier reported by Web Serial
+      placeholder: "0xEA60"
     validations:
       required: true
 
