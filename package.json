@@ -1,0 +1,8 @@
+{
+  "name": "webchirp",
+  "private": true,
+  "dependencies": {
+    "pyodide": "^0.27.2",
+    "serialport": "^12.0.0"
+  }
+}
