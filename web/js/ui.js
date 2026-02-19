@@ -1,4 +1,6 @@
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
+const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
+const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
 
 // Create and manage all DOM/UI state and user interaction behavior.
 export function createUiController() {
@@ -7,6 +9,7 @@ export function createUiController() {
   const tableBody = document.querySelector("#mem-table tbody");
   const fileInput = document.querySelector("#csv-file");
   const debugOutputEl = document.querySelector("#debug-output");
+  const reportIssueEl = document.querySelector("#report-issue");
   const radioMakeEl = document.querySelector("#radio-make");
   const radioModelEl = document.querySelector("#radio-model");
 
@@ -16,6 +19,9 @@ export function createUiController() {
   let radioCatalog = [];
   let selectedRadio = null;
   let radioMetadata = { headers: [], columns: {} };
+  let runtimeInfo = { chirpRevision: "master" };
+  let lastSerialDeviceName = "";
+  let lastErrorSummary = "";
 
   function setCallWorker(fn) {
     callWorker = fn;
@@ -34,6 +40,15 @@ export function createUiController() {
     logDebug(`STATUS ${text}`);
   }
 
+  function maybeEnableIssueButton(line) {
+    const text = String(line || "");
+    if (!/\b(error|traceback|exception)\b/i.test(text)) {
+      return;
+    }
+    lastErrorSummary = text.replace(/\s+/g, " ").trim().slice(0, 180);
+    reportIssueEl?.classList.remove("hidden");
+  }
+
   // Record serial-related events in the central debug output stream.
   function logSerial(line) {
     logDebug(`SERIAL ${String(line || "")}`);
@@ -46,6 +61,92 @@ export function createUiController() {
     const current = debugOutputEl.value ? `${debugOutputEl.value}\n` : "";
     debugOutputEl.value = `${current}${text}`;
     debugOutputEl.scrollTop = debugOutputEl.scrollHeight;
+    maybeEnableIssueButton(line);
+  }
+
+  function detectOperatingSystem() {
+    const ua = navigator.userAgent || "";
+    if (/Windows/i.test(ua)) {
+      return "Windows";
+    }
+    if (/Macintosh|Mac OS X/i.test(ua)) {
+      return "macOS";
+    }
+    if (/Linux|X11/i.test(ua)) {
+      return "Linux";
+    }
+    return "Other";
+  }
+
+  function detectBrowserVersion() {
+    const ua = navigator.userAgent || "";
+    const matchers = [
+      [/Edg\/([\d.]+)/, "Microsoft Edge"],
+      [/OPR\/([\d.]+)/, "Opera"],
+      [/Firefox\/([\d.]+)/, "Firefox"],
+      [/Chrome\/([\d.]+)/, "Chrome"],
+      [/Version\/([\d.]+).*Safari/, "Safari"],
+    ];
+    for (const [regex, name] of matchers) {
+      const match = ua.match(regex);
+      if (match?.[1]) {
+        return `${name} ${match[1]}`;
+      }
+    }
+    return navigator.appVersion || "Unknown browser";
+  }
+
+  function latestDebugTail(lineCount) {
+    const lines = String(debugOutputEl.value || "")
+      .split("\n")
+      .filter(Boolean);
+    if (lines.length <= lineCount) {
+      return lines.join("\n");
+    }
+    return lines.slice(lines.length - lineCount).join("\n");
+  }
+
+  function buildIssueUrl() {
+    const radioMake = selectedRadio?.vendor || radioMakeEl.value || "Unknown";
+    const radioModel = selectedRadio?.model || radioModelEl.value || "Unknown";
+    const issueTitle = `Radio bug: ${radioMake} ${radioModel} - ${lastErrorSummary || "runtime error"}`;
+    const debugTail = latestDebugTail(120);
+    const steps = [
+      "1. Connect radio",
+      "2. Select radio make/model",
+      "3. Run the action that failed",
+      "4. Observe the error in Debug Output",
+    ].join("\n");
+    const actualBehavior = [
+      lastErrorSummary || "Error recorded in Debug Output.",
+      "",
+      "Debug output excerpt:",
+      "```",
+      debugTail || "<no debug logs captured>",
+      "```",
+    ].join("\n");
+
+    const params = new URLSearchParams({
+      template: ISSUE_TEMPLATE_NAME,
+      title: issueTitle.slice(0, 240),
+      radio_make: radioMake,
+      radio_model: radioModel,
+      usb_device_name:
+        lastSerialDeviceName || "Unknown (Web Serial API does not expose COM/tty path)",
+      operating_system: detectOperatingSystem(),
+      browser_and_version: detectBrowserVersion(),
+      chirp_revision: runtimeInfo.chirpRevision || "master",
+      steps_to_reproduce: steps,
+      expected_behavior: "The radio operation should complete without errors.",
+      actual_behavior: actualBehavior,
+    });
+    return `${ISSUE_NEW_URL}?${params.toString()}`;
+  }
+
+  function openPrefilledIssue() {
+    const url = buildIssueUrl();
+    window.open(url, "_blank", "noopener,noreferrer");
+    logDebug("Opened pre-filled GitHub issue form.");
   }
 
   // Normalize unknown error shapes into a detailed string for diagnostics.
@@ -400,6 +501,10 @@ export function createUiController() {
       try {
         setStatus("Connecting serial...");
         const result = await requireCallWorker()("serialConnect", { baudRate });
+        if (result?.deviceName) {
+          lastSerialDeviceName = result.deviceName;
+          logDebug(`SERIAL DEVICE ${lastSerialDeviceName}`);
+        }
         setStatus(result.message || "Serial connected.");
       } catch (error) {
         reportActionError("Serial connect", error);
@@ -435,6 +540,12 @@ export function createUiController() {
 
     document.querySelector("#debug-clear").addEventListener("click", () => {
       debugOutputEl.value = "";
+      lastErrorSummary = "";
+      reportIssueEl?.classList.add("hidden");
+    });
+
+    reportIssueEl?.addEventListener("click", () => {
+      openPrefilledIssue();
     });
 
     window.addEventListener("error", (event) => {
@@ -501,6 +612,7 @@ export function createUiController() {
       }
       const catalog = await requireCallWorker()("listRadios");
       radioCatalog = catalog.radios || [];
+      runtimeInfo = (await requireCallWorker()("getRuntimeInfo")) || runtimeInfo;
       refreshMakeOptions();
       await loadSelectedRadioMetadata();
       setStatus(`Loaded ${radioCatalog.length} radio definitions from CHIRP sources.`);

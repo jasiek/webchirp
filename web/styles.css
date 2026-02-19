@@ -198,9 +198,23 @@ button:hover {
   margin-bottom: 0.4rem;
 }
 
+.debug-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
 .debug-header h2 {
   margin: 0;
   font-size: 0.9rem;
+}
+
+#report-issue {
+  border-color: #965200;
+  background: linear-gradient(180deg, #fff4df 0%, #f6d7ab 100%);
+}
+
+#report-issue.hidden {
+  display: none;
 }
 
 #debug-output {

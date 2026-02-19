@@ -68,6 +68,15 @@ async function fetchText(path) {
   return await res.text();
 }
 
+function getChirpRevision() {
+  const marker = "@";
+  const idx = CHIRP_CDN_BASE.lastIndexOf(marker);
+  if (idx === -1 || idx + 1 >= CHIRP_CDN_BASE.length) {
+    return "master";
+  }
+  return CHIRP_CDN_BASE.slice(idx + 1);
+}
+
 // Trigger runtime import of the selected driver; Python import hook fetches missing files.
 async function ensureSelectedRadioModules(moduleShortName) {
   await ensurePyodide();
@@ -178,6 +187,13 @@ async function ensurePyodide() {
 
 // Dispatch a worker RPC method to the appropriate Pyodide/runtime operation.
 async function handleCall(method, payload) {
+  if (method === "getRuntimeInfo") {
+    return {
+      chirpRevision: getChirpRevision(),
+      chirpCdnBase: CHIRP_CDN_BASE,
+    };
+  }
+
   if (method === "listRadios") {
     const radios = await loadRadioCatalogFromSources();
     return { radios };

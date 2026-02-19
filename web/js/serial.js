@@ -41,6 +41,7 @@ export class BrowserSerialBridge {
     this.reader = null;
     this.writer = null;
     this.readBuffer = new Uint8Array(0);
+    this.lastDeviceName = "";
   }
 
   isSupported() {
@@ -63,10 +64,15 @@ export class BrowserSerialBridge {
       parity: "none",
       flowControl: "none",
     });
+    this.lastDeviceName = this._describePort(this.port);
     this.reader = this.port.readable.getReader();
     this.writer = this.port.writable.getWriter();
     this._startReadLoop();
-    return { connected: true, message: `Connected at ${baudRate} baud` };
+    return {
+      connected: true,
+      message: `Connected at ${baudRate} baud`,
+      deviceName: this.lastDeviceName,
+    };
   }
 
   async close() {
@@ -100,6 +106,13 @@ export class BrowserSerialBridge {
     this.writer = null;
     this.readBuffer = new Uint8Array(0);
     return { connected: false, message: "Disconnected." };
+  }
+
+  getPortInfo() {
+    return {
+      connected: Boolean(this.port),
+      deviceName: this.port ? this._describePort(this.port) : this.lastDeviceName,
+    };
   }
 
   async writeHex(hex) {
@@ -183,6 +196,23 @@ export class BrowserSerialBridge {
       }
     }
   }
+
+  _describePort(port) {
+    const info = port?.getInfo?.() || {};
+    const vid = Number.isInteger(info.usbVendorId)
+      ? `0x${info.usbVendorId.toString(16).padStart(4, "0").toUpperCase()}`
+      : null;
+    const pid = Number.isInteger(info.usbProductId)
+      ? `0x${info.usbProductId.toString(16).padStart(4, "0").toUpperCase()}`
+      : null;
+    if (vid && pid) {
+      return `USB VID:PID ${vid}:${pid}`;
+    }
+    if (vid) {
+      return `USB VID ${vid}`;
+    }
+    return "Unknown (Web Serial API does not expose COM/tty path)";
+  }
 }
 
 // Build a serial RPC dispatcher used by worker-rpc bridge messages.
@@ -234,6 +264,9 @@ export function createSerialRpcHandler({ serialBridge, logSerial }) {
     if (op === "resetBuffers") {
       serialBridge.readBuffer = new Uint8Array(0);
       return { reset: true };
+    }
+    if (op === "getPortInfo") {
+      return serialBridge.getPortInfo();
     }
 
     throw new Error(`Unknown serial op: ${op}`);
