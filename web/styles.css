@@ -17,12 +17,15 @@ body {
   background: linear-gradient(180deg, #f6f8fb 0%, #e9eef6 100%);
   color: var(--text);
   font-family: "Segoe UI", Tahoma, sans-serif;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .toolbar {
@@ -272,7 +275,7 @@ button:hover {
 @media (max-width: 900px) {
   .main-layout {
     grid-template-columns: 1fr;
-    min-height: auto;
+    min-height: 0;
   }
 
   .left-panel {
