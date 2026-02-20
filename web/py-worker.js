@@ -1,7 +1,7 @@
 /* global importScripts, loadPyodide */
 
 const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js";
-const CHIRP_REVISION = "master";
+const CHIRP_REVISION = "1467519e792e8ebcc9a33dc40df0b2e273ce9a53";
 const CHIRP_CDN_BASE = `https://cdn.jsdelivr.net/gh/kk7ds/chirp@${CHIRP_REVISION}`;
 const CHIRP_FILE_INDEX_URL =
   `https://data.jsdelivr.com/v1/package/gh/kk7ds/chirp@${CHIRP_REVISION}/flat`;
