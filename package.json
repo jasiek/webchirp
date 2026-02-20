@@ -2,7 +2,7 @@
   "name": "webchirp",
   "private": true,
   "scripts": {
-    "build:dist": "python -c \"import pathlib, shutil; root=pathlib.Path('.'); dist=root/'dist'; shutil.rmtree(dist, ignore_errors=True); dist.mkdir(parents=True, exist_ok=True); shutil.copy2(root/'index.html', dist/'index.html'); shutil.copytree(root/'web', dist/'web')\""
+    "build:dist": "node scripts/build-dist.mjs"
   },
   "dependencies": {
     "pyodide": "^0.27.2",
