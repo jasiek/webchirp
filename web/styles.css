@@ -82,6 +82,7 @@ button:hover {
   grid-template-columns: 280px 1fr;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .left-panel {
@@ -90,6 +91,7 @@ button:hover {
   padding: 1rem;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .left-panel-main {
@@ -150,6 +152,7 @@ button:hover {
 
 .editor-panel {
   padding: 1rem;
+  min-height: 0;
   overflow: auto;
 }
 
