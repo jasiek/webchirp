@@ -30,6 +30,7 @@ except Exception:
     pyodide_run_sync = None
 
 CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
+DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
 LAST_IMAGE_BY_DRIVER = {}
 
 
@@ -464,6 +465,12 @@ def _mk_enum(values):
     return [str(v) for v in values] if values else []
 
 
+def _radio_supports_dv(rf):
+    """Detect whether a radio's mode capabilities include D-STAR DV mode."""
+    modes = {str(mode) for mode in (rf.valid_modes or [])}
+    return "DV" in modes
+
+
 def get_radio_column_metadata(module_name: str, class_name: str):
     """Build CHIRP-derived column editability/options metadata for the UI."""
     radio_cls = _import_radio_class(module_name, class_name)
@@ -566,7 +573,11 @@ def get_radio_column_metadata(module_name: str, class_name: str):
     col["RPT2CALL"] = {"kind": "text", "editable": False}
     col["DVCODE"] = {"kind": "text", "editable": False}
 
+    headers = list(CSV_HEADERS)
+    if not _radio_supports_dv(rf):
+        headers = [h for h in headers if h not in DV_ONLY_HEADERS]
+
     return {
-        "headers": list(CSV_HEADERS),
+        "headers": headers,
         "columns": col,
     }

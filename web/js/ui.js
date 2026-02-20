@@ -577,7 +577,9 @@ export function createUiController() {
           module: selectedRadio.module,
           className: selectedRadio.className,
         });
-        currentHeaders = result.headers;
+        currentHeaders = radioMetadata.headers?.length
+          ? radioMetadata.headers
+          : (result.headers || []);
         currentRows = result.rows;
         renderTable();
         setStatus(`${makeModelLabel(selectedRadio)} download complete (${currentRows.length} channels).`);
