@@ -1,9 +1,10 @@
 /* global importScripts, loadPyodide */
 
 const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js";
-const CHIRP_CDN_BASE = "https://cdn.jsdelivr.net/gh/kk7ds/chirp@master";
+const CHIRP_REVISION = "master";
+const CHIRP_CDN_BASE = `https://cdn.jsdelivr.net/gh/kk7ds/chirp@${CHIRP_REVISION}`;
 const CHIRP_FILE_INDEX_URL =
-  "https://data.jsdelivr.com/v1/package/gh/kk7ds/chirp@master/flat";
+  `https://data.jsdelivr.com/v1/package/gh/kk7ds/chirp@${CHIRP_REVISION}/flat`;
 
 const CHIRP_FILES = [
   ["/chirp/__init__.py", "chirp/__init__.py"],
@@ -69,12 +70,7 @@ async function fetchText(path) {
 }
 
 function getChirpRevision() {
-  const marker = "@";
-  const idx = CHIRP_CDN_BASE.lastIndexOf(marker);
-  if (idx === -1 || idx + 1 >= CHIRP_CDN_BASE.length) {
-    return "master";
-  }
-  return CHIRP_CDN_BASE.slice(idx + 1);
+  return CHIRP_REVISION;
 }
 
 // Trigger runtime import of the selected driver; Python import hook fetches missing files.

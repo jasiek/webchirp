@@ -19,7 +19,7 @@ export function createUiController() {
   let radioCatalog = [];
   let selectedRadio = null;
   let radioMetadata = { headers: [], columns: {} };
-  let runtimeInfo = { chirpRevision: "master" };
+  let runtimeInfo = { chirpRevision: "" };
   let lastUsbVendorId = "";
   let lastUsbProductId = "";
   let lastErrorSummary = "";
@@ -136,7 +136,7 @@ export function createUiController() {
       usb_product_id: lastUsbProductId || "Unknown",
       operating_system: detectOperatingSystem(),
       browser_and_version: detectBrowserVersion(),
-      chirp_revision: runtimeInfo.chirpRevision || "master",
+      chirp_revision: runtimeInfo.chirpRevision || "unknown",
       steps_to_reproduce: steps,
       expected_behavior: "The radio operation should complete without errors.",
       actual_behavior: actualBehavior,
