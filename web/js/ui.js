@@ -4,7 +4,6 @@ const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
 
 // Create and manage all DOM/UI state and user interaction behavior.
 export function createUiController() {
-  const statusEl = document.querySelector("#status");
   const tableHead = document.querySelector("#mem-table thead");
   const tableBody = document.querySelector("#mem-table tbody");
   const fileInput = document.querySelector("#csv-file");
@@ -35,9 +34,8 @@ export function createUiController() {
     return callWorker;
   }
 
-  // Update the visible status line and mirror it into the debug log stream.
+  // Emit status updates into the debug output stream.
   function setStatus(text) {
-    statusEl.textContent = text;
     logDebug(`STATUS ${text}`);
   }
 

@@ -140,16 +140,6 @@ button:hover {
   line-height: 1.4;
 }
 
-#status {
-  font-size: 0.92rem;
-}
-
-.hint {
-  color: var(--muted);
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
 .editor-panel {
   padding: 1rem;
   min-height: 0;
