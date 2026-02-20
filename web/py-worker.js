@@ -84,41 +84,7 @@ async function ensureSelectedRadioModules(moduleShortName) {
   await pyodide.runPythonAsync("ensure_radio_module(_sel_module_short)");
 }
 
-// Extract registered radio classes (vendor/model/class) from driver source.
-function parseDriverFileForRadios(moduleName, text) {
-  const radios = [];
-  const marker = "@directory.register";
-  let idx = 0;
-  while (true) {
-    const start = text.indexOf(marker, idx);
-    if (start === -1) {
-      break;
-    }
-    const next = text.indexOf(marker, start + marker.length);
-    const block = text.slice(start, next === -1 ? text.length : next);
-    idx = next === -1 ? text.length : next;
-
-    const classMatch = block.match(/class\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-    const vendorMatch = block.match(/^\s*VENDOR\s*=\s*["']([^"']+)["']/m);
-    const modelMatch = block.match(/^\s*MODEL\s*=\s*["']([^"']+)["']/m);
-    const baudMatch = block.match(/^\s*BAUD_RATE\s*=\s*([0-9]+)/m);
-    if (!classMatch || !vendorMatch || !modelMatch) {
-      continue;
-    }
-
-    radios.push({
-      key: `${moduleName}:${classMatch[1]}`,
-      module: moduleName,
-      className: classMatch[1],
-      vendor: vendorMatch[1],
-      model: modelMatch[1],
-      baudRate: baudMatch ? Number(baudMatch[1]) : null,
-    });
-  }
-  return radios;
-}
-
-// Build and cache the radio catalog by scanning CHIRP driver files from CDN.
+// Build and cache the radio catalog from CHIRP's runtime registration directory.
 async function loadRadioCatalogFromSources() {
   if (radioCatalogCache) {
     return radioCatalogCache;
@@ -138,17 +104,12 @@ async function loadRadioCatalogFromSources() {
     ),
   );
 
-  const allRadios = [];
-  await Promise.all(
-    modules.map(async (moduleName) => {
-      try {
-        const text = await fetchText(`/chirp/drivers/${moduleName}.py`);
-        allRadios.push(...parseDriverFileForRadios(moduleName, text));
-      } catch {
-        // Ignore module parse failures.
-      }
-    }),
+  await ensurePyodide();
+  pyodide.globals.set("_radio_catalog_modules", modules);
+  const radiosJson = await pyodide.runPythonAsync(
+    "json.dumps(list_registered_radios(_radio_catalog_modules))",
   );
+  const allRadios = JSON.parse(radiosJson);
 
   allRadios.sort((a, b) => {
     const av = `${a.vendor}\u0000${a.model}`;

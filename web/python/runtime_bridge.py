@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, "/webchirp_runtime")
 
-from chirp import chirp_common, errors, memmap
+from chirp import chirp_common, directory, errors, memmap
 from chirp.drivers.generic_csv import CSVRadio
 from js import (
     fetch_chirp_source,
@@ -114,6 +114,61 @@ def ensure_radio_module(module_short_name: str) -> None:
 
 
 _install_chirp_import_hook()
+
+
+def list_registered_radios(module_short_names):
+    """Import drivers and return radios from CHIRP's registration directory."""
+    loaded_modules = set()
+    for name in module_short_names or []:
+        module_short = str(name or "").strip()
+        if not module_short:
+            continue
+        try:
+            ensure_radio_module(module_short)
+            loaded_modules.add(module_short)
+        except Exception:
+            # Skip modules that cannot be imported in this runtime.
+            continue
+
+    seen = set()
+    radios = []
+    for radio_cls in directory.DRV_TO_RADIO.values():
+        module_full = getattr(radio_cls, "__module__", "")
+        if not module_full.startswith("chirp.drivers."):
+            continue
+        module_short = module_full.rsplit(".", 1)[-1]
+        if loaded_modules and module_short not in loaded_modules:
+            continue
+
+        vendor = getattr(radio_cls, "VENDOR", None)
+        model = getattr(radio_cls, "MODEL", None)
+        if vendor is None or model is None:
+            continue
+
+        key = f"{module_short}:{radio_cls.__name__}"
+        if key in seen:
+            continue
+        seen.add(key)
+
+        baud_rate = getattr(radio_cls, "BAUD_RATE", None)
+        try:
+            baud_rate = int(baud_rate) if baud_rate is not None else None
+        except Exception:
+            baud_rate = None
+
+        radios.append(
+            {
+                "key": key,
+                "module": module_short,
+                "className": radio_cls.__name__,
+                "vendor": str(vendor),
+                "model": str(model),
+                "baudRate": baud_rate,
+            }
+        )
+
+    radios.sort(key=lambda r: (r["vendor"], r["model"], r["className"]))
+    return radios
 
 
 def parse_csv(csv_text: str):
