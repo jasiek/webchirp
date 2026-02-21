@@ -12,6 +12,7 @@ export function createUiController() {
   const radioMakeEl = document.querySelector("#radio-make");
   const radioModelEl = document.querySelector("#radio-model");
   const channelInsertEl = document.querySelector("#channel-insert");
+  const channelRemoveEl = document.querySelector("#channel-remove");
   const sidebarControlEls = Array.from(
     document.querySelectorAll(".left-panel select, .left-panel button, .left-panel input"),
   );
@@ -438,6 +439,28 @@ export function createUiController() {
     setStatus(`Inserted new channel at channel ${insertAt}.`);
   }
 
+  function removeSelectedChannelRows() {
+    const selectedIndexes = sortedSelectedRowIndexes();
+    if (selectedIndexes.length === 0) {
+      setStatus("Select one or more channels to remove.");
+      return;
+    }
+
+    for (let i = selectedIndexes.length - 1; i >= 0; i -= 1) {
+      currentRows.splice(selectedIndexes[i], 1);
+    }
+    reindexLocationColumn();
+
+    resetRowSelection();
+    if (currentRows.length > 0) {
+      const nextIndex = Math.min(selectedIndexes[0], currentRows.length - 1);
+      selectedRowIndexes = new Set([nextIndex]);
+      selectionAnchorIndex = nextIndex;
+    }
+    renderTable();
+    setStatus(`Removed ${selectedIndexes.length} selected channel(s).`);
+  }
+
   // Create a table cell editor (input/select) based on CHIRP column metadata.
   function createCellEditor(row, rowIdx, column) {
     const meta = radioMetadata.columns?.[column] || {};
@@ -580,6 +603,9 @@ export function createUiController() {
   function bindEvents() {
     channelInsertEl?.addEventListener("click", () => {
       insertNewChannelRow();
+    });
+    channelRemoveEl?.addEventListener("click", () => {
+      removeSelectedChannelRows();
     });
 
     document.querySelector("#load-sample").addEventListener("click", async () => {

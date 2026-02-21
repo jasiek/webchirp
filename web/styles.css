@@ -165,7 +165,8 @@ button:not(:disabled):hover {
   margin-bottom: 0.6rem;
 }
 
-#channel-insert {
+#channel-insert,
+#channel-remove {
   min-width: 2.1rem;
   padding: 0.3rem 0.45rem;
   font-size: 1rem;
