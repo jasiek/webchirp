@@ -35,5 +35,3 @@ Before committing, run relevant checks:
 - `node --check web/app.js`
 - `node --check web/py-worker.js`
 - `python -m py_compile web/python/runtime_bridge.py`
-
-If checks generate `__pycache__`, remove it before committing.
