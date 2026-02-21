@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import csv
 import io
 import importlib
@@ -518,6 +519,46 @@ async def download_selected_radio(module_name: str, class_name: str):
 async def upload_selected_radio(module_name: str, class_name: str, rows):
     """Async wrapper for selected-radio upload operation."""
     return _upload_selected_radio_sync(module_name, class_name, rows)
+
+
+def get_cached_image_base64(module_name: str, class_name: str):
+    """Return cached clone image bytes for a driver as base64 text."""
+    driver_key = f"{module_name}.{class_name}"
+    image = LAST_IMAGE_BY_DRIVER.get(driver_key)
+    if not image:
+        raise RuntimeUnsupportedError(
+            "No cached radio image for this model. Download from radio first."
+        )
+    return {
+        "imageBase64": base64.b64encode(bytes(image)).decode("ascii"),
+        "size": len(image),
+    }
+
+
+def upload_image_base64(module_name: str, class_name: str, image_b64: str):
+    """Upload an explicit full-image payload through the selected clone driver."""
+    radio_cls = _import_radio_class(module_name, class_name)
+    _ensure_clone_mode_radio(radio_cls)
+    try:
+        raw_image = base64.b64decode(str(image_b64 or ""), validate=True)
+    except Exception as exc:
+        raise RuntimeUnsupportedError("Invalid image base64 payload") from exc
+
+    radio = radio_cls(memmap.MemoryMapBytes(raw_image))
+    radio.status_fn = _status_to_log
+    pipe = WebSerialPipe(timeout=0.5)
+    pipe.baudrate = getattr(radio_cls, "BAUD_RATE", None)
+    pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
+    pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
+    radio.set_pipe(pipe)
+    _prepare_clone_session(radio_cls)
+    radio.sync_out()
+
+    driver_key = f"{module_name}.{class_name}"
+    LAST_IMAGE_BY_DRIVER[driver_key] = (
+        radio.get_mmap().get_byte_compatible().get_packed()
+    )
+    return {"uploaded": True, "size": len(raw_image)}
 
 
 def _mk_enum(values):

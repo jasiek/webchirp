@@ -34,6 +34,29 @@ For radio cloning:
 3. Click `Download Radio` to read channels into the table.
 4. Edit values and click `Upload Radio` to write back.
 
+## Command-line hardware test (UV-5R flow)
+
+You can run the serial hardware regression sequence from Node.js using the
+local `chirp/` checkout and the `serialport` package:
+
+```bash
+npm run test:hw -- --port /dev/tty.usbserial-XXXX
+```
+
+Optional flags:
+
+- `--module uv5r` (default)
+- `--class BaofengUV5R` (default)
+- `--baud 9600` (auto-uses driver BAUD_RATE when omitted)
+
+The test sequence is:
+
+1. Download current radio image and save it to a temporary backup file.
+2. Erase all channels.
+3. Upload a synthetic PMR446 channel plan.
+4. Download again and verify readback matches the synthetic rows.
+5. Restore the original backup image in a `finally` block (even on failure).
+
 ## Architecture
 
 - Frontend: `/Users/jps/github/webchirp/web/index.html` + `/Users/jps/github/webchirp/web/app.js`

@@ -2,7 +2,8 @@
   "name": "webchirp",
   "private": true,
   "scripts": {
-    "build:dist": "node scripts/build-dist.mjs"
+    "build:dist": "node scripts/build-dist.mjs",
+    "test:hw": "node scripts/test-hw-radio.mjs"
   },
   "dependencies": {
     "pyodide": "^0.27.2",
