@@ -332,6 +332,8 @@ def _radio_rows_from_instance(radio):
             mem = radio.get_memory(number)
         except Exception:
             continue
+        if getattr(mem, "empty", False):
+            continue
         values = mem.to_csv()
         row = {}
         for header, value in zip(CSV_HEADERS, values):
