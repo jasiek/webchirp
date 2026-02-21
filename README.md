@@ -78,8 +78,72 @@ Live browser serial now attempts to execute the selected CHIRP clone-mode
 driver (`sync_in`/`sync_out`) through a generalized pyserial-like bridge.
 Compatibility still depends on driver expectations and browser transport limits.
 
-## Next phase (recommended)
+## Sequence diagram (sketch) of how it all works
 
-1. Validate BF-888 against multiple cable/radio variants and harden timeout/ACK retries.
-2. Preserve and edit BF-888 radio settings (not just memory channels) in the UI.
-3. Add driver capability flags and expand model support incrementally.
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as User
+  participant UI as ui.js
+  participant APP as app.js
+  participant RPC as worker-rpc.js
+  participant W as py-worker.js
+  participant PY as runtime_bridge.py
+  participant S as serial.js
+  participant R as Radio
+
+  Note over APP,UI: app.js wires UI -> worker-rpc and serial bridge on page load
+
+  U->>UI: Select make/model, click Connect
+  UI->>RPC: callWorker("serialConnect", baudRate)
+  RPC->>W: RPC request
+  W->>PY: webserial_connect(baud)
+  PY->>W: serial_open(...)
+  W->>RPC: serial-rpc(op="open")
+  RPC->>S: handleSerialRpc("open")
+  S-->>R: Open Web Serial port
+  S-->>RPC: connected
+  RPC-->>W: serial-rpc-result
+  W-->>RPC: RPC success
+  RPC-->>UI: connected/status
+
+  U->>UI: Click Download Radio
+  UI->>RPC: callWorker("downloadSelectedRadio", module,class)
+  RPC->>W: RPC request
+  W->>PY: download_selected_radio(...)
+  PY->>W: serial_prepare_clone(...)
+  W->>RPC: serial-rpc(op="prepareClone")
+  RPC->>S: prepareClone(DTR/RTS, settle)
+  S-->>R: Set control lines + settle
+  S-->>RPC: prepared
+  RPC-->>W: serial-rpc-result
+  PY-->>R: sync_in() via serial read/write
+  PY->>PY: Cache image in LAST_IMAGE_BY_DRIVER
+  PY-->>W: rows + headers
+  W-->>RPC: RPC success
+  RPC-->>UI: Populate editable memory table
+
+  U->>UI: Edit channels, click Upload Radio
+  UI->>RPC: callWorker("uploadSelectedRadio", module,class,rows)
+  RPC->>W: RPC request
+  W->>PY: upload_selected_radio(...)
+
+  alt Cached image exists
+    PY->>W: serial_prepare_clone(...)
+    W->>RPC: serial-rpc(op="prepareClone")
+    RPC->>S: prepareClone(...)
+    S-->>R: Set control lines + settle
+    RPC-->>W: serial-rpc-result
+    PY->>PY: Apply edited rows to cached image
+    PY-->>R: sync_out() via serial read/write
+    PY->>PY: Refresh cached image
+    PY-->>W: uploaded=true
+    W-->>RPC: RPC success
+    RPC-->>UI: Show upload success
+  else No cached image
+    PY-->>W: Error: download required first
+    W-->>RPC: RPC error
+    RPC-->>UI: Show clear failure in Debug Output
+  end
+
+```
