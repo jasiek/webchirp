@@ -45,6 +45,7 @@ function parseArgs(argv) {
     className: "BaofengUV5R",
     port: process.env.WEBCHIRP_PORT || "",
     baudRate: null,
+    postCloneDelayMs: Number(process.env.WEBCHIRP_POST_CLONE_DELAY_MS || "3000") || 3000,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
@@ -60,6 +61,9 @@ function parseArgs(argv) {
     } else if (token === "--baud") {
       out.baudRate = Number(argv[i + 1] || "0") || null;
       i += 1;
+    } else if (token === "--post-clone-delay-ms") {
+      out.postCloneDelayMs = Number(argv[i + 1] || "3000") || 3000;
+      i += 1;
     } else if (token === "--help" || token === "-h") {
       printUsage();
       process.exit(0);
@@ -74,9 +78,11 @@ function printUsage() {
   console.log(
     [
       "Usage: node scripts/test-hw-radio.mjs [--module uv5r] [--class BaofengUV5R] [--port /dev/tty.usbserial*] [--baud 9600]",
+      "       [--post-clone-delay-ms 3000]",
       "",
       "Environment fallback:",
       "  WEBCHIRP_PORT=/dev/tty...  Serial path to use when --port is omitted",
+      "  WEBCHIRP_POST_CLONE_DELAY_MS=3000  Wait after each clone op for radio reboot",
     ].join("\n"),
   );
 }
@@ -116,6 +122,8 @@ function makePmrRows() {
     cToneFreq: "88.5",
     DtcsCode: "023",
     DtcsPolarity: "NN",
+    RxDtcsCode: "023",
+    CrossMode: "Tone->Tone",
     Mode: "NFM",
     TStep: "12.50",
     Skip: "",
@@ -136,6 +144,8 @@ function canonicalizeRows(rows) {
     "cToneFreq",
     "DtcsCode",
     "DtcsPolarity",
+    "RxDtcsCode",
+    "CrossMode",
     "Mode",
     "TStep",
     "Skip",
@@ -170,6 +180,14 @@ function assertRowsEqual(expected, actual) {
       }
     }
   }
+}
+
+function isNoContactError(error) {
+  const text = String(error?.stack || error || "");
+  return (
+    text.includes("RadioNoContactLikelyK1") ||
+    text.includes("No response from radio")
+  );
 }
 
 class NodeSerialBridge {
@@ -396,6 +414,27 @@ async function run() {
   const tempDir = await fs.mkdtemp(path.join(process.cwd(), "webchirp-hw-"));
   const backupPath = path.join(tempDir, "backup.img");
   console.log(`Backup image path: ${backupPath}`);
+  console.log(`Post-clone reset delay: ${args.postCloneDelayMs}ms`);
+
+  const runCloneOp = async (label, operation) => {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!isNoContactError(error) || attempt >= maxAttempts) {
+          throw error;
+        }
+        console.warn(
+          `${label} attempt ${attempt}/${maxAttempts} failed with no-contact; waiting ${args.postCloneDelayMs}ms and retrying...`,
+        );
+        await serial.close().catch(() => {});
+        await sleep(args.postCloneDelayMs);
+        await serial.open(baudRate);
+      }
+    }
+    throw new Error(`${label} failed after retries`);
+  };
 
   let backupSaved = false;
   let failure = null;
@@ -403,11 +442,14 @@ async function run() {
     await serial.open(baudRate);
 
     console.log("Step 1/4: reading original codeplug");
-    await callJson(
-      pyodide,
-      "json.dumps(await download_selected_radio(_sel_module, _sel_class))",
-      selVars,
+    await runCloneOp("download backup", async () =>
+      callJson(
+        pyodide,
+        "json.dumps(await download_selected_radio(_sel_module, _sel_class))",
+        selVars,
+      ),
     );
+    await sleep(args.postCloneDelayMs);
     const backup = await callJson(
       pyodide,
       "json.dumps(get_cached_image_base64(_sel_module, _sel_class))",
@@ -417,28 +459,36 @@ async function run() {
     backupSaved = true;
 
     console.log("Step 2/4: erasing all channels");
-    await callJson(
-      pyodide,
-      "json.dumps(await upload_selected_radio(_sel_module, _sel_class, []))",
-      selVars,
+    await runCloneOp("erase channels", async () =>
+      callJson(
+        pyodide,
+        "json.dumps(await upload_selected_radio(_sel_module, _sel_class, []))",
+        selVars,
+      ),
     );
+    await sleep(args.postCloneDelayMs);
 
     console.log("Step 3/4: writing synthetic PMR codeplug");
     const syntheticRows = makePmrRows();
-    await callJson(
-      pyodide,
-      "json.dumps(await upload_selected_radio(_sel_module, _sel_class, json.loads(_rows_json)))",
-      {
-        ...selVars,
-        _rows_json: JSON.stringify(syntheticRows),
-      },
+    await runCloneOp("upload synthetic", async () =>
+      callJson(
+        pyodide,
+        "json.dumps(await upload_selected_radio(_sel_module, _sel_class, json.loads(_rows_json)))",
+        {
+          ...selVars,
+          _rows_json: JSON.stringify(syntheticRows),
+        },
+      ),
     );
+    await sleep(args.postCloneDelayMs);
 
     console.log("Step 4/4: reading back and comparing");
-    const readback = await callJson(
-      pyodide,
-      "json.dumps(await download_selected_radio(_sel_module, _sel_class))",
-      selVars,
+    const readback = await runCloneOp("download readback", async () =>
+      callJson(
+        pyodide,
+        "json.dumps(await download_selected_radio(_sel_module, _sel_class))",
+        selVars,
+      ),
     );
     assertRowsEqual(syntheticRows, readback.rows || []);
     console.log("Hardware test passed: readback matches synthetic PMR rows.");
@@ -449,14 +499,17 @@ async function run() {
     if (backupSaved) {
       try {
         console.log("Restoring saved codeplug");
+        await sleep(args.postCloneDelayMs);
         const backupRaw = await fs.readFile(backupPath);
-        await callJson(
-          pyodide,
-          "json.dumps(upload_image_base64(_sel_module, _sel_class, _image_b64))",
-          {
-            ...selVars,
-            _image_b64: backupRaw.toString("base64"),
-          },
+        await runCloneOp("restore backup", async () =>
+          callJson(
+            pyodide,
+            "json.dumps(upload_image_base64(_sel_module, _sel_class, _image_b64))",
+            {
+              ...selVars,
+              _image_b64: backupRaw.toString("base64"),
+            },
+          ),
         );
         console.log("Restore complete");
       } catch (restoreError) {

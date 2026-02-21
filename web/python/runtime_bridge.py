@@ -502,8 +502,8 @@ def _upload_selected_radio_sync(module_name: str, class_name: str, rows):
     pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
     pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
     radio.set_pipe(pipe)
-    _prepare_clone_session(radio_cls)
     _apply_rows_to_radio_instance(radio, rows)
+    _prepare_clone_session(radio_cls)
     radio.sync_out()
     LAST_IMAGE_BY_DRIVER[driver_key] = (
         radio.get_mmap().get_byte_compatible().get_packed()

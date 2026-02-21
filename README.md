@@ -48,6 +48,7 @@ Optional flags:
 - `--module uv5r` (default)
 - `--class BaofengUV5R` (default)
 - `--baud 9600` (auto-uses driver BAUD_RATE when omitted)
+- `--post-clone-delay-ms 3000` (wait after clone operations for radio reboot)
 
 The test sequence is:
 
