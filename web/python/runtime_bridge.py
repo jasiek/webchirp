@@ -343,46 +343,36 @@ def _radio_rows_from_instance(radio):
 
 
 def _apply_rows_to_radio_instance(radio, rows):
-    """Apply editable row values to a radio instance with best-effort validation."""
+    """Apply editable rows to a radio instance and fail on invalid channel writes."""
     valid_numbers = set(_iter_memory_numbers(radio))
     seen_numbers = set()
     for row in rows:
         try:
             number = int(row.get("Location", "0") or 0)
-        except ValueError:
-            continue
+        except ValueError as exc:
+            raise RuntimeUnsupportedError(
+                f"Invalid Location value in row: {row.get('Location')!r}"
+            ) from exc
         if number not in valid_numbers:
-            continue
+            raise RuntimeUnsupportedError(
+                f"Channel Location {number} is outside radio memory bounds"
+            )
         seen_numbers.add(number)
         freq_text = str(row.get("Frequency", "") or "").strip()
         if not freq_text:
-            try:
-                radio.erase_memory(number)
-            except Exception:
-                continue
+            radio.erase_memory(number)
             continue
         vals = [str(row.get(h, "") or "") for h in CSV_HEADERS]
         vals[0] = str(number)
-        try:
-            mem = chirp_common.Memory()
-            mem.really_from_csv(vals)
-        except Exception:
-            continue
+        mem = chirp_common.Memory()
+        mem.really_from_csv(vals)
         mem.number = number
         if not mem.mode:
             mem.mode = "FM"
-        try:
-            radio.set_memory(mem)
-        except Exception:
-            # Driver-specific validation may reject some values; keep going.
-            continue
+        radio.set_memory(mem)
 
     for number in sorted(valid_numbers - seen_numbers):
-        try:
-            radio.erase_memory(number)
-        except Exception:
-            # Some models may not support erasing every slot; continue best-effort.
-            continue
+        radio.erase_memory(number)
 
 
 def _ensure_clone_mode_radio(radio_cls):

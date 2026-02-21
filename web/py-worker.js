@@ -260,10 +260,14 @@ self.onmessage = async (event) => {
     const data = await handleCall(method, payload || {});
     self.postMessage({ id, ok: true, data });
   } catch (error) {
+    const detailedError =
+      (typeof error?.stack === "string" && error.stack) ||
+      error?.message ||
+      String(error);
     self.postMessage({
       id,
       ok: false,
-      error: error?.message || String(error),
+      error: detailedError,
     });
   }
 };
