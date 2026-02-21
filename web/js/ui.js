@@ -25,6 +25,8 @@ export function createUiController() {
   let lastUsbVendorId = "";
   let lastUsbProductId = "";
   let lastErrorSummary = "";
+  let selectedRowIndexes = new Set();
+  let selectionAnchorIndex = null;
 
   function setCallWorker(fn) {
     callWorker = fn;
@@ -34,6 +36,69 @@ export function createUiController() {
     for (const el of sidebarControlEls) {
       el.disabled = !enabled;
     }
+  }
+
+  function sortedSelectedRowIndexes() {
+    return Array.from(selectedRowIndexes)
+      .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < currentRows.length)
+      .sort((a, b) => a - b);
+  }
+
+  function selectedRowsForOperations() {
+    const indexes = sortedSelectedRowIndexes();
+    if (indexes.length === 0) {
+      return currentRows;
+    }
+    return indexes.map((idx) => currentRows[idx]).filter(Boolean);
+  }
+
+  function resetRowSelection() {
+    selectedRowIndexes.clear();
+    selectionAnchorIndex = null;
+  }
+
+  function applyRowSelectionVisuals() {
+    const selected = selectedRowIndexes;
+    const rows = tableBody.querySelectorAll("tr");
+    rows.forEach((tr, rowIdx) => {
+      const isSelected = selected.has(rowIdx);
+      tr.classList.toggle("is-selected", isSelected);
+      const locationButton = tr.querySelector(".channel-location-button");
+      if (locationButton) {
+        locationButton.setAttribute("aria-pressed", isSelected ? "true" : "false");
+      }
+    });
+  }
+
+  function selectRowRange(fromIdx, toIdx, addToExisting) {
+    const start = Math.max(0, Math.min(fromIdx, toIdx));
+    const end = Math.min(currentRows.length - 1, Math.max(fromIdx, toIdx));
+    const next = addToExisting ? new Set(selectedRowIndexes) : new Set();
+    for (let idx = start; idx <= end; idx += 1) {
+      next.add(idx);
+    }
+    selectedRowIndexes = next;
+  }
+
+  function updateRowSelectionFromLocationClick(event, rowIdx) {
+    const wantsToggle = event.metaKey || event.ctrlKey;
+    const wantsRange = event.shiftKey && Number.isInteger(selectionAnchorIndex);
+
+    if (wantsRange) {
+      selectRowRange(selectionAnchorIndex, rowIdx, wantsToggle);
+    } else if (wantsToggle) {
+      if (selectedRowIndexes.has(rowIdx)) {
+        selectedRowIndexes.delete(rowIdx);
+      } else {
+        selectedRowIndexes.add(rowIdx);
+      }
+      selectionAnchorIndex = rowIdx;
+    } else {
+      selectedRowIndexes = new Set([rowIdx]);
+      selectionAnchorIndex = rowIdx;
+    }
+
+    applyRowSelectionVisuals();
   }
 
   function requireCallWorker() {
@@ -329,6 +394,16 @@ export function createUiController() {
     const meta = radioMetadata.columns?.[column] || {};
     const current = String(row[column] ?? "");
     const readOnly = column === "Location" || meta.editable === false;
+    if (column === "Location") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "channel-location-button";
+      button.textContent = current;
+      button.addEventListener("click", (event) => {
+        updateRowSelectionFromLocationClick(event, rowIdx);
+      });
+      return button;
+    }
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
       const select = document.createElement("select");
       const options = meta.options.map(String);
@@ -386,6 +461,9 @@ export function createUiController() {
 
     currentRows.forEach((row, rowIdx) => {
       const tr = document.createElement("tr");
+      if (selectedRowIndexes.has(rowIdx)) {
+        tr.classList.add("is-selected");
+      }
 
       columns.forEach((column) => {
         const td = document.createElement("td");
@@ -396,6 +474,8 @@ export function createUiController() {
 
       tableBody.appendChild(tr);
     });
+
+    applyRowSelectionVisuals();
   }
 
   // Load selected radio's CHIRP-derived column metadata from Python runtime.
@@ -419,6 +499,7 @@ export function createUiController() {
     const parsedHeaders = parsed.headers || [];
     currentHeaders = headersFromMeta.length ? headersFromMeta : parsedHeaders;
     currentRows = parsed.rows;
+    resetRowSelection();
     renderTable();
 
     const issues = parsed.errors.length
@@ -588,6 +669,7 @@ export function createUiController() {
           ? radioMetadata.headers
           : (result.headers || []);
         currentRows = result.rows;
+        resetRowSelection();
         renderTable();
         setStatus(`${makeModelLabel(selectedRadio)} download complete (${currentRows.length} channels).`);
         if (result.ident) {
@@ -649,6 +731,7 @@ export function createUiController() {
     logSerial,
     logDebug,
     init,
+    selectedRowsForOperations,
     onWorkerCrash(message) {
       logDebug(`WORKER CRASH ${message}`);
     },
