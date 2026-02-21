@@ -202,8 +202,15 @@ def normalize_rows(rows):
     for row in rows:
         writer.writerow([row.get(header, "") for header in CSV_HEADERS])
 
+    csv_text = out.getvalue()
     radio = CSVRadio(None, max_memory=999)
-    radio.load_from(out.getvalue())
+    try:
+        radio.load_from(csv_text)
+    except errors.InvalidDataError as exc:
+        # Preserve export capability when CHIRP parser decides the CSV has no channels.
+        if "No channels found" in str(exc):
+            return csv_text
+        raise
     return radio.as_string()
 
 
