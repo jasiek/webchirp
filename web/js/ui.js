@@ -356,7 +356,6 @@ export function createUiController() {
       logDebug(
         `RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
       );
-      persistSelectedRadioCookie();
     }
   }
 
