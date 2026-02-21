@@ -38,16 +38,16 @@
           <div class="left-panel-main">
             <h2>Serial Bridge</h2>
             <label for="radio-make">Radio make</label>
-            <select id="radio-make"></select>
+            <select id="radio-make" disabled></select>
             <label for="radio-model">Radio model</label>
-            <select id="radio-model"></select>
+            <select id="radio-model" disabled></select>
             <div class="serial-actions">
-              <button id="serial-connect">Connect</button>
-              <button id="serial-disconnect">Disconnect</button>
+              <button id="serial-connect" disabled>Connect</button>
+              <button id="serial-disconnect" disabled>Disconnect</button>
             </div>
             <div class="serial-actions">
-              <button id="radio-download">Download Radio</button>
-              <button id="radio-upload">Upload Radio</button>
+              <button id="radio-download" disabled>Download Radio</button>
+              <button id="radio-upload" disabled>Upload Radio</button>
             </div>
           </div>
 
@@ -56,12 +56,12 @@
             <div class="debug-body">
               <div class="debug-serial-tools">
                 <label for="tx-hex">TX (hex)</label>
-                <input id="tx-hex" type="text" value="" placeholder="AA BB CC" />
+                <input id="tx-hex" type="text" value="" placeholder="AA BB CC" disabled />
                 <label for="rx-bytes">RX bytes</label>
-                <input id="rx-bytes" type="number" value="32" min="1" max="2048" />
+                <input id="rx-bytes" type="number" value="32" min="1" max="2048" disabled />
                 <label for="rx-timeout">Timeout (ms)</label>
-                <input id="rx-timeout" type="number" value="1200" min="50" step="50" />
-                <button id="serial-transaction">Python TX/RX</button>
+                <input id="rx-timeout" type="number" value="1200" min="50" step="50" disabled />
+                <button id="serial-transaction" disabled>Python TX/RX</button>
               </div>
             </div>
           </details>

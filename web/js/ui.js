@@ -11,6 +11,9 @@ export function createUiController() {
   const reportIssueEl = document.querySelector("#report-issue");
   const radioMakeEl = document.querySelector("#radio-make");
   const radioModelEl = document.querySelector("#radio-model");
+  const sidebarControlEls = Array.from(
+    document.querySelectorAll(".left-panel select, .left-panel button, .left-panel input"),
+  );
 
   let callWorker = null;
   let currentHeaders = [];
@@ -25,6 +28,12 @@ export function createUiController() {
 
   function setCallWorker(fn) {
     callWorker = fn;
+  }
+
+  function setSidebarControlsEnabled(enabled) {
+    for (const el of sidebarControlEls) {
+      el.disabled = !enabled;
+    }
   }
 
   function requireCallWorker() {
@@ -613,6 +622,7 @@ export function createUiController() {
   // Bootstrap UI: capability checks, catalog load, metadata load, sample data.
   async function init(serialSupported) {
     bindEvents();
+    setSidebarControlsEnabled(false);
     try {
       if (!serialSupported) {
         logSerial("Web Serial unsupported in this browser.");
@@ -626,8 +636,10 @@ export function createUiController() {
       await loadSelectedRadioMetadata();
       setStatus(`Loaded ${radioCatalog.length} radio definitions from CHIRP sources.`);
       await loadCsvText(DEFAULT_SAMPLE_CSV);
+      setSidebarControlsEnabled(true);
     } catch (error) {
       reportActionError("Initialization", error);
+      setStatus("Initialization failed; sidebar controls remain disabled.");
     }
   }
 
