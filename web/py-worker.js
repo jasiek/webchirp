@@ -168,8 +168,10 @@ async function handleCall(method, payload) {
 
   if (method === "normalizeRows") {
     pyodide.globals.set("_rows_json", JSON.stringify(payload.rows));
+    pyodide.globals.set("_sel_module", payload.module || "");
+    pyodide.globals.set("_sel_class", payload.className || "");
     const result = await pyodide.runPythonAsync(
-      "normalize_rows(json.loads(_rows_json))",
+      "normalize_rows(json.loads(_rows_json), _sel_module, _sel_class)",
     );
     return result;
   }

@@ -601,7 +601,11 @@ export function createUiController() {
   // Ask Python runtime to normalize current rows and export as CSV file.
   async function exportCsv() {
     setStatus("Normalizing rows with CHIRP Python...");
-    const csvText = await requireCallWorker()("normalizeRows", { rows: currentRows });
+    const csvText = await requireCallWorker()("normalizeRows", {
+      rows: currentRows,
+      module: selectedRadio?.module || "",
+      className: selectedRadio?.className || "",
+    });
     downloadText("webchirp-export.csv", csvText);
     setStatus("Exported webchirp-export.csv");
   }

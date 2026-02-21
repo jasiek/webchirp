@@ -194,13 +194,55 @@ def parse_csv(csv_text: str):
     }
 
 
-def normalize_rows(rows):
+def _power_label_map_for_radio(module_name: str, class_name: str):
+    """Map radio power labels (e.g., High) to CSV power specs (e.g., 5.00W)."""
+    if not module_name or not class_name:
+        return {}
+    try:
+        radio_cls = _import_radio_class(module_name, class_name)
+        try:
+            radio = radio_cls(None)
+        except Exception:
+            radio = radio_cls("")
+        rf = radio.get_features()
+        levels = getattr(rf, "valid_power_levels", None) or []
+    except Exception:
+        return {}
+
+    mapped = {}
+    for level in levels:
+        try:
+            mapped[str(level)] = chirp_common.format_power(level)
+        except Exception:
+            continue
+    return mapped
+
+
+def _normalize_power_value(value, power_map):
+    """Return a CHIRP-parseable power value or blank if unavailable."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text in power_map:
+        return power_map[text]
+    try:
+        chirp_common.parse_power(text)
+        return text
+    except Exception:
+        return ""
+
+
+def normalize_rows(rows, module_name="", class_name=""):
     """Round-trip rows through CHIRP CSV parser/writer to normalize formatting."""
+    power_map = _power_label_map_for_radio(module_name, class_name)
     out = io.StringIO(newline="")
     writer = csv.writer(out)
     writer.writerow(CSV_HEADERS)
     for row in rows:
-        writer.writerow([row.get(header, "") for header in CSV_HEADERS])
+        cooked = [row.get(header, "") for header in CSV_HEADERS]
+        power_idx = CSV_HEADERS.index("Power")
+        cooked[power_idx] = _normalize_power_value(cooked[power_idx], power_map)
+        writer.writerow(cooked)
 
     csv_text = out.getvalue()
     radio = CSVRadio(None, max_memory=999)
