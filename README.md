@@ -1,6 +1,8 @@
-# webchirp
+# webchirp 📻
 
 Prototype for running parts of [CHIRP](https://github.com/kk7ds/chirp) in the browser with a CHIRP-like UI.
+
+# This is live and running on [codeplug.org](https://codeplug.org)
 
 ## What is implemented
 
