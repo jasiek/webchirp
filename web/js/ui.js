@@ -1,6 +1,7 @@
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
 const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
 const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
+const LAST_RADIO_COOKIE = "webchirp_last_radio";
 
 // Create and manage all DOM/UI state and user interaction behavior.
 export function createUiController() {
@@ -45,6 +46,64 @@ export function createUiController() {
     for (const el of sidebarControlEls) {
       el.disabled = !enabled;
     }
+  }
+
+  function setCookie(name, value, maxAgeSeconds = 31536000) {
+    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
+  }
+
+  function getCookie(name) {
+    const prefix = `${name}=`;
+    const parts = String(document.cookie || "").split(";").map((v) => v.trim());
+    for (const part of parts) {
+      if (part.startsWith(prefix)) {
+        return decodeURIComponent(part.slice(prefix.length));
+      }
+    }
+    return "";
+  }
+
+  function persistSelectedRadioCookie() {
+    if (!selectedRadio) {
+      return;
+    }
+    const value = JSON.stringify({
+      make: selectedRadio.vendor,
+      key: selectedRadio.key,
+    });
+    setCookie(LAST_RADIO_COOKIE, value);
+  }
+
+  function restoreSelectedRadioCookie() {
+    const raw = getCookie(LAST_RADIO_COOKIE);
+    if (!raw) {
+      return false;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return false;
+    }
+    const make = String(parsed?.make || "");
+    const key = String(parsed?.key || "");
+    if (!make || !key) {
+      return false;
+    }
+    if (!radioCatalog.some((r) => r.vendor === make && r.key === key)) {
+      return false;
+    }
+    radioMakeEl.value = make;
+    refreshModelOptions();
+    radioModelEl.value = key;
+    selectedRadio = radioCatalog.find((r) => r.key === key) || null;
+    if (!selectedRadio) {
+      return false;
+    }
+    logDebug(
+      `RADIO RESTORE ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
+    );
+    return true;
   }
 
   function sortedSelectedRowIndexes() {
@@ -297,6 +356,7 @@ export function createUiController() {
       logDebug(
         `RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
       );
+      persistSelectedRadioCookie();
     }
   }
 
@@ -669,6 +729,7 @@ export function createUiController() {
         logDebug(
           `RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
         );
+        persistSelectedRadioCookie();
       }
       loadSelectedRadioMetadata()
         .then(() => renderTable())
@@ -805,6 +866,7 @@ export function createUiController() {
       radioCatalog = catalog.radios || [];
       runtimeInfo = (await requireCallWorker()("getRuntimeInfo")) || runtimeInfo;
       refreshMakeOptions();
+      restoreSelectedRadioCookie();
       await loadSelectedRadioMetadata();
       setStatus(`Loaded ${radioCatalog.length} radio definitions from CHIRP sources.`);
       await loadCsvText(DEFAULT_SAMPLE_CSV);
