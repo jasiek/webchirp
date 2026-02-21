@@ -30,6 +30,13 @@ export function createUiController() {
   let selectedRowIndexes = new Set();
   let selectionAnchorIndex = null;
 
+  if (!Object.getOwnPropertyDescriptor(globalThis, "currentRows")) {
+    Object.defineProperty(globalThis, "currentRows", {
+      configurable: true,
+      get: () => currentRows,
+    });
+  }
+
   function setCallWorker(fn) {
     callWorker = fn;
   }
