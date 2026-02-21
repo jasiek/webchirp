@@ -32,6 +32,7 @@ except Exception:
 CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
 DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
 LAST_IMAGE_BY_DRIVER = {}
+DEFAULT_EXPORT_POWER = "50W"
 
 
 def _js_to_py(value):
@@ -195,7 +196,7 @@ def parse_csv(csv_text: str):
 
 
 def _power_label_map_for_radio(module_name: str, class_name: str):
-    """Map radio power labels (e.g., High) to CSV power specs (e.g., 5.00W)."""
+    """Map radio power labels (e.g., High) to CSV power specs (e.g., 4.0W)."""
     if not module_name or not class_name:
         return {}
     try:
@@ -213,8 +214,10 @@ def _power_label_map_for_radio(module_name: str, class_name: str):
     default_power = ""
     for level in levels:
         try:
-            formatted = chirp_common.format_power(level)
+            watts = chirp_common.dBm_to_watts(int(level))
+            formatted = str(chirp_common.AutoNamedPowerLevel(watts))
             mapped[str(level)] = formatted
+            mapped[formatted] = formatted
             if not default_power:
                 default_power = formatted
         except Exception:
@@ -225,15 +228,16 @@ def _power_label_map_for_radio(module_name: str, class_name: str):
 def _normalize_power_value(value, power_map, default_power):
     """Return a CHIRP-parseable power value or blank if unavailable."""
     text = str(value or "").strip()
+    fallback = default_power or DEFAULT_EXPORT_POWER
     if not text:
-        return default_power
+        return fallback
     if text in power_map:
         return power_map[text]
     try:
         chirp_common.parse_power(text)
         return text
     except Exception:
-        return default_power
+        return fallback
 
 
 def normalize_rows(rows, module_name="", class_name=""):
