@@ -11,6 +11,7 @@ export function createUiController() {
   const reportIssueEl = document.querySelector("#report-issue");
   const radioMakeEl = document.querySelector("#radio-make");
   const radioModelEl = document.querySelector("#radio-model");
+  const channelInsertEl = document.querySelector("#channel-insert");
   const sidebarControlEls = Array.from(
     document.querySelectorAll(".left-panel select, .left-panel button, .left-panel input"),
   );
@@ -389,6 +390,54 @@ export function createUiController() {
     return v;
   }
 
+  function defaultValueForColumn(column) {
+    if (column === "Location") {
+      return "";
+    }
+    const meta = radioMetadata.columns?.[column] || {};
+    if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
+      return String(meta.options[0]);
+    }
+    if (meta.kind === "int" && Number.isFinite(meta.min)) {
+      return String(meta.min);
+    }
+    return "";
+  }
+
+  function reindexLocationColumn() {
+    if (!currentHeaders.includes("Location")) {
+      return;
+    }
+    currentRows.forEach((row, idx) => {
+      row.Location = String(idx);
+    });
+  }
+
+  function createBlankChannelRow() {
+    const row = {};
+    for (const column of currentHeaders) {
+      row[column] = defaultValueForColumn(column);
+    }
+    return row;
+  }
+
+  function insertNewChannelRow() {
+    if (!currentHeaders.length) {
+      setStatus("No channel schema loaded yet.");
+      return;
+    }
+
+    const selectedIndexes = sortedSelectedRowIndexes();
+    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : currentRows.length;
+    currentRows.splice(insertAt, 0, createBlankChannelRow());
+    reindexLocationColumn();
+
+    selectedRowIndexes = new Set([insertAt]);
+    selectionAnchorIndex = insertAt;
+    renderTable();
+    setStatus(`Inserted new channel at channel ${insertAt}.`);
+  }
+
   // Create a table cell editor (input/select) based on CHIRP column metadata.
   function createCellEditor(row, rowIdx, column) {
     const meta = radioMetadata.columns?.[column] || {};
@@ -529,6 +578,10 @@ export function createUiController() {
 
   // Register all UI event handlers and action bindings.
   function bindEvents() {
+    channelInsertEl?.addEventListener("click", () => {
+      insertNewChannelRow();
+    });
+
     document.querySelector("#load-sample").addEventListener("click", async () => {
       try {
         await loadCsvText(DEFAULT_SAMPLE_CSV);

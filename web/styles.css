@@ -158,6 +158,20 @@ button:not(:disabled):hover {
   overflow: auto;
 }
 
+.channel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.6rem;
+}
+
+#channel-insert {
+  min-width: 2.1rem;
+  padding: 0.3rem 0.45rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .sidebar-debug-panel {
   margin-top: auto;
   border-top: 1px solid var(--border);
