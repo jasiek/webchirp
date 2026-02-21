@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { cp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const ROOT = process.cwd();
 const DIST_DIR = path.join(ROOT, "dist");
-const DIST_WEB_DIR = path.join(DIST_DIR, "web");
 const HASHED_EXTS = new Set([".js", ".css", ".py"]);
 const REWRITE_EXTS = new Set([".html", ".js", ".css"]);
 
@@ -40,11 +39,12 @@ function rewriteText(text, replacements) {
 
 async function main() {
   await rm(DIST_DIR, { recursive: true, force: true });
-  await mkdir(DIST_DIR, { recursive: true });
-  await cp(path.join(ROOT, "web"), DIST_WEB_DIR, { recursive: true });
-  await cp(path.join(ROOT, "index.html"), path.join(DIST_DIR, "index.html"));
+  await cp(path.join(ROOT, "web"), DIST_DIR, {
+    recursive: true,
+    filter: (src) => path.basename(src) !== "__pycache__",
+  });
 
-  const webFiles = await walkFiles(DIST_WEB_DIR);
+  const webFiles = await walkFiles(DIST_DIR);
   const replacements = [];
 
   for (const filePath of webFiles) {
@@ -62,9 +62,9 @@ async function main() {
 
     await rename(filePath, hashedPath);
 
-    const oldRel = toPosix(path.relative(DIST_WEB_DIR, filePath));
-    const newRel = toPosix(path.relative(DIST_WEB_DIR, hashedPath));
-    replacements.push([`/web/${oldRel}`, `/web/${newRel}`]);
+    const oldRel = toPosix(path.relative(DIST_DIR, filePath));
+    const newRel = toPosix(path.relative(DIST_DIR, hashedPath));
+    replacements.push([`/web/${oldRel}`, `/${newRel}`]);
   }
 
   replacements.sort((a, b) => b[0].length - a[0].length);
@@ -82,18 +82,7 @@ async function main() {
     }
   }
 
-  const buildHash = contentHash(
-    JSON.stringify([...replacements].sort((a, b) => a[0].localeCompare(b[0]))),
-  );
-
-  const rootIndexPath = path.join(DIST_DIR, "index.html");
-  const rootIndex = await readFile(rootIndexPath, "utf8");
-  const target = `/web/index.html?v=${buildHash}`;
-  const patchedRoot = rootIndex
-    .replace('content="0; url=/web/"', `content="0; url=${target}"`)
-    .replace("window.location.replace('/web/index.html');", `window.location.replace('${target}');`)
-    .replace('href="/web/">/web/</a>', `href="${target}">${target}</a>`);
-  await writeFile(rootIndexPath, patchedRoot, "utf8");
+  const buildHash = contentHash(JSON.stringify([...replacements].sort()));
 
   const manifest = {
     buildHash,
