@@ -345,6 +345,7 @@ def _radio_rows_from_instance(radio):
 def _apply_rows_to_radio_instance(radio, rows):
     """Apply editable row values to a radio instance with best-effort validation."""
     valid_numbers = set(_iter_memory_numbers(radio))
+    seen_numbers = set()
     for row in rows:
         try:
             number = int(row.get("Location", "0") or 0)
@@ -352,6 +353,7 @@ def _apply_rows_to_radio_instance(radio, rows):
             continue
         if number not in valid_numbers:
             continue
+        seen_numbers.add(number)
         freq_text = str(row.get("Frequency", "") or "").strip()
         if not freq_text:
             try:
@@ -373,6 +375,13 @@ def _apply_rows_to_radio_instance(radio, rows):
             radio.set_memory(mem)
         except Exception:
             # Driver-specific validation may reject some values; keep going.
+            continue
+
+    for number in sorted(valid_numbers - seen_numbers):
+        try:
+            radio.erase_memory(number)
+        except Exception:
+            # Some models may not support erasing every slot; continue best-effort.
             continue
 
 
