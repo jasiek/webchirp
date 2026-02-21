@@ -717,6 +717,7 @@ export function createUiController() {
 
     radioMakeEl.addEventListener("change", () => {
       refreshModelOptions();
+      persistSelectedRadioCookie();
       loadSelectedRadioMetadata()
         .then(() => renderTable())
         .catch((error) => reportActionError("Metadata load", error));
@@ -729,8 +730,8 @@ export function createUiController() {
         logDebug(
           `RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
         );
-        persistSelectedRadioCookie();
       }
+      persistSelectedRadioCookie();
       loadSelectedRadioMetadata()
         .then(() => renderTable())
         .catch((error) => reportActionError("Metadata load", error));
