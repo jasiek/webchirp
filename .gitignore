@@ -28,4 +28,3 @@ tmp/
 .env
 .env.*
 !.env.example
-chirp/
