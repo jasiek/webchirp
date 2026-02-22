@@ -447,7 +447,8 @@ export function createUiController() {
       if (hz === null) {
         return String(previous ?? "");
       }
-      if (!inAnyBand(hz, meta.bands || [])) {
+      const shouldCheckBands = column !== "Offset";
+      if (shouldCheckBands && !inAnyBand(hz, meta.bands || [])) {
         return String(previous ?? "");
       }
       return v;

@@ -241,6 +241,18 @@ def _normalize_power_value(value, power_map, default_power):
         return fallback
 
 
+def _coerce_csv_vals_for_chirp(vals):
+    """Patch CSV fields CHIRP treats as required numerics."""
+    out = list(vals)
+    freq_idx = CSV_HEADERS.index("Frequency")
+    offset_idx = CSV_HEADERS.index("Offset")
+    freq_text = str(out[freq_idx] or "").strip()
+    offset_text = str(out[offset_idx] or "").strip()
+    if freq_text and not offset_text:
+        out[offset_idx] = "0.000000"
+    return out
+
+
 def normalize_rows(rows, module_name="", class_name=""):
     """Round-trip rows through CHIRP CSV parser/writer to normalize formatting."""
     power_map, default_power = _power_label_map_for_radio(module_name, class_name)
@@ -249,6 +261,7 @@ def normalize_rows(rows, module_name="", class_name=""):
     writer.writerow(CSV_HEADERS)
     for row in rows:
         cooked = [row.get(header, "") for header in CSV_HEADERS]
+        cooked = _coerce_csv_vals_for_chirp(cooked)
         power_idx = CSV_HEADERS.index("Power")
         cooked[power_idx] = _normalize_power_value(
             cooked[power_idx], power_map, default_power
@@ -423,6 +436,7 @@ def _apply_rows_to_radio_instance(radio, rows):
             radio.erase_memory(number)
             continue
         vals = [str(row.get(h, "") or "") for h in CSV_HEADERS]
+        vals = _coerce_csv_vals_for_chirp(vals)
         vals[0] = str(number)
         mem = chirp_common.Memory()
         mem.really_from_csv(vals)
