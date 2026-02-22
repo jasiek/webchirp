@@ -186,6 +186,25 @@ async function handleCall(method, payload) {
     return JSON.parse(resultJson);
   }
 
+  if (method === "exportImage") {
+    await ensureSelectedRadioModules(payload.module || "");
+    pyodide.globals.set("_rows_json", JSON.stringify(payload.rows));
+    pyodide.globals.set("_sel_module", payload.module || "");
+    pyodide.globals.set("_sel_class", payload.className || "");
+    const resultJson = await pyodide.runPythonAsync(
+      "json.dumps(export_image_base64(_sel_module, _sel_class, json.loads(_rows_json)))",
+    );
+    return JSON.parse(resultJson);
+  }
+
+  if (method === "loadImage") {
+    pyodide.globals.set("_image_b64", payload.imageBase64 || "");
+    const resultJson = await pyodide.runPythonAsync(
+      "json.dumps(load_image_base64(_image_b64))",
+    );
+    return JSON.parse(resultJson);
+  }
+
   if (method === "serialConnect") {
     pyodide.globals.set("_baud", payload.baudRate || 9600);
     const resultJson = await pyodide.runPythonAsync(

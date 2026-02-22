@@ -12,6 +12,7 @@ export function createUiController() {
   const tableHead = document.querySelector("#mem-table thead");
   const tableBody = document.querySelector("#mem-table tbody");
   const fileInput = document.querySelector("#csv-file");
+  const imgFileInput = document.querySelector("#img-file");
   const debugOutputEl = document.querySelector("#debug-output");
   const reportIssueEl = document.querySelector("#report-issue");
   const radioMakeEl = document.querySelector("#radio-make");
@@ -357,6 +358,50 @@ export function createUiController() {
     return `${radio.vendor} ${radio.model}`;
   }
 
+  function sanitizeFileNamePart(text) {
+    return String(text || "")
+      .trim()
+      .replace(/[^\w.-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "radio";
+  }
+
+  function nowStampForFileName() {
+    const now = new Date();
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const y = now.getFullYear();
+    const m = pad2(now.getMonth() + 1);
+    const d = pad2(now.getDate());
+    const hh = pad2(now.getHours());
+    const mm = pad2(now.getMinutes());
+    const ss = pad2(now.getSeconds());
+    return `${y}${m}${d}_${hh}${mm}${ss}`;
+  }
+
+  function buildBinaryCodeplugFileName(vendor, model) {
+    const vendorPart = sanitizeFileNamePart(vendor);
+    const modelPart = sanitizeFileNamePart(model);
+    return `${vendorPart}_${modelPart}_${nowStampForFileName()}.img`;
+  }
+
+  function base64ToBytes(base64) {
+    const binary = atob(String(base64 || ""));
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      out[i] = binary.charCodeAt(i);
+    }
+    return out;
+  }
+
+  function bytesToBase64(bytes) {
+    let out = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      out += String.fromCharCode(...chunk);
+    }
+    return btoa(out);
+  }
+
   // Produce a sorted unique list of vendor names from the radio catalog.
   function uniqueVendors(radios) {
     return Array.from(new Set(radios.map((r) => r.vendor))).sort((a, b) =>
@@ -385,6 +430,44 @@ export function createUiController() {
         `RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
       );
     }
+  }
+
+  function selectRadioByDriver(moduleName, className) {
+    const target = radioCatalog.find(
+      (r) => r.module === moduleName && r.className === className,
+    );
+    if (!target) {
+      return false;
+    }
+    radioMakeEl.value = target.vendor;
+    refreshModelOptions();
+    radioModelEl.value = target.key;
+    selectedRadio = target;
+    persistSelectedRadioCookie();
+    return true;
+  }
+
+  function selectRadioByDetectedImage(loaded) {
+    if (selectRadioByDriver(loaded.module, loaded.className)) {
+      return true;
+    }
+    const vendor = String(loaded.vendor || "");
+    const model = String(loaded.model || "");
+    const fallback = radioCatalog.find(
+      (r) =>
+        r.module === loaded.module
+        && r.vendor === vendor
+        && r.model === model,
+    );
+    if (!fallback) {
+      return false;
+    }
+    radioMakeEl.value = fallback.vendor;
+    refreshModelOptions();
+    radioModelEl.value = fallback.key;
+    selectedRadio = fallback;
+    persistSelectedRadioCookie();
+    return true;
   }
 
   // Populate make dropdown from catalog and initialize model options.
@@ -775,6 +858,16 @@ export function createUiController() {
     URL.revokeObjectURL(url);
   }
 
+  function downloadBytes(filename, bytes) {
+    const blob = new Blob([bytes], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // Ask Python runtime to normalize current rows and export as CSV file.
   async function exportCsv() {
     setStatus("Normalizing rows with CHIRP Python...");
@@ -785,6 +878,50 @@ export function createUiController() {
     });
     downloadText("webchirp-export.csv", csvText);
     setStatus("Exported webchirp-export.csv");
+  }
+
+  async function exportBinaryCodeplug() {
+    if (!selectedRadio) {
+      setStatus("Select a radio make/model first.");
+      return;
+    }
+    setStatus("Preparing CHIRP binary codeplug...");
+    const result = await requireCallWorker()("exportImage", {
+      module: selectedRadio.module,
+      className: selectedRadio.className,
+      rows: currentRows,
+    });
+    const bytes = base64ToBytes(result.imageBase64 || "");
+    const fileName = buildBinaryCodeplugFileName(
+      result.vendor || selectedRadio.vendor,
+      result.model || selectedRadio.model,
+    );
+    downloadBytes(fileName, bytes);
+    setStatus(`Exported ${fileName}`);
+  }
+
+  async function importBinaryCodeplug(file) {
+    const raw = new Uint8Array(await file.arrayBuffer());
+    const imageBase64 = bytesToBase64(raw);
+    setStatus("Loading CHIRP binary codeplug...");
+    const loaded = await requireCallWorker()("loadImage", { imageBase64 });
+    const selected = selectRadioByDetectedImage(loaded);
+    if (!selected) {
+      throw new Error(
+        `Loaded image radio ${loaded.module}.${loaded.className} is not available in current radio catalog`,
+      );
+    }
+    await loadSelectedRadioMetadata();
+    currentHeaders = radioMetadata.headers?.length
+      ? radioMetadata.headers
+      : (loaded.headers || currentHeaders);
+    currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
+    clearInvalidHighlights();
+    resetRowSelection();
+    renderTable();
+    setStatus(
+      `Loaded binary codeplug for ${loaded.vendor || selectedRadio.vendor} ${loaded.model || selectedRadio.model}.`,
+    );
   }
 
   async function runUploadPreflight() {
@@ -887,6 +1024,32 @@ export function createUiController() {
         await exportCsv();
       } catch (error) {
         reportActionError("Export", error);
+      }
+    });
+
+    document.querySelector("#export-binary").addEventListener("click", async () => {
+      try {
+        await exportBinaryCodeplug();
+      } catch (error) {
+        reportActionError("Binary export", error);
+      }
+    });
+
+    document.querySelector("#import-binary").addEventListener("click", () => {
+      imgFileInput.click();
+    });
+
+    imgFileInput.addEventListener("change", async () => {
+      const file = imgFileInput.files?.[0];
+      if (!file) {
+        return;
+      }
+      try {
+        await importBinaryCodeplug(file);
+      } catch (error) {
+        reportActionError("Binary import", error);
+      } finally {
+        imgFileInput.value = "";
       }
     });
 

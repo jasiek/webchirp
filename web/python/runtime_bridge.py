@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 
 sys.path.insert(0, "/webchirp_runtime")
 
@@ -633,6 +634,78 @@ def upload_image_base64(module_name: str, class_name: str, image_b64: str):
         radio.get_mmap().get_byte_compatible().get_packed()
     )
     return {"uploaded": True, "size": len(raw_image)}
+
+
+def export_image_base64(module_name: str, class_name: str, rows):
+    """Build a CHIRP .img payload from rows for selected clone-mode driver."""
+    radio_cls = _import_radio_class(module_name, class_name)
+    _ensure_clone_mode_radio(radio_cls)
+    driver_key = f"{module_name}.{class_name}"
+    base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
+    if not base_image:
+        memsize = int(getattr(radio_cls, "_memsize", 0) or 0)
+        if memsize <= 0:
+            raise RuntimeUnsupportedError(
+                "Driver does not expose memory size for offline image export"
+            )
+        base_image = bytes(memsize)
+
+    radio = radio_cls(memmap.MemoryMapBytes(base_image))
+    _apply_rows_to_radio_instance(radio, rows or [])
+    packed = radio.get_mmap().get_byte_compatible().get_packed()
+    LAST_IMAGE_BY_DRIVER[driver_key] = bytes(packed)
+    metadata_blob = radio._make_metadata()
+    image_data = bytes(packed) + chirp_common.CloneModeRadio.MAGIC + bytes(metadata_blob)
+    return {
+        "imageBase64": base64.b64encode(image_data).decode("ascii"),
+        "size": len(image_data),
+        "vendor": str(getattr(radio_cls, "VENDOR", "")),
+        "model": str(getattr(radio_cls, "MODEL", "")),
+        "variant": str(getattr(radio_cls, "VARIANT", "")),
+    }
+
+
+def load_image_base64(image_b64: str):
+    """Load a CHIRP .img payload, detect driver, and return rows + radio identity."""
+    try:
+        raw_image = base64.b64decode(str(image_b64 or ""), validate=True)
+    except Exception as exc:
+        raise RuntimeUnsupportedError("Invalid image base64 payload") from exc
+
+    with tempfile.NamedTemporaryFile(
+        mode="wb", suffix=".img", prefix="webchirp-", delete=False
+    ) as f:
+        image_path = f.name
+        f.write(raw_image)
+
+    try:
+        radio = directory.get_radio_by_image(image_path)
+    except Exception as exc:
+        raise RuntimeUnsupportedError(f"Unable to detect radio from image: {exc}") from exc
+    finally:
+        try:
+            os.unlink(image_path)
+        except Exception:
+            pass
+
+    if not isinstance(radio, chirp_common.CloneModeRadio):
+        raise RuntimeUnsupportedError("Loaded image is not a clone-mode CHIRP image")
+
+    base_cls = getattr(radio.__class__, "_orig_rclass", radio.__class__)
+    module_short = str(base_cls.__module__).rsplit(".", 1)[-1]
+    class_name = str(base_cls.__name__)
+    driver_key = f"{module_short}.{class_name}"
+    LAST_IMAGE_BY_DRIVER[driver_key] = radio.get_mmap().get_byte_compatible().get_packed()
+    rows = _radio_rows_from_instance(radio)
+    return {
+        "module": module_short,
+        "className": class_name,
+        "vendor": str(getattr(radio.__class__, "VENDOR", "")),
+        "model": str(getattr(radio.__class__, "MODEL", "")),
+        "variant": str(getattr(radio.__class__, "VARIANT", "")),
+        "rows": rows,
+        "headers": CSV_HEADERS,
+    }
 
 
 def _mk_enum(values):

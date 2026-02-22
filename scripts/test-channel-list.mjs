@@ -248,4 +248,36 @@ json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
     assert.equal(result.issues[0].rowIndex, 2);
     assert.equal(result.issues[0].column, "Frequency");
   });
+
+  await t.test("binary image export/load roundtrip preserves driver identity", async () => {
+    const rows = makeChannelRows();
+    const result = await runPythonJson(
+      pyodide,
+      `
+_rows = json.loads(_rows_json)
+_exported = export_image_base64(_sel_module, _sel_class, _rows)
+_loaded = load_image_base64(_exported["imageBase64"])
+json.dumps({
+    "module": _loaded["module"],
+    "className": _loaded["className"],
+    "vendor": _loaded["vendor"],
+    "model": _loaded["model"],
+    "rowCount": len(_loaded["rows"]),
+    "size": int(_exported.get("size", 0)),
+})
+      `,
+      {
+        _rows_json: JSON.stringify(rows),
+        _sel_module: TEST_RADIO.module,
+        _sel_class: TEST_RADIO.className,
+      },
+    );
+
+    assert.equal(result.module, TEST_RADIO.module);
+    assert.match(result.className, /BaofengUV5R/);
+    assert.equal(result.vendor, "Baofeng");
+    assert.equal(result.model, "UV-5R");
+    assert.equal(result.rowCount, rows.length);
+    assert.ok(result.size > 0);
+  });
 });
