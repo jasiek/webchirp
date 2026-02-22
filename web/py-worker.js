@@ -134,7 +134,7 @@ async function ensurePyodide() {
           });
         }),
       );
-      const runtimePython = await fetchLocalText("/web/python/runtime_bridge.py");
+      const runtimePython = await fetchLocalText("./python/runtime_bridge.py");
       await pyodide.runPythonAsync(runtimePython);
     })();
   }

@@ -1,6 +1,6 @@
-import { BrowserSerialBridge, createSerialRpcHandler } from "/web/js/serial.js";
-import { createWorkerRpcClient } from "/web/js/worker-rpc.js";
-import { createUiController } from "/web/js/ui.js";
+import { BrowserSerialBridge, createSerialRpcHandler } from "./js/serial.js";
+import { createWorkerRpcClient } from "./js/worker-rpc.js";
+import { createUiController } from "./js/ui.js";
 
 const ui = createUiController();
 const serialBridge = new BrowserSerialBridge();
@@ -10,7 +10,7 @@ const serialRpcHandler = createSerialRpcHandler({
 });
 
 const rpcClient = createWorkerRpcClient({
-  workerUrl: "/web/py-worker.js",
+  workerUrl: "./py-worker.js",
   handleSerialRpc: serialRpcHandler,
   logDebug: ui.logDebug,
   onWorkerCrash: ui.onWorkerCrash,
