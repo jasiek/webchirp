@@ -71,6 +71,23 @@
           <div class="channel-toolbar">
             <button id="channel-insert" type="button" title="Insert new channel" aria-label="Insert new channel">➕</button>
             <button id="channel-remove" type="button" title="Remove selected channels" aria-label="Remove selected channels">➖</button>
+            <div class="channel-menu">
+              <button
+                id="channel-menu-toggle"
+                type="button"
+                title="Channel actions"
+                aria-label="Channel actions"
+                aria-haspopup="true"
+                aria-expanded="false"
+              >
+                Actions
+              </button>
+              <div id="channel-menu-popup" class="channel-menu-popup hidden" role="menu">
+                <button id="channel-add-pmr446" type="button" role="menuitem">
+                  Add PMR446 channels
+                </button>
+              </div>
+            </div>
           </div>
           <div class="mem-table-scroll">
             <table id="mem-table">

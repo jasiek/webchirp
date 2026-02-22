@@ -166,6 +166,7 @@ button:not(:disabled):hover {
   gap: 0.45rem;
   margin-bottom: 0.6rem;
   flex: 0 0 auto;
+  position: relative;
 }
 
 .mem-table-scroll {
@@ -180,6 +181,32 @@ button:not(:disabled):hover {
   padding: 0.3rem 0.45rem;
   font-size: 1rem;
   line-height: 1;
+}
+
+.channel-menu {
+  position: relative;
+}
+
+.channel-menu-popup {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 20;
+  min-width: 12rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  box-shadow: 0 6px 16px rgba(21, 37, 63, 0.16);
+}
+
+.channel-menu-popup.hidden {
+  display: none;
+}
+
+.channel-menu-popup button {
+  width: 100%;
+  text-align: left;
 }
 
 .sidebar-debug-panel {

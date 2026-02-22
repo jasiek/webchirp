@@ -2,6 +2,10 @@ const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq
 const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
 const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
+const PMR446_FREQUENCIES_MHZ = Array.from(
+  { length: 16 },
+  (_, index) => (446.00625 + (index * 0.0125)).toFixed(5),
+);
 
 // Create and manage all DOM/UI state and user interaction behavior.
 export function createUiController() {
@@ -14,6 +18,9 @@ export function createUiController() {
   const radioModelEl = document.querySelector("#radio-model");
   const channelInsertEl = document.querySelector("#channel-insert");
   const channelRemoveEl = document.querySelector("#channel-remove");
+  const channelMenuToggleEl = document.querySelector("#channel-menu-toggle");
+  const channelMenuPopupEl = document.querySelector("#channel-menu-popup");
+  const channelAddPmr446El = document.querySelector("#channel-add-pmr446");
   const sidebarControlEls = Array.from(
     document.querySelectorAll(".left-panel select, .left-panel button, .left-panel input"),
   );
@@ -505,6 +512,84 @@ export function createUiController() {
     setStatus(`Inserted new channel at channel ${insertAt}.`);
   }
 
+  function setChannelMenuOpen(open) {
+    if (!channelMenuToggleEl || !channelMenuPopupEl) {
+      return;
+    }
+    channelMenuPopupEl.classList.toggle("hidden", !open);
+    channelMenuToggleEl.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function toggleChannelMenu() {
+    if (!channelMenuPopupEl) {
+      return;
+    }
+    const shouldOpen = channelMenuPopupEl.classList.contains("hidden");
+    setChannelMenuOpen(shouldOpen);
+  }
+
+  function setRowValueIfPresent(row, column, value) {
+    if (!currentHeaders.includes(column)) {
+      return;
+    }
+    const meta = radioMetadata.columns?.[column] || {};
+    row[column] = normalizeValue(column, value, meta, row[column]);
+  }
+
+  function preferredEnumOption(column, choices) {
+    if (!currentHeaders.includes(column)) {
+      return "";
+    }
+    const meta = radioMetadata.columns?.[column] || {};
+    const options = Array.isArray(meta.options) ? meta.options.map(String) : [];
+    for (const choice of choices) {
+      if (options.includes(choice)) {
+        return choice;
+      }
+    }
+    return "";
+  }
+
+  function createPmr446ChannelRow(channelNumber, frequencyMhz) {
+    const row = createBlankChannelRow();
+    setRowValueIfPresent(row, "Name", `PMR ${channelNumber}`);
+    setRowValueIfPresent(row, "Frequency", frequencyMhz);
+    setRowValueIfPresent(row, "Duplex", "");
+    setRowValueIfPresent(row, "Offset", "0.000000");
+    setRowValueIfPresent(row, "Tone", "");
+    setRowValueIfPresent(row, "CrossMode", "Tone->Tone");
+    const modeValue = preferredEnumOption("Mode", ["NFM", "FMN", "FM"]);
+    if (modeValue) {
+      setRowValueIfPresent(row, "Mode", modeValue);
+    }
+    const powerValue = preferredEnumOption("Power", ["0.5W", "500mW", "Low"]);
+    if (powerValue) {
+      setRowValueIfPresent(row, "Power", powerValue);
+    }
+    return row;
+  }
+
+  function addPmr446Channels() {
+    if (!currentHeaders.length) {
+      setStatus("No channel schema loaded yet.");
+      return;
+    }
+    const selectedIndexes = sortedSelectedRowIndexes();
+    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : currentRows.length;
+    const rowsToInsert = PMR446_FREQUENCIES_MHZ.map((frequency, idx) =>
+      createPmr446ChannelRow(idx + 1, frequency),
+    );
+    currentRows.splice(insertAt, 0, ...rowsToInsert);
+    reindexLocationColumn();
+
+    selectedRowIndexes = new Set(
+      rowsToInsert.map((_, offset) => insertAt + offset),
+    );
+    selectionAnchorIndex = insertAt;
+    renderTable();
+    setStatus(`Inserted ${rowsToInsert.length} PMR446 channels at channel ${insertAt}.`);
+  }
+
   function removeSelectedChannelRows() {
     const selectedIndexes = sortedSelectedRowIndexes();
     if (selectedIndexes.length === 0) {
@@ -676,6 +761,34 @@ export function createUiController() {
     });
     channelRemoveEl?.addEventListener("click", () => {
       removeSelectedChannelRows();
+    });
+    channelMenuToggleEl?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleChannelMenu();
+    });
+    channelAddPmr446El?.addEventListener("click", () => {
+      setChannelMenuOpen(false);
+      addPmr446Channels();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!channelMenuPopupEl || channelMenuPopupEl.classList.contains("hidden")) {
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (channelMenuPopupEl.contains(target) || channelMenuToggleEl?.contains(target)) {
+        return;
+      }
+      setChannelMenuOpen(false);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        setChannelMenuOpen(false);
+      }
     });
 
     document.querySelector("#load-sample").addEventListener("click", async () => {
