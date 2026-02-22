@@ -348,6 +348,10 @@ button:not(:disabled):hover {
   background: #dcecff;
 }
 
+#mem-table td.is-invalid {
+  background: #ffd9d9;
+}
+
 #mem-table td input:focus {
   outline: 1px solid var(--accent);
   background: #f2f8ff;

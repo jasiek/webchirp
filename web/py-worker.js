@@ -176,6 +176,16 @@ async function handleCall(method, payload) {
     return result;
   }
 
+  if (method === "validateRowsForUpload") {
+    pyodide.globals.set("_rows_json", JSON.stringify(payload.rows));
+    pyodide.globals.set("_sel_module", payload.module || "");
+    pyodide.globals.set("_sel_class", payload.className || "");
+    const resultJson = await pyodide.runPythonAsync(
+      "json.dumps(validate_rows_for_upload(json.loads(_rows_json), _sel_module, _sel_class))",
+    );
+    return JSON.parse(resultJson);
+  }
+
   if (method === "serialConnect") {
     pyodide.globals.set("_baud", payload.baudRate || 9600);
     const resultJson = await pyodide.runPythonAsync(

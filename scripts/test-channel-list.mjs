@@ -225,4 +225,27 @@ json.dumps({
       rows.map((row) => Number(row.Location)),
     );
   });
+
+  await t.test("preflight validator returns row+column issues for invalid values", async () => {
+    const rows = makeChannelRows();
+    rows[2].Frequency = "not-a-freq";
+    const result = await runPythonJson(
+      pyodide,
+      `
+_rows = json.loads(_rows_json)
+json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
+      `,
+      {
+        _rows_json: JSON.stringify(rows),
+        _sel_module: TEST_RADIO.module,
+        _sel_class: TEST_RADIO.className,
+      },
+    );
+
+    assert.equal(result.valid, false);
+    assert.ok(Array.isArray(result.issues));
+    assert.ok(result.issues.length >= 1);
+    assert.equal(result.issues[0].rowIndex, 2);
+    assert.equal(result.issues[0].column, "Frequency");
+  });
 });

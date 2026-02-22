@@ -6,6 +6,7 @@ import importlib
 import importlib.abc
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, "/webchirp_runtime")
@@ -278,6 +279,65 @@ def normalize_rows(rows, module_name="", class_name=""):
             return csv_text
         raise
     return radio.as_string()
+
+
+def _infer_csv_error_column(error_text: str):
+    """Best-effort mapping from CHIRP parse error text to CSV column name."""
+    text = str(error_text or "")
+    match = re.search(r"vals\[(\d+)\]", text)
+    if match:
+        idx = int(match.group(1))
+        if 0 <= idx < len(CSV_HEADERS):
+            return CSV_HEADERS[idx]
+
+    lowered = text.lower()
+    keywords = {
+        "location": "Location",
+        "frequency": "Frequency",
+        "duplex": "Duplex",
+        "offset": "Offset",
+        "tone": "Tone",
+        "rtonefreq": "rToneFreq",
+        "ctonefreq": "cToneFreq",
+        "dtcscode": "DtcsCode",
+        "dtcspolarity": "DtcsPolarity",
+        "rxdtcscode": "RxDtcsCode",
+        "crossmode": "CrossMode",
+        "mode": "Mode",
+        "tstep": "TStep",
+        "skip": "Skip",
+        "power": "Power",
+        "comment": "Comment",
+        "name": "Name",
+    }
+    for token, column in keywords.items():
+        if token in lowered:
+            return column
+    return ""
+
+
+def validate_rows_for_upload(rows, module_name="", class_name=""):
+    """Validate row values with CHIRP CSV parsing and return per-cell issues."""
+    power_map, default_power = _power_label_map_for_radio(module_name, class_name)
+    issues = []
+    for row_index, row in enumerate(rows or []):
+        vals = [str((row or {}).get(header, "") or "") for header in CSV_HEADERS]
+        vals = _coerce_csv_vals_for_chirp(vals)
+        power_idx = CSV_HEADERS.index("Power")
+        vals[power_idx] = _normalize_power_value(vals[power_idx], power_map, default_power)
+        try:
+            mem = chirp_common.Memory()
+            mem.really_from_csv(vals)
+        except Exception as exc:
+            error_text = str(exc)
+            issues.append(
+                {
+                    "rowIndex": int(row_index),
+                    "column": _infer_csv_error_column(error_text),
+                    "message": error_text,
+                }
+            )
+    return {"valid": len(issues) == 0, "issues": issues}
 
 
 async def webserial_connect(baudrate: int):

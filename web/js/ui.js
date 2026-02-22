@@ -37,6 +37,7 @@ export function createUiController() {
   let lastErrorSummary = "";
   let selectedRowIndexes = new Set();
   let selectionAnchorIndex = null;
+  let invalidCellKeys = new Set();
 
   if (!Object.getOwnPropertyDescriptor(globalThis, "currentRows")) {
     Object.defineProperty(globalThis, "currentRows", {
@@ -130,6 +131,26 @@ export function createUiController() {
   function resetRowSelection() {
     selectedRowIndexes.clear();
     selectionAnchorIndex = null;
+  }
+
+  function invalidCellKey(rowIdx, column) {
+    return `${Number(rowIdx)}:${String(column || "")}`;
+  }
+
+  function clearInvalidHighlights() {
+    invalidCellKeys.clear();
+  }
+
+  function clearInvalidCell(rowIdx, column) {
+    const key = invalidCellKey(rowIdx, column);
+    if (!invalidCellKeys.has(key)) {
+      return;
+    }
+    invalidCellKeys.delete(key);
+    const td = tableBody.querySelector(
+      `td[data-row-idx="${Number(rowIdx)}"][data-column="${CSS.escape(String(column || ""))}"]`,
+    );
+    td?.classList.remove("is-invalid");
   }
 
   function applyRowSelectionVisuals() {
@@ -506,6 +527,7 @@ export function createUiController() {
     const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : currentRows.length;
     currentRows.splice(insertAt, 0, createBlankChannelRow());
     reindexLocationColumn();
+    clearInvalidHighlights();
 
     selectedRowIndexes = new Set([insertAt]);
     selectionAnchorIndex = insertAt;
@@ -582,6 +604,7 @@ export function createUiController() {
     );
     currentRows.splice(insertAt, 0, ...rowsToInsert);
     reindexLocationColumn();
+    clearInvalidHighlights();
 
     selectedRowIndexes = new Set(
       rowsToInsert.map((_, offset) => insertAt + offset),
@@ -602,6 +625,7 @@ export function createUiController() {
       currentRows.splice(selectedIndexes[i], 1);
     }
     reindexLocationColumn();
+    clearInvalidHighlights();
 
     resetRowSelection();
     if (currentRows.length > 0) {
@@ -643,6 +667,7 @@ export function createUiController() {
       select.value = current;
       select.disabled = readOnly;
       select.addEventListener("change", () => {
+        clearInvalidCell(rowIdx, column);
         const next = normalizeValue(column, select.value, meta, row[column]);
         row[column] = next;
         currentRows[rowIdx][column] = next;
@@ -659,6 +684,9 @@ export function createUiController() {
     if (Number.isFinite(meta.maxLength)) {
       input.maxLength = Number(meta.maxLength);
     }
+    input.addEventListener("input", () => {
+      clearInvalidCell(rowIdx, column);
+    });
     input.addEventListener("blur", () => {
       const next = normalizeValue(column, input.value, meta, row[column]);
       row[column] = next;
@@ -691,6 +719,9 @@ export function createUiController() {
 
       columns.forEach((column) => {
         const td = document.createElement("td");
+        td.dataset.rowIdx = String(rowIdx);
+        td.dataset.column = String(column);
+        td.classList.toggle("is-invalid", invalidCellKeys.has(invalidCellKey(rowIdx, column)));
         const editor = createCellEditor(row, rowIdx, column);
         td.appendChild(editor);
         tr.appendChild(td);
@@ -723,6 +754,7 @@ export function createUiController() {
     const parsedHeaders = parsed.headers || [];
     currentHeaders = headersFromMeta.length ? headersFromMeta : parsedHeaders;
     currentRows = parsed.rows;
+    clearInvalidHighlights();
     resetRowSelection();
     renderTable();
 
@@ -753,6 +785,36 @@ export function createUiController() {
     });
     downloadText("webchirp-export.csv", csvText);
     setStatus("Exported webchirp-export.csv");
+  }
+
+  async function runUploadPreflight() {
+    if (!selectedRadio) {
+      return { valid: false, issues: [{ rowIndex: -1, column: "", message: "No radio selected." }] };
+    }
+    const result = await requireCallWorker()("validateRowsForUpload", {
+      rows: currentRows,
+      module: selectedRadio.module,
+      className: selectedRadio.className,
+    });
+    clearInvalidHighlights();
+    const issues = Array.isArray(result?.issues) ? result.issues : [];
+    for (const issue of issues) {
+      const rowIdx = Number(issue?.rowIndex);
+      const column = String(issue?.column || "");
+      if (!Number.isInteger(rowIdx) || rowIdx < 0 || rowIdx >= currentRows.length || !column) {
+        continue;
+      }
+      invalidCellKeys.add(invalidCellKey(rowIdx, column));
+      const channel = currentRows[rowIdx]?.Location ?? rowIdx;
+      logDebug(`PREFLIGHT INVALID channel=${channel} column=${column}: ${issue?.message || "Invalid value"}`);
+    }
+    if (issues.length > 0) {
+      renderTable();
+    }
+    return {
+      valid: Boolean(result?.valid),
+      issues,
+    };
   }
 
   // Register all UI event handlers and action bindings.
@@ -831,6 +893,7 @@ export function createUiController() {
     radioMakeEl.addEventListener("change", () => {
       refreshModelOptions();
       persistSelectedRadioCookie();
+      clearInvalidHighlights();
       loadSelectedRadioMetadata()
         .then(() => renderTable())
         .catch((error) => reportActionError("Metadata load", error));
@@ -845,6 +908,7 @@ export function createUiController() {
         );
       }
       persistSelectedRadioCookie();
+      clearInvalidHighlights();
       loadSelectedRadioMetadata()
         .then(() => renderTable())
         .catch((error) => reportActionError("Metadata load", error));
@@ -934,6 +998,7 @@ export function createUiController() {
           ? radioMetadata.headers
           : (result.headers || []);
         currentRows = result.rows;
+        clearInvalidHighlights();
         resetRowSelection();
         renderTable();
         setStatus(`${makeModelLabel(selectedRadio)} download complete (${currentRows.length} channels).`);
@@ -952,6 +1017,17 @@ export function createUiController() {
         return;
       }
       try {
+        setStatus("Running upload preflight validation...");
+        const preflight = await runUploadPreflight();
+        if (!preflight.valid) {
+          const count = Array.isArray(preflight.issues) ? preflight.issues.length : 0;
+          setStatus(
+            count > 0
+              ? `Upload blocked: ${count} invalid value(s) highlighted in red.`
+              : "Upload blocked: preflight validation failed.",
+          );
+          return;
+        }
         setStatus(`Uploading to ${makeModelLabel(selectedRadio)}...`);
         await requireCallWorker()("uploadSelectedRadio", {
           module: selectedRadio.module,
