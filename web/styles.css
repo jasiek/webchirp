@@ -155,7 +155,9 @@ button:not(:disabled):hover {
 .editor-panel {
   padding: 1rem;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .channel-toolbar {
@@ -163,6 +165,13 @@ button:not(:disabled):hover {
   align-items: center;
   gap: 0.45rem;
   margin-bottom: 0.6rem;
+  flex: 0 0 auto;
+}
+
+.mem-table-scroll {
+  min-height: 0;
+  overflow: auto;
+  flex: 1 1 auto;
 }
 
 #channel-insert,
