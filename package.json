@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build:dist": "node scripts/build-dist.mjs",
+    "test:channels": "node --test --experimental-wasm-stack-switching scripts/test-channel-list.mjs",
     "test:hw": "node --experimental-wasm-stack-switching scripts/test-hw-radio.mjs"
   },
   "dependencies": {
