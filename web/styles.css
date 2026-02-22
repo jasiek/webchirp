@@ -21,6 +21,48 @@ body {
   overflow: hidden;
 }
 
+.about-page {
+  min-height: 100vh;
+  height: auto;
+  overflow: auto;
+  background:
+    radial-gradient(circle at top right, rgba(13, 94, 168, 0.16), transparent 45%),
+    linear-gradient(180deg, #f7f9fd 0%, #e7edf7 100%);
+}
+
+.about-shell {
+  max-width: 860px;
+  margin: 2.2rem auto;
+  padding: 0 1rem 2rem;
+}
+
+.about-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 14px 28px rgba(23, 42, 70, 0.14);
+  padding: 1.5rem 1.6rem;
+  line-height: 1.6;
+}
+
+.about-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.about-header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.about-signoff {
+  margin-top: 1.1rem;
+  font-weight: 600;
+}
+
 .app-shell {
   height: 100vh;
   display: flex;

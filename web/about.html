@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About WebCHIRP</title>
+    <link rel="stylesheet" href="/web/styles.css" />
+  </head>
+  <body class="about-page">
+    <main class="about-shell">
+      <section class="about-card">
+        <div class="about-header">
+          <h1>About WebCHIRP</h1>
+          <a class="toolbar-link" href="/web/index.html">Back to App</a>
+        </div>
+        <p>
+          WebCHIRP is a browser-based CHIRP interface for programming compatible radios over
+          Web Serial. You can connect a radio, download/upload codeplugs, and edit channels
+          directly in the browser.
+        </p>
+        <p>
+          The core idea is running CHIRP's Python driver logic inside the browser through
+          Pyodide (Python compiled to WebAssembly). A JavaScript bridge provides serial I/O
+          to that Python runtime, so existing CHIRP radio protocol implementations can be
+          reused instead of rewritten in JavaScript.
+        </p>
+        <p>
+          This project is still evolving, so expect rough edges and verify writes carefully,
+          especially on first use with a particular model.
+        </p>
+        <p>
+          Source code: <a href="https://github.com/jasiek/webchirp" target="_blank" rel="noreferrer">github.com/jasiek/webchirp</a>
+        </p>
+        <p class="about-signoff">73 de HF2J / M0NIT</p>
+      </section>
+    </main>
+  </body>
+</html>
