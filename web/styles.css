@@ -304,6 +304,19 @@ button:not(:disabled):hover {
   margin: 0;
 }
 
+.modal-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.35rem 0.55rem;
+}
+
+.modal-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
 .modal-actions {
   margin-top: 0.9rem;
   display: flex;

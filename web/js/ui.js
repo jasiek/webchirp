@@ -28,7 +28,7 @@ export function createUiController() {
   const przemiennikiFormEl = document.querySelector("#przemienniki-form");
   const przemiennikiCountryEl = document.querySelector("#przemienniki-country");
   const przemiennikiBandEl = document.querySelector("#przemienniki-band");
-  const przemiennikiModeEl = document.querySelector("#przemienniki-mode");
+  const przemiennikiModeListEl = document.querySelector("#przemienniki-mode-list");
   const przemiennikiOnlyWorkingEl = document.querySelector("#przemienniki-onlyworking");
   const przemiennikiLatitudeEl = document.querySelector("#przemienniki-latitude");
   const przemiennikiLongitudeEl = document.querySelector("#przemienniki-longitude");
@@ -649,10 +649,11 @@ export function createUiController() {
 
   function flagEmojiFromCountryCode(countryCode) {
     const code = String(countryCode || "").trim().toUpperCase();
-    if (!/^[A-Z]{2}$/.test(code)) {
+    const emojiCode = code === "UK" ? "GB" : code;
+    if (!/^[A-Z]{2}$/.test(emojiCode)) {
       return code;
     }
-    return Array.from(code)
+    return Array.from(emojiCode)
       .map((char) => String.fromCodePoint(char.charCodeAt(0) + 127397))
       .join("");
   }
@@ -691,6 +692,9 @@ export function createUiController() {
   }
 
   function countryDisplayName(countryCode) {
+    if (countryCode === "UK" || countryCode === "GB") {
+      return "United Kingdom";
+    }
     try {
       const displayNames = new Intl.DisplayNames([navigator.language || "en-US"], { type: "region" });
       return String(displayNames.of(countryCode) || countryCode);
@@ -750,6 +754,55 @@ export function createUiController() {
     replaceOptions(przemiennikiBandEl, uniqueBands, "Any band");
   }
 
+  function populatePrzemiennikiModeOptions(xmlDoc) {
+    if (!przemiennikiModeListEl) {
+      return;
+    }
+    const modes = [];
+    xmlDoc.querySelectorAll("dictionary > item").forEach((item) => {
+      if (firstText(item, "type").toLowerCase() !== "mode") {
+        return;
+      }
+      const description = firstText(item, "description");
+      const name = firstText(item, "name");
+      const modeQueryValue = (name || description).toLowerCase();
+      if (!modeQueryValue) {
+        return;
+      }
+      modes.push({
+        value: modeQueryValue,
+        label: description || name || modeQueryValue,
+        title: description || name || modeQueryValue,
+      });
+    });
+    const uniqueModes = Array.from(new Map(modes.map((entry) => [entry.value, entry])).values())
+      .sort((a, b) => a.label.localeCompare(b.label));
+    przemiennikiModeListEl.innerHTML = "";
+    uniqueModes.forEach((mode) => {
+      const label = document.createElement("label");
+      label.className = "modal-mode-option";
+      label.title = mode.title;
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = mode.value;
+      checkbox.name = "mode";
+      const text = document.createElement("span");
+      text.textContent = mode.label;
+      label.appendChild(checkbox);
+      label.appendChild(text);
+      przemiennikiModeListEl.appendChild(label);
+    });
+  }
+
+  function selectedPrzemiennikiModes() {
+    if (!przemiennikiModeListEl) {
+      return [];
+    }
+    return Array.from(przemiennikiModeListEl.querySelectorAll('input[name="mode"]:checked'))
+      .map((el) => String(el.value || "").trim().toLowerCase())
+      .filter((value) => value.length > 0);
+  }
+
   async function ensurePrzemiennikiDictionaryLoaded() {
     if (przemiennikiDictionaryPromise) {
       return przemiennikiDictionaryPromise;
@@ -763,6 +816,7 @@ export function createUiController() {
       const xmlDoc = parseXmlDocument(xmlText);
       populatePrzemiennikiCountryOptions(xmlDoc);
       populatePrzemiennikiBandOptions(xmlDoc);
+      populatePrzemiennikiModeOptions(xmlDoc);
       logDebug("Loaded przemienniki.net dictionary options.");
       return xmlDoc;
     })();
@@ -808,7 +862,9 @@ export function createUiController() {
     const url = new URL(PRZEMIENNIKI_API_URL);
     appendQueryParam(url, "country", String(przemiennikiCountryEl?.value || "").toLowerCase());
     appendQueryParam(url, "band", przemiennikiBandEl?.value || "");
-    appendQueryParam(url, "mode", String(przemiennikiModeEl?.value || "").toLowerCase());
+    selectedPrzemiennikiModes().forEach((mode) => {
+      url.searchParams.append("mode", mode);
+    });
     if (przemiennikiOnlyWorkingEl?.checked) {
       url.searchParams.set("onlyworking", "true");
     }
