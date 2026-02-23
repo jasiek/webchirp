@@ -251,6 +251,66 @@ button:not(:disabled):hover {
   text-align: left;
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(12, 23, 40, 0.45);
+  padding: 1rem;
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+.modal-card {
+  width: min(560px, 100%);
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(18, 35, 60, 0.3);
+  padding: 1rem;
+}
+
+.modal-card h2 {
+  margin: 0 0 0.8rem;
+  font-size: 1rem;
+}
+
+.modal-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 0.45rem 0.7rem;
+  align-items: center;
+}
+
+.modal-grid input[type="text"],
+.modal-grid input[type="number"],
+.modal-grid select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  padding: 0.35rem 0.45rem;
+}
+
+.modal-grid input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+
+.modal-actions {
+  margin-top: 0.9rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .sidebar-debug-panel {
   margin-top: auto;
   border-top: 1px solid var(--border);
@@ -427,5 +487,9 @@ button:not(:disabled):hover {
 
   .debug-serial-tools button {
     grid-column: 1;
+  }
+
+  .modal-grid {
+    grid-template-columns: 1fr;
   }
 }

@@ -89,6 +89,9 @@
                 <button id="channel-add-pmr446" type="button" role="menuitem">
                   Add PMR446 channels
                 </button>
+                <button id="channel-import-przemienniki" type="button" role="menuitem">
+                  Query przemienniki.net
+                </button>
               </div>
             </div>
           </div>
@@ -116,6 +119,44 @@
           placeholder="Runtime logs will appear here..."
         ></textarea>
       </section>
+    </div>
+
+    <div
+      id="przemienniki-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="przemienniki-modal-title"
+    >
+      <form id="przemienniki-form" class="modal-card">
+        <h2 id="przemienniki-modal-title">Query przemienniki.net</h2>
+        <div class="modal-grid">
+          <label for="przemienniki-country">Country</label>
+          <select id="przemienniki-country" name="country"></select>
+
+          <label for="przemienniki-band">Band</label>
+          <select id="przemienniki-band" name="band"></select>
+
+          <label for="przemienniki-mode">Mode</label>
+          <input id="przemienniki-mode" name="mode" type="text" placeholder="fm, dstar, atv..." />
+
+          <label for="przemienniki-onlyworking">Only working</label>
+          <input id="przemienniki-onlyworking" name="onlyworking" type="checkbox" checked />
+
+          <label for="przemienniki-latitude">Latitude</label>
+          <input id="przemienniki-latitude" name="latitude" type="number" step="any" />
+
+          <label for="przemienniki-longitude">Longitude</label>
+          <input id="przemienniki-longitude" name="longitude" type="number" step="any" />
+
+          <label for="przemienniki-range">Range (km)</label>
+          <input id="przemienniki-range" name="range" type="number" min="1" step="1" />
+        </div>
+        <div class="modal-actions">
+          <button id="przemienniki-cancel" type="button">Cancel</button>
+          <button id="przemienniki-submit" type="submit">Query API</button>
+        </div>
+      </form>
     </div>
 
     <input id="csv-file" type="file" accept=".csv,text/csv" hidden />

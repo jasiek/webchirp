@@ -6,6 +6,7 @@ const PMR446_FREQUENCIES_MHZ = Array.from(
   { length: 16 },
   (_, index) => (446.00625 + (index * 0.0125)).toFixed(5),
 );
+const PRZEMIENNIKI_API_URL = "https://api.codeplug.org/przemienniki";
 
 // Create and manage all DOM/UI state and user interaction behavior.
 export function createUiController() {
@@ -22,6 +23,17 @@ export function createUiController() {
   const channelMenuToggleEl = document.querySelector("#channel-menu-toggle");
   const channelMenuPopupEl = document.querySelector("#channel-menu-popup");
   const channelAddPmr446El = document.querySelector("#channel-add-pmr446");
+  const channelImportPrzemiennikiEl = document.querySelector("#channel-import-przemienniki");
+  const przemiennikiModalEl = document.querySelector("#przemienniki-modal");
+  const przemiennikiFormEl = document.querySelector("#przemienniki-form");
+  const przemiennikiCountryEl = document.querySelector("#przemienniki-country");
+  const przemiennikiBandEl = document.querySelector("#przemienniki-band");
+  const przemiennikiModeEl = document.querySelector("#przemienniki-mode");
+  const przemiennikiOnlyWorkingEl = document.querySelector("#przemienniki-onlyworking");
+  const przemiennikiLatitudeEl = document.querySelector("#przemienniki-latitude");
+  const przemiennikiLongitudeEl = document.querySelector("#przemienniki-longitude");
+  const przemiennikiRangeEl = document.querySelector("#przemienniki-range");
+  const przemiennikiCancelEl = document.querySelector("#przemienniki-cancel");
   const sidebarControlEls = Array.from(
     document.querySelectorAll(".left-panel select, .left-panel button, .left-panel input"),
   );
@@ -39,6 +51,7 @@ export function createUiController() {
   let selectedRowIndexes = new Set();
   let selectionAnchorIndex = null;
   let invalidCellKeys = new Set();
+  let przemiennikiDictionaryPromise = null;
 
   if (!Object.getOwnPropertyDescriptor(globalThis, "currentRows")) {
     Object.defineProperty(globalThis, "currentRows", {
@@ -634,6 +647,197 @@ export function createUiController() {
     setChannelMenuOpen(shouldOpen);
   }
 
+  function flagEmojiFromCountryCode(countryCode) {
+    const code = String(countryCode || "").trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(code)) {
+      return code;
+    }
+    return Array.from(code)
+      .map((char) => String.fromCodePoint(char.charCodeAt(0) + 127397))
+      .join("");
+  }
+
+  function optionEntriesFromDictionary(raw) {
+    const entries = [];
+    if (Array.isArray(raw)) {
+      for (const value of raw) {
+        if (typeof value === "string") {
+          entries.push({ value, label: value, title: value });
+          continue;
+        }
+        if (!value || typeof value !== "object") {
+          continue;
+        }
+        const entryValue = String(
+          value.value ?? value.code ?? value.id ?? value.key ?? value.band ?? value.name ?? "",
+        ).trim();
+        if (!entryValue) {
+          continue;
+        }
+        const entryLabel = String(value.label ?? value.name ?? value.title ?? entryValue).trim();
+        entries.push({ value: entryValue, label: entryLabel || entryValue, title: entryLabel || entryValue });
+      }
+      return entries;
+    }
+    if (raw && typeof raw === "object") {
+      for (const [key, value] of Object.entries(raw)) {
+        if (typeof value === "string") {
+          entries.push({ value: key, label: value, title: value });
+          continue;
+        }
+        if (!value || typeof value !== "object") {
+          entries.push({ value: key, label: key, title: key });
+          continue;
+        }
+        const entryLabel = String(value.label ?? value.name ?? value.title ?? key).trim();
+        const entryValue = String(value.value ?? value.code ?? value.id ?? key).trim();
+        if (!entryValue) {
+          continue;
+        }
+        entries.push({ value: entryValue, label: entryLabel || entryValue, title: entryLabel || entryValue });
+      }
+      return entries;
+    }
+    return entries;
+  }
+
+  function replaceOptions(selectEl, options, placeholderLabel) {
+    if (!selectEl) {
+      return;
+    }
+    selectEl.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = placeholderLabel;
+    selectEl.appendChild(placeholder);
+    for (const option of options) {
+      const opt = document.createElement("option");
+      opt.value = option.value;
+      opt.textContent = option.label;
+      if (option.title) {
+        opt.title = option.title;
+      }
+      selectEl.appendChild(opt);
+    }
+  }
+
+  function populatePrzemiennikiCountryOptions(rawCountries) {
+    const countries = optionEntriesFromDictionary(rawCountries)
+      .map((entry) => {
+        const code = String(entry.value || "").toUpperCase();
+        const name = String(entry.label || code);
+        return {
+          value: code,
+          label: `${flagEmojiFromCountryCode(code)} ${code}`.trim(),
+          title: name,
+        };
+      })
+      .filter((entry) => /^[A-Z]{2}$/.test(entry.value))
+      .sort((a, b) => a.title.localeCompare(b.title));
+    replaceOptions(przemiennikiCountryEl, countries, "Any country");
+  }
+
+  function populatePrzemiennikiBandOptions(rawBands) {
+    const bands = optionEntriesFromDictionary(rawBands)
+      .map((entry) => {
+        const value = String(entry.value || "").trim();
+        return {
+          value,
+          label: value,
+          title: String(entry.title || value),
+        };
+      })
+      .filter((entry) => entry.value.length > 0)
+      .sort((a, b) => a.value.localeCompare(b.value));
+    replaceOptions(przemiennikiBandEl, bands, "Any band");
+  }
+
+  async function ensurePrzemiennikiDictionaryLoaded() {
+    if (przemiennikiDictionaryPromise) {
+      return przemiennikiDictionaryPromise;
+    }
+    przemiennikiDictionaryPromise = (async () => {
+      const response = await fetch(PRZEMIENNIKI_API_URL);
+      if (!response.ok) {
+        throw new Error(`Dictionary request failed: HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      const dictionary = payload?.dictionary && typeof payload.dictionary === "object"
+        ? payload.dictionary
+        : {};
+      populatePrzemiennikiCountryOptions(dictionary.country || dictionary.countries || {});
+      populatePrzemiennikiBandOptions(dictionary.band || dictionary.bands || {});
+      logDebug("Loaded przemienniki.net dictionary options.");
+      return dictionary;
+    })();
+    try {
+      return await przemiennikiDictionaryPromise;
+    } catch (error) {
+      przemiennikiDictionaryPromise = null;
+      throw error;
+    }
+  }
+
+  function setPrzemiennikiModalOpen(open) {
+    if (!przemiennikiModalEl) {
+      return;
+    }
+    przemiennikiModalEl.classList.toggle("hidden", !open);
+    if (open) {
+      przemiennikiCountryEl?.focus();
+    }
+  }
+
+  function isPrzemiennikiModalOpen() {
+    return Boolean(przemiennikiModalEl && !przemiennikiModalEl.classList.contains("hidden"));
+  }
+
+  async function openPrzemiennikiModal() {
+    setChannelMenuOpen(false);
+    setStatus("Loading przemienniki.net query options...");
+    await ensurePrzemiennikiDictionaryLoaded();
+    setPrzemiennikiModalOpen(true);
+    setStatus("Configure przemienniki.net query.");
+  }
+
+  function appendQueryParam(url, key, value) {
+    const text = String(value ?? "").trim();
+    if (!text) {
+      return;
+    }
+    url.searchParams.set(key, text);
+  }
+
+  async function runPrzemiennikiQuery() {
+    const url = new URL(PRZEMIENNIKI_API_URL);
+    appendQueryParam(url, "country", przemiennikiCountryEl?.value || "");
+    appendQueryParam(url, "band", przemiennikiBandEl?.value || "");
+    appendQueryParam(url, "mode", przemiennikiModeEl?.value || "");
+    if (przemiennikiOnlyWorkingEl?.checked) {
+      url.searchParams.set("onlyworking", "true");
+    }
+    appendQueryParam(url, "latitude", przemiennikiLatitudeEl?.value || "");
+    appendQueryParam(url, "longitude", przemiennikiLongitudeEl?.value || "");
+    appendQueryParam(url, "range", przemiennikiRangeEl?.value || "");
+    setStatus("Querying przemienniki.net...");
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Przemienniki query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
+    }
+    const payload = await response.json();
+    const resultList = Array.isArray(payload?.result)
+      ? payload.result
+      : Array.isArray(payload?.results)
+        ? payload.results
+        : Array.isArray(payload)
+          ? payload
+          : [];
+    logDebug(`PRZEMIENNIKI QUERY ${url.toString()}`);
+    logDebug(`PRZEMIENNIKI RESULTS ${resultList.length}`);
+    setStatus(`przemienniki.net query returned ${resultList.length} record(s).`);
+  }
+
   function setRowValueIfPresent(row, column, value) {
     if (!currentHeaders.includes(column)) {
       return;
@@ -970,6 +1174,31 @@ export function createUiController() {
       setChannelMenuOpen(false);
       addPmr446Channels();
     });
+    channelImportPrzemiennikiEl?.addEventListener("click", async () => {
+      try {
+        await openPrzemiennikiModal();
+      } catch (error) {
+        reportActionError("Przemienniki modal", error);
+      }
+    });
+    przemiennikiCancelEl?.addEventListener("click", () => {
+      setPrzemiennikiModalOpen(false);
+      setStatus("Cancelled przemienniki.net query.");
+    });
+    przemiennikiModalEl?.addEventListener("click", (event) => {
+      if (event.target === przemiennikiModalEl) {
+        setPrzemiennikiModalOpen(false);
+      }
+    });
+    przemiennikiFormEl?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await runPrzemiennikiQuery();
+        setPrzemiennikiModalOpen(false);
+      } catch (error) {
+        reportActionError("Przemienniki query", error);
+      }
+    });
 
     document.addEventListener("click", (event) => {
       if (!channelMenuPopupEl || channelMenuPopupEl.classList.contains("hidden")) {
@@ -987,6 +1216,10 @@ export function createUiController() {
 
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
+        if (isPrzemiennikiModalOpen()) {
+          setPrzemiennikiModalOpen(false);
+          return;
+        }
         setChannelMenuOpen(false);
       }
     });
