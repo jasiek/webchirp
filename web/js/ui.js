@@ -859,6 +859,10 @@ export function createUiController() {
   }
 
   async function runPrzemiennikiQuery() {
+    if (!currentHeaders.length) {
+      setStatus("No channel schema loaded yet.");
+      return;
+    }
     const url = new URL(PRZEMIENNIKI_API_URL);
     appendQueryParam(url, "country", String(przemiennikiCountryEl?.value || "").toLowerCase());
     appendQueryParam(url, "band", przemiennikiBandEl?.value || "");
@@ -880,9 +884,10 @@ export function createUiController() {
     const xmlText = await response.text();
     const xmlDoc = parseXmlDocument(xmlText);
     const resultList = Array.from(xmlDoc.querySelectorAll("repeaters > repeater"));
+    const rowsToInsert = resultList.map((node) => createPrzemiennikiChannelRow(node));
+    insertRowsAtSelectionOrEnd(rowsToInsert, "przemienniki");
     logDebug(`PRZEMIENNIKI QUERY ${url.toString()}`);
     logDebug(`PRZEMIENNIKI RESULTS ${resultList.length}`);
-    setStatus(`przemienniki.net query returned ${resultList.length} record(s).`);
   }
 
   function setRowValueIfPresent(row, column, value) {
@@ -905,6 +910,104 @@ export function createUiController() {
       }
     }
     return "";
+  }
+
+  function enumOptionCaseInsensitive(column, choices) {
+    if (!currentHeaders.includes(column)) {
+      return "";
+    }
+    const meta = radioMetadata.columns?.[column] || {};
+    const options = Array.isArray(meta.options) ? meta.options.map(String) : [];
+    const normalized = new Map(options.map((option) => [option.toLowerCase(), option]));
+    for (const choice of choices) {
+      const match = normalized.get(String(choice || "").toLowerCase());
+      if (match) {
+        return match;
+      }
+    }
+    return "";
+  }
+
+  function formatFrequencyMhz(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return "";
+    }
+    return numeric.toFixed(6);
+  }
+
+  function buildPrzemiennikiComment(repeaterEl) {
+    const qth = firstText(repeaterEl, "qth");
+    const remarks = firstText(repeaterEl, "remarks");
+    const link = firstText(repeaterEl, "link");
+    const parts = [qth, remarks, link].filter((part) => part.length > 0);
+    return parts.join(" | ");
+  }
+
+  function mapPrzemiennikiModeToChirp(apiMode) {
+    const mode = String(apiMode || "").trim().toUpperCase();
+    if (!mode) {
+      return "";
+    }
+    const mappings = {
+      FM: ["FM", "NFM", "FMN"],
+      DSTAR: ["DV", "DSTAR", "D-STAR"],
+      ATV: ["ATV"],
+      ECHOLINK: ["ECHOLINK", "FM", "NFM", "FMN"],
+      MOTOTRBO: ["DMR", "MOTOTRBO", "DIG"],
+      APCO25: ["P25", "APCO25", "APCO-25", "DIG"],
+      C4FM: ["C4FM", "DN", "VW", "DIG"],
+      FMLINK: ["FM", "NFM", "FMN"],
+      TETRA: ["TETRA", "DIG"],
+      M17: ["M17", "DIG"],
+    };
+    return enumOptionCaseInsensitive("Mode", mappings[mode] || [mode]);
+  }
+
+  function createPrzemiennikiChannelRow(repeaterEl) {
+    const row = createBlankChannelRow();
+    const callSign = firstText(repeaterEl, "qra");
+    const mode = firstText(repeaterEl, "mode");
+    const repeaterRx = Number(firstText(repeaterEl, 'qrg[type="rx"]'));
+    const repeaterTx = Number(firstText(repeaterEl, 'qrg[type="tx"]'));
+    const receiveFrequency = Number.isFinite(repeaterTx) ? repeaterTx : repeaterRx;
+    const transmitFrequency = Number.isFinite(repeaterRx) ? repeaterRx : repeaterTx;
+
+    setRowValueIfPresent(row, "Name", callSign);
+    setRowValueIfPresent(row, "Comment", buildPrzemiennikiComment(repeaterEl));
+
+    if (Number.isFinite(receiveFrequency)) {
+      setRowValueIfPresent(row, "Frequency", formatFrequencyMhz(receiveFrequency));
+    }
+    if (Number.isFinite(receiveFrequency) && Number.isFinite(transmitFrequency)) {
+      const delta = transmitFrequency - receiveFrequency;
+      if (Math.abs(delta) < 0.0000005) {
+        setRowValueIfPresent(row, "Duplex", "");
+        setRowValueIfPresent(row, "Offset", "0.000000");
+      } else {
+        setRowValueIfPresent(row, "Duplex", delta < 0 ? "-" : "+");
+        setRowValueIfPresent(row, "Offset", formatFrequencyMhz(Math.abs(delta)));
+      }
+    }
+
+    const ctcssTx = firstText(repeaterEl, 'ctcss[type="tx"]');
+    if (ctcssTx) {
+      const toneMode = enumOptionCaseInsensitive("Tone", ["Tone", "TSQL"]);
+      if (toneMode) {
+        setRowValueIfPresent(row, "Tone", toneMode);
+      }
+      setRowValueIfPresent(row, "rToneFreq", ctcssTx);
+    }
+    const ctcssRx = firstText(repeaterEl, 'ctcss[type="rx"]');
+    if (ctcssRx) {
+      setRowValueIfPresent(row, "cToneFreq", ctcssRx);
+    }
+
+    const mappedMode = mapPrzemiennikiModeToChirp(mode);
+    if (mappedMode) {
+      setRowValueIfPresent(row, "Mode", mappedMode);
+    }
+    return row;
   }
 
   function createPmr446ChannelRow(channelNumber, frequencyMhz) {
@@ -931,11 +1034,23 @@ export function createUiController() {
       setStatus("No channel schema loaded yet.");
       return;
     }
-    const selectedIndexes = sortedSelectedRowIndexes();
-    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : currentRows.length;
     const rowsToInsert = PMR446_FREQUENCIES_MHZ.map((frequency, idx) =>
       createPmr446ChannelRow(idx + 1, frequency),
     );
+    insertRowsAtSelectionOrEnd(rowsToInsert, "PMR446");
+  }
+
+  function insertRowsAtSelectionOrEnd(rowsToInsert, label) {
+    if (!currentHeaders.length) {
+      setStatus("No channel schema loaded yet.");
+      return false;
+    }
+    if (!Array.isArray(rowsToInsert) || rowsToInsert.length === 0) {
+      setStatus(`No ${label} entries to insert.`);
+      return false;
+    }
+    const selectedIndexes = sortedSelectedRowIndexes();
+    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : currentRows.length;
     currentRows.splice(insertAt, 0, ...rowsToInsert);
     reindexLocationColumn();
     clearInvalidHighlights();
@@ -945,7 +1060,8 @@ export function createUiController() {
     );
     selectionAnchorIndex = insertAt;
     renderTable();
-    setStatus(`Inserted ${rowsToInsert.length} PMR446 channels at channel ${insertAt}.`);
+    setStatus(`Inserted ${rowsToInsert.length} ${label} channel(s) at channel ${insertAt}.`);
+    return true;
   }
 
   function removeSelectedChannelRows() {
