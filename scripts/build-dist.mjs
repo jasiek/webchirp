@@ -39,6 +39,23 @@ function rewriteText(text, replacements) {
   return out;
 }
 
+function makePerFileRelativeReplacements(filePath, assetPairs) {
+  const fileDir = path.dirname(filePath);
+  const replacements = [];
+  for (const pair of assetPairs) {
+    const oldAbs = path.join(DIST_DIR, pair.oldRel);
+    const newAbs = path.join(DIST_DIR, pair.newRel);
+    let oldRef = toPosix(path.relative(fileDir, oldAbs));
+    let newRef = toPosix(path.relative(fileDir, newAbs));
+    if (!oldRef.startsWith(".")) {
+      oldRef = `./${oldRef}`;
+      newRef = `./${newRef}`;
+    }
+    replacements.push([oldRef, newRef]);
+  }
+  return replacements;
+}
+
 async function main() {
   await rm(DIST_DIR, { recursive: true, force: true });
   await cp(WEB_DIR, DIST_DIR, {
@@ -57,6 +74,7 @@ async function main() {
 
   const webFiles = await walkFiles(DIST_DIR);
   const replacements = [];
+  const assetPairs = [];
 
   for (const filePath of webFiles) {
     const ext = path.extname(filePath);
@@ -75,6 +93,7 @@ async function main() {
 
     const oldRel = toPosix(path.relative(DIST_DIR, filePath));
     const newRel = toPosix(path.relative(DIST_DIR, hashedPath));
+    assetPairs.push({ oldRel, newRel });
     replacements.push([`./${oldRel}`, `./${newRel}`]);
     replacements.push([`/${oldRel}`, `/${newRel}`]);
   }
@@ -88,7 +107,10 @@ async function main() {
       continue;
     }
     const original = await readFile(filePath, "utf8");
-    const rewritten = rewriteText(original, replacements);
+    const localReplacements = makePerFileRelativeReplacements(filePath, assetPairs);
+    const allReplacements = [...replacements, ...localReplacements]
+      .sort((a, b) => b[0].length - a[0].length);
+    const rewritten = rewriteText(original, allReplacements);
     if (rewritten !== original) {
       await writeFile(filePath, rewritten, "utf8");
     }
