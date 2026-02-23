@@ -14,6 +14,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Prefer generic, parameterized flows based on selected CHIRP driver/module/class.
 - Do not reintroduce radio-specific RPC methods when generic selected-radio methods can be used.
 - Preserve debug visibility: full errors/tracebacks should be logged to the bottom debug panel.
+- Avoid context pollution by spawning sub-agents when appropriate. Use sub-agent sandboxing when a read-only task is to be executed.
 - Avoid regressions in clone workflow:
   - Download should cache the image for the selected driver.
   - Upload should use cached image and fail clearly if no cached image exists.
@@ -35,3 +36,4 @@ Before committing, run relevant checks:
 - `node --check web/app.js`
 - `node --check web/py-worker.js`
 - `python -m py_compile web/python/runtime_bridge.py`
+- `npm run test:channels`
