@@ -1,7 +1,9 @@
 import {
   PRZEMIENNIKI_API_URL,
+  PRZEMIENNIKI_META_URL,
   buildPmr446Rows,
   buildPrzemiennikiRows,
+  parsePrzemiennikiMetaJson,
   parsePrzemiennikiXml,
 } from "./datasources.js";
 
@@ -762,18 +764,16 @@ export function createUiController() {
       return przemiennikiDictionaryPromise;
     }
     przemiennikiDictionaryPromise = (async () => {
-      const dictionaryUrl = new URL(PRZEMIENNIKI_API_URL);
-      dictionaryUrl.searchParams.set("country", "xx");
-      const response = await fetch(dictionaryUrl.toString());
+      const response = await fetch(PRZEMIENNIKI_META_URL);
       if (!response.ok) {
         throw new Error(`Dictionary request failed: HTTP ${response.status}`);
       }
-      const xmlText = await response.text();
-      const parsed = parsePrzemiennikiXml(xmlText);
+      const jsonText = await response.text();
+      const parsed = parsePrzemiennikiMetaJson(jsonText);
       populatePrzemiennikiCountryOptions(parsed.countries);
       populatePrzemiennikiBandOptions(parsed.bands);
       populatePrzemiennikiModeOptions(parsed.modes);
-      logDebug("Loaded przemienniki.net dictionary options.");
+      logDebug("Loaded przemienniki.net filter options from /meta.");
       return parsed;
     })();
     try {

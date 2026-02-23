@@ -4,6 +4,7 @@ const PMR446_FREQUENCIES_MHZ = Array.from(
 );
 
 const PRZEMIENNIKI_API_URL = "https://api.codeplug.org/przemienniki";
+const PRZEMIENNIKI_META_URL = "https://api.codeplug.org/przemienniki/meta";
 
 function parseXmlDocument(xmlText) {
   const doc = new DOMParser().parseFromString(String(xmlText || ""), "application/xml");
@@ -84,6 +85,42 @@ export function parsePrzemiennikiXml(xmlText) {
   return { countries, bands, modes, repeaters };
 }
 
+export function parsePrzemiennikiMetaJson(jsonText) {
+  let payload;
+  try {
+    payload = JSON.parse(String(jsonText || "{}"));
+  } catch (error) {
+    throw new Error(`Invalid meta JSON response: ${error.message}`);
+  }
+  const filters = payload?.filters && typeof payload.filters === "object" ? payload.filters : {};
+
+  const countries = Array.isArray(filters.country)
+    ? filters.country
+      .map((value) => String(value || "").trim().toUpperCase())
+      .filter((value) => /^[A-Z]{2}$/.test(value))
+    : [];
+
+  const bands = Array.isArray(filters.band)
+    ? filters.band
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter((value) => value.length > 0)
+    : [];
+
+  const modes = Array.isArray(filters.mode)
+    ? filters.mode
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter((value) => value.length > 0)
+      .map((value) => ({ value, label: value, title: value }))
+    : [];
+
+  return {
+    countries: Array.from(new Set(countries)).sort((a, b) => a.localeCompare(b)),
+    bands: Array.from(new Set(bands)).sort((a, b) => a.localeCompare(b)),
+    modes: Array.from(new Map(modes.map((entry) => [entry.value, entry])).values())
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  };
+}
+
 export function buildPmr446Rows({ createBlankRow, setRowValue, findEnumOption }) {
   return PMR446_FREQUENCIES_MHZ.map((frequency, idx) => {
     const row = createBlankRow();
@@ -161,4 +198,4 @@ export function buildPrzemiennikiRows(repeaters, { createBlankRow, setRowValue, 
   });
 }
 
-export { PRZEMIENNIKI_API_URL };
+export { PRZEMIENNIKI_API_URL, PRZEMIENNIKI_META_URL };
