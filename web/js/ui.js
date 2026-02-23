@@ -1,12 +1,14 @@
+import {
+  PRZEMIENNIKI_API_URL,
+  buildPmr446Rows,
+  buildPrzemiennikiRows,
+  parsePrzemiennikiXml,
+} from "./datasources.js";
+
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
 const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
 const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
-const PMR446_FREQUENCIES_MHZ = Array.from(
-  { length: 16 },
-  (_, index) => (446.00625 + (index * 0.0125)).toFixed(5),
-);
-const PRZEMIENNIKI_API_URL = "https://api.codeplug.org/przemienniki";
 
 // Create and manage all DOM/UI state and user interaction behavior.
 export function createUiController() {
@@ -659,19 +661,6 @@ export function createUiController() {
       .join("");
   }
 
-  function parseXmlDocument(xmlText) {
-    const doc = new DOMParser().parseFromString(String(xmlText || ""), "application/xml");
-    const parserErrorNode = doc.querySelector("parsererror");
-    if (parserErrorNode) {
-      throw new Error(`Invalid XML response: ${parserErrorNode.textContent?.trim() || "parsererror"}`);
-    }
-    return doc;
-  }
-
-  function firstText(parent, selector) {
-    return String(parent?.querySelector(selector)?.textContent || "").trim();
-  }
-
   function replaceOptions(selectEl, options, placeholderLabel) {
     if (!selectEl) {
       return;
@@ -692,6 +681,27 @@ export function createUiController() {
     }
   }
 
+  function replaceCheckboxOptions(containerEl, options, name) {
+    if (!containerEl) {
+      return;
+    }
+    containerEl.innerHTML = "";
+    options.forEach((option) => {
+      const label = document.createElement("label");
+      label.className = "modal-mode-option";
+      label.title = option.title || option.label || option.value;
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = option.value;
+      checkbox.name = name;
+      const text = document.createElement("span");
+      text.textContent = option.label || option.value;
+      label.appendChild(checkbox);
+      label.appendChild(text);
+      containerEl.appendChild(label);
+    });
+  }
+
   function countryDisplayName(countryCode) {
     if (countryCode === "UK" || countryCode === "GB") {
       return "United Kingdom";
@@ -704,15 +714,8 @@ export function createUiController() {
     }
   }
 
-  function populatePrzemiennikiCountryOptions(xmlDoc) {
-    const codes = new Set();
-    xmlDoc.querySelectorAll("repeaters > repeater > country").forEach((node) => {
-      const code = String(node.textContent || "").trim().toUpperCase();
-      if (/^[A-Z]{2}$/.test(code)) {
-        codes.add(code);
-      }
-    });
-    const countries = Array.from(codes)
+  function populatePrzemiennikiCountryOptions(codes) {
+    const countries = Array.from(codes || [])
       .map((code) => {
         const name = countryDisplayName(code);
         return {
@@ -725,84 +728,15 @@ export function createUiController() {
     replaceOptions(przemiennikiCountryEl, countries, "Any country");
   }
 
-  function populatePrzemiennikiBandOptions(xmlDoc) {
-    if (!przemiennikiBandListEl) {
-      return;
-    }
-    const bands = [];
-    xmlDoc.querySelectorAll("dictionary > item").forEach((item) => {
-      if (firstText(item, "type").toLowerCase() !== "band") {
-        return;
-      }
-      const description = firstText(item, "description");
-      const name = firstText(item, "name");
-      const bandQueryValue = (description || name).toLowerCase();
-      if (!bandQueryValue) {
-        return;
-      }
-      bands.push({
-        value: bandQueryValue,
-        label: bandQueryValue,
-        title: description || name || bandQueryValue,
-      });
-    });
-    const uniqueBands = Array.from(new Map(bands.map((entry) => [entry.value, entry])).values())
+  function populatePrzemiennikiBandOptions(bands) {
+    const options = Array.from(bands || [])
+      .map((band) => ({ value: band, label: band, title: band }))
       .sort((a, b) => a.value.localeCompare(b.value));
-    przemiennikiBandListEl.innerHTML = "";
-    uniqueBands.forEach((band) => {
-      const label = document.createElement("label");
-      label.className = "modal-mode-option";
-      label.title = band.title;
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.value = band.value;
-      checkbox.name = "band";
-      const text = document.createElement("span");
-      text.textContent = band.label;
-      label.appendChild(checkbox);
-      label.appendChild(text);
-      przemiennikiBandListEl.appendChild(label);
-    });
+    replaceCheckboxOptions(przemiennikiBandListEl, options, "band");
   }
 
-  function populatePrzemiennikiModeOptions(xmlDoc) {
-    if (!przemiennikiModeListEl) {
-      return;
-    }
-    const modes = [];
-    xmlDoc.querySelectorAll("dictionary > item").forEach((item) => {
-      if (firstText(item, "type").toLowerCase() !== "mode") {
-        return;
-      }
-      const description = firstText(item, "description");
-      const name = firstText(item, "name");
-      const modeQueryValue = (name || description).toLowerCase();
-      if (!modeQueryValue) {
-        return;
-      }
-      modes.push({
-        value: modeQueryValue,
-        label: description || name || modeQueryValue,
-        title: description || name || modeQueryValue,
-      });
-    });
-    const uniqueModes = Array.from(new Map(modes.map((entry) => [entry.value, entry])).values())
-      .sort((a, b) => a.label.localeCompare(b.label));
-    przemiennikiModeListEl.innerHTML = "";
-    uniqueModes.forEach((mode) => {
-      const label = document.createElement("label");
-      label.className = "modal-mode-option";
-      label.title = mode.title;
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.value = mode.value;
-      checkbox.name = "mode";
-      const text = document.createElement("span");
-      text.textContent = mode.label;
-      label.appendChild(checkbox);
-      label.appendChild(text);
-      przemiennikiModeListEl.appendChild(label);
-    });
+  function populatePrzemiennikiModeOptions(modes) {
+    replaceCheckboxOptions(przemiennikiModeListEl, Array.from(modes || []), "mode");
   }
 
   function selectedPrzemiennikiModes() {
@@ -835,12 +769,12 @@ export function createUiController() {
         throw new Error(`Dictionary request failed: HTTP ${response.status}`);
       }
       const xmlText = await response.text();
-      const xmlDoc = parseXmlDocument(xmlText);
-      populatePrzemiennikiCountryOptions(xmlDoc);
-      populatePrzemiennikiBandOptions(xmlDoc);
-      populatePrzemiennikiModeOptions(xmlDoc);
+      const parsed = parsePrzemiennikiXml(xmlText);
+      populatePrzemiennikiCountryOptions(parsed.countries);
+      populatePrzemiennikiBandOptions(parsed.bands);
+      populatePrzemiennikiModeOptions(parsed.modes);
       logDebug("Loaded przemienniki.net dictionary options.");
-      return xmlDoc;
+      return parsed;
     })();
     try {
       return await przemiennikiDictionaryPromise;
@@ -907,12 +841,15 @@ export function createUiController() {
       throw new Error(`Przemienniki query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
     }
     const xmlText = await response.text();
-    const xmlDoc = parseXmlDocument(xmlText);
-    const resultList = Array.from(xmlDoc.querySelectorAll("repeaters > repeater"));
-    const rowsToInsert = resultList.map((node) => createPrzemiennikiChannelRow(node));
+    const parsed = parsePrzemiennikiXml(xmlText);
+    const rowsToInsert = buildPrzemiennikiRows(parsed.repeaters, {
+      createBlankRow: createBlankChannelRow,
+      setRowValue: setRowValueIfPresent,
+      findEnumOption,
+    });
     insertRowsAtSelectionOrEnd(rowsToInsert, "przemienniki");
     logDebug(`PRZEMIENNIKI QUERY ${url.toString()}`);
-    logDebug(`PRZEMIENNIKI RESULTS ${resultList.length}`);
+    logDebug(`PRZEMIENNIKI RESULTS ${parsed.repeaters.length}`);
   }
 
   async function geolocatePrzemiennikiQuery() {
@@ -950,12 +887,22 @@ export function createUiController() {
     row[column] = normalizeValue(column, value, meta, row[column]);
   }
 
-  function preferredEnumOption(column, choices) {
+  function findEnumOption(column, choices, caseInsensitive = false) {
     if (!currentHeaders.includes(column)) {
       return "";
     }
     const meta = radioMetadata.columns?.[column] || {};
     const options = Array.isArray(meta.options) ? meta.options.map(String) : [];
+    if (caseInsensitive) {
+      const normalized = new Map(options.map((option) => [option.toLowerCase(), option]));
+      for (const choice of choices) {
+        const match = normalized.get(String(choice || "").toLowerCase());
+        if (match) {
+          return match;
+        }
+      }
+      return "";
+    }
     for (const choice of choices) {
       if (options.includes(choice)) {
         return choice;
@@ -964,131 +911,16 @@ export function createUiController() {
     return "";
   }
 
-  function enumOptionCaseInsensitive(column, choices) {
-    if (!currentHeaders.includes(column)) {
-      return "";
-    }
-    const meta = radioMetadata.columns?.[column] || {};
-    const options = Array.isArray(meta.options) ? meta.options.map(String) : [];
-    const normalized = new Map(options.map((option) => [option.toLowerCase(), option]));
-    for (const choice of choices) {
-      const match = normalized.get(String(choice || "").toLowerCase());
-      if (match) {
-        return match;
-      }
-    }
-    return "";
-  }
-
-  function formatFrequencyMhz(value) {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) {
-      return "";
-    }
-    return numeric.toFixed(6);
-  }
-
-  function buildPrzemiennikiComment(repeaterEl) {
-    const qth = firstText(repeaterEl, "qth");
-    const remarks = firstText(repeaterEl, "remarks");
-    const link = firstText(repeaterEl, "link");
-    const parts = [qth, remarks, link].filter((part) => part.length > 0);
-    return parts.join(" | ");
-  }
-
-  function mapPrzemiennikiModeToChirp(apiMode) {
-    const mode = String(apiMode || "").trim().toUpperCase();
-    if (!mode) {
-      return "";
-    }
-    const mappings = {
-      FM: ["FM", "NFM", "FMN"],
-      DSTAR: ["DV", "DSTAR", "D-STAR"],
-      ATV: ["ATV"],
-      ECHOLINK: ["ECHOLINK", "FM", "NFM", "FMN"],
-      MOTOTRBO: ["DMR", "MOTOTRBO", "DIG"],
-      APCO25: ["P25", "APCO25", "APCO-25", "DIG"],
-      C4FM: ["C4FM", "DN", "VW", "DIG"],
-      FMLINK: ["FM", "NFM", "FMN"],
-      TETRA: ["TETRA", "DIG"],
-      M17: ["M17", "DIG"],
-    };
-    return enumOptionCaseInsensitive("Mode", mappings[mode] || [mode]);
-  }
-
-  function createPrzemiennikiChannelRow(repeaterEl) {
-    const row = createBlankChannelRow();
-    const callSign = firstText(repeaterEl, "qra");
-    const mode = firstText(repeaterEl, "mode");
-    const repeaterRx = Number(firstText(repeaterEl, 'qrg[type="rx"]'));
-    const repeaterTx = Number(firstText(repeaterEl, 'qrg[type="tx"]'));
-    const receiveFrequency = Number.isFinite(repeaterTx) ? repeaterTx : repeaterRx;
-    const transmitFrequency = Number.isFinite(repeaterRx) ? repeaterRx : repeaterTx;
-
-    setRowValueIfPresent(row, "Name", callSign);
-    setRowValueIfPresent(row, "Comment", buildPrzemiennikiComment(repeaterEl));
-
-    if (Number.isFinite(receiveFrequency)) {
-      setRowValueIfPresent(row, "Frequency", formatFrequencyMhz(receiveFrequency));
-    }
-    if (Number.isFinite(receiveFrequency) && Number.isFinite(transmitFrequency)) {
-      const delta = transmitFrequency - receiveFrequency;
-      if (Math.abs(delta) < 0.0000005) {
-        setRowValueIfPresent(row, "Duplex", "");
-        setRowValueIfPresent(row, "Offset", "0.000000");
-      } else {
-        setRowValueIfPresent(row, "Duplex", delta < 0 ? "-" : "+");
-        setRowValueIfPresent(row, "Offset", formatFrequencyMhz(Math.abs(delta)));
-      }
-    }
-
-    const ctcssTx = firstText(repeaterEl, 'ctcss[type="tx"]');
-    if (ctcssTx) {
-      const toneMode = enumOptionCaseInsensitive("Tone", ["Tone", "TSQL"]);
-      if (toneMode) {
-        setRowValueIfPresent(row, "Tone", toneMode);
-      }
-      setRowValueIfPresent(row, "rToneFreq", ctcssTx);
-    }
-    const ctcssRx = firstText(repeaterEl, 'ctcss[type="rx"]');
-    if (ctcssRx) {
-      setRowValueIfPresent(row, "cToneFreq", ctcssRx);
-    }
-
-    const mappedMode = mapPrzemiennikiModeToChirp(mode);
-    if (mappedMode) {
-      setRowValueIfPresent(row, "Mode", mappedMode);
-    }
-    return row;
-  }
-
-  function createPmr446ChannelRow(channelNumber, frequencyMhz) {
-    const row = createBlankChannelRow();
-    setRowValueIfPresent(row, "Name", `PMR ${channelNumber}`);
-    setRowValueIfPresent(row, "Frequency", frequencyMhz);
-    setRowValueIfPresent(row, "Duplex", "");
-    setRowValueIfPresent(row, "Offset", "0.000000");
-    setRowValueIfPresent(row, "Tone", "");
-    setRowValueIfPresent(row, "CrossMode", "Tone->Tone");
-    const modeValue = preferredEnumOption("Mode", ["NFM", "FMN", "FM"]);
-    if (modeValue) {
-      setRowValueIfPresent(row, "Mode", modeValue);
-    }
-    const powerValue = preferredEnumOption("Power", ["0.5W", "500mW", "Low"]);
-    if (powerValue) {
-      setRowValueIfPresent(row, "Power", powerValue);
-    }
-    return row;
-  }
-
   function addPmr446Channels() {
     if (!currentHeaders.length) {
       setStatus("No channel schema loaded yet.");
       return;
     }
-    const rowsToInsert = PMR446_FREQUENCIES_MHZ.map((frequency, idx) =>
-      createPmr446ChannelRow(idx + 1, frequency),
-    );
+    const rowsToInsert = buildPmr446Rows({
+      createBlankRow: createBlankChannelRow,
+      setRowValue: setRowValueIfPresent,
+      findEnumOption,
+    });
     insertRowsAtSelectionOrEnd(rowsToInsert, "PMR446");
   }
 
