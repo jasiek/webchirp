@@ -657,48 +657,17 @@ export function createUiController() {
       .join("");
   }
 
-  function optionEntriesFromDictionary(raw) {
-    const entries = [];
-    if (Array.isArray(raw)) {
-      for (const value of raw) {
-        if (typeof value === "string") {
-          entries.push({ value, label: value, title: value });
-          continue;
-        }
-        if (!value || typeof value !== "object") {
-          continue;
-        }
-        const entryValue = String(
-          value.value ?? value.code ?? value.id ?? value.key ?? value.band ?? value.name ?? "",
-        ).trim();
-        if (!entryValue) {
-          continue;
-        }
-        const entryLabel = String(value.label ?? value.name ?? value.title ?? entryValue).trim();
-        entries.push({ value: entryValue, label: entryLabel || entryValue, title: entryLabel || entryValue });
-      }
-      return entries;
+  function parseXmlDocument(xmlText) {
+    const doc = new DOMParser().parseFromString(String(xmlText || ""), "application/xml");
+    const parserErrorNode = doc.querySelector("parsererror");
+    if (parserErrorNode) {
+      throw new Error(`Invalid XML response: ${parserErrorNode.textContent?.trim() || "parsererror"}`);
     }
-    if (raw && typeof raw === "object") {
-      for (const [key, value] of Object.entries(raw)) {
-        if (typeof value === "string") {
-          entries.push({ value: key, label: value, title: value });
-          continue;
-        }
-        if (!value || typeof value !== "object") {
-          entries.push({ value: key, label: key, title: key });
-          continue;
-        }
-        const entryLabel = String(value.label ?? value.name ?? value.title ?? key).trim();
-        const entryValue = String(value.value ?? value.code ?? value.id ?? key).trim();
-        if (!entryValue) {
-          continue;
-        }
-        entries.push({ value: entryValue, label: entryLabel || entryValue, title: entryLabel || entryValue });
-      }
-      return entries;
-    }
-    return entries;
+    return doc;
+  }
+
+  function firstText(parent, selector) {
+    return String(parent?.querySelector(selector)?.textContent || "").trim();
   }
 
   function replaceOptions(selectEl, options, placeholderLabel) {
@@ -721,35 +690,64 @@ export function createUiController() {
     }
   }
 
-  function populatePrzemiennikiCountryOptions(rawCountries) {
-    const countries = optionEntriesFromDictionary(rawCountries)
-      .map((entry) => {
-        const code = String(entry.value || "").toUpperCase();
-        const name = String(entry.label || code);
+  function countryDisplayName(countryCode) {
+    try {
+      const displayNames = new Intl.DisplayNames([navigator.language || "en-US"], { type: "region" });
+      return String(displayNames.of(countryCode) || countryCode);
+    } catch {
+      return countryCode;
+    }
+  }
+
+  function populatePrzemiennikiCountryOptions(xmlDoc) {
+    const codes = new Set();
+    xmlDoc.querySelectorAll("repeaters > repeater > country").forEach((node) => {
+      const code = String(node.textContent || "").trim().toUpperCase();
+      if (/^[A-Z]{2}$/.test(code)) {
+        codes.add(code);
+      }
+    });
+    const countries = Array.from(codes)
+      .map((code) => {
+        const name = countryDisplayName(code);
         return {
           value: code,
           label: `${flagEmojiFromCountryCode(code)} ${code}`.trim(),
           title: name,
         };
       })
-      .filter((entry) => /^[A-Z]{2}$/.test(entry.value))
       .sort((a, b) => a.title.localeCompare(b.title));
     replaceOptions(przemiennikiCountryEl, countries, "Any country");
   }
 
-  function populatePrzemiennikiBandOptions(rawBands) {
-    const bands = optionEntriesFromDictionary(rawBands)
+  function populatePrzemiennikiBandOptions(xmlDoc) {
+    const bands = [];
+    xmlDoc.querySelectorAll("dictionary > item").forEach((item) => {
+      if (firstText(item, "type").toLowerCase() !== "band") {
+        return;
+      }
+      const description = firstText(item, "description");
+      const name = firstText(item, "name");
+      const bandQueryValue = (description || name).toLowerCase();
+      if (!bandQueryValue) {
+        return;
+      }
+      bands.push({
+        value: bandQueryValue,
+        label: bandQueryValue,
+        title: description || name || bandQueryValue,
+      });
+    });
+    const uniqueBands = Array.from(new Map(bands.map((entry) => [entry.value, entry])).values())
       .map((entry) => {
-        const value = String(entry.value || "").trim();
         return {
-          value,
-          label: value,
-          title: String(entry.title || value),
+          value: entry.value,
+          label: entry.label,
+          title: entry.title,
         };
       })
-      .filter((entry) => entry.value.length > 0)
       .sort((a, b) => a.value.localeCompare(b.value));
-    replaceOptions(przemiennikiBandEl, bands, "Any band");
+    replaceOptions(przemiennikiBandEl, uniqueBands, "Any band");
   }
 
   async function ensurePrzemiennikiDictionaryLoaded() {
@@ -761,14 +759,12 @@ export function createUiController() {
       if (!response.ok) {
         throw new Error(`Dictionary request failed: HTTP ${response.status}`);
       }
-      const payload = await response.json();
-      const dictionary = payload?.dictionary && typeof payload.dictionary === "object"
-        ? payload.dictionary
-        : {};
-      populatePrzemiennikiCountryOptions(dictionary.country || dictionary.countries || {});
-      populatePrzemiennikiBandOptions(dictionary.band || dictionary.bands || {});
+      const xmlText = await response.text();
+      const xmlDoc = parseXmlDocument(xmlText);
+      populatePrzemiennikiCountryOptions(xmlDoc);
+      populatePrzemiennikiBandOptions(xmlDoc);
       logDebug("Loaded przemienniki.net dictionary options.");
-      return dictionary;
+      return xmlDoc;
     })();
     try {
       return await przemiennikiDictionaryPromise;
@@ -810,9 +806,9 @@ export function createUiController() {
 
   async function runPrzemiennikiQuery() {
     const url = new URL(PRZEMIENNIKI_API_URL);
-    appendQueryParam(url, "country", przemiennikiCountryEl?.value || "");
+    appendQueryParam(url, "country", String(przemiennikiCountryEl?.value || "").toLowerCase());
     appendQueryParam(url, "band", przemiennikiBandEl?.value || "");
-    appendQueryParam(url, "mode", przemiennikiModeEl?.value || "");
+    appendQueryParam(url, "mode", String(przemiennikiModeEl?.value || "").toLowerCase());
     if (przemiennikiOnlyWorkingEl?.checked) {
       url.searchParams.set("onlyworking", "true");
     }
@@ -825,14 +821,9 @@ export function createUiController() {
       const body = await response.text();
       throw new Error(`Przemienniki query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
     }
-    const payload = await response.json();
-    const resultList = Array.isArray(payload?.result)
-      ? payload.result
-      : Array.isArray(payload?.results)
-        ? payload.results
-        : Array.isArray(payload)
-          ? payload
-          : [];
+    const xmlText = await response.text();
+    const xmlDoc = parseXmlDocument(xmlText);
+    const resultList = Array.from(xmlDoc.querySelectorAll("repeaters > repeater"));
     logDebug(`PRZEMIENNIKI QUERY ${url.toString()}`);
     logDebug(`PRZEMIENNIKI RESULTS ${resultList.length}`);
     setStatus(`przemienniki.net query returned ${resultList.length} record(s).`);
