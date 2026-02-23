@@ -809,7 +809,9 @@ export function createUiController() {
       return przemiennikiDictionaryPromise;
     }
     przemiennikiDictionaryPromise = (async () => {
-      const response = await fetch(PRZEMIENNIKI_API_URL);
+      const dictionaryUrl = new URL(PRZEMIENNIKI_API_URL);
+      dictionaryUrl.searchParams.set("country", "xx");
+      const response = await fetch(dictionaryUrl.toString());
       if (!response.ok) {
         throw new Error(`Dictionary request failed: HTTP ${response.status}`);
       }
