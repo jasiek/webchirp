@@ -27,7 +27,7 @@ export function createUiController() {
   const przemiennikiModalEl = document.querySelector("#przemienniki-modal");
   const przemiennikiFormEl = document.querySelector("#przemienniki-form");
   const przemiennikiCountryEl = document.querySelector("#przemienniki-country");
-  const przemiennikiBandEl = document.querySelector("#przemienniki-band");
+  const przemiennikiBandListEl = document.querySelector("#przemienniki-band-list");
   const przemiennikiModeListEl = document.querySelector("#przemienniki-mode-list");
   const przemiennikiOnlyWorkingEl = document.querySelector("#przemienniki-onlyworking");
   const przemiennikiLatitudeEl = document.querySelector("#przemienniki-latitude");
@@ -726,6 +726,9 @@ export function createUiController() {
   }
 
   function populatePrzemiennikiBandOptions(xmlDoc) {
+    if (!przemiennikiBandListEl) {
+      return;
+    }
     const bands = [];
     xmlDoc.querySelectorAll("dictionary > item").forEach((item) => {
       if (firstText(item, "type").toLowerCase() !== "band") {
@@ -744,15 +747,22 @@ export function createUiController() {
       });
     });
     const uniqueBands = Array.from(new Map(bands.map((entry) => [entry.value, entry])).values())
-      .map((entry) => {
-        return {
-          value: entry.value,
-          label: entry.label,
-          title: entry.title,
-        };
-      })
       .sort((a, b) => a.value.localeCompare(b.value));
-    replaceOptions(przemiennikiBandEl, uniqueBands, "Any band");
+    przemiennikiBandListEl.innerHTML = "";
+    uniqueBands.forEach((band) => {
+      const label = document.createElement("label");
+      label.className = "modal-mode-option";
+      label.title = band.title;
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = band.value;
+      checkbox.name = "band";
+      const text = document.createElement("span");
+      text.textContent = band.label;
+      label.appendChild(checkbox);
+      label.appendChild(text);
+      przemiennikiBandListEl.appendChild(label);
+    });
   }
 
   function populatePrzemiennikiModeOptions(xmlDoc) {
@@ -800,6 +810,15 @@ export function createUiController() {
       return [];
     }
     return Array.from(przemiennikiModeListEl.querySelectorAll('input[name="mode"]:checked'))
+      .map((el) => String(el.value || "").trim().toLowerCase())
+      .filter((value) => value.length > 0);
+  }
+
+  function selectedPrzemiennikiBands() {
+    if (!przemiennikiBandListEl) {
+      return [];
+    }
+    return Array.from(przemiennikiBandListEl.querySelectorAll('input[name="band"]:checked'))
       .map((el) => String(el.value || "").trim().toLowerCase())
       .filter((value) => value.length > 0);
   }
@@ -868,7 +887,10 @@ export function createUiController() {
     }
     const url = new URL(PRZEMIENNIKI_API_URL);
     appendQueryParam(url, "country", String(przemiennikiCountryEl?.value || "").toLowerCase());
-    appendQueryParam(url, "band", przemiennikiBandEl?.value || "");
+    const selectedBands = selectedPrzemiennikiBands();
+    if (selectedBands.length > 0) {
+      url.searchParams.set("band", selectedBands.join(","));
+    }
     selectedPrzemiennikiModes().forEach((mode) => {
       url.searchParams.append("mode", mode);
     });
