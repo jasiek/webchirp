@@ -144,13 +144,24 @@
           <input id="przemienniki-onlyworking" name="onlyworking" type="checkbox" checked />
 
           <label for="przemienniki-latitude">Latitude</label>
-          <input id="przemienniki-latitude" name="latitude" type="number" step="any" />
+          <div class="modal-geo-row">
+            <input id="przemienniki-latitude" name="latitude" type="number" step="any" />
+            <button
+              id="przemienniki-geolocate"
+              class="modal-geo-button"
+              type="button"
+              title="Use current location"
+              aria-label="Use current location"
+            >
+              🛰️
+            </button>
+          </div>
 
           <label for="przemienniki-longitude">Longitude</label>
           <input id="przemienniki-longitude" name="longitude" type="number" step="any" />
 
           <label for="przemienniki-range">Range (km)</label>
-          <input id="przemienniki-range" name="range" type="number" min="1" step="1" />
+          <input id="przemienniki-range" name="range" type="number" min="1" step="1" value="30" />
         </div>
         <div class="modal-actions">
           <button id="przemienniki-cancel" type="button">Cancel</button>

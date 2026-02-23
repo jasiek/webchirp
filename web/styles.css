@@ -304,6 +304,19 @@ button:not(:disabled):hover {
   margin: 0;
 }
 
+.modal-geo-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.modal-geo-button {
+  min-width: 2rem;
+  padding: 0.35rem 0.45rem;
+  line-height: 1;
+}
+
 .modal-modes {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));

@@ -33,6 +33,7 @@ export function createUiController() {
   const przemiennikiLatitudeEl = document.querySelector("#przemienniki-latitude");
   const przemiennikiLongitudeEl = document.querySelector("#przemienniki-longitude");
   const przemiennikiRangeEl = document.querySelector("#przemienniki-range");
+  const przemiennikiGeolocateEl = document.querySelector("#przemienniki-geolocate");
   const przemiennikiCancelEl = document.querySelector("#przemienniki-cancel");
   const sidebarControlEls = Array.from(
     document.querySelectorAll(".left-panel select, .left-panel button, .left-panel input"),
@@ -890,6 +891,33 @@ export function createUiController() {
     logDebug(`PRZEMIENNIKI RESULTS ${resultList.length}`);
   }
 
+  async function geolocatePrzemiennikiQuery() {
+    if (!navigator.geolocation) {
+      throw new Error("Geolocation API is not available in this browser.");
+    }
+    setStatus("Requesting browser geolocation...");
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      });
+    });
+    const latitude = Number(position?.coords?.latitude);
+    const longitude = Number(position?.coords?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new Error("Geolocation did not return valid coordinates.");
+    }
+    if (przemiennikiLatitudeEl) {
+      przemiennikiLatitudeEl.value = latitude.toFixed(6);
+    }
+    if (przemiennikiLongitudeEl) {
+      przemiennikiLongitudeEl.value = longitude.toFixed(6);
+    }
+    setStatus("Geolocation loaded into latitude/longitude fields.");
+    logDebug(`PRZEMIENNIKI GEO ${latitude.toFixed(6)},${longitude.toFixed(6)}`);
+  }
+
   function setRowValueIfPresent(row, column, value) {
     if (!currentHeaders.includes(column)) {
       return;
@@ -1347,6 +1375,13 @@ export function createUiController() {
     przemiennikiCancelEl?.addEventListener("click", () => {
       setPrzemiennikiModalOpen(false);
       setStatus("Cancelled przemienniki.net query.");
+    });
+    przemiennikiGeolocateEl?.addEventListener("click", async () => {
+      try {
+        await geolocatePrzemiennikiQuery();
+      } catch (error) {
+        reportActionError("Przemienniki geolocation", error);
+      }
     });
     przemiennikiModalEl?.addEventListener("click", (event) => {
       if (event.target === przemiennikiModalEl) {
