@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { access, cp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const ROOT = process.cwd();
@@ -7,6 +7,7 @@ const DIST_DIR = path.join(ROOT, "dist");
 const WEB_DIR = path.join(ROOT, "web");
 const HASHED_EXTS = new Set([".js", ".css", ".py"]);
 const REWRITE_EXTS = new Set([".html", ".js", ".css"]);
+const REQUIRED_WEB_FILES = ["js/datasources.js"];
 
 function toPosix(relPath) {
   return relPath.split(path.sep).join("/");
@@ -44,6 +45,15 @@ async function main() {
     recursive: true,
     filter: (src) => path.basename(src) !== "__pycache__",
   });
+
+  for (const relPath of REQUIRED_WEB_FILES) {
+    const expectedPath = path.join(DIST_DIR, relPath);
+    try {
+      await access(expectedPath);
+    } catch {
+      throw new Error(`Missing required dist asset: ${toPosix(path.relative(DIST_DIR, expectedPath))}`);
+    }
+  }
 
   const webFiles = await walkFiles(DIST_DIR);
   const replacements = [];
