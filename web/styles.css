@@ -337,6 +337,18 @@ button:not(:disabled):hover {
   gap: 0.5rem;
 }
 
+#przemienniki-country {
+  margin-bottom: 2em;
+}
+
+#przemienniki-band-list {
+  margin-bottom: 2em;
+}
+
+#przemienniki-mode-list {
+  margin-bottom: 2em;
+}
+
 .sidebar-debug-panel {
   margin-top: auto;
   border-top: 1px solid var(--border);
