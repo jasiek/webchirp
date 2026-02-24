@@ -22,6 +22,7 @@ export function createUiController() {
   const reportIssueEl = document.querySelector("#report-issue");
   const radioMakeEl = document.querySelector("#radio-make");
   const radioModelEl = document.querySelector("#radio-model");
+  const serialConnectToggleEl = document.querySelector("#serial-connect-toggle");
   const channelInsertEl = document.querySelector("#channel-insert");
   const channelRemoveEl = document.querySelector("#channel-remove");
   const channelMenuToggleEl = document.querySelector("#channel-menu-toggle");
@@ -57,6 +58,7 @@ export function createUiController() {
   let selectionAnchorIndex = null;
   let invalidCellKeys = new Set();
   let przemiennikiDictionaryPromise = null;
+  let serialConnected = false;
 
   if (!Object.getOwnPropertyDescriptor(globalThis, "currentRows")) {
     Object.defineProperty(globalThis, "currentRows", {
@@ -73,6 +75,13 @@ export function createUiController() {
     for (const el of sidebarControlEls) {
       el.disabled = !enabled;
     }
+  }
+
+  function refreshSerialConnectToggleLabel() {
+    if (!serialConnectToggleEl) {
+      return;
+    }
+    serialConnectToggleEl.textContent = serialConnected ? "Disconnect" : "Connect";
   }
 
   function setCookie(name, value, maxAgeSeconds = 31536000) {
@@ -1364,11 +1373,23 @@ export function createUiController() {
         .catch((error) => reportActionError("Metadata load", error));
     });
 
-    document.querySelector("#serial-connect").addEventListener("click", async () => {
-      const baudRate = Number(selectedRadio?.baudRate || 9600);
+    serialConnectToggleEl?.addEventListener("click", async () => {
+      serialConnectToggleEl.disabled = true;
       try {
+        if (serialConnected) {
+          setStatus("Disconnecting serial...");
+          const result = await requireCallWorker()("serialDisconnect");
+          serialConnected = Boolean(result?.connected);
+          refreshSerialConnectToggleLabel();
+          setStatus(result.message || "Serial disconnected.");
+          return;
+        }
+
+        const baudRate = Number(selectedRadio?.baudRate || 9600);
         setStatus("Connecting serial...");
         const result = await requireCallWorker()("serialConnect", { baudRate });
+        serialConnected = Boolean(result?.connected);
+        refreshSerialConnectToggleLabel();
         if (result?.deviceName) {
           logDebug(`SERIAL DEVICE ${result.deviceName}`);
         }
@@ -1383,18 +1404,11 @@ export function createUiController() {
         }
         setStatus(result.message || "Serial connected.");
       } catch (error) {
-        reportActionError("Serial connect", error);
+        const action = serialConnected ? "Serial disconnect" : "Serial connect";
+        reportActionError(action, error);
         logSerial(`ERROR ${errorSummary(error)}`);
-      }
-    });
-
-    document.querySelector("#serial-disconnect").addEventListener("click", async () => {
-      try {
-        const result = await requireCallWorker()("serialDisconnect");
-        setStatus(result.message || "Serial disconnected.");
-      } catch (error) {
-        reportActionError("Serial disconnect", error);
-        logSerial(`ERROR ${errorSummary(error)}`);
+      } finally {
+        serialConnectToggleEl.disabled = false;
       }
     });
 
@@ -1495,6 +1509,7 @@ export function createUiController() {
   // Bootstrap UI: capability checks, catalog load, metadata load, sample data.
   async function init(serialSupported) {
     bindEvents();
+    refreshSerialConnectToggleLabel();
     setSidebarControlsEnabled(false);
     try {
       if (!serialSupported) {
