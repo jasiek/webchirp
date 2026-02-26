@@ -440,12 +440,19 @@ export function createUiController() {
   function refreshModelOptions() {
     const vendor = radioMakeEl.value;
     const models = radioCatalog.filter((r) => r.vendor === vendor);
+    const modelCounts = new Map();
+    for (const radio of models) {
+      modelCounts.set(radio.model, (modelCounts.get(radio.model) || 0) + 1);
+    }
     radioModelEl.innerHTML = "";
 
     for (const radio of models) {
       const option = document.createElement("option");
       option.value = radio.key;
-      option.textContent = radio.model;
+      const hasDuplicateModel = (modelCounts.get(radio.model) || 0) > 1;
+      option.textContent = hasDuplicateModel
+        ? `${radio.model} (${radio.className})`
+        : radio.model;
       radioModelEl.appendChild(option);
     }
 
