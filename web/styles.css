@@ -148,6 +148,26 @@ button:not(:disabled):hover {
   font-size: 1rem;
 }
 
+.serial-support-warning {
+  margin: 0.35rem 0 0.8rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid #d97b2f;
+  border-radius: 6px;
+  background: #fff4e8;
+  color: #61330f;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.serial-support-warning a {
+  color: #7b3f14;
+  font-weight: 600;
+}
+
+.serial-support-warning[hidden] {
+  display: none;
+}
+
 #radio-make,
 #radio-model,
 #tx-hex,

@@ -40,6 +40,13 @@
         <aside class="left-panel">
           <div class="left-panel-main">
             <h2>Serial Bridge</h2>
+            <p id="webserial-support-warning" class="serial-support-warning" hidden>
+              Web Serial is unavailable in this browser, so radio download/upload will not work
+              correctly. Use a supported browser:
+              <a href="https://caniuse.com/web-serial" target="_blank" rel="noopener noreferrer"
+                >Web Serial browser support</a
+              >.
+            </p>
             <label for="radio-make">Radio make</label>
             <select id="radio-make" disabled></select>
             <label for="radio-model">Radio model</label>

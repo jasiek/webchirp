@@ -20,6 +20,7 @@ export function createUiController() {
   const imgFileInput = document.querySelector("#img-file");
   const debugOutputEl = document.querySelector("#debug-output");
   const reportIssueEl = document.querySelector("#report-issue");
+  const serialSupportWarningEl = document.querySelector("#webserial-support-warning");
   const radioMakeEl = document.querySelector("#radio-make");
   const radioModelEl = document.querySelector("#radio-model");
   const serialConnectToggleEl = document.querySelector("#serial-connect-toggle");
@@ -75,6 +76,13 @@ export function createUiController() {
     for (const el of sidebarControlEls) {
       el.disabled = !enabled;
     }
+  }
+
+  function setSerialSupportWarningVisible(visible) {
+    if (!serialSupportWarningEl) {
+      return;
+    }
+    serialSupportWarningEl.hidden = !visible;
   }
 
   function refreshSerialConnectToggleLabel() {
@@ -1517,6 +1525,7 @@ export function createUiController() {
   async function init(serialSupported) {
     bindEvents();
     refreshSerialConnectToggleLabel();
+    setSerialSupportWarningVisible(!serialSupported);
     setSidebarControlsEnabled(false);
     try {
       if (!serialSupported) {
