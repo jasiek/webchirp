@@ -179,6 +179,14 @@
     <input id="csv-file" type="file" accept=".csv,text/csv" hidden />
     <input id="img-file" type="file" accept=".img,application/octet-stream" hidden />
     <script type="module" src="./app.js"></script>
-    <script async defer src="https://buttons.github.io/buttons.js"></script>
+    <script>
+      if (!globalThis.crossOriginIsolated) {
+        const script = document.createElement("script");
+        script.async = true;
+        script.defer = true;
+        script.src = "https://buttons.github.io/buttons.js";
+        document.body.appendChild(script);
+      }
+    </script>
   </body>
 </html>
