@@ -23,13 +23,16 @@ Prototype for running parts of [CHIRP](https://github.com/kk7ds/chirp) in the br
 From `/Users/jps/github/webchirp`:
 
 ```bash
-python -m http.server 8000
+npm run dev
 ```
 
-Open [http://localhost:8000/web/index.html](http://localhost:8000/web/index.html).
+Open [http://127.0.0.1:8000/web/index.html](http://127.0.0.1:8000/web/index.html).
 
 Serial access requires a browser with Web Serial support and a secure context
 (`http://localhost` works).
+
+`npm run dev` serves with cross-origin isolation headers (`COOP`/`COEP`) so
+Pyodide synchronous JS bridging can use `SharedArrayBuffer` without warnings.
 
 For radio cloning:
 
