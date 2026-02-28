@@ -235,7 +235,7 @@ export function createUiController() {
 
   function requireCallWorker() {
     if (!callWorker) {
-      throw new Error("Worker RPC client is not initialized");
+      throw new Error("Runtime RPC client is not initialized");
     }
     return callWorker;
   }
@@ -1555,8 +1555,8 @@ export function createUiController() {
     logDebug,
     init,
     selectedRowsForOperations,
-    onWorkerCrash(message) {
-      logDebug(`WORKER CRASH ${message}`);
+    onRuntimeCrash(message) {
+      logDebug(`RUNTIME CRASH ${message}`);
     },
   };
 }

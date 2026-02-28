@@ -1,6 +1,6 @@
-/* global importScripts, loadPyodide */
+import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs";
 
-const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js";
+const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/";
 const CHIRP_REVISION = "1467519e792e8ebcc9a33dc40df0b2e273ce9a53";
 const CHIRP_CDN_BASE = `https://cdn.jsdelivr.net/gh/kk7ds/chirp@${CHIRP_REVISION}`;
 const CHIRP_FILE_INDEX_URL =
@@ -24,17 +24,8 @@ const CHIRP_FILES = [
 let pyodide;
 let bootstrapPromise;
 let radioCatalogCache = null;
-let rpcId = 0;
-const rpcPending = new Map();
-
-// Send a serial operation request to the main thread and await its result.
-function serialRpc(op, payload = {}) {
-  const id = ++rpcId;
-  return new Promise((resolve, reject) => {
-    rpcPending.set(id, { resolve, reject });
-    self.postMessage({ type: "serial-rpc", id, op, payload });
-  });
-}
+let handleSerialRpc = null;
+let bootstrapFailed = false;
 
 // Create nested directories in the Pyodide virtual filesystem.
 function mkdirp(path) {
@@ -71,6 +62,46 @@ async function fetchText(path) {
 
 function getChirpRevision() {
   return CHIRP_REVISION;
+}
+
+// Dispatch serial operations to the app's browser-serial bridge handler.
+async function serialRpc(op, payload = {}) {
+  if (!handleSerialRpc) {
+    throw new Error("Serial RPC handler is not configured");
+  }
+  return handleSerialRpc({ op, payload });
+}
+
+function installSerialBridgeGlobals() {
+  globalThis.serial_open = (baudRate) => serialRpc("open", { baudRate: Number(baudRate) });
+  globalThis.serial_close = () => serialRpc("close", {});
+  globalThis.serial_write_hex = (hex) => serialRpc("writeHex", { hex: String(hex || "") });
+  globalThis.serial_read_hex = (count, timeoutMs) =>
+    serialRpc("readHex", {
+      count: Number(count || 1),
+      timeoutMs: Number(timeoutMs || 1200),
+    });
+  globalThis.serial_write_bytes = (bytes) =>
+    serialRpc("writeBytes", {
+      bytes: Array.from(bytes || []),
+    });
+  globalThis.serial_read_bytes = (count, timeoutMs) =>
+    serialRpc("readBytes", {
+      count: Number(count || 1),
+      timeoutMs: Number(timeoutMs || 1200),
+    });
+  globalThis.serial_log = (message) =>
+    serialRpc("log", {
+      message: String(message || ""),
+    });
+  globalThis.serial_prepare_clone = (wantsDtr, wantsRts, settleMs) =>
+    serialRpc("prepareClone", {
+      wantsDtr: Boolean(wantsDtr),
+      wantsRts: Boolean(wantsRts),
+      settleMs: Number(settleMs || 350),
+    });
+  globalThis.serial_reset_buffers = () => serialRpc("resetBuffers", {});
+  globalThis.fetch_chirp_source = (path) => fetchText(path);
 }
 
 // Trigger runtime import of the selected driver; Python import hook fetches missing files.
@@ -121,8 +152,8 @@ async function loadRadioCatalogFromSources() {
 async function ensurePyodide() {
   if (!bootstrapPromise) {
     bootstrapPromise = (async () => {
-      importScripts(PYODIDE_URL);
-      pyodide = await loadPyodide();
+      installSerialBridgeGlobals();
+      pyodide = await loadPyodide({ indexURL: PYODIDE_INDEX_URL });
 
       mkdirp("/webchirp_runtime/chirp/drivers");
 
@@ -142,7 +173,7 @@ async function ensurePyodide() {
   return bootstrapPromise;
 }
 
-// Dispatch a worker RPC method to the appropriate Pyodide/runtime operation.
+// Dispatch a runtime RPC method to the appropriate Pyodide/runtime operation.
 async function handleCall(method, payload) {
   if (method === "getRuntimeInfo") {
     return {
@@ -170,10 +201,9 @@ async function handleCall(method, payload) {
     pyodide.globals.set("_rows_json", JSON.stringify(payload.rows));
     pyodide.globals.set("_sel_module", payload.module || "");
     pyodide.globals.set("_sel_class", payload.className || "");
-    const result = await pyodide.runPythonAsync(
+    return pyodide.runPythonAsync(
       "normalize_rows(json.loads(_rows_json), _sel_module, _sel_class)",
     );
-    return result;
   }
 
   if (method === "validateRowsForUpload") {
@@ -264,81 +294,34 @@ async function handleCall(method, payload) {
   throw new Error(`Unknown method: ${method}`);
 }
 
-// Worker message loop: handles serial RPC responses and API method calls.
-self.onmessage = async (event) => {
-  const msg = event.data || {};
+export function createRuntimeRpcClient({
+  handleSerialRpc: nextHandleSerialRpc,
+  logDebug,
+  onRuntimeCrash,
+}) {
+  handleSerialRpc = nextHandleSerialRpc;
 
-  if (msg.type === "serial-rpc-result") {
-    const pending = rpcPending.get(msg.id);
-    if (!pending) {
-      return;
+  async function callWorker(method, payload = {}) {
+    try {
+      return await handleCall(method, payload);
+    } catch (error) {
+      const detailedError =
+        (typeof error?.stack === "string" && error.stack) ||
+        error?.message ||
+        String(error);
+
+      if (!bootstrapFailed && !pyodide && onRuntimeCrash) {
+        bootstrapFailed = true;
+        onRuntimeCrash(detailedError);
+      }
+      if (logDebug) {
+        logDebug(`RUNTIME ERROR ${detailedError}`);
+      }
+      throw new Error(detailedError);
     }
-    rpcPending.delete(msg.id);
-    if (msg.ok) {
-      pending.resolve(msg.data);
-    } else {
-      pending.reject(new Error(msg.error || "serial rpc failed"));
-    }
-    return;
   }
 
-  const { id, method, payload } = msg;
-  if (!id || !method) {
-    return;
-  }
-
-  try {
-    const data = await handleCall(method, payload || {});
-    self.postMessage({ id, ok: true, data });
-  } catch (error) {
-    const detailedError =
-      (typeof error?.stack === "string" && error.stack) ||
-      error?.message ||
-      String(error);
-    self.postMessage({
-      id,
-      ok: false,
-      error: detailedError,
-    });
-  }
-};
-
-// Expose serial open callback to Python runtime via js module bridge.
-self.serial_open = (baudRate) => serialRpc("open", { baudRate: Number(baudRate) });
-// Expose serial close callback to Python runtime via js module bridge.
-self.serial_close = () => serialRpc("close", {});
-// Expose hex write callback to Python runtime via js module bridge.
-self.serial_write_hex = (hex) => serialRpc("writeHex", { hex: String(hex || "") });
-// Expose hex read callback to Python runtime via js module bridge.
-self.serial_read_hex = (count, timeoutMs) =>
-  serialRpc("readHex", {
-    count: Number(count || 1),
-    timeoutMs: Number(timeoutMs || 1200),
-  });
-// Expose raw byte write callback to Python runtime via js module bridge.
-self.serial_write_bytes = (bytes) =>
-  serialRpc("writeBytes", {
-    bytes: Array.from(bytes || []),
-  });
-// Expose raw byte read callback to Python runtime via js module bridge.
-self.serial_read_bytes = (count, timeoutMs) =>
-  serialRpc("readBytes", {
-    count: Number(count || 1),
-    timeoutMs: Number(timeoutMs || 1200),
-  });
-// Expose log callback so Python status/debug lines can be rendered in UI.
-self.serial_log = (message) =>
-  serialRpc("log", {
-    message: String(message || ""),
-  });
-// Expose pre-clone session prep callback (line control + settle timing).
-self.serial_prepare_clone = (wantsDtr, wantsRts, settleMs) =>
-  serialRpc("prepareClone", {
-    wantsDtr: Boolean(wantsDtr),
-    wantsRts: Boolean(wantsRts),
-    settleMs: Number(settleMs || 350),
-  });
-// Expose buffer reset callback for pyserial compatibility methods.
-self.serial_reset_buffers = () => serialRpc("resetBuffers", {});
-// Expose CHIRP source fetch callback used by Python import hook for lazy module loading.
-self.fetch_chirp_source = (path) => fetchText(String(path || ""));
+  return {
+    callWorker,
+  };
+}

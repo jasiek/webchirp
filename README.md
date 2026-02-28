@@ -65,8 +65,8 @@ The test sequence is:
 ## Architecture
 
 - Frontend: `/Users/jps/github/webchirp/web/index.html` + `/Users/jps/github/webchirp/web/app.js`
-- Python worker bridge: `/Users/jps/github/webchirp/web/py-worker.js`
-- Versioned Python runtime code (loaded by worker): `/Users/jps/github/webchirp/web/python/runtime_bridge.py`
+- Main-thread runtime bridge: `/Users/jps/github/webchirp/web/js/runtime-rpc.js`
+- Versioned Python runtime code: `/Users/jps/github/webchirp/web/python/runtime_bridge.py`
 - CHIRP source loaded into Pyodide FS directly from the submodule:
   - `/chirp/chirp/__init__.py`
   - `/chirp/chirp/chirp_common.py`
@@ -90,63 +90,49 @@ sequenceDiagram
   participant U as User
   participant UI as ui.js
   participant APP as app.js
-  participant RPC as worker-rpc.js
-  participant W as py-worker.js
+  participant RPC as runtime-rpc.js
   participant PY as runtime_bridge.py
   participant S as serial.js
   participant R as Radio
 
-  Note over APP,UI: app.js wires UI -> worker-rpc and serial bridge on page load
+  Note over APP,UI: app.js wires UI -> runtime-rpc and serial bridge on page load
 
   U->>UI: Select make/model, click Connect
   UI->>RPC: callWorker("serialConnect", baudRate)
-  RPC->>W: RPC request
-  W->>PY: webserial_connect(baud)
-  PY->>W: serial_open(...)
-  W->>RPC: serial-rpc(op="open")
+  RPC->>PY: webserial_connect(baud)
+  PY->>RPC: serial_open(...)
   RPC->>S: handleSerialRpc("open")
   S-->>R: Open Web Serial port
   S-->>RPC: connected
-  RPC-->>W: serial-rpc-result
-  W-->>RPC: RPC success
   RPC-->>UI: connected/status
 
   U->>UI: Click Download Radio
   UI->>RPC: callWorker("downloadSelectedRadio", module,class)
-  RPC->>W: RPC request
-  W->>PY: download_selected_radio(...)
-  PY->>W: serial_prepare_clone(...)
-  W->>RPC: serial-rpc(op="prepareClone")
+  RPC->>PY: download_selected_radio(...)
+  PY->>RPC: serial_prepare_clone(...)
   RPC->>S: prepareClone(DTR/RTS, settle)
   S-->>R: Set control lines + settle
   S-->>RPC: prepared
-  RPC-->>W: serial-rpc-result
   PY-->>R: sync_in() via serial read/write
   PY->>PY: Cache image in LAST_IMAGE_BY_DRIVER
-  PY-->>W: rows + headers
-  W-->>RPC: RPC success
+  PY-->>RPC: rows + headers
   RPC-->>UI: Populate editable memory table
 
   U->>UI: Edit channels, click Upload Radio
   UI->>RPC: callWorker("uploadSelectedRadio", module,class,rows)
-  RPC->>W: RPC request
-  W->>PY: upload_selected_radio(...)
+  RPC->>PY: upload_selected_radio(...)
 
   alt Cached image exists
-    PY->>W: serial_prepare_clone(...)
-    W->>RPC: serial-rpc(op="prepareClone")
+    PY->>RPC: serial_prepare_clone(...)
     RPC->>S: prepareClone(...)
     S-->>R: Set control lines + settle
-    RPC-->>W: serial-rpc-result
     PY->>PY: Apply edited rows to cached image
     PY-->>R: sync_out() via serial read/write
     PY->>PY: Refresh cached image
-    PY-->>W: uploaded=true
-    W-->>RPC: RPC success
+    PY-->>RPC: uploaded=true
     RPC-->>UI: Show upload success
   else No cached image
-    PY-->>W: Error: download required first
-    W-->>RPC: RPC error
+    PY-->>RPC: Error: download required first
     RPC-->>UI: Show clear failure in Debug Output
   end
 

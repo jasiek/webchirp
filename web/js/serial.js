@@ -228,7 +228,7 @@ export class BrowserSerialBridge {
   }
 }
 
-// Build a serial RPC dispatcher used by worker-rpc bridge messages.
+// Build a serial RPC dispatcher used by runtime bridge messages.
 export function createSerialRpcHandler({ serialBridge, logSerial }) {
   return async function handleSerialRpc(msg) {
     const { op, payload } = msg;

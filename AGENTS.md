@@ -5,7 +5,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 
 ## Core Architecture
 - `web/app.js`: Browser UI and Web Serial bridge implementation.
-- `web/py-worker.js`: Worker RPC layer and Pyodide bootstrap.
+- `web/js/runtime-rpc.js`: Main-thread runtime RPC layer and Pyodide bootstrap.
 - `web/python/runtime_bridge.py`: Versioned Python runtime logic (no embedded Python in JS files).
 - `chirp/`: Upstream CHIRP source as a git submodule.
 
@@ -34,6 +34,6 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 ## Validation
 Before committing, run relevant checks:
 - `node --check web/app.js`
-- `node --check web/py-worker.js`
+- `node --check web/js/runtime-rpc.js`
 - `python -m py_compile web/python/runtime_bridge.py`
 - `npm run test:channels`
