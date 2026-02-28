@@ -26,7 +26,7 @@ From `/Users/jps/github/webchirp`:
 npm run dev
 ```
 
-Open [http://127.0.0.1:8000/web/index.html](http://127.0.0.1:8000/web/index.html).
+Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/).
 
 Serial access requires a browser with Web Serial support and a secure context
 (`http://localhost` works).

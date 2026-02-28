@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createServer } from "node:http";
 
-const rootDir = path.resolve(process.cwd());
+const webRootDir = path.resolve(process.cwd(), "web");
 const port = Number.parseInt(process.env.PORT || "8000", 10);
 
 const MIME_BY_EXT = {
@@ -24,9 +24,12 @@ const MIME_BY_EXT = {
 
 function resolveRequestPath(urlPath) {
   const cleanPath = decodeURIComponent(urlPath.split("?")[0] || "/");
-  const requested = cleanPath === "/" ? "/web/index.html" : cleanPath;
-  const fsPath = path.resolve(rootDir, `.${requested}`);
-  if (!fsPath.startsWith(rootDir)) {
+  const normalizedPath = cleanPath.startsWith("/web/")
+    ? cleanPath.slice("/web".length)
+    : cleanPath;
+  const requested = normalizedPath === "/" ? "/index.html" : normalizedPath;
+  const fsPath = path.resolve(webRootDir, `.${requested}`);
+  if (!fsPath.startsWith(webRootDir)) {
     return null;
   }
   return fsPath;
@@ -91,5 +94,5 @@ const server = createServer((req, res) => {
 
 server.listen(port, "127.0.0.1", () => {
   // eslint-disable-next-line no-console
-  console.log(`webchirp dev server listening at http://127.0.0.1:${port}/web/index.html`);
+  console.log(`webchirp dev server listening at http://127.0.0.1:${port}/`);
 });
