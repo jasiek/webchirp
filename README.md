@@ -99,11 +99,20 @@ sequenceDiagram
   participant UI as ui.js
   participant APP as app.js
   participant RPC as runtime-rpc.js
+  participant SRC as python-sources.mjs
   participant PY as runtime_bridge.py
   participant S as serial.js
   participant R as Radio
 
-  Note over APP,UI: app.js wires UI -> runtime-rpc and serial bridge on page load
+  Note over APP,UI: app.js wires UI controller + runtime RPC client + serial bridge
+
+  U->>UI: Open page
+  UI->>RPC: callWorker("listRadios")
+  RPC->>SRC: listDriverModules() + seedPyodideRuntime()
+  SRC-->>RPC: Driver module list + runtime bridge source
+  RPC->>PY: list_registered_radios(...)
+  PY-->>RPC: radios[]
+  RPC-->>UI: Populate make/model dropdowns
 
   U->>UI: Select make/model, click Connect
   UI->>RPC: callWorker("serialConnect", baudRate)
@@ -115,33 +124,58 @@ sequenceDiagram
   RPC-->>UI: connected/status
 
   U->>UI: Click Download Radio
-  UI->>RPC: callWorker("downloadSelectedRadio", module,class)
-  RPC->>PY: download_selected_radio(...)
+  UI->>RPC: callWorker("downloadSelectedRadio", {module,className})
+  RPC->>PY: ensure_radio_module(module)
+  RPC->>PY: download_selected_radio(module,className)
   PY->>RPC: serial_prepare_clone(...)
   RPC->>S: prepareClone(DTR/RTS, settle)
   S-->>R: Set control lines + settle
   S-->>RPC: prepared
-  PY-->>R: sync_in() via serial read/write
+  loop sync_in() serial exchange
+    PY->>RPC: serial_write_bytes / serial_read_bytes
+    RPC->>S: writeBytes / readBytes
+    S-->>R: TX/RX bytes
+    R-->>S: TX/RX bytes
+    S-->>RPC: bytes
+    RPC-->>PY: bytes
+  end
   PY->>PY: Cache image in LAST_IMAGE_BY_DRIVER
   PY-->>RPC: rows + headers
   RPC-->>UI: Populate editable memory table
 
   U->>UI: Edit channels, click Upload Radio
-  UI->>RPC: callWorker("uploadSelectedRadio", module,class,rows)
-  RPC->>PY: upload_selected_radio(...)
+  UI->>RPC: callWorker("validateRowsForUpload", {rows,module,className})
+  RPC->>PY: validate_rows_for_upload(...)
+  PY-->>RPC: valid + issues
 
-  alt Cached image exists
-    PY->>RPC: serial_prepare_clone(...)
-    RPC->>S: prepareClone(...)
-    S-->>R: Set control lines + settle
-    PY->>PY: Apply edited rows to cached image
-    PY-->>R: sync_out() via serial read/write
-    PY->>PY: Refresh cached image
-    PY-->>RPC: uploaded=true
-    RPC-->>UI: Show upload success
-  else No cached image
-    PY-->>RPC: Error: download required first
-    RPC-->>UI: Show clear failure in Debug Output
+  alt Preflight invalid
+    RPC-->>UI: Block upload + highlight invalid cells
+  else Preflight valid
+    UI->>RPC: callWorker("uploadSelectedRadio", {module,className,rows})
+    RPC->>PY: ensure_radio_module(module)
+    RPC->>PY: upload_selected_radio(module,className,rows)
+
+    alt Cached image exists
+      PY->>PY: Apply edited rows to cached image
+      PY->>RPC: serial_prepare_clone(...)
+      RPC->>S: prepareClone(...)
+      loop sync_out() serial exchange
+        PY->>RPC: serial_write_bytes / serial_read_bytes
+        RPC->>S: writeBytes / readBytes
+        S-->>R: TX/RX bytes
+        R-->>S: TX/RX bytes
+        S-->>RPC: bytes
+        RPC-->>PY: bytes
+      end
+      PY->>PY: Refresh cached image
+      PY-->>RPC: uploaded=true
+      RPC-->>UI: Show upload success
+    else No cached image
+      PY-->>RPC: Error: download required first
+      RPC-->>UI: Show clear failure in Debug Output
+    end
   end
+
+  Note over UI,PY: callWorker() logs full stack traces to Debug Output on runtime errors
 
 ```
