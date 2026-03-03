@@ -4,9 +4,11 @@
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
     "build:dist": "node scripts/build-dist.mjs",
-    "test:channels": "node --test --experimental-wasm-stack-switching scripts/test-channel-list.mjs"
+    "test:channels": "node --test --experimental-wasm-stack-switching scripts/test-channel-list.mjs",
+    "test:hw": "node --experimental-wasm-stack-switching scripts/test-hw-radio.mjs"
   },
   "dependencies": {
-    "pyodide": "^0.27.2"
+    "pyodide": "^0.27.2",
+    "serialport": "^13.0.0"
   }
 }
