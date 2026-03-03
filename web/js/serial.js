@@ -41,6 +41,7 @@ export class BrowserSerialBridge {
     this.reader = null;
     this.writer = null;
     this.readBuffer = new Uint8Array(0);
+    this.readWaiters = new Set();
     this.lastDeviceName = "";
   }
 
@@ -108,6 +109,7 @@ export class BrowserSerialBridge {
     this.reader = null;
     this.writer = null;
     this.readBuffer = new Uint8Array(0);
+    this._resolveReadWaiters(false);
     return { connected: false, message: "Disconnected." };
   }
 
@@ -143,22 +145,30 @@ export class BrowserSerialBridge {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }
-    const start = performance.now();
-    while (this.readBuffer.length < count) {
-      const elapsed = performance.now() - start;
-      if (elapsed >= timeoutMs) {
+    const wanted = Math.max(0, Number(count || 0));
+    if (wanted === 0) {
+      return { read: 0, hex: "", timedOut: false };
+    }
+    const timeout = Math.max(0, Number(timeoutMs || 0));
+    const deadline = performance.now() + timeout;
+    while (this.readBuffer.length < wanted) {
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) {
         break;
       }
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      const gotEvent = await this._waitForReadEvent(remaining);
+      if (!gotEvent) {
+        break;
+      }
     }
 
-    const available = Math.min(count, this.readBuffer.length);
+    const available = Math.min(wanted, this.readBuffer.length);
     const out = this.readBuffer.slice(0, available);
     this.readBuffer = this.readBuffer.slice(available);
     return {
       read: out.length,
       hex: bytesToHex(out),
-      timedOut: out.length < count,
+      timedOut: out.length < wanted,
     };
   }
 
@@ -196,10 +206,38 @@ export class BrowserSerialBridge {
         }
         if (value && value.length > 0) {
           this.readBuffer = concatUint8(this.readBuffer, value);
+          this._resolveReadWaiters(true);
         }
       } catch {
         break;
       }
+    }
+    this._resolveReadWaiters(false);
+  }
+
+  _waitForReadEvent(timeoutMs) {
+    if (this.readBuffer.length > 0) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolve) => {
+      const waiter = {
+        settle: (result) => {
+          if (!this.readWaiters.delete(waiter)) {
+            return;
+          }
+          clearTimeout(timerId);
+          resolve(result);
+        },
+      };
+      const timerId = setTimeout(() => waiter.settle(false), Math.max(0, timeoutMs));
+      this.readWaiters.add(waiter);
+    });
+  }
+
+  _resolveReadWaiters(result) {
+    const waiters = Array.from(this.readWaiters);
+    for (const waiter of waiters) {
+      waiter.settle(result);
     }
   }
 
