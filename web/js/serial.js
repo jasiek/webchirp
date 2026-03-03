@@ -230,58 +230,83 @@ export class BrowserSerialBridge {
 
 // Build a serial RPC dispatcher used by runtime bridge messages.
 export function createSerialRpcHandler({ serialBridge, logSerial }) {
+  async function handleOpen(payload = {}) {
+    const res = await serialBridge.open(payload.baudRate);
+    logSerial(res.message);
+    return res;
+  }
+
+  async function handleClose() {
+    const res = await serialBridge.close();
+    logSerial(res.message);
+    return res;
+  }
+
+  async function handleWriteHex(payload = {}) {
+    const res = await serialBridge.writeHex(payload.hex);
+    logSerial(`TX ${res.hex}`);
+    return res;
+  }
+
+  async function handleReadHex(payload = {}) {
+    const res = await serialBridge.readHex(payload.count, payload.timeoutMs);
+    logSerial(`RX ${res.hex || "<none>"}${res.timedOut ? " (timeout)" : ""}`);
+    return res;
+  }
+
+  async function handleWriteBytes(payload = {}) {
+    return serialBridge.writeBytes(payload.bytes || []);
+  }
+
+  async function handleReadBytes(payload = {}) {
+    return serialBridge.readBytes(payload.count, payload.timeoutMs);
+  }
+
+  async function handleLog(payload = {}) {
+    logSerial(String(payload.message || ""));
+    return { logged: true };
+  }
+
+  async function handlePrepareClone(payload = {}) {
+    const res = await serialBridge.prepareClone(
+      payload.wantsDtr,
+      payload.wantsRts,
+      payload.settleMs,
+    );
+    logSerial(
+      `Prepared clone session (DTR=${Boolean(payload.wantsDtr)} RTS=${Boolean(payload.wantsRts)})`,
+    );
+    return res;
+  }
+
+  async function handleResetBuffers() {
+    serialBridge.readBuffer = new Uint8Array(0);
+    return { reset: true };
+  }
+
+  async function handleGetPortInfo() {
+    return serialBridge.getPortInfo();
+  }
+
+  const OP_HANDLERS = Object.freeze({
+    open: handleOpen,
+    close: handleClose,
+    writeHex: handleWriteHex,
+    readHex: handleReadHex,
+    writeBytes: handleWriteBytes,
+    readBytes: handleReadBytes,
+    log: handleLog,
+    prepareClone: handlePrepareClone,
+    resetBuffers: handleResetBuffers,
+    getPortInfo: handleGetPortInfo,
+  });
+
   return async function handleSerialRpc(msg) {
     const { op, payload } = msg;
-
-    if (op === "open") {
-      const res = await serialBridge.open(payload.baudRate);
-      logSerial(res.message);
-      return res;
+    const handler = OP_HANDLERS[op];
+    if (!handler) {
+      throw new Error(`Unknown serial op: ${op}`);
     }
-    if (op === "close") {
-      const res = await serialBridge.close();
-      logSerial(res.message);
-      return res;
-    }
-    if (op === "writeHex") {
-      const res = await serialBridge.writeHex(payload.hex);
-      logSerial(`TX ${res.hex}`);
-      return res;
-    }
-    if (op === "readHex") {
-      const res = await serialBridge.readHex(payload.count, payload.timeoutMs);
-      logSerial(`RX ${res.hex || "<none>"}${res.timedOut ? " (timeout)" : ""}`);
-      return res;
-    }
-    if (op === "writeBytes") {
-      return serialBridge.writeBytes(payload.bytes || []);
-    }
-    if (op === "readBytes") {
-      return serialBridge.readBytes(payload.count, payload.timeoutMs);
-    }
-    if (op === "log") {
-      logSerial(String(payload.message || ""));
-      return { logged: true };
-    }
-    if (op === "prepareClone") {
-      const res = await serialBridge.prepareClone(
-        payload.wantsDtr,
-        payload.wantsRts,
-        payload.settleMs,
-      );
-      logSerial(
-        `Prepared clone session (DTR=${Boolean(payload.wantsDtr)} RTS=${Boolean(payload.wantsRts)})`,
-      );
-      return res;
-    }
-    if (op === "resetBuffers") {
-      serialBridge.readBuffer = new Uint8Array(0);
-      return { reset: true };
-    }
-    if (op === "getPortInfo") {
-      return serialBridge.getPortInfo();
-    }
-
-    throw new Error(`Unknown serial op: ${op}`);
+    return handler(payload || {});
   };
 }

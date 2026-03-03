@@ -104,122 +104,145 @@ async function ensurePyodide() {
   return bootstrapPromise;
 }
 
-// Dispatch a runtime RPC method to the appropriate Pyodide/runtime operation.
-async function handleCall(method, payload) {
-  if (method === "getRuntimeInfo") {
-    return pythonSource.getRuntimeInfo();
-  }
-
-  if (method === "listRadios") {
-    const radios = await loadRadioCatalogFromSources();
-    return { radios };
-  }
-
+async function requirePyodide() {
   await ensurePyodide();
+}
 
-  if (method === "parseCsv") {
-    pyodide.globals.set("_csv_input", payload.csvText);
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(parse_csv(_csv_input))",
-    );
-    return JSON.parse(resultJson);
+function setSelectedRadioGlobals(payload = {}) {
+  pyodide.globals.set("_sel_module", payload.module || "");
+  pyodide.globals.set("_sel_class", payload.className || "");
+}
+
+function setRowsJsonGlobal(rows) {
+  pyodide.globals.set("_rows_json", JSON.stringify(rows));
+}
+
+async function runPythonJson(pythonCode) {
+  const resultJson = await pyodide.runPythonAsync(pythonCode);
+  return JSON.parse(resultJson);
+}
+
+async function handleGetRuntimeInfo() {
+  return pythonSource.getRuntimeInfo();
+}
+
+async function handleListRadios() {
+  const radios = await loadRadioCatalogFromSources();
+  return { radios };
+}
+
+async function handleParseCsv(payload = {}) {
+  await requirePyodide();
+  pyodide.globals.set("_csv_input", payload.csvText);
+  return runPythonJson("json.dumps(parse_csv(_csv_input))");
+}
+
+async function handleNormalizeRows(payload = {}) {
+  await requirePyodide();
+  setRowsJsonGlobal(payload.rows);
+  setSelectedRadioGlobals(payload);
+  return pyodide.runPythonAsync(
+    "normalize_rows(json.loads(_rows_json), _sel_module, _sel_class)",
+  );
+}
+
+async function handleValidateRowsForUpload(payload = {}) {
+  await requirePyodide();
+  setRowsJsonGlobal(payload.rows);
+  setSelectedRadioGlobals(payload);
+  return runPythonJson(
+    "json.dumps(validate_rows_for_upload(json.loads(_rows_json), _sel_module, _sel_class))",
+  );
+}
+
+async function handleExportImage(payload = {}) {
+  await requirePyodide();
+  await ensureSelectedRadioModules(payload.module || "");
+  setRowsJsonGlobal(payload.rows);
+  setSelectedRadioGlobals(payload);
+  return runPythonJson(
+    "json.dumps(export_image_base64(_sel_module, _sel_class, json.loads(_rows_json)))",
+  );
+}
+
+async function handleLoadImage(payload = {}) {
+  await requirePyodide();
+  pyodide.globals.set("_image_b64", payload.imageBase64 || "");
+  return runPythonJson("json.dumps(load_image_base64(_image_b64))");
+}
+
+async function handleSerialConnect(payload = {}) {
+  await requirePyodide();
+  pyodide.globals.set("_baud", payload.baudRate || 9600);
+  return runPythonJson("json.dumps(await webserial_connect(_baud))");
+}
+
+async function handleSerialDisconnect() {
+  await requirePyodide();
+  return runPythonJson("json.dumps(await webserial_disconnect())");
+}
+
+async function handleSerialTxRx(payload = {}) {
+  await requirePyodide();
+  pyodide.globals.set("_tx_hex", payload.txHex || "");
+  pyodide.globals.set("_rx_bytes", payload.rxBytes || 32);
+  pyodide.globals.set("_timeout_ms", payload.timeoutMs || 1200);
+  return runPythonJson(
+    "json.dumps(await webserial_txrx_hex(_tx_hex, _rx_bytes, _timeout_ms))",
+  );
+}
+
+async function handleDownloadSelectedRadio(payload = {}) {
+  await requirePyodide();
+  await ensureSelectedRadioModules(payload.module || "");
+  setSelectedRadioGlobals(payload);
+  return runPythonJson(
+    "json.dumps(await download_selected_radio(_sel_module, _sel_class))",
+  );
+}
+
+async function handleUploadSelectedRadio(payload = {}) {
+  await requirePyodide();
+  await ensureSelectedRadioModules(payload.module || "");
+  setSelectedRadioGlobals(payload);
+  setRowsJsonGlobal(payload.rows || []);
+  return runPythonJson(
+    "json.dumps(await upload_selected_radio(_sel_module, _sel_class, json.loads(_rows_json)))",
+  );
+}
+
+async function handleGetRadioMetadata(payload = {}) {
+  await requirePyodide();
+  await ensureSelectedRadioModules(payload.module || "");
+  setSelectedRadioGlobals(payload);
+  return runPythonJson(
+    "json.dumps(get_radio_column_metadata(_sel_module, _sel_class))",
+  );
+}
+
+const CALL_HANDLERS = Object.freeze({
+  getRuntimeInfo: handleGetRuntimeInfo,
+  listRadios: handleListRadios,
+  parseCsv: handleParseCsv,
+  normalizeRows: handleNormalizeRows,
+  validateRowsForUpload: handleValidateRowsForUpload,
+  exportImage: handleExportImage,
+  loadImage: handleLoadImage,
+  serialConnect: handleSerialConnect,
+  serialDisconnect: handleSerialDisconnect,
+  serialTxRx: handleSerialTxRx,
+  downloadSelectedRadio: handleDownloadSelectedRadio,
+  uploadSelectedRadio: handleUploadSelectedRadio,
+  getRadioMetadata: handleGetRadioMetadata,
+});
+
+// Dispatch a runtime RPC method to the appropriate named handler.
+async function handleCall(method, payload) {
+  const handler = CALL_HANDLERS[method];
+  if (!handler) {
+    throw new Error(`Unknown method: ${method}`);
   }
-
-  if (method === "normalizeRows") {
-    pyodide.globals.set("_rows_json", JSON.stringify(payload.rows));
-    pyodide.globals.set("_sel_module", payload.module || "");
-    pyodide.globals.set("_sel_class", payload.className || "");
-    return pyodide.runPythonAsync(
-      "normalize_rows(json.loads(_rows_json), _sel_module, _sel_class)",
-    );
-  }
-
-  if (method === "validateRowsForUpload") {
-    pyodide.globals.set("_rows_json", JSON.stringify(payload.rows));
-    pyodide.globals.set("_sel_module", payload.module || "");
-    pyodide.globals.set("_sel_class", payload.className || "");
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(validate_rows_for_upload(json.loads(_rows_json), _sel_module, _sel_class))",
-    );
-    return JSON.parse(resultJson);
-  }
-
-  if (method === "exportImage") {
-    await ensureSelectedRadioModules(payload.module || "");
-    pyodide.globals.set("_rows_json", JSON.stringify(payload.rows));
-    pyodide.globals.set("_sel_module", payload.module || "");
-    pyodide.globals.set("_sel_class", payload.className || "");
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(export_image_base64(_sel_module, _sel_class, json.loads(_rows_json)))",
-    );
-    return JSON.parse(resultJson);
-  }
-
-  if (method === "loadImage") {
-    pyodide.globals.set("_image_b64", payload.imageBase64 || "");
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(load_image_base64(_image_b64))",
-    );
-    return JSON.parse(resultJson);
-  }
-
-  if (method === "serialConnect") {
-    pyodide.globals.set("_baud", payload.baudRate || 9600);
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(await webserial_connect(_baud))",
-    );
-    return JSON.parse(resultJson);
-  }
-
-  if (method === "serialDisconnect") {
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(await webserial_disconnect())",
-    );
-    return JSON.parse(resultJson);
-  }
-
-  if (method === "serialTxRx") {
-    pyodide.globals.set("_tx_hex", payload.txHex || "");
-    pyodide.globals.set("_rx_bytes", payload.rxBytes || 32);
-    pyodide.globals.set("_timeout_ms", payload.timeoutMs || 1200);
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(await webserial_txrx_hex(_tx_hex, _rx_bytes, _timeout_ms))",
-    );
-    return JSON.parse(resultJson);
-  }
-
-  if (method === "downloadSelectedRadio") {
-    await ensureSelectedRadioModules(payload.module || "");
-    pyodide.globals.set("_sel_module", payload.module || "");
-    pyodide.globals.set("_sel_class", payload.className || "");
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(await download_selected_radio(_sel_module, _sel_class))",
-    );
-    return JSON.parse(resultJson);
-  }
-
-  if (method === "uploadSelectedRadio") {
-    await ensureSelectedRadioModules(payload.module || "");
-    pyodide.globals.set("_sel_module", payload.module || "");
-    pyodide.globals.set("_sel_class", payload.className || "");
-    pyodide.globals.set("_rows_json", JSON.stringify(payload.rows || []));
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(await upload_selected_radio(_sel_module, _sel_class, json.loads(_rows_json)))",
-    );
-    return JSON.parse(resultJson);
-  }
-
-  if (method === "getRadioMetadata") {
-    await ensureSelectedRadioModules(payload.module || "");
-    pyodide.globals.set("_sel_module", payload.module || "");
-    pyodide.globals.set("_sel_class", payload.className || "");
-    const resultJson = await pyodide.runPythonAsync(
-      "json.dumps(get_radio_column_metadata(_sel_module, _sel_class))",
-    );
-    return JSON.parse(resultJson);
-  }
-
-  throw new Error(`Unknown method: ${method}`);
+  return handler(payload || {});
 }
 
 export function createRuntimeRpcClient({
