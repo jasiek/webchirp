@@ -186,7 +186,9 @@ function isNoContactError(error) {
   const text = String(error?.stack || error || "");
   return (
     text.includes("RadioNoContactLikelyK1") ||
-    text.includes("No response from radio")
+    text.includes("No response from radio") ||
+    text.includes("No data received from radio") ||
+    text.includes("Error reading data from radio")
   );
 }
 
@@ -204,7 +206,8 @@ class NodeSerialBridge {
     if (this.port?.isOpen) {
       return { connected: true, message: "Already connected." };
     }
-    const selectedPath = this.portPath || (await this.autoDetectPortPath());
+    const requestedPath = this.portPath || (await this.autoDetectPortPath());
+    const selectedPath = await this.resolvePreferredPortPath(requestedPath);
     this.portPath = selectedPath;
     this.port = new SerialPort({
       path: selectedPath,
@@ -330,6 +333,24 @@ class NodeSerialBridge {
       );
     }
     return ports[0].path;
+  }
+
+  async resolvePreferredPortPath(portPath) {
+    const pathText = String(portPath || "");
+    if (process.platform !== "darwin" || !pathText.startsWith("/dev/tty.")) {
+      return pathText;
+    }
+    const suffix = pathText.slice("/dev/tty.".length);
+    const cuPath = `/dev/cu.${suffix}`;
+    try {
+      await fs.access(cuPath);
+      console.warn(
+        `[serial] macOS detected; using ${cuPath} instead of ${pathText} for callout access`,
+      );
+      return cuPath;
+    } catch {
+      return pathText;
+    }
   }
 }
 

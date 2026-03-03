@@ -36,6 +36,7 @@ CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
 DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
 LAST_IMAGE_BY_DRIVER = {}
 DEFAULT_EXPORT_POWER = "50W"
+DEFAULT_SERIAL_PIPE_TIMEOUT = 1.2
 
 
 def _js_to_py(value):
@@ -366,7 +367,7 @@ async def webserial_txrx_hex(tx_hex: str, rx_bytes: int, timeout_ms: int):
 class WebSerialPipe:
     """Minimal pyserial-like API over JS bridge for CHIRP drivers."""
 
-    def __init__(self, timeout=0.5):
+    def __init__(self, timeout=DEFAULT_SERIAL_PIPE_TIMEOUT):
         """Expose a minimal pyserial-like pipe for CHIRP clone-mode drivers."""
         self.timeout = timeout
         self.baudrate = None
@@ -426,6 +427,20 @@ class WebSerialPipe:
     def log(self, msg):
         """Forward driver log/status text to the browser debug console."""
         serial_log(str(msg))
+
+
+def _serial_pipe_timeout_seconds():
+    """Resolve serial read timeout with optional env override."""
+    raw = os.environ.get("WEBCHIRP_SERIAL_TIMEOUT_S", "")
+    if not raw:
+        return DEFAULT_SERIAL_PIPE_TIMEOUT
+    try:
+        value = float(raw)
+    except Exception:
+        return DEFAULT_SERIAL_PIPE_TIMEOUT
+    if value <= 0:
+        return DEFAULT_SERIAL_PIPE_TIMEOUT
+    return value
 
 
 class RuntimeUnsupportedError(errors.RadioError):
@@ -520,7 +535,7 @@ def _ensure_clone_mode_radio(radio_cls):
 
 def _create_radio_for_serial(radio_cls):
     """Instantiate selected radio with configured WebSerial pipe and status hook."""
-    pipe = WebSerialPipe(timeout=0.5)
+    pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
     pipe.baudrate = getattr(radio_cls, "BAUD_RATE", None)
     pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
     pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
@@ -572,7 +587,7 @@ def _upload_selected_radio_sync(module_name: str, class_name: str, rows):
         )
     radio = radio_cls(memmap.MemoryMapBytes(base_image))
     radio.status_fn = _status_to_log
-    pipe = WebSerialPipe(timeout=0.5)
+    pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
     pipe.baudrate = getattr(radio_cls, "BAUD_RATE", None)
     pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
     pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
@@ -621,7 +636,7 @@ def upload_image_base64(module_name: str, class_name: str, image_b64: str):
 
     radio = radio_cls(memmap.MemoryMapBytes(raw_image))
     radio.status_fn = _status_to_log
-    pipe = WebSerialPipe(timeout=0.5)
+    pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
     pipe.baudrate = getattr(radio_cls, "BAUD_RATE", None)
     pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
     pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
