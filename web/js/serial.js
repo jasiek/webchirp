@@ -216,9 +216,6 @@ export class BrowserSerialBridge {
   }
 
   _waitForReadEvent(timeoutMs) {
-    if (this.readBuffer.length > 0) {
-      return Promise.resolve(true);
-    }
     return new Promise((resolve) => {
       const waiter = {
         settle: (result) => {
