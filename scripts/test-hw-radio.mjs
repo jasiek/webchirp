@@ -9,6 +9,8 @@ import {
   seedPyodideRuntime,
 } from "../web/js/python-sources.mjs";
 
+const DEFAULT_REBOOT_DELAY_MS = 5000;
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
@@ -75,6 +77,7 @@ function usage() {
     "  --baud N               Optional serial baud override (default: driver BAUD_RATE or 9600)",
     "  --chirp-dir PATH       Optional CHIRP source tree root (default: ./chirp or WEBCHIRP_CHIRP_DIR)",
     "  --serial-timeout-s N   Optional serial read timeout seconds (sets WEBCHIRP_SERIAL_TIMEOUT_S)",
+    "  --reboot-delay-ms N    Wait after download before upload (default: 5000)",
   ].join("\n");
 }
 
@@ -321,6 +324,10 @@ async function main() {
   if (args["serial-timeout-s"]) {
     process.env.WEBCHIRP_SERIAL_TIMEOUT_S = String(args["serial-timeout-s"]);
   }
+  const rebootDelayOverride = Number(args["reboot-delay-ms"]);
+  const rebootDelayMs = Number.isFinite(rebootDelayOverride)
+    ? Math.max(0, rebootDelayOverride)
+    : DEFAULT_REBOOT_DELAY_MS;
 
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const pythonSource = await createLocalPythonSource(repoRoot, String(args["chirp-dir"] || ""));
@@ -371,6 +378,10 @@ json.dumps({
 
     const rows = Array.isArray(downloaded.rows) ? downloaded.rows : [];
     console.log(`Download complete: ${rows.length} channel row(s) read.`);
+    if (rebootDelayMs > 0) {
+      console.log(`Waiting ${rebootDelayMs} ms for radio reboot before upload...`);
+      await sleep(rebootDelayMs);
+    }
 
     const uploaded = await runPythonJson(
       pyodide,

@@ -58,6 +58,7 @@ Optional flags:
 - `--baud 9600` to override the driver's default baud.
 - `--chirp-dir /path/to/chirp` (or `WEBCHIRP_CHIRP_DIR=/path/to/chirp`) to load CHIRP sources from a custom directory.
 - `--serial-timeout-s 2.0` to override serial read timeout used by the runtime bridge.
+- `--reboot-delay-ms 5000` to wait between download and upload (useful when radios need reboot time after programming mode).
 
 The flow is:
 1. Open serial on the selected port.
