@@ -4,21 +4,11 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
-
-const CORE_CHIRP_FILES = [
-  ["chirp/__init__.py", "chirp/__init__.py"],
-  ["chirp/errors.py", "chirp/errors.py"],
-  ["chirp/util.py", "chirp/util.py"],
-  ["chirp/memmap.py", "chirp/memmap.py"],
-  ["chirp/chirp_common.py", "chirp/chirp_common.py"],
-  ["chirp/directory.py", "chirp/directory.py"],
-  ["chirp/pyPEG.py", "chirp/pyPEG.py"],
-  ["chirp/bitwise_grammar.py", "chirp/bitwise_grammar.py"],
-  ["chirp/bitwise.py", "chirp/bitwise.py"],
-  ["chirp/settings.py", "chirp/settings.py"],
-  ["chirp/drivers/generic_csv.py", "chirp/drivers/generic_csv.py"],
-  ["chirp/drivers/h777.py", "chirp/drivers/h777.py"],
-];
+import {
+  createFilesystemPythonSource,
+  installFetchChirpSourceGlobal,
+  seedPyodideRuntime,
+} from "../web/js/python-sources.mjs";
 
 const PMR446_FREQS_6DP = [
   "446.006250",
@@ -70,32 +60,7 @@ function makeChannelRows({ offset = "0.000000", frequencies = PMR446_FREQS_6DP }
   }));
 }
 
-async function mkdirpFs(pyodide, dir) {
-  const parts = dir.split("/").filter(Boolean);
-  let current = "";
-  for (const part of parts) {
-    current += `/${part}`;
-    try {
-      pyodide.FS.mkdir(current);
-    } catch {
-      // already exists
-    }
-  }
-}
-
-async function bootstrapRuntime(pyodide, repoRoot) {
-  await mkdirpFs(pyodide, "/webchirp_runtime/chirp/drivers");
-  for (const [src, dest] of CORE_CHIRP_FILES) {
-    const fullPath = path.join(repoRoot, "chirp", src);
-    const text = await fs.readFile(fullPath, "utf8");
-    pyodide.FS.writeFile(`/webchirp_runtime/${dest}`, text, { encoding: "utf8" });
-  }
-  const runtimePath = path.join(repoRoot, "web/python/runtime_bridge.py");
-  const runtimePython = await fs.readFile(runtimePath, "utf8");
-  await pyodide.runPythonAsync(runtimePython);
-}
-
-function installJsBridgeStubs(repoRoot) {
+function installJsBridgeStubs() {
   globalThis.serial_open = async () => ({ connected: true, message: "stub open" });
   globalThis.serial_close = async () => ({ connected: false, message: "stub close" });
   globalThis.serial_write_hex = async () => ({ written: 0, hex: "" });
@@ -105,11 +70,65 @@ function installJsBridgeStubs(repoRoot) {
   globalThis.serial_log = () => ({ logged: true });
   globalThis.serial_prepare_clone = async () => ({ prepared: true });
   globalThis.serial_reset_buffers = async () => ({ reset: true });
-  globalThis.fetch_chirp_source = async (sourcePath) => {
-    const rel = String(sourcePath || "").replace(/^\/chirp\//, "");
-    const fullPath = path.join(repoRoot, "chirp/chirp", rel);
-    return await fs.readFile(fullPath, "utf8");
-  };
+}
+
+async function pathExists(fullPath) {
+  try {
+    await fs.access(fullPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveChirpPackageDir(inputDir) {
+  const candidate = path.resolve(inputDir);
+  const directInit = path.join(candidate, "__init__.py");
+  const directDrivers = path.join(candidate, "drivers");
+  if ((await pathExists(directInit)) && (await pathExists(directDrivers))) {
+    return candidate;
+  }
+
+  const nested = path.join(candidate, "chirp");
+  const nestedInit = path.join(nested, "__init__.py");
+  const nestedDrivers = path.join(nested, "drivers");
+  if ((await pathExists(nestedInit)) && (await pathExists(nestedDrivers))) {
+    return nested;
+  }
+
+  throw new Error(
+    `Invalid CHIRP source dir: ${candidate}. Expected dir containing __init__.py and drivers/`,
+  );
+}
+
+function parseChirpDirArg(argv = process.argv.slice(2)) {
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = String(argv[i] || "");
+    if (arg === "--chirp-dir" && argv[i + 1]) {
+      return String(argv[i + 1]);
+    }
+    if (arg.startsWith("--chirp-dir=")) {
+      return arg.slice("--chirp-dir=".length);
+    }
+  }
+  return "";
+}
+
+async function createLocalPythonSource(repoRoot) {
+  const chirpInputDir =
+    parseChirpDirArg() || process.env.WEBCHIRP_CHIRP_DIR || path.join(repoRoot, "chirp");
+  const chirpPackageDir = await resolveChirpPackageDir(chirpInputDir);
+  const runtimeBridgePath = path.join(repoRoot, "web/python/runtime_bridge.py");
+  return createFilesystemPythonSource({
+    chirpPackageDir,
+    runtimeBridgePath,
+    readText: (fullPath) => fs.readFile(fullPath, "utf8"),
+    readDirNames: async (fullPath) => {
+      const entries = await fs.readdir(fullPath, { withFileTypes: true });
+      return entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
+    },
+    joinPath: (...parts) => path.join(...parts),
+  });
 }
 
 async function runPythonJson(pyodide, python, vars = {}) {
@@ -122,10 +141,12 @@ async function runPythonJson(pyodide, python, vars = {}) {
 
 test("channel list rows are parseable and codeplug-applicable", async (t) => {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  installJsBridgeStubs(repoRoot);
+  installJsBridgeStubs();
+  const pythonSource = await createLocalPythonSource(repoRoot);
+  installFetchChirpSourceGlobal(pythonSource);
 
   const pyodide = await loadPyodide();
-  await bootstrapRuntime(pyodide, repoRoot);
+  await seedPyodideRuntime(pyodide, pythonSource);
   pyodide.globals.set("_sel_module", TEST_RADIO.module);
   await pyodide.runPythonAsync("ensure_radio_module(_sel_module)");
 

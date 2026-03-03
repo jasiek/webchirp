@@ -45,8 +45,12 @@ For radio cloning:
 
 - Frontend: `/Users/jps/github/webchirp/web/index.html` + `/Users/jps/github/webchirp/web/app.js`
 - Main-thread runtime bridge: `/Users/jps/github/webchirp/web/js/runtime-rpc.js`
+- Python source providers: `/Users/jps/github/webchirp/web/js/python-sources.mjs`
 - Versioned Python runtime code: `/Users/jps/github/webchirp/web/python/runtime_bridge.py`
-- CHIRP source loaded into Pyodide FS directly from the submodule:
+- Browser runtime loads CHIRP source files into Pyodide from jsDelivr (revision-pinned).
+- Command-line runtime can load CHIRP source files from a local directory:
+  - `WEBCHIRP_CHIRP_DIR=/path/to/chirp npm run test:channels`
+- Core CHIRP files preloaded into Pyodide include:
   - `/chirp/chirp/__init__.py`
   - `/chirp/chirp/chirp_common.py`
   - `/chirp/chirp/directory.py`

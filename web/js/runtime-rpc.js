@@ -1,68 +1,24 @@
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs";
+import {
+  createBrowserCdnPythonSource,
+  installFetchChirpSourceGlobal,
+  listDriverModules,
+  seedPyodideRuntime,
+} from "./python-sources.mjs";
 
 const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/";
 const CHIRP_REVISION = "1467519e792e8ebcc9a33dc40df0b2e273ce9a53";
-const CHIRP_CDN_BASE = `https://cdn.jsdelivr.net/gh/kk7ds/chirp@${CHIRP_REVISION}`;
-const CHIRP_FILE_INDEX_URL =
-  `https://data.jsdelivr.com/v1/package/gh/kk7ds/chirp@${CHIRP_REVISION}/flat`;
 
-const CHIRP_FILES = [
-  ["/chirp/__init__.py", "chirp/__init__.py"],
-  ["/chirp/errors.py", "chirp/errors.py"],
-  ["/chirp/util.py", "chirp/util.py"],
-  ["/chirp/memmap.py", "chirp/memmap.py"],
-  ["/chirp/chirp_common.py", "chirp/chirp_common.py"],
-  ["/chirp/directory.py", "chirp/directory.py"],
-  ["/chirp/pyPEG.py", "chirp/pyPEG.py"],
-  ["/chirp/bitwise_grammar.py", "chirp/bitwise_grammar.py"],
-  ["/chirp/bitwise.py", "chirp/bitwise.py"],
-  ["/chirp/settings.py", "chirp/settings.py"],
-  ["/chirp/drivers/generic_csv.py", "chirp/drivers/generic_csv.py"],
-  ["/chirp/drivers/h777.py", "chirp/drivers/h777.py"],
-];
+const pythonSource = createBrowserCdnPythonSource({
+  chirpRevision: CHIRP_REVISION,
+  runtimeBridgePath: "./python/runtime_bridge.py",
+});
 
 let pyodide;
 let bootstrapPromise;
 let radioCatalogCache = null;
 let handleSerialRpc = null;
 let bootstrapFailed = false;
-
-// Create nested directories in the Pyodide virtual filesystem.
-function mkdirp(path) {
-  const parts = path.split("/").filter(Boolean);
-  let current = "";
-  for (const part of parts) {
-    current += `/${part}`;
-    try {
-      pyodide.FS.mkdir(current);
-    } catch {
-      // Exists.
-    }
-  }
-}
-
-// Fetch local app assets (used for project-owned runtime files).
-async function fetchLocalText(path) {
-  const res = await fetch(path);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${path}: ${res.status}`);
-  }
-  return await res.text();
-}
-
-// Fetch CHIRP source content from jsDelivr (or pass through full URLs).
-async function fetchText(path) {
-  const url = path.startsWith("http") ? path : `${CHIRP_CDN_BASE}${path}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${url}: ${res.status}`);
-  }
-  return await res.text();
-}
-
-function getChirpRevision() {
-  return CHIRP_REVISION;
-}
 
 // Dispatch serial operations to the app's browser-serial bridge handler.
 async function serialRpc(op, payload = {}) {
@@ -101,7 +57,7 @@ function installSerialBridgeGlobals() {
       settleMs: Number(settleMs || 350),
     });
   globalThis.serial_reset_buffers = () => serialRpc("resetBuffers", {});
-  globalThis.fetch_chirp_source = (path) => fetchText(path);
+  installFetchChirpSourceGlobal(pythonSource);
 }
 
 // Trigger runtime import of the selected driver; Python import hook fetches missing files.
@@ -116,20 +72,7 @@ async function loadRadioCatalogFromSources() {
   if (radioCatalogCache) {
     return radioCatalogCache;
   }
-  const indexRes = await fetch(CHIRP_FILE_INDEX_URL);
-  if (!indexRes.ok) {
-    throw new Error(`Failed to fetch ${CHIRP_FILE_INDEX_URL}: ${indexRes.status}`);
-  }
-  const indexJson = await indexRes.json();
-  const modules = Array.from(
-    new Set(
-      (indexJson.files || [])
-        .map((f) => f.name || "")
-        .filter((name) => /^\/chirp\/drivers\/[A-Za-z0-9_]+\.py$/.test(name))
-        .map((name) => name.split("/").pop().replace(/\.py$/, ""))
-        .filter((name) => !name.startsWith("__")),
-    ),
-  );
+  const modules = await listDriverModules(pythonSource);
 
   await ensurePyodide();
   pyodide.globals.set("_radio_catalog_modules", modules);
@@ -154,19 +97,7 @@ async function ensurePyodide() {
     bootstrapPromise = (async () => {
       installSerialBridgeGlobals();
       pyodide = await loadPyodide({ indexURL: PYODIDE_INDEX_URL });
-
-      mkdirp("/webchirp_runtime/chirp/drivers");
-
-      await Promise.all(
-        CHIRP_FILES.map(async ([src, dest]) => {
-          const text = await fetchText(src);
-          pyodide.FS.writeFile(`/webchirp_runtime/${dest}`, text, {
-            encoding: "utf8",
-          });
-        }),
-      );
-      const runtimePython = await fetchLocalText("./python/runtime_bridge.py");
-      await pyodide.runPythonAsync(runtimePython);
+      await seedPyodideRuntime(pyodide, pythonSource);
     })();
   }
 
@@ -176,10 +107,7 @@ async function ensurePyodide() {
 // Dispatch a runtime RPC method to the appropriate Pyodide/runtime operation.
 async function handleCall(method, payload) {
   if (method === "getRuntimeInfo") {
-    return {
-      chirpRevision: getChirpRevision(),
-      chirpCdnBase: CHIRP_CDN_BASE,
-    };
+    return pythonSource.getRuntimeInfo();
   }
 
   if (method === "listRadios") {
