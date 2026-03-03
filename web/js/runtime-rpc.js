@@ -220,7 +220,7 @@ async function handleGetRadioMetadata(payload = {}) {
   );
 }
 
-const CALL_HANDLERS = Object.freeze({
+const RUNTIME_METHODS = Object.freeze({
   getRuntimeInfo: handleGetRuntimeInfo,
   listRadios: handleListRadios,
   parseCsv: handleParseCsv,
@@ -236,15 +236,6 @@ const CALL_HANDLERS = Object.freeze({
   getRadioMetadata: handleGetRadioMetadata,
 });
 
-// Dispatch a runtime RPC method to the appropriate named handler.
-async function handleCall(method, payload) {
-  const handler = CALL_HANDLERS[method];
-  if (!handler) {
-    throw new Error(`Unknown method: ${method}`);
-  }
-  return handler(payload || {});
-}
-
 export function createRuntimeRpcClient({
   handleSerialRpc: nextHandleSerialRpc,
   logDebug,
@@ -252,27 +243,32 @@ export function createRuntimeRpcClient({
 }) {
   handleSerialRpc = nextHandleSerialRpc;
 
-  async function callWorker(method, payload = {}) {
-    try {
-      return await handleCall(method, payload);
-    } catch (error) {
-      const detailedError =
-        (typeof error?.stack === "string" && error.stack) ||
-        error?.message ||
-        String(error);
+  function wrapRuntimeMethod(handler) {
+    return async function invokeRuntimeMethod(payload = {}) {
+      try {
+        return await handler(payload);
+      } catch (error) {
+        const detailedError =
+          (typeof error?.stack === "string" && error.stack) ||
+          error?.message ||
+          String(error);
 
-      if (!bootstrapFailed && !pyodide && onRuntimeCrash) {
-        bootstrapFailed = true;
-        onRuntimeCrash(detailedError);
+        if (!bootstrapFailed && !pyodide && onRuntimeCrash) {
+          bootstrapFailed = true;
+          onRuntimeCrash(detailedError);
+        }
+        if (logDebug) {
+          logDebug(`RUNTIME ERROR ${detailedError}`);
+        }
+        throw new Error(detailedError);
       }
-      if (logDebug) {
-        logDebug(`RUNTIME ERROR ${detailedError}`);
-      }
-      throw new Error(detailedError);
-    }
+    };
   }
 
-  return {
-    callWorker,
-  };
+  const runtimeApi = {};
+  for (const [name, handler] of Object.entries(RUNTIME_METHODS)) {
+    runtimeApi[name] = wrapRuntimeMethod(handler);
+  }
+
+  return Object.freeze(runtimeApi);
 }

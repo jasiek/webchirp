@@ -15,5 +15,5 @@ const rpcClient = createRuntimeRpcClient({
   onRuntimeCrash: ui.onRuntimeCrash,
 });
 
-ui.setCallWorker(rpcClient.callWorker);
+ui.setRuntimeApi(rpcClient);
 ui.init(serialBridge.isSupported());

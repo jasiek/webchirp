@@ -45,7 +45,7 @@ export function createUiController() {
     document.querySelectorAll(".left-panel select, .left-panel button, .left-panel input"),
   );
 
-  let callWorker = null;
+  let runtimeApi = null;
   let currentHeaders = [];
   let currentRows = [];
   let radioCatalog = [];
@@ -68,8 +68,8 @@ export function createUiController() {
     });
   }
 
-  function setCallWorker(fn) {
-    callWorker = fn;
+  function setRuntimeApi(api) {
+    runtimeApi = api;
   }
 
   function setSidebarControlsEnabled(enabled) {
@@ -233,11 +233,11 @@ export function createUiController() {
     applyRowSelectionVisuals();
   }
 
-  function requireCallWorker() {
-    if (!callWorker) {
-      throw new Error("Runtime RPC client is not initialized");
+  function requireRuntimeApi() {
+    if (!runtimeApi) {
+      throw new Error("Runtime API client is not initialized");
     }
-    return callWorker;
+    return runtimeApi;
   }
 
   // Emit status updates into the debug output stream.
@@ -1096,7 +1096,7 @@ export function createUiController() {
     if (!selectedRadio) {
       return;
     }
-    const meta = await requireCallWorker()("getRadioMetadata", {
+    const meta = await requireRuntimeApi().getRadioMetadata({
       module: selectedRadio.module,
       className: selectedRadio.className,
     });
@@ -1107,7 +1107,7 @@ export function createUiController() {
   // Parse CSV through Python runtime and refresh table rows and status text.
   async function loadCsvText(csvText) {
     setStatus("Parsing CSV with CHIRP Python...");
-    const parsed = await requireCallWorker()("parseCsv", { csvText });
+    const parsed = await requireRuntimeApi().parseCsv({ csvText });
     const headersFromMeta = radioMetadata.headers || [];
     const parsedHeaders = parsed.headers || [];
     currentHeaders = headersFromMeta.length ? headersFromMeta : parsedHeaders;
@@ -1146,7 +1146,7 @@ export function createUiController() {
   // Ask Python runtime to normalize current rows and export as CSV file.
   async function exportCsv() {
     setStatus("Normalizing rows with CHIRP Python...");
-    const csvText = await requireCallWorker()("normalizeRows", {
+    const csvText = await requireRuntimeApi().normalizeRows({
       rows: currentRows,
       module: selectedRadio?.module || "",
       className: selectedRadio?.className || "",
@@ -1161,7 +1161,7 @@ export function createUiController() {
       return;
     }
     setStatus("Preparing CHIRP binary codeplug...");
-    const result = await requireCallWorker()("exportImage", {
+    const result = await requireRuntimeApi().exportImage({
       module: selectedRadio.module,
       className: selectedRadio.className,
       rows: currentRows,
@@ -1179,7 +1179,7 @@ export function createUiController() {
     const raw = new Uint8Array(await file.arrayBuffer());
     const imageBase64 = bytesToBase64(raw);
     setStatus("Loading CHIRP binary codeplug...");
-    const loaded = await requireCallWorker()("loadImage", { imageBase64 });
+    const loaded = await requireRuntimeApi().loadImage({ imageBase64 });
     const selected = selectRadioByDetectedImage(loaded);
     if (!selected) {
       throw new Error(
@@ -1203,7 +1203,7 @@ export function createUiController() {
     if (!selectedRadio) {
       return { valid: false, issues: [{ rowIndex: -1, column: "", message: "No radio selected." }] };
     }
-    const result = await requireCallWorker()("validateRowsForUpload", {
+    const result = await requireRuntimeApi().validateRowsForUpload({
       rows: currentRows,
       module: selectedRadio.module,
       className: selectedRadio.className,
@@ -1393,7 +1393,7 @@ export function createUiController() {
       try {
         if (serialConnected) {
           setStatus("Disconnecting serial...");
-          const result = await requireCallWorker()("serialDisconnect");
+          const result = await requireRuntimeApi().serialDisconnect();
           serialConnected = Boolean(result?.connected);
           refreshSerialConnectToggleLabel();
           setStatus(result.message || "Serial disconnected.");
@@ -1402,7 +1402,7 @@ export function createUiController() {
 
         const baudRate = Number(selectedRadio?.baudRate || 9600);
         setStatus("Connecting serial...");
-        const result = await requireCallWorker()("serialConnect", { baudRate });
+        const result = await requireRuntimeApi().serialConnect({ baudRate });
         serialConnected = Boolean(result?.connected);
         refreshSerialConnectToggleLabel();
         if (result?.deviceName) {
@@ -1434,7 +1434,7 @@ export function createUiController() {
 
       try {
         setStatus("Running Python serial transaction...");
-        const result = await requireCallWorker()("serialTxRx", { txHex, rxBytes, timeoutMs });
+        const result = await requireRuntimeApi().serialTxRx({ txHex, rxBytes, timeoutMs });
         setStatus("Python serial transaction complete.");
         logSerial(`PY TX ${result.tx.hex} | PY RX ${result.rx.hex || "<none>"}`);
       } catch (error) {
@@ -1469,7 +1469,7 @@ export function createUiController() {
       }
       try {
         setStatus(`Downloading from ${makeModelLabel(selectedRadio)}...`);
-        const result = await requireCallWorker()("downloadSelectedRadio", {
+        const result = await requireRuntimeApi().downloadSelectedRadio({
           module: selectedRadio.module,
           className: selectedRadio.className,
         });
@@ -1508,7 +1508,7 @@ export function createUiController() {
           return;
         }
         setStatus(`Uploading to ${makeModelLabel(selectedRadio)}...`);
-        await requireCallWorker()("uploadSelectedRadio", {
+        await requireRuntimeApi().uploadSelectedRadio({
           module: selectedRadio.module,
           className: selectedRadio.className,
           rows: currentRows,
@@ -1533,9 +1533,9 @@ export function createUiController() {
       } else {
         logSerial("Web Serial available.");
       }
-      const catalog = await requireCallWorker()("listRadios");
+      const catalog = await requireRuntimeApi().listRadios();
       radioCatalog = catalog.radios || [];
-      runtimeInfo = (await requireCallWorker()("getRuntimeInfo")) || runtimeInfo;
+      runtimeInfo = (await requireRuntimeApi().getRuntimeInfo()) || runtimeInfo;
       refreshMakeOptions();
       restoreSelectedRadioCookie();
       await loadSelectedRadioMetadata();
@@ -1549,7 +1549,7 @@ export function createUiController() {
   }
 
   return {
-    setCallWorker,
+    setRuntimeApi,
     setStatus,
     logSerial,
     logDebug,
