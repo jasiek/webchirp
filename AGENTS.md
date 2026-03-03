@@ -15,6 +15,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Do not reintroduce radio-specific RPC methods when generic selected-radio methods can be used.
 - Preserve debug visibility: full errors/tracebacks should be logged to the bottom debug panel.
 - Avoid context pollution by spawning sub-agents when appropriate. Use sub-agent sandboxing when a read-only task is to be executed.
+  - Use sub-agents to produce a summary for a commit message.
 - Avoid regressions in clone workflow:
   - Download should cache the image for the selected driver.
   - Upload should use cached image and fail clearly if no cached image exists.
