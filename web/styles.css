@@ -148,6 +148,30 @@ button:not(:disabled):hover {
   font-size: 1rem;
 }
 
+.sidebar-warning-panel {
+  margin: 0.2rem 0 0.9rem;
+  padding: 0.75rem 0.8rem;
+  border: 1px solid #d1a862;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff7e8 0%, #f6e4bf 100%);
+  color: #5b3810;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.sidebar-warning-panel strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebar-warning-panel p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .serial-support-warning {
   margin: 0.35rem 0 0.8rem;
   padding: 0.55rem 0.6rem;
