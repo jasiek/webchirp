@@ -624,6 +624,13 @@ def _serialize_setting_value(value):
         "current": current,
     }
 
+    def _serialize_numeric_bound(getter_name, attr_name):
+        getter = getattr(value, getter_name, None)
+        bound = getter() if callable(getter) else None
+        if bound is None:
+            bound = getattr(value, attr_name, None)
+        return float(bound) if bound is not None else None
+
     if isinstance(value, chirp_settings.RadioSettingValueBoolean):
         data["type"] = "boolean"
     elif isinstance(value, chirp_settings.RadioSettingValueMap):
@@ -640,8 +647,12 @@ def _serialize_setting_value(value):
         data["step"] = int(value.get_step())
     elif isinstance(value, chirp_settings.RadioSettingValueFloat):
         data["type"] = "float"
-        data["min"] = float(value.get_min())
-        data["max"] = float(value.get_max())
+        minimum = _serialize_numeric_bound("get_min", "_min")
+        maximum = _serialize_numeric_bound("get_max", "_max")
+        if minimum is not None:
+            data["min"] = minimum
+        if maximum is not None:
+            data["max"] = maximum
     elif isinstance(value, chirp_settings.RadioSettingValueString):
         data["type"] = "string"
         data["minLength"] = int(value.minlength)
