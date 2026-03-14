@@ -236,6 +236,14 @@ button:not(:disabled):hover {
   min-width: 8.5rem;
 }
 
+.editor-view-toggle button:disabled {
+  color: #7d889a;
+  border-color: #c4cbd8;
+  background: linear-gradient(180deg, #eef2f8 0%, #dee5f0 100%);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .editor-view-toggle button.is-active {
   border-color: #20598d;
   background: linear-gradient(180deg, #fefefe 0%, #cfe3fb 100%);
