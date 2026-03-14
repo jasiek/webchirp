@@ -5,7 +5,8 @@
     "dev": "node scripts/dev-server.mjs",
     "build:dist": "node scripts/build-dist.mjs",
     "test:channels": "node --test --experimental-wasm-stack-switching scripts/test-channel-list.mjs",
-    "test:hw": "node --experimental-wasm-stack-switching scripts/test-hw-radio.mjs"
+    "test:hw": "node --experimental-wasm-stack-switching scripts/test-hw-radio.mjs",
+    "test:settings": "node --experimental-wasm-stack-switching scripts/test-radio-settings.mjs"
   },
   "dependencies": {
     "pyodide": "^0.27.2",
