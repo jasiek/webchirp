@@ -557,6 +557,11 @@ export function createUiController() {
     );
   }
 
+  function formatRadioModelOption(radio, hasDuplicateModel) {
+    const modelLabel = radio.isLiveRadio ? `⚡ ${radio.model}` : radio.model;
+    return hasDuplicateModel ? `${modelLabel} (${radio.className})` : modelLabel;
+  }
+
   // Populate model dropdown for selected vendor and refresh selection state.
   function refreshModelOptions() {
     const vendor = radioMakeEl.value;
@@ -571,9 +576,7 @@ export function createUiController() {
       const option = document.createElement("option");
       option.value = radio.key;
       const hasDuplicateModel = (modelCounts.get(radio.model) || 0) > 1;
-      option.textContent = hasDuplicateModel
-        ? `${radio.model} (${radio.className})`
-        : radio.model;
+      option.textContent = formatRadioModelOption(radio, hasDuplicateModel);
       radioModelEl.appendChild(option);
     }
 

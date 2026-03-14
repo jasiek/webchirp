@@ -170,6 +170,7 @@ def list_registered_radios(module_short_names):
                 "vendor": str(vendor),
                 "model": str(model),
                 "baudRate": baud_rate,
+                "isLiveRadio": bool(issubclass(radio_cls, chirp_common.LiveRadio)),
             }
         )
 
