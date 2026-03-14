@@ -701,6 +701,15 @@ def _apply_setting_value(setting, value_index, next_value):
     target.set_value(next_value)
 
 
+def _setting_value_is_mutable(setting, value_index):
+    """Report whether the selected CHIRP setting value accepts updates."""
+    try:
+        target = setting[value_index] if len(setting) > 1 else setting.value
+    except Exception:
+        return False
+    return bool(getattr(target, "get_mutable", lambda: True)())
+
+
 def _apply_serialized_settings(actual_container, payload_children, issues, prefix):
     """Apply serialized UI settings onto a fresh CHIRP settings tree."""
     children = payload_children or []
@@ -737,6 +746,8 @@ def _apply_serialized_settings(actual_container, payload_children, issues, prefi
 
         payload_values = payload.get("values") or []
         for value_index, value_payload in enumerate(payload_values):
+            if not _setting_value_is_mutable(actual_child, value_index):
+                continue
             try:
                 _apply_setting_value(actual_child, value_index, value_payload.get("current"))
             except Exception as exc:
