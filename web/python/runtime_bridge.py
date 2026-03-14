@@ -458,6 +458,24 @@ def _driver_cache_key(module_name: str, class_name: str):
     return f"{module_name}.{class_name}"
 
 
+def _has_cached_image(module_name: str, class_name: str) -> bool:
+    """Report whether runtime currently has a cached image for this driver."""
+    driver_key = _driver_cache_key(module_name, class_name)
+    return driver_key in LAST_IMAGE_BY_DRIVER
+
+
+def _settings_unavailable_payload(message: str, requires_image=False, error_text=""):
+    """Standard payload when radio-wide settings cannot currently be loaded."""
+    return {
+        "supported": False,
+        "available": False,
+        "requiresImage": bool(requires_image),
+        "message": str(message or ""),
+        "error": str(error_text or ""),
+        "groups": [],
+    }
+
+
 def _best_effort_radio_instance(module_name: str, class_name: str, require_cached=False):
     """Instantiate a radio with cached data when available, otherwise best-effort blank state."""
     radio_cls = _import_radio_class(module_name, class_name)
@@ -1055,23 +1073,72 @@ def get_radio_column_metadata(module_name: str, class_name: str):
 
 def get_radio_settings(module_name: str, class_name: str):
     """Build CHIRP settings-group metadata for the UI when supported."""
+    radio_cls = _import_radio_class(module_name, class_name)
+    if issubclass(radio_cls, chirp_common.CloneModeRadio) and not _has_cached_image(
+        module_name, class_name
+    ):
+        return _settings_unavailable_payload(
+            "Download from radio or load a codeplug image to edit radio-wide settings.",
+            requires_image=True,
+        )
+
     radio = _best_effort_radio_instance(module_name, class_name)
     rf = radio.get_features()
     if not bool(getattr(rf, "has_settings", False)):
-        return {"supported": False, "groups": []}
-    settings_tree = radio.get_settings()
+        return _settings_unavailable_payload(
+            "This radio does not expose radio-wide settings."
+        )
+    try:
+        settings_tree = radio.get_settings()
+    except Exception as exc:
+        return _settings_unavailable_payload(
+            "Radio-wide settings are unavailable until this driver's backing state is loaded.",
+            error_text=str(exc),
+        )
     return {
         "supported": True,
+        "available": True,
+        "requiresImage": False,
+        "message": "",
+        "error": "",
         "groups": _serialize_radio_settings(settings_tree),
     }
 
 
 def validate_radio_settings(module_name: str, class_name: str, settings_groups):
     """Validate serialized radio settings using CHIRP's typed value objects."""
+    radio_cls = _import_radio_class(module_name, class_name)
+    if issubclass(radio_cls, chirp_common.CloneModeRadio) and not _has_cached_image(
+        module_name, class_name
+    ):
+        return {
+            "valid": True,
+            "issues": [],
+            "settings": [],
+            "available": False,
+            "requiresImage": True,
+            "message": "Download from radio or load a codeplug image to edit radio-wide settings.",
+            "error": "",
+        }
     radio = _best_effort_radio_instance(module_name, class_name, require_cached=False)
-    result = _validate_and_apply_radio_settings(radio, settings_groups or [], apply_changes=False)
+    try:
+        result = _validate_and_apply_radio_settings(radio, settings_groups or [], apply_changes=False)
+    except Exception as exc:
+        return {
+            "valid": True,
+            "issues": [],
+            "settings": [],
+            "available": False,
+            "requiresImage": False,
+            "message": "Radio-wide settings are unavailable until this driver's backing state is loaded.",
+            "error": str(exc),
+        }
     return {
         "valid": bool(result["valid"]),
         "issues": result["issues"],
         "settings": result["settings"],
+        "available": True,
+        "requiresImage": False,
+        "message": "",
+        "error": "",
     }

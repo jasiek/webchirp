@@ -149,6 +149,8 @@ json.dumps({
     "headerCount": len(_meta.get("headers") or []),
     "columnCount": len(_meta.get("columns") or {}),
     "settingsSupported": bool(_settings.get("supported")),
+    "settingsAvailable": bool(_settings.get("available")),
+    "settingsRequiresImage": bool(_settings.get("requiresImage")),
     "settingsGroupCount": len(_settings.get("groups") or []),
 })
         `,
@@ -160,8 +162,11 @@ json.dumps({
 
       assert.ok(result.headerCount > 0, `${label}: expected metadata headers`);
       assert.ok(result.columnCount > 0, `${label}: expected metadata columns`);
-      if (result.settingsSupported) {
+      if (result.settingsAvailable) {
         assert.ok(result.settingsGroupCount > 0, `${label}: settings claimed support but returned no groups`);
+      }
+      if (result.settingsRequiresImage) {
+        assert.equal(result.settingsSupported, false, `${label}: image-gated settings should not be marked supported during initial load`);
       }
     });
   }

@@ -60,7 +60,7 @@ export function createUiController() {
   let radioCatalog = [];
   let selectedRadio = null;
   let radioMetadata = { headers: [], columns: {} };
-  let radioSettingsState = { supported: false, groups: [] };
+  let radioSettingsState = { supported: false, available: false, requiresImage: false, message: "", groups: [] };
   let runtimeInfo = { chirpRevision: "" };
   let lastUsbVendorId = "";
   let lastUsbProductId = "";
@@ -446,7 +446,11 @@ export function createUiController() {
   }
 
   function radioHasSettings() {
-    return Boolean(Array.isArray(radioSettingsState.groups) && radioSettingsState.groups.length > 0);
+    return Boolean(
+      radioSettingsState?.available &&
+      Array.isArray(radioSettingsState.groups) &&
+      radioSettingsState.groups.length > 0,
+    );
   }
 
   function updateViewButtons() {
@@ -454,7 +458,7 @@ export function createUiController() {
       viewSettingsEl.disabled = !radioHasSettings();
       viewSettingsEl.title = radioHasSettings()
         ? "Edit radio-wide settings"
-        : "This radio does not expose radio-wide settings";
+        : (radioSettingsState?.message || "This radio does not expose radio-wide settings");
     }
   }
 
@@ -491,6 +495,10 @@ export function createUiController() {
       ? `Radio settings have ${count} invalid value${count === 1 ? "" : "s"}. Fix the highlighted fields before upload.`
       : "Radio settings are ready to write. Immutable values are shown but disabled.";
     updateUploadButtonState();
+  }
+
+  function settingsUnavailableMessage() {
+    return radioSettingsState?.message || "This radio does not expose radio-wide settings.";
   }
 
   // Build a short user-facing label for a selected radio catalog entry.
@@ -1211,14 +1219,26 @@ export function createUiController() {
 
   async function loadSelectedRadioSettings(options = {}) {
     if (!selectedRadio) {
-      radioSettingsState = { supported: false, groups: [] };
+      radioSettingsState = {
+        supported: false,
+        available: false,
+        requiresImage: false,
+        message: "",
+        groups: [],
+      };
       clearInvalidSettings();
       updateViewButtons();
       renderSettingsPanel();
       return;
     }
     const preserveCurrent = Boolean(options.preserveCurrent);
-    let nextState = { supported: false, groups: [] };
+    let nextState = {
+      supported: false,
+      available: false,
+      requiresImage: false,
+      message: "",
+      groups: [],
+    };
     try {
       const result = await requireRuntimeApi().getRadioSettings({
         module: selectedRadio.module,
@@ -1226,10 +1246,14 @@ export function createUiController() {
       });
       nextState = {
         supported: Boolean(result?.supported),
+        available: Boolean(result?.available),
+        requiresImage: Boolean(result?.requiresImage),
+        message: String(result?.message || ""),
         groups: cloneSettingsGroups(result?.groups || []),
       };
     } catch (error) {
       logDebug(`SETTINGS LOAD FALLBACK ${errorSummary(error)}`);
+      nextState.message = "Radio-wide settings could not be prepared.";
     }
 
     if (preserveCurrent && radioHasSettings() && nextState.supported) {
@@ -1510,6 +1534,7 @@ export function createUiController() {
 
     settingsTabsEl.innerHTML = "";
     settingsContentEl.innerHTML = "";
+    settingsEmptyEl.textContent = settingsUnavailableMessage();
 
     if (!radioHasSettings()) {
       settingsEmptyEl.hidden = false;
@@ -1632,6 +1657,9 @@ export function createUiController() {
     await loadSelectedRadioMetadata();
     radioSettingsState = {
       supported: Array.isArray(loaded.settings) && loaded.settings.length > 0,
+      available: Array.isArray(loaded.settings) && loaded.settings.length > 0,
+      requiresImage: false,
+      message: "",
       groups: cloneSettingsGroups(loaded.settings || []),
     };
     clearInvalidSettings();
@@ -1879,7 +1907,7 @@ export function createUiController() {
 
     viewSettingsEl?.addEventListener("click", () => {
       if (!radioHasSettings()) {
-        setStatus("Radio-wide settings are not available for the selected radio.");
+        setStatus(settingsUnavailableMessage());
         return;
       }
       setEditorView("settings");
@@ -1977,6 +2005,9 @@ export function createUiController() {
         currentRows = result.rows;
         radioSettingsState = {
           supported: Array.isArray(result.settings) && result.settings.length > 0,
+          available: Array.isArray(result.settings) && result.settings.length > 0,
+          requiresImage: false,
+          message: "",
           groups: cloneSettingsGroups(result.settings || []),
         };
         activeSettingsTab = radioSettingsState.groups[0]?.id || "";
