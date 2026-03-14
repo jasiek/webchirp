@@ -698,10 +698,6 @@ button:not(:disabled):hover {
   background: linear-gradient(180deg, #fff4df 0%, #f6d7ab 100%);
 }
 
-#report-issue.hidden {
-  display: none;
-}
-
 #debug-output {
   width: 100%;
   min-height: 180px;

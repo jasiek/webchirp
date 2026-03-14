@@ -285,13 +285,12 @@ export function createUiController() {
     return currentEditorView === "settings" ? "radio settings" : "channels";
   }
 
-  function maybeEnableIssueButton(line) {
+  function captureErrorSummary(line) {
     const text = String(line || "");
     if (!/\b(error|traceback|exception)\b/i.test(text)) {
       return;
     }
     lastErrorSummary = text.replace(/\s+/g, " ").trim().slice(0, 180);
-    reportIssueEl?.classList.remove("hidden");
   }
 
   // Record serial-related events in the central debug output stream.
@@ -306,7 +305,7 @@ export function createUiController() {
     const current = debugOutputEl.value ? `${debugOutputEl.value}\n` : "";
     debugOutputEl.value = `${current}${text}`;
     debugOutputEl.scrollTop = debugOutputEl.scrollHeight;
-    maybeEnableIssueButton(line);
+    captureErrorSummary(line);
   }
 
   function detectOperatingSystem() {
@@ -352,18 +351,19 @@ export function createUiController() {
   }
 
   function buildIssueUrl() {
-    const radioMake = selectedRadio?.vendor || radioMakeEl.value || "Unknown";
-    const radioModel = selectedRadio?.model || radioModelEl.value || "Unknown";
-    const issueTitle = `Radio bug: ${radioMake} ${radioModel} - ${lastErrorSummary || "runtime error"}`;
+    const radioMake = selectedRadio?.vendor || radioMakeEl.value || "Not selected";
+    const radioModel = selectedRadio?.model || radioModelEl.value || "Not selected";
+    const bugSummary = lastErrorSummary || "manual report";
+    const issueTitle = `Bug report: ${radioMake} ${radioModel} - ${bugSummary}`;
     const debugTail = latestDebugTail(120);
     const steps = [
-      "1. Connect radio",
-      "2. Select radio make/model",
-      "3. Run the action that failed",
-      "4. Observe the error in Debug Output",
+      "1. Open WebCHIRP",
+      "2. Select a radio make/model if relevant",
+      "3. Perform the action that shows the bug",
+      "4. Describe what happened",
     ].join("\n");
     const actualBehavior = [
-      lastErrorSummary || "Error recorded in Debug Output.",
+      lastErrorSummary || "Manual report with no captured runtime error yet.",
       "",
       "Debug output excerpt:",
       "```",
@@ -376,13 +376,13 @@ export function createUiController() {
       title: issueTitle.slice(0, 240),
       radio_make: radioMake,
       radio_model: radioModel,
-      usb_vendor_id: lastUsbVendorId || "Unknown",
-      usb_product_id: lastUsbProductId || "Unknown",
+      usb_vendor_id: lastUsbVendorId || "Unknown / not connected",
+      usb_product_id: lastUsbProductId || "Unknown / not connected",
       operating_system: detectOperatingSystem(),
       browser_and_version: detectBrowserVersion(),
       chirp_revision: runtimeInfo.chirpRevision || "unknown",
       steps_to_reproduce: steps,
-      expected_behavior: "The radio operation should complete without errors.",
+      expected_behavior: "The reported action should work without the observed bug.",
       actual_behavior: actualBehavior,
     });
     return `${ISSUE_NEW_URL}?${params.toString()}`;
@@ -1972,7 +1972,6 @@ export function createUiController() {
     document.querySelector("#debug-clear").addEventListener("click", () => {
       debugOutputEl.value = "";
       lastErrorSummary = "";
-      reportIssueEl?.classList.add("hidden");
     });
 
     reportIssueEl?.addEventListener("click", () => {
