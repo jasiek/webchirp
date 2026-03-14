@@ -29,9 +29,11 @@ export function createUiController() {
   const debugOutputEl = document.querySelector("#debug-output");
   const reportIssueEl = document.querySelector("#report-issue");
   const serialSupportWarningEl = document.querySelector("#webserial-support-warning");
+  const liveRadioSupportWarningEl = document.querySelector("#live-radio-support-warning");
   const radioMakeEl = document.querySelector("#radio-make");
   const radioModelEl = document.querySelector("#radio-model");
   const serialConnectToggleEl = document.querySelector("#serial-connect-toggle");
+  const radioDownloadEl = document.querySelector("#radio-download");
   const radioUploadEl = document.querySelector("#radio-upload");
   const channelInsertEl = document.querySelector("#channel-insert");
   const channelRemoveEl = document.querySelector("#channel-remove");
@@ -92,7 +94,7 @@ export function createUiController() {
     for (const el of sidebarControlEls) {
       el.disabled = !enabled;
     }
-    updateUploadButtonState();
+    updateSerialActionState();
   }
 
   function setSerialSupportWarningVisible(visible) {
@@ -100,6 +102,13 @@ export function createUiController() {
       return;
     }
     serialSupportWarningEl.hidden = !visible;
+  }
+
+  function setLiveRadioSupportWarningVisible(visible) {
+    if (!liveRadioSupportWarningEl) {
+      return;
+    }
+    liveRadioSupportWarningEl.hidden = !visible;
   }
 
   function refreshSerialConnectToggleLabel() {
@@ -161,6 +170,7 @@ export function createUiController() {
     if (!selectedRadio) {
       return false;
     }
+    updateSerialActionState();
     logDebug(
       `RADIO RESTORE ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
     );
@@ -466,15 +476,39 @@ export function createUiController() {
     return invalidSettingKeys.size > 0;
   }
 
-  function updateUploadButtonState() {
+  function selectedRadioIsLiveMode() {
+    return Boolean(selectedRadio?.isLiveRadio);
+  }
+
+  function updateSerialActionState() {
+    const liveRadioUnsupported = selectedRadioIsLiveMode();
+    const actionsAllowed = sidebarControlsEnabled && !liveRadioUnsupported;
+
+    setLiveRadioSupportWarningVisible(liveRadioUnsupported);
+
+    if (serialConnectToggleEl) {
+      serialConnectToggleEl.disabled = !actionsAllowed;
+      serialConnectToggleEl.title = liveRadioUnsupported
+        ? "Live-mode radios are not supported in this UI yet"
+        : "";
+    }
+
+    if (radioDownloadEl) {
+      radioDownloadEl.disabled = !actionsAllowed;
+      radioDownloadEl.title = liveRadioUnsupported
+        ? "Live-mode radios are not supported in this UI yet"
+        : "";
+    }
+
     if (!radioUploadEl) {
       return;
     }
-    if (!sidebarControlsEnabled) {
-      radioUploadEl.disabled = true;
+
+    radioUploadEl.disabled = !actionsAllowed || hasInvalidSettings();
+    if (liveRadioUnsupported) {
+      radioUploadEl.title = "Live-mode radios are not supported in this UI yet";
       return;
     }
-    radioUploadEl.disabled = hasInvalidSettings();
     radioUploadEl.title = hasInvalidSettings()
       ? "Fix invalid radio settings before upload"
       : "";
@@ -494,7 +528,7 @@ export function createUiController() {
     settingsSummaryEl.textContent = count > 0
       ? `Radio settings have ${count} invalid value${count === 1 ? "" : "s"}. Fix the highlighted fields before upload.`
       : "Radio settings are ready to write. Immutable values are shown but disabled.";
-    updateUploadButtonState();
+    updateSerialActionState();
   }
 
   function settingsUnavailableMessage() {
@@ -582,6 +616,7 @@ export function createUiController() {
 
     const selectedKey = radioModelEl.value || models[0]?.key;
     selectedRadio = models.find((r) => r.key === selectedKey) || null;
+    updateSerialActionState();
     if (selectedRadio) {
       radioModelEl.value = selectedRadio.key;
       logDebug(
@@ -1874,6 +1909,7 @@ export function createUiController() {
 
     radioMakeEl.addEventListener("change", () => {
       refreshModelOptions();
+      updateSerialActionState();
       persistSelectedRadioCookie();
       clearInvalidHighlights();
       clearInvalidSettings();
@@ -1893,6 +1929,7 @@ export function createUiController() {
           `RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
         );
       }
+      updateSerialActionState();
       persistSelectedRadioCookie();
       clearInvalidHighlights();
       clearInvalidSettings();
