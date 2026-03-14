@@ -1,5 +1,6 @@
 ## 2026-03-14
 
+- `buttons.github.io/buttons.js` is not a viable GitHub star widget under cross-origin isolation. Even if the script is self-hosted, the widget path still depends on cross-origin embed resources, which conflicts with `COEP`/`COOP` on the static `codeplug.org` deployment.
 - Some CHIRP drivers do not instantiate cleanly with `None` when enumerating metadata or settings from a non-downloaded state. Generic runtime helpers should fall back to `radio_cls("")` to preserve best-effort schema loading before a live download.
 - Clone-mode settings introspection is not safe to assume on blank/default state. `get_radio_settings()` can fail for drivers like `baofeng_uv17Pro.UV17Pro` unless the runtime has first been seeded with a real cached image or download result.
 - An all-radios initial-load sweep shows the browser prep path is broader than the `UV17Pro` failure: several drivers currently throw during `get_radio_settings()` on blank/default state, including missing parsed memory objects, missing `_` translation bindings, and serialization of `None` setting values.

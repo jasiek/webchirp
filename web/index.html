@@ -19,15 +19,28 @@
             >View on GitHub</a
           >
           <a class="toolbar-link" href="./about.html">About</a>
-          <a
-            class="github-button"
-            href="https://github.com/jasiek/webchirp"
-            data-icon="octicon-star"
-            data-size="large"
-            data-show-count="true"
-            aria-label="Star jasiek/webchirp on GitHub"
-            >Star</a
-          >
+          <div class="github-star-widget">
+            <a
+              id="github-star-button"
+              class="github-star-button"
+              href="https://github.com/jasiek/webchirp"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Star jasiek/webchirp on GitHub"
+            >
+              <span class="github-star-icon" aria-hidden="true">★</span>
+              <span>Star</span>
+            </a>
+            <a
+              id="github-star-count"
+              class="github-star-count"
+              href="https://github.com/jasiek/webchirp/stargazers"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="View stargazers for jasiek/webchirp on GitHub"
+              hidden
+            ></a>
+          </div>
           <button id="load-sample">Load Sample</button>
           <button id="import-csv">Import CSV</button>
           <button id="export-csv">Export CSV</button>
@@ -213,15 +226,7 @@
 
     <input id="csv-file" type="file" accept=".csv,text/csv" hidden />
     <input id="img-file" type="file" accept=".img,application/octet-stream" hidden />
+    <script type="module" src="./js/github-button.js"></script>
     <script type="module" src="./app.js"></script>
-    <script>
-      if (!globalThis.crossOriginIsolated) {
-        const script = document.createElement("script");
-        script.async = true;
-        script.defer = true;
-        script.src = "https://buttons.github.io/buttons.js";
-        document.body.appendChild(script);
-      }
-    </script>
   </body>
 </html>
