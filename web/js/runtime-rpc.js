@@ -117,6 +117,10 @@ function setRowsJsonGlobal(rows) {
   pyodide.globals.set("_rows_json", JSON.stringify(rows));
 }
 
+function setSettingsJsonGlobal(groups) {
+  pyodide.globals.set("_settings_json", JSON.stringify(groups));
+}
+
 async function runPythonJson(pythonCode) {
   const resultJson = await pyodide.runPythonAsync(pythonCode);
   return JSON.parse(resultJson);
@@ -159,9 +163,10 @@ async function handleExportImage(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
   setRowsJsonGlobal(payload.rows);
+  setSettingsJsonGlobal(payload.settings || []);
   setSelectedRadioGlobals(payload);
   return runPythonJson(
-    "json.dumps(export_image_base64(_sel_module, _sel_class, json.loads(_rows_json)))",
+    "json.dumps(export_image_base64(_sel_module, _sel_class, json.loads(_rows_json), json.loads(_settings_json)))",
   );
 }
 
@@ -206,8 +211,9 @@ async function handleUploadSelectedRadio(payload = {}) {
   await ensureSelectedRadioModules(payload.module || "");
   setSelectedRadioGlobals(payload);
   setRowsJsonGlobal(payload.rows || []);
+  setSettingsJsonGlobal(payload.settings || []);
   return runPythonJson(
-    "json.dumps(await upload_selected_radio(_sel_module, _sel_class, json.loads(_rows_json)))",
+    "json.dumps(await upload_selected_radio(_sel_module, _sel_class, json.loads(_rows_json), json.loads(_settings_json)))",
   );
 }
 
@@ -217,6 +223,25 @@ async function handleGetRadioMetadata(payload = {}) {
   setSelectedRadioGlobals(payload);
   return runPythonJson(
     "json.dumps(get_radio_column_metadata(_sel_module, _sel_class))",
+  );
+}
+
+async function handleGetRadioSettings(payload = {}) {
+  await requirePyodide();
+  await ensureSelectedRadioModules(payload.module || "");
+  setSelectedRadioGlobals(payload);
+  return runPythonJson(
+    "json.dumps(get_radio_settings(_sel_module, _sel_class))",
+  );
+}
+
+async function handleValidateRadioSettings(payload = {}) {
+  await requirePyodide();
+  await ensureSelectedRadioModules(payload.module || "");
+  setSelectedRadioGlobals(payload);
+  setSettingsJsonGlobal(payload.settings || []);
+  return runPythonJson(
+    "json.dumps(validate_radio_settings(_sel_module, _sel_class, json.loads(_settings_json)))",
   );
 }
 
@@ -234,6 +259,8 @@ const RUNTIME_METHODS = Object.freeze({
   downloadSelectedRadio: handleDownloadSelectedRadio,
   uploadSelectedRadio: handleUploadSelectedRadio,
   getRadioMetadata: handleGetRadioMetadata,
+  getRadioSettings: handleGetRadioSettings,
+  validateRadioSettings: handleValidateRadioSettings,
 });
 
 export function createRuntimeRpcClient({

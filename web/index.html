@@ -77,35 +77,59 @@
         </aside>
 
         <section class="editor-panel">
-          <div class="channel-toolbar">
-            <button id="channel-insert" type="button" title="Insert new channel" aria-label="Insert new channel">➕</button>
-            <button id="channel-remove" type="button" title="Remove selected channels" aria-label="Remove selected channels">➖</button>
-            <div class="channel-menu">
-              <button
-                id="channel-menu-toggle"
-                type="button"
-                title="Channel actions"
-                aria-label="Channel actions"
-                aria-haspopup="true"
-                aria-expanded="false"
-              >
-                Actions
-              </button>
-              <div id="channel-menu-popup" class="channel-menu-popup hidden" role="menu">
-                <button id="channel-add-pmr446" type="button" role="menuitem">
-                  Add PMR446 channels
+          <div class="editor-view-toggle" role="tablist" aria-label="Editor view">
+            <button id="view-channels" type="button" class="is-active" role="tab" aria-selected="true">
+              Channels
+            </button>
+            <button id="view-settings" type="button" role="tab" aria-selected="false">
+              Radio Settings
+            </button>
+          </div>
+
+          <div id="channel-editor" class="editor-view is-active">
+            <div class="channel-toolbar">
+              <button id="channel-insert" type="button" title="Insert new channel" aria-label="Insert new channel">➕</button>
+              <button id="channel-remove" type="button" title="Remove selected channels" aria-label="Remove selected channels">➖</button>
+              <div class="channel-menu">
+                <button
+                  id="channel-menu-toggle"
+                  type="button"
+                  title="Channel actions"
+                  aria-label="Channel actions"
+                  aria-haspopup="true"
+                  aria-expanded="false"
+                >
+                  Actions
                 </button>
-                <button id="channel-import-przemienniki" type="button" role="menuitem">
-                  Query przemienniki.net
-                </button>
+                <div id="channel-menu-popup" class="channel-menu-popup hidden" role="menu">
+                  <button id="channel-add-pmr446" type="button" role="menuitem">
+                    Add PMR446 channels
+                  </button>
+                  <button id="channel-import-przemienniki" type="button" role="menuitem">
+                    Query przemienniki.net
+                  </button>
+                </div>
               </div>
             </div>
+            <div class="mem-table-scroll">
+              <table id="mem-table">
+                <thead></thead>
+                <tbody></tbody>
+              </table>
+            </div>
           </div>
-          <div class="mem-table-scroll">
-            <table id="mem-table">
-              <thead></thead>
-              <tbody></tbody>
-            </table>
+
+          <div id="settings-editor" class="editor-view" hidden>
+            <div class="settings-layout">
+              <aside id="settings-tabs" class="settings-tabs" aria-label="Radio settings groups"></aside>
+              <div class="settings-panel">
+                <div id="settings-summary" class="settings-summary" hidden></div>
+                <div id="settings-empty" class="settings-empty">
+                  Radio-wide settings are not available for the selected radio.
+                </div>
+                <div id="settings-content" class="settings-content" hidden></div>
+              </div>
+            </div>
           </div>
         </section>
       </main>

@@ -16,6 +16,14 @@ const LAST_RADIO_COOKIE = "webchirp_last_radio";
 export function createUiController() {
   const tableHead = document.querySelector("#mem-table thead");
   const tableBody = document.querySelector("#mem-table tbody");
+  const channelEditorEl = document.querySelector("#channel-editor");
+  const settingsEditorEl = document.querySelector("#settings-editor");
+  const viewChannelsEl = document.querySelector("#view-channels");
+  const viewSettingsEl = document.querySelector("#view-settings");
+  const settingsTabsEl = document.querySelector("#settings-tabs");
+  const settingsSummaryEl = document.querySelector("#settings-summary");
+  const settingsEmptyEl = document.querySelector("#settings-empty");
+  const settingsContentEl = document.querySelector("#settings-content");
   const fileInput = document.querySelector("#csv-file");
   const imgFileInput = document.querySelector("#img-file");
   const debugOutputEl = document.querySelector("#debug-output");
@@ -24,6 +32,7 @@ export function createUiController() {
   const radioMakeEl = document.querySelector("#radio-make");
   const radioModelEl = document.querySelector("#radio-model");
   const serialConnectToggleEl = document.querySelector("#serial-connect-toggle");
+  const radioUploadEl = document.querySelector("#radio-upload");
   const channelInsertEl = document.querySelector("#channel-insert");
   const channelRemoveEl = document.querySelector("#channel-remove");
   const channelMenuToggleEl = document.querySelector("#channel-menu-toggle");
@@ -51,14 +60,20 @@ export function createUiController() {
   let radioCatalog = [];
   let selectedRadio = null;
   let radioMetadata = { headers: [], columns: {} };
+  let radioSettingsState = { supported: false, groups: [] };
   let runtimeInfo = { chirpRevision: "" };
   let lastUsbVendorId = "";
   let lastUsbProductId = "";
   let lastErrorSummary = "";
+  let currentEditorView = "channels";
+  let activeSettingsTab = "";
   let selectedRowIndexes = new Set();
   let selectionAnchorIndex = null;
   let invalidCellKeys = new Set();
+  let invalidSettingKeys = new Set();
+  let invalidSettingMessages = new Map();
   let przemiennikiDictionaryPromise = null;
+  let sidebarControlsEnabled = false;
   let serialConnected = false;
 
   if (!Object.getOwnPropertyDescriptor(globalThis, "currentRows")) {
@@ -73,9 +88,11 @@ export function createUiController() {
   }
 
   function setSidebarControlsEnabled(enabled) {
+    sidebarControlsEnabled = Boolean(enabled);
     for (const el of sidebarControlEls) {
       el.disabled = !enabled;
     }
+    updateUploadButtonState();
   }
 
   function setSerialSupportWarningVisible(visible) {
@@ -173,8 +190,21 @@ export function createUiController() {
     return `${Number(rowIdx)}:${String(column || "")}`;
   }
 
+  function cloneSettingsGroups(groups) {
+    return JSON.parse(JSON.stringify(Array.isArray(groups) ? groups : []));
+  }
+
+  function settingKey(path, valueIndex = 0) {
+    return `${(Array.isArray(path) ? path : []).join("/")}:${Number(valueIndex)}`;
+  }
+
   function clearInvalidHighlights() {
     invalidCellKeys.clear();
+  }
+
+  function clearInvalidSettings() {
+    invalidSettingKeys.clear();
+    invalidSettingMessages.clear();
   }
 
   function clearInvalidCell(rowIdx, column) {
@@ -187,6 +217,12 @@ export function createUiController() {
       `td[data-row-idx="${Number(rowIdx)}"][data-column="${CSS.escape(String(column || ""))}"]`,
     );
     td?.classList.remove("is-invalid");
+  }
+
+  function clearInvalidSetting(path, valueIndex = 0) {
+    const key = settingKey(path, valueIndex);
+    invalidSettingKeys.delete(key);
+    invalidSettingMessages.delete(key);
   }
 
   function applyRowSelectionVisuals() {
@@ -243,6 +279,10 @@ export function createUiController() {
   // Emit status updates into the debug output stream.
   function setStatus(text) {
     logDebug(`STATUS ${text}`);
+  }
+
+  function currentViewLabel() {
+    return currentEditorView === "settings" ? "radio settings" : "channels";
   }
 
   function maybeEnableIssueButton(line) {
@@ -386,6 +426,71 @@ export function createUiController() {
     const details = errorDetails(error);
     logDebug(`${action.toUpperCase()} ERROR\n${details}`);
     setStatus(`${action} failed (see Debug Output).`);
+  }
+
+  function setEditorView(nextView) {
+    currentEditorView = nextView === "settings" ? "settings" : "channels";
+    const channelsActive = currentEditorView === "channels";
+    channelEditorEl?.classList.toggle("is-active", channelsActive);
+    settingsEditorEl?.classList.toggle("is-active", !channelsActive);
+    if (channelEditorEl) {
+      channelEditorEl.hidden = !channelsActive;
+    }
+    if (settingsEditorEl) {
+      settingsEditorEl.hidden = channelsActive;
+    }
+    viewChannelsEl?.classList.toggle("is-active", channelsActive);
+    viewSettingsEl?.classList.toggle("is-active", !channelsActive);
+    viewChannelsEl?.setAttribute("aria-selected", channelsActive ? "true" : "false");
+    viewSettingsEl?.setAttribute("aria-selected", channelsActive ? "false" : "true");
+  }
+
+  function radioHasSettings() {
+    return Boolean(Array.isArray(radioSettingsState.groups) && radioSettingsState.groups.length > 0);
+  }
+
+  function updateViewButtons() {
+    if (viewSettingsEl) {
+      viewSettingsEl.disabled = !radioHasSettings();
+      viewSettingsEl.title = radioHasSettings()
+        ? "Edit radio-wide settings"
+        : "This radio does not expose radio-wide settings";
+    }
+  }
+
+  function hasInvalidSettings() {
+    return invalidSettingKeys.size > 0;
+  }
+
+  function updateUploadButtonState() {
+    if (!radioUploadEl) {
+      return;
+    }
+    if (!sidebarControlsEnabled) {
+      radioUploadEl.disabled = true;
+      return;
+    }
+    radioUploadEl.disabled = hasInvalidSettings();
+    radioUploadEl.title = hasInvalidSettings()
+      ? "Fix invalid radio settings before upload"
+      : "";
+  }
+
+  function updateSettingsSummary() {
+    if (!settingsSummaryEl) {
+      return;
+    }
+    const count = invalidSettingKeys.size;
+    settingsSummaryEl.hidden = !radioHasSettings();
+    settingsSummaryEl.classList.toggle("has-invalid", count > 0);
+    if (!radioHasSettings()) {
+      settingsSummaryEl.textContent = "";
+      return;
+    }
+    settingsSummaryEl.textContent = count > 0
+      ? `Radio settings have ${count} invalid value${count === 1 ? "" : "s"}. Fix the highlighted fields before upload.`
+      : "Radio settings are ready to write. Immutable values are shown but disabled.";
+    updateUploadButtonState();
   }
 
   // Build a short user-facing label for a selected radio catalog entry.
@@ -1104,6 +1209,341 @@ export function createUiController() {
     currentHeaders = radioMetadata.headers?.length ? radioMetadata.headers : currentHeaders;
   }
 
+  async function loadSelectedRadioSettings(options = {}) {
+    if (!selectedRadio) {
+      radioSettingsState = { supported: false, groups: [] };
+      clearInvalidSettings();
+      updateViewButtons();
+      renderSettingsPanel();
+      return;
+    }
+    const preserveCurrent = Boolean(options.preserveCurrent);
+    let nextState = { supported: false, groups: [] };
+    try {
+      const result = await requireRuntimeApi().getRadioSettings({
+        module: selectedRadio.module,
+        className: selectedRadio.className,
+      });
+      nextState = {
+        supported: Boolean(result?.supported),
+        groups: cloneSettingsGroups(result?.groups || []),
+      };
+    } catch (error) {
+      logDebug(`SETTINGS LOAD FALLBACK ${errorSummary(error)}`);
+    }
+
+    if (preserveCurrent && radioHasSettings() && nextState.supported) {
+      const currentByKey = new Map();
+      for (const field of flattenSettingsFields(radioSettingsState.groups)) {
+        currentByKey.set(settingKey(field.path, field.valueIndex), field.current);
+      }
+      for (const field of flattenSettingsFields(nextState.groups)) {
+        const key = settingKey(field.path, field.valueIndex);
+        if (currentByKey.has(key)) {
+          field.valueRef.current = currentByKey.get(key);
+        }
+      }
+    }
+
+    radioSettingsState = nextState;
+    clearInvalidSettings();
+    if (!radioHasSettings() && currentEditorView === "settings") {
+      setEditorView("channels");
+    }
+    if (!activeSettingsTab || !radioSettingsState.groups.some((group) => group.id === activeSettingsTab)) {
+      activeSettingsTab = radioSettingsState.groups[0]?.id || "";
+    }
+    updateViewButtons();
+    renderSettingsPanel();
+  }
+
+  function flattenSettingsFields(groups) {
+    const out = [];
+    function walk(node) {
+      if (!node) {
+        return;
+      }
+      if (node.kind === "setting") {
+        const values = Array.isArray(node.values) ? node.values : [];
+        values.forEach((value, valueIndex) => {
+          out.push({
+            path: node.path || [],
+            valueIndex,
+            current: value.current,
+            valueRef: value,
+          });
+        });
+        return;
+      }
+      (node.children || []).forEach(walk);
+    }
+    (groups || []).forEach(walk);
+    return out;
+  }
+
+  function normalizeRadioSettingValue(meta, rawValue, previousValue) {
+    const type = String(meta?.type || "");
+    if (meta?.mutable === false) {
+      return { value: previousValue, error: "" };
+    }
+
+    if (type === "boolean") {
+      return { value: Boolean(rawValue), error: "" };
+    }
+
+    if (type === "enum") {
+      const options = Array.isArray(meta?.options) ? meta.options.map(String) : [];
+      const candidate = String(rawValue ?? "");
+      if (options.length > 0 && !options.includes(candidate)) {
+        return { value: previousValue, error: "Select one of the supported values." };
+      }
+      return { value: candidate, error: "" };
+    }
+
+    if (type === "integer") {
+      const parsed = Number.parseInt(String(rawValue ?? "").trim(), 10);
+      if (!Number.isInteger(parsed)) {
+        return { value: rawValue, error: "Enter an integer." };
+      }
+      if (Number.isFinite(meta.min) && parsed < Number(meta.min)) {
+        return { value: parsed, error: `Value must be at least ${meta.min}.` };
+      }
+      if (Number.isFinite(meta.max) && parsed > Number(meta.max)) {
+        return { value: parsed, error: `Value must be at most ${meta.max}.` };
+      }
+      if (Number.isFinite(meta.step) && Number(meta.step) > 1) {
+        const base = Number.isFinite(meta.min) ? Number(meta.min) : 0;
+        if ((parsed - base) % Number(meta.step) !== 0) {
+          return { value: parsed, error: `Value must increment by ${meta.step}.` };
+        }
+      }
+      return { value: parsed, error: "" };
+    }
+
+    if (type === "float") {
+      const parsed = Number.parseFloat(String(rawValue ?? "").trim());
+      if (!Number.isFinite(parsed)) {
+        return { value: rawValue, error: "Enter a number." };
+      }
+      if (Number.isFinite(meta.min) && parsed < Number(meta.min)) {
+        return { value: parsed, error: `Value must be at least ${meta.min}.` };
+      }
+      if (Number.isFinite(meta.max) && parsed > Number(meta.max)) {
+        return { value: parsed, error: `Value must be at most ${meta.max}.` };
+      }
+      return { value: parsed, error: "" };
+    }
+
+    if (type === "string") {
+      const text = String(rawValue ?? "");
+      if (Number.isFinite(meta.minLength) && text.length < Number(meta.minLength)) {
+        return { value: text, error: `Value must be at least ${meta.minLength} characters.` };
+      }
+      if (Number.isFinite(meta.maxLength) && text.length > Number(meta.maxLength)) {
+        return { value: text, error: `Value must be at most ${meta.maxLength} characters.` };
+      }
+      if (meta.charset) {
+        const allowed = new Set(String(meta.charset).split(""));
+        const invalidChar = text.split("").find((ch) => !allowed.has(ch));
+        if (invalidChar) {
+          return { value: text, error: `Character ${JSON.stringify(invalidChar)} is not allowed.` };
+        }
+      }
+      return { value: text, error: "" };
+    }
+
+    return { value: rawValue, error: "" };
+  }
+
+  function setSettingValue(settingNode, valueIndex, rawValue) {
+    const valueMeta = settingNode?.values?.[valueIndex];
+    if (!valueMeta) {
+      return;
+    }
+    const result = normalizeRadioSettingValue(valueMeta, rawValue, valueMeta.current);
+    valueMeta.current = result.value;
+    const key = settingKey(settingNode.path, valueIndex);
+    if (result.error) {
+      invalidSettingKeys.add(key);
+      invalidSettingMessages.set(key, result.error);
+    } else {
+      clearInvalidSetting(settingNode.path, valueIndex);
+    }
+    updateSettingsSummary();
+    renderSettingsPanel();
+  }
+
+  function findSettingsTabNode(tabId) {
+    return radioSettingsState.groups.find((group) => group.id === tabId) || null;
+  }
+
+  function tabHasInvalidSettings(group) {
+    if (!group) {
+      return false;
+    }
+    return flattenSettingsFields([group]).some((field) =>
+      invalidSettingKeys.has(settingKey(field.path, field.valueIndex)));
+  }
+
+  function renderSettingControl(settingNode, valueMeta, valueIndex) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "settings-field-control";
+    const key = settingKey(settingNode.path, valueIndex);
+    const immutable = settingNode.mutable === false || valueMeta.mutable === false;
+    const errorText = invalidSettingMessages.get(key) || "";
+    wrapper.classList.toggle("is-invalid", Boolean(errorText));
+    wrapper.classList.toggle("is-immutable", immutable);
+
+    const current = valueMeta.current;
+    let control;
+    if (valueMeta.type === "boolean") {
+      control = document.createElement("input");
+      control.type = "checkbox";
+      control.checked = Boolean(current);
+      control.disabled = immutable;
+      control.addEventListener("change", () => {
+        setSettingValue(settingNode, valueIndex, control.checked);
+      });
+    } else if (valueMeta.type === "enum") {
+      control = document.createElement("select");
+      const options = Array.isArray(valueMeta.options) ? valueMeta.options : [];
+      options.forEach((option) => {
+        const optionEl = document.createElement("option");
+        optionEl.value = String(option);
+        optionEl.textContent = String(option);
+        control.appendChild(optionEl);
+      });
+      control.value = String(current ?? "");
+      control.disabled = immutable;
+      control.addEventListener("change", () => {
+        setSettingValue(settingNode, valueIndex, control.value);
+      });
+    } else {
+      control = document.createElement("input");
+      control.type = valueMeta.type === "integer" || valueMeta.type === "float" ? "number" : "text";
+      if (valueMeta.type === "integer" || valueMeta.type === "float") {
+        if (Number.isFinite(valueMeta.min)) {
+          control.min = String(valueMeta.min);
+        }
+        if (Number.isFinite(valueMeta.max)) {
+          control.max = String(valueMeta.max);
+        }
+        if (Number.isFinite(valueMeta.step)) {
+          control.step = String(valueMeta.step);
+        } else if (valueMeta.type === "float") {
+          control.step = "any";
+        }
+      }
+      if (Number.isFinite(valueMeta.maxLength)) {
+        control.maxLength = Number(valueMeta.maxLength);
+      }
+      control.value = current ?? "";
+      control.readOnly = immutable;
+      control.disabled = immutable;
+      control.addEventListener("change", () => {
+        setSettingValue(settingNode, valueIndex, control.value);
+      });
+    }
+
+    wrapper.appendChild(control);
+
+    if (settingNode.warning) {
+      const warningEl = document.createElement("div");
+      warningEl.className = "settings-field-warning";
+      warningEl.textContent = settingNode.warning;
+      wrapper.appendChild(warningEl);
+    }
+    if (errorText) {
+      const errorEl = document.createElement("div");
+      errorEl.className = "settings-field-error";
+      errorEl.textContent = errorText;
+      wrapper.appendChild(errorEl);
+    }
+    return wrapper;
+  }
+
+  function renderSettingNode(parentEl, node) {
+    if (node.kind === "group") {
+      const section = document.createElement("section");
+      section.className = node.path?.length > 1 ? "settings-subgroup" : "settings-group";
+      const heading = document.createElement(node.path?.length > 1 ? "h4" : "h3");
+      heading.textContent = node.label || node.id;
+      section.appendChild(heading);
+      (node.children || []).forEach((child) => renderSettingNode(section, child));
+      parentEl.appendChild(section);
+      return;
+    }
+
+    const fields = document.createElement("div");
+    fields.className = "settings-fields";
+    const values = Array.isArray(node.values) ? node.values : [];
+    values.forEach((valueMeta, valueIndex) => {
+      const labelEl = document.createElement("div");
+      labelEl.className = "settings-field-label";
+      const labelStrong = document.createElement("strong");
+      labelStrong.textContent = values.length > 1 ? `${node.label} ${valueIndex + 1}` : node.label;
+      labelEl.appendChild(labelStrong);
+      if (node.doc) {
+        const docEl = document.createElement("div");
+        docEl.className = "settings-field-doc";
+        docEl.textContent = node.doc;
+        labelEl.appendChild(docEl);
+      }
+      if (node.volatile) {
+        const volatileEl = document.createElement("div");
+        volatileEl.className = "settings-field-doc";
+        volatileEl.textContent = "Volatile setting";
+        labelEl.appendChild(volatileEl);
+      }
+      fields.appendChild(labelEl);
+      fields.appendChild(renderSettingControl(node, valueMeta, valueIndex));
+    });
+    parentEl.appendChild(fields);
+  }
+
+  function renderSettingsPanel() {
+    updateSettingsSummary();
+    updateViewButtons();
+    if (!settingsTabsEl || !settingsContentEl || !settingsEmptyEl) {
+      return;
+    }
+
+    settingsTabsEl.innerHTML = "";
+    settingsContentEl.innerHTML = "";
+
+    if (!radioHasSettings()) {
+      settingsEmptyEl.hidden = false;
+      settingsContentEl.hidden = true;
+      return;
+    }
+
+    settingsEmptyEl.hidden = true;
+    settingsContentEl.hidden = false;
+
+    const activeGroup = findSettingsTabNode(activeSettingsTab) || radioSettingsState.groups[0];
+    if (!activeGroup) {
+      settingsEmptyEl.hidden = false;
+      settingsContentEl.hidden = true;
+      return;
+    }
+    activeSettingsTab = activeGroup.id;
+
+    radioSettingsState.groups.forEach((group) => {
+      const tabButton = document.createElement("button");
+      tabButton.type = "button";
+      tabButton.className = "settings-tab";
+      tabButton.textContent = group.label || group.id;
+      tabButton.classList.toggle("is-active", group.id === activeSettingsTab);
+      tabButton.classList.toggle("has-invalid", tabHasInvalidSettings(group));
+      tabButton.addEventListener("click", () => {
+        activeSettingsTab = group.id;
+        renderSettingsPanel();
+      });
+      settingsTabsEl.appendChild(tabButton);
+    });
+    renderSettingNode(settingsContentEl, activeGroup);
+  }
+
   // Parse CSV through Python runtime and refresh table rows and status text.
   async function loadCsvText(csvText) {
     setStatus("Parsing CSV with CHIRP Python...");
@@ -1165,7 +1605,10 @@ export function createUiController() {
       module: selectedRadio.module,
       className: selectedRadio.className,
       rows: currentRows,
+      settings: radioSettingsState.groups,
     });
+    radioSettingsState.groups = cloneSettingsGroups(result.settings || radioSettingsState.groups);
+    renderSettingsPanel();
     const bytes = base64ToBytes(result.imageBase64 || "");
     const fileName = buildBinaryCodeplugFileName(
       result.vendor || selectedRadio.vendor,
@@ -1187,6 +1630,12 @@ export function createUiController() {
       );
     }
     await loadSelectedRadioMetadata();
+    radioSettingsState = {
+      supported: Array.isArray(loaded.settings) && loaded.settings.length > 0,
+      groups: cloneSettingsGroups(loaded.settings || []),
+    };
+    clearInvalidSettings();
+    activeSettingsTab = radioSettingsState.groups[0]?.id || "";
     currentHeaders = radioMetadata.headers?.length
       ? radioMetadata.headers
       : (loaded.headers || currentHeaders);
@@ -1194,6 +1643,8 @@ export function createUiController() {
     clearInvalidHighlights();
     resetRowSelection();
     renderTable();
+    updateViewButtons();
+    renderSettingsPanel();
     setStatus(
       `Loaded binary codeplug for ${loaded.vendor || selectedRadio.vendor} ${loaded.model || selectedRadio.model}.`,
     );
@@ -1203,11 +1654,36 @@ export function createUiController() {
     if (!selectedRadio) {
       return { valid: false, issues: [{ rowIndex: -1, column: "", message: "No radio selected." }] };
     }
-    const result = await requireRuntimeApi().validateRowsForUpload({
-      rows: currentRows,
-      module: selectedRadio.module,
-      className: selectedRadio.className,
+    const [rowResult, settingsResult] = await Promise.all([
+      requireRuntimeApi().validateRowsForUpload({
+        rows: currentRows,
+        module: selectedRadio.module,
+        className: selectedRadio.className,
+      }),
+      requireRuntimeApi().validateRadioSettings({
+        settings: radioSettingsState.groups,
+        module: selectedRadio.module,
+        className: selectedRadio.className,
+      }),
+    ]);
+    const result = rowResult;
+    const settingsValidation = settingsResult || { valid: true, issues: [], settings: radioSettingsState.groups };
+    radioSettingsState.groups = cloneSettingsGroups(settingsValidation.settings || radioSettingsState.groups);
+    if (!activeSettingsTab || !radioSettingsState.groups.some((group) => group.id === activeSettingsTab)) {
+      activeSettingsTab = radioSettingsState.groups[0]?.id || "";
+    }
+    clearInvalidSettings();
+    (settingsValidation.issues || []).forEach((issue) => {
+      const path = Array.isArray(issue?.path) ? issue.path : [];
+      const valueIndex = Number(issue?.valueIndex || 0);
+      const key = settingKey(path, valueIndex);
+      invalidSettingKeys.add(key);
+      invalidSettingMessages.set(key, String(issue?.message || "Invalid value"));
+      logDebug(
+        `PREFLIGHT INVALID setting=${path.join(".") || "<unknown>"} value=${valueIndex}: ${issue?.message || "Invalid value"}`,
+      );
     });
+    updateSettingsSummary();
     clearInvalidHighlights();
     const issues = Array.isArray(result?.issues) ? result.issues : [];
     for (const issue of issues) {
@@ -1223,9 +1699,10 @@ export function createUiController() {
     if (issues.length > 0) {
       renderTable();
     }
+    renderSettingsPanel();
     return {
-      valid: Boolean(result?.valid),
-      issues,
+      valid: Boolean(result?.valid) && Boolean(settingsValidation?.valid) && invalidSettingKeys.size === 0,
+      issues: [...issues, ...(settingsValidation.issues || [])],
     };
   }
 
@@ -1368,7 +1845,11 @@ export function createUiController() {
       refreshModelOptions();
       persistSelectedRadioCookie();
       clearInvalidHighlights();
-      loadSelectedRadioMetadata()
+      clearInvalidSettings();
+      Promise.all([
+        loadSelectedRadioMetadata(),
+        loadSelectedRadioSettings(),
+      ])
         .then(() => renderTable())
         .catch((error) => reportActionError("Metadata load", error));
     });
@@ -1383,9 +1864,26 @@ export function createUiController() {
       }
       persistSelectedRadioCookie();
       clearInvalidHighlights();
-      loadSelectedRadioMetadata()
+      clearInvalidSettings();
+      Promise.all([
+        loadSelectedRadioMetadata(),
+        loadSelectedRadioSettings(),
+      ])
         .then(() => renderTable())
         .catch((error) => reportActionError("Metadata load", error));
+    });
+
+    viewChannelsEl?.addEventListener("click", () => {
+      setEditorView("channels");
+    });
+
+    viewSettingsEl?.addEventListener("click", () => {
+      if (!radioHasSettings()) {
+        setStatus("Radio-wide settings are not available for the selected radio.");
+        return;
+      }
+      setEditorView("settings");
+      renderSettingsPanel();
     });
 
     serialConnectToggleEl?.addEventListener("click", async () => {
@@ -1477,9 +1975,17 @@ export function createUiController() {
           ? radioMetadata.headers
           : (result.headers || []);
         currentRows = result.rows;
+        radioSettingsState = {
+          supported: Array.isArray(result.settings) && result.settings.length > 0,
+          groups: cloneSettingsGroups(result.settings || []),
+        };
+        activeSettingsTab = radioSettingsState.groups[0]?.id || "";
         clearInvalidHighlights();
+        clearInvalidSettings();
         resetRowSelection();
         renderTable();
+        updateViewButtons();
+        renderSettingsPanel();
         setStatus(`${makeModelLabel(selectedRadio)} download complete (${currentRows.length} channels).`);
         if (result.ident) {
           logSerial(`IDENT ${result.ident}`);
@@ -1502,17 +2008,21 @@ export function createUiController() {
           const count = Array.isArray(preflight.issues) ? preflight.issues.length : 0;
           setStatus(
             count > 0
-              ? `Upload blocked: ${count} invalid value(s) highlighted in red.`
+              ? `Upload blocked: ${count} invalid value(s) highlighted in red in ${currentViewLabel()}.`
               : "Upload blocked: preflight validation failed.",
           );
           return;
         }
         setStatus(`Uploading to ${makeModelLabel(selectedRadio)}...`);
-        await requireRuntimeApi().uploadSelectedRadio({
+        const uploadResult = await requireRuntimeApi().uploadSelectedRadio({
           module: selectedRadio.module,
           className: selectedRadio.className,
           rows: currentRows,
+          settings: radioSettingsState.groups,
         });
+        radioSettingsState.groups = cloneSettingsGroups(uploadResult.settings || radioSettingsState.groups);
+        clearInvalidSettings();
+        renderSettingsPanel();
         setStatus(`${makeModelLabel(selectedRadio)} upload complete.`);
       } catch (error) {
         reportActionError("Upload", error);
@@ -1539,8 +2049,10 @@ export function createUiController() {
       refreshMakeOptions();
       restoreSelectedRadioCookie();
       await loadSelectedRadioMetadata();
+      await loadSelectedRadioSettings();
       setStatus(`Loaded ${radioCatalog.length} radio definitions from CHIRP sources.`);
       await loadCsvText(DEFAULT_SAMPLE_CSV);
+      renderSettingsPanel();
       setSidebarControlsEnabled(true);
     } catch (error) {
       reportActionError("Initialization", error);

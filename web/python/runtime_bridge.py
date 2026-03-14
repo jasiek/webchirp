@@ -12,7 +12,7 @@ import tempfile
 
 sys.path.insert(0, "/webchirp_runtime")
 
-from chirp import chirp_common, directory, errors, memmap
+from chirp import chirp_common, directory, errors, memmap, settings as chirp_settings
 from chirp.drivers.generic_csv import CSVRadio
 from js import (
     fetch_chirp_source,
@@ -453,6 +453,42 @@ def _import_radio_class(module_name: str, class_name: str):
     return getattr(module, class_name)
 
 
+def _driver_cache_key(module_name: str, class_name: str):
+    """Build a stable key for cached image data by selected driver."""
+    return f"{module_name}.{class_name}"
+
+
+def _best_effort_radio_instance(module_name: str, class_name: str, require_cached=False):
+    """Instantiate a radio with cached data when available, otherwise best-effort blank state."""
+    radio_cls = _import_radio_class(module_name, class_name)
+    driver_key = _driver_cache_key(module_name, class_name)
+    base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
+
+    def _fallback_constructor():
+        try:
+            return radio_cls(None)
+        except Exception:
+            return radio_cls("")
+
+    if base_image is not None:
+        radio = radio_cls(memmap.MemoryMapBytes(base_image))
+    elif issubclass(radio_cls, chirp_common.CloneModeRadio):
+        memsize = int(getattr(radio_cls, "_memsize", 0) or 0)
+        if memsize > 0:
+            radio = radio_cls(memmap.MemoryMapBytes(bytes(memsize)))
+        elif require_cached:
+            raise RuntimeUnsupportedError(
+                "No cached radio image for this model. Download from radio first."
+            )
+        else:
+            radio = _fallback_constructor()
+    else:
+        radio = _fallback_constructor()
+
+    radio.status_fn = _status_to_log
+    return radio
+
+
 def _status_to_log(status):
     """Adapt CHIRP status callbacks into debug log lines."""
     msg = getattr(status, "msg", "")
@@ -555,6 +591,162 @@ def _prepare_clone_session(radio_cls):
     )
 
 
+def _setting_path(parts):
+    """Normalize a settings path list into a JSON-safe list of strings."""
+    return [str(part) for part in parts]
+
+
+def _serialize_setting_value(value):
+    """Convert a CHIRP RadioSettingValue into UI-friendly JSON metadata."""
+    current = value.get_value() if value.initialized else None
+    data = {
+        "mutable": bool(value.get_mutable()),
+        "initialized": bool(value.initialized),
+        "current": current,
+    }
+
+    if isinstance(value, chirp_settings.RadioSettingValueBoolean):
+        data["type"] = "boolean"
+    elif isinstance(value, chirp_settings.RadioSettingValueMap):
+        data["type"] = "enum"
+        data["options"] = [str(option) for option in value.get_options()]
+        data["mapped"] = True
+    elif isinstance(value, chirp_settings.RadioSettingValueList):
+        data["type"] = "enum"
+        data["options"] = [str(option) for option in value.get_options()]
+    elif isinstance(value, chirp_settings.RadioSettingValueInteger):
+        data["type"] = "integer"
+        data["min"] = int(value.get_min())
+        data["max"] = int(value.get_max())
+        data["step"] = int(value.get_step())
+    elif isinstance(value, chirp_settings.RadioSettingValueFloat):
+        data["type"] = "float"
+        data["min"] = float(value.get_min())
+        data["max"] = float(value.get_max())
+    elif isinstance(value, chirp_settings.RadioSettingValueString):
+        data["type"] = "string"
+        data["minLength"] = int(value.minlength)
+        data["maxLength"] = int(value.maxlength)
+        data["charset"] = str(getattr(value, "_charset", "") or "")
+        data["autopad"] = bool(value.autopad)
+    else:
+        data["type"] = value.__class__.__name__
+
+    return data
+
+
+def _serialize_setting_node(node, path_parts):
+    """Serialize a CHIRP settings tree node for browser rendering."""
+    if isinstance(node, chirp_settings.RadioSetting):
+        raw_values = node.value if isinstance(node.value, list) else [node.value]
+        values = []
+        all_mutable = True
+        for value_index, value in enumerate(raw_values):
+            serialized = _serialize_setting_value(value)
+            serialized["index"] = int(value_index)
+            values.append(serialized)
+            all_mutable = all_mutable and bool(serialized["mutable"])
+
+        current_value = values[0]["current"] if len(values) == 1 else None
+        warning = node.get_warning(current_value) if len(values) == 1 else None
+        return {
+            "kind": "setting",
+            "id": str(node.get_name()),
+            "label": str(node.get_shortname()),
+            "doc": getattr(node, "__doc__", None),
+            "path": _setting_path(path_parts + [node.get_name()]),
+            "mutable": bool(all_mutable),
+            "volatile": bool(getattr(node, "volatile", False)),
+            "warning": warning,
+            "values": values,
+        }
+
+    children = [_serialize_setting_node(child, path_parts + [node.get_name()]) for child in node]
+    return {
+        "kind": "group",
+        "id": str(node.get_name()),
+        "label": str(node.get_shortname()),
+        "doc": getattr(node, "__doc__", None),
+        "path": _setting_path(path_parts + [node.get_name()]),
+        "children": children,
+    }
+
+
+def _serialize_radio_settings(settings_tree):
+    """Serialize the top-level RadioSettings collection."""
+    return [_serialize_setting_node(group, []) for group in settings_tree]
+
+
+def _apply_setting_value(setting, value_index, next_value):
+    """Assign one serialized setting value onto the corresponding CHIRP setting."""
+    target = setting[value_index] if len(setting) > 1 else setting.value
+    target.set_value(next_value)
+
+
+def _apply_serialized_settings(actual_container, payload_children, issues, prefix):
+    """Apply serialized UI settings onto a fresh CHIRP settings tree."""
+    children = payload_children or []
+    for payload in children:
+        child_id = str(payload.get("id", ""))
+        if not child_id:
+            continue
+        try:
+            actual_child = actual_container[child_id]
+        except Exception:
+            issues.append(
+                {
+                    "path": _setting_path(prefix + [child_id]),
+                    "valueIndex": 0,
+                    "message": "Setting is not available for this radio image.",
+                }
+            )
+            continue
+
+        path = prefix + [child_id]
+        if payload.get("kind") == "group":
+            _apply_serialized_settings(actual_child, payload.get("children") or [], issues, path)
+            continue
+
+        if not isinstance(actual_child, chirp_settings.RadioSetting):
+            issues.append(
+                {
+                    "path": _setting_path(path),
+                    "valueIndex": 0,
+                    "message": "Payload expected a setting but CHIRP returned a group.",
+                }
+            )
+            continue
+
+        payload_values = payload.get("values") or []
+        for value_index, value_payload in enumerate(payload_values):
+            try:
+                _apply_setting_value(actual_child, value_index, value_payload.get("current"))
+            except Exception as exc:
+                issues.append(
+                    {
+                        "path": _setting_path(path),
+                        "valueIndex": int(value_index),
+                        "message": str(exc),
+                    }
+                )
+
+
+def _validate_and_apply_radio_settings(radio, serialized_groups, apply_changes=False):
+    """Validate serialized settings against a fresh CHIRP settings tree."""
+    rf = radio.get_features()
+    if not bool(getattr(rf, "has_settings", False)):
+        return {"valid": True, "issues": [], "settings": []}
+
+    settings_tree = radio.get_settings()
+    issues = []
+    _apply_serialized_settings(settings_tree, serialized_groups, issues, [])
+    if issues:
+        return {"valid": False, "issues": issues, "settings": _serialize_radio_settings(settings_tree)}
+    if apply_changes:
+        radio.set_settings(settings_tree)
+    return {"valid": True, "issues": [], "settings": _serialize_radio_settings(settings_tree)}
+
+
 def _download_selected_radio_sync(module_name: str, class_name: str):
     """Run selected driver's sync_in and return rows + cached image state."""
     radio_cls = _import_radio_class(module_name, class_name)
@@ -563,23 +755,25 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
     _prepare_clone_session(radio_cls)
     radio = _create_radio_for_serial(radio_cls)
     radio.sync_in()
-    driver_key = f"{module_name}.{class_name}"
+    driver_key = _driver_cache_key(module_name, class_name)
     LAST_IMAGE_BY_DRIVER[driver_key] = (
         radio.get_mmap().get_byte_compatible().get_packed()
     )
 
     rows = _radio_rows_from_instance(radio)
+    settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
         "rows": rows,
         "headers": CSV_HEADERS,
+        "settings": settings_result["settings"],
     }
 
 
-def _upload_selected_radio_sync(module_name: str, class_name: str, rows):
+def _upload_selected_radio_sync(module_name: str, class_name: str, rows, settings_groups=None):
     """Apply rows onto cached image and run selected driver's sync_out."""
     radio_cls = _import_radio_class(module_name, class_name)
     _ensure_clone_mode_radio(radio_cls)
-    driver_key = f"{module_name}.{class_name}"
+    driver_key = _driver_cache_key(module_name, class_name)
     base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
     if not base_image:
         raise RuntimeUnsupportedError(
@@ -593,12 +787,17 @@ def _upload_selected_radio_sync(module_name: str, class_name: str, rows):
     pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
     radio.set_pipe(pipe)
     _apply_rows_to_radio_instance(radio, rows)
+    settings_result = _validate_and_apply_radio_settings(
+        radio, settings_groups or [], apply_changes=True
+    )
+    if not settings_result["valid"]:
+        raise RuntimeUnsupportedError("Radio settings validation failed before upload")
     _prepare_clone_session(radio_cls)
     radio.sync_out()
     LAST_IMAGE_BY_DRIVER[driver_key] = (
         radio.get_mmap().get_byte_compatible().get_packed()
     )
-    return {"uploaded": True}
+    return {"uploaded": True, "settings": settings_result["settings"]}
 
 
 async def download_selected_radio(module_name: str, class_name: str):
@@ -606,14 +805,14 @@ async def download_selected_radio(module_name: str, class_name: str):
     return _download_selected_radio_sync(module_name, class_name)
 
 
-async def upload_selected_radio(module_name: str, class_name: str, rows):
+async def upload_selected_radio(module_name: str, class_name: str, rows, settings_groups=None):
     """Async wrapper for selected-radio upload operation."""
-    return _upload_selected_radio_sync(module_name, class_name, rows)
+    return _upload_selected_radio_sync(module_name, class_name, rows, settings_groups)
 
 
 def get_cached_image_base64(module_name: str, class_name: str):
     """Return cached clone image bytes for a driver as base64 text."""
-    driver_key = f"{module_name}.{class_name}"
+    driver_key = _driver_cache_key(module_name, class_name)
     image = LAST_IMAGE_BY_DRIVER.get(driver_key)
     if not image:
         raise RuntimeUnsupportedError(
@@ -644,18 +843,18 @@ def upload_image_base64(module_name: str, class_name: str, image_b64: str):
     _prepare_clone_session(radio_cls)
     radio.sync_out()
 
-    driver_key = f"{module_name}.{class_name}"
+    driver_key = _driver_cache_key(module_name, class_name)
     LAST_IMAGE_BY_DRIVER[driver_key] = (
         radio.get_mmap().get_byte_compatible().get_packed()
     )
     return {"uploaded": True, "size": len(raw_image)}
 
 
-def export_image_base64(module_name: str, class_name: str, rows):
+def export_image_base64(module_name: str, class_name: str, rows, settings_groups=None):
     """Build a CHIRP .img payload from rows for selected clone-mode driver."""
     radio_cls = _import_radio_class(module_name, class_name)
     _ensure_clone_mode_radio(radio_cls)
-    driver_key = f"{module_name}.{class_name}"
+    driver_key = _driver_cache_key(module_name, class_name)
     base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
     if not base_image:
         memsize = int(getattr(radio_cls, "_memsize", 0) or 0)
@@ -667,6 +866,11 @@ def export_image_base64(module_name: str, class_name: str, rows):
 
     radio = radio_cls(memmap.MemoryMapBytes(base_image))
     _apply_rows_to_radio_instance(radio, rows or [])
+    settings_result = _validate_and_apply_radio_settings(
+        radio, settings_groups or [], apply_changes=True
+    )
+    if not settings_result["valid"]:
+        raise RuntimeUnsupportedError("Radio settings validation failed before export")
     packed = radio.get_mmap().get_byte_compatible().get_packed()
     LAST_IMAGE_BY_DRIVER[driver_key] = bytes(packed)
     metadata_blob = radio._make_metadata()
@@ -677,6 +881,7 @@ def export_image_base64(module_name: str, class_name: str, rows):
         "vendor": str(getattr(radio_cls, "VENDOR", "")),
         "model": str(getattr(radio_cls, "MODEL", "")),
         "variant": str(getattr(radio_cls, "VARIANT", "")),
+        "settings": settings_result["settings"],
     }
 
 
@@ -709,9 +914,10 @@ def load_image_base64(image_b64: str):
     base_cls = getattr(radio.__class__, "_orig_rclass", radio.__class__)
     module_short = str(base_cls.__module__).rsplit(".", 1)[-1]
     class_name = str(base_cls.__name__)
-    driver_key = f"{module_short}.{class_name}"
+    driver_key = _driver_cache_key(module_short, class_name)
     LAST_IMAGE_BY_DRIVER[driver_key] = radio.get_mmap().get_byte_compatible().get_packed()
     rows = _radio_rows_from_instance(radio)
+    settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
         "module": module_short,
         "className": class_name,
@@ -720,6 +926,7 @@ def load_image_base64(image_b64: str):
         "variant": str(getattr(radio.__class__, "VARIANT", "")),
         "rows": rows,
         "headers": CSV_HEADERS,
+        "settings": settings_result["settings"],
     }
 
 
@@ -843,4 +1050,28 @@ def get_radio_column_metadata(module_name: str, class_name: str):
     return {
         "headers": headers,
         "columns": col,
+    }
+
+
+def get_radio_settings(module_name: str, class_name: str):
+    """Build CHIRP settings-group metadata for the UI when supported."""
+    radio = _best_effort_radio_instance(module_name, class_name)
+    rf = radio.get_features()
+    if not bool(getattr(rf, "has_settings", False)):
+        return {"supported": False, "groups": []}
+    settings_tree = radio.get_settings()
+    return {
+        "supported": True,
+        "groups": _serialize_radio_settings(settings_tree),
+    }
+
+
+def validate_radio_settings(module_name: str, class_name: str, settings_groups):
+    """Validate serialized radio settings using CHIRP's typed value objects."""
+    radio = _best_effort_radio_instance(module_name, class_name, require_cached=False)
+    result = _validate_and_apply_radio_settings(radio, settings_groups or [], apply_changes=False)
+    return {
+        "valid": bool(result["valid"]),
+        "issues": result["issues"],
+        "settings": result["settings"],
     }
