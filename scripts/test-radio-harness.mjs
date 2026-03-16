@@ -8,6 +8,16 @@ import {
   seedPyodideRuntime,
 } from "../web/js/python-sources.mjs";
 
+function decodeBase64ToBytes(base64Text) {
+  return Uint8Array.from(Buffer.from(String(base64Text || ""), "base64"));
+}
+
+function encodeBytesToBase64(bytesLike) {
+  return Buffer.from(Array.from(bytesLike || []).map((value) => Number(value) & 0xff)).toString(
+    "base64",
+  );
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
@@ -382,6 +392,48 @@ json.dumps({
         _sel_class: className,
         _rows_json: JSON.stringify(normalizedRows),
         _settings_json: JSON.stringify(normalizedSettings),
+      },
+    );
+  }
+
+  async readCodeplugBinary(moduleName, className) {
+    const result = await this.runPythonJson(
+      "json.dumps(get_cached_image_base64(_sel_module, _sel_class))",
+      { _sel_module: moduleName, _sel_class: className },
+    );
+    return {
+      ...result,
+      image: decodeBase64ToBytes(result.imageBase64),
+    };
+  }
+
+  async exportCodeplugBinary(moduleName, className, rows, settingsGroups = []) {
+    const codeplug =
+      rows && typeof rows === "object" && !Array.isArray(rows) ? rows : null;
+    const normalizedRows = codeplug ? codeplug.rows || [] : rows || [];
+    const normalizedSettings = codeplug ? codeplug.settings || [] : settingsGroups || [];
+    const result = await this.runPythonJson(
+      "json.dumps(export_image_base64(_sel_module, _sel_class, json.loads(_rows_json), json.loads(_settings_json)))",
+      {
+        _sel_module: moduleName,
+        _sel_class: className,
+        _rows_json: JSON.stringify(normalizedRows),
+        _settings_json: JSON.stringify(normalizedSettings),
+      },
+    );
+    return {
+      ...result,
+      image: decodeBase64ToBytes(result.imageBase64),
+    };
+  }
+
+  async writeCodeplugBinary(moduleName, className, imageBytes) {
+    return this.runPythonJson(
+      "json.dumps(upload_image_base64(_sel_module, _sel_class, _image_b64))",
+      {
+        _sel_module: moduleName,
+        _sel_class: className,
+        _image_b64: encodeBytesToBase64(imageBytes),
       },
     );
   }
