@@ -427,15 +427,32 @@ json.dumps({
     };
   }
 
-  async writeCodeplugBinary(moduleName, className, imageBytes) {
-    return this.runPythonJson(
-      "json.dumps(upload_image_base64(_sel_module, _sel_class, _image_b64))",
+  async loadCodeplugBinary(imageBytes) {
+    const result = await this.runPythonJson(
+      "json.dumps(load_image_base64(_image_b64))",
       {
-        _sel_module: moduleName,
-        _sel_class: className,
         _image_b64: encodeBytesToBase64(imageBytes),
       },
     );
+    return {
+      ...result,
+      image: Uint8Array.from(imageBytes || []),
+    };
+  }
+
+  async writeCodeplugBinary(moduleName, className, imageBytes) {
+    const loaded = await this.loadCodeplugBinary(imageBytes);
+    if (String(loaded.module || "") !== String(moduleName || "")) {
+      throw new Error(
+        `Binary image driver mismatch: expected module ${moduleName}, got ${loaded.module || "<unknown>"}`,
+      );
+    }
+    if (String(loaded.className || "") !== String(className || "")) {
+      throw new Error(
+        `Binary image driver mismatch: expected class ${className}, got ${loaded.className || "<unknown>"}`,
+      );
+    }
+    return this.writeCodeplug(moduleName, className, loaded);
   }
 }
 

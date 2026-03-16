@@ -13,3 +13,4 @@
 ## 2026-03-16
 
 - Direct channel-to-codeplug writes in `web/python/runtime_bridge.py` normalized the CSV `Power` cell but still fed the row through `chirp_common.Memory.really_from_csv()`, which ignores the `Power` column entirely. On radios like `uv5r.BaofengUV5R`, that leaves `mem.power` unset and `set_memory()` falls back to index `0`, which is `High`; a live repro on `/dev/cu.usbserial-110` confirmed that changing channel 0 from `High` to `Low` uploaded successfully but read back as `High`.
+- The runtime bridge already exposes enough generic primitives for an agent-facing hardware CLI without adding new Python APIs: `download_selected_radio()` returns rows/settings/CSV, `export_image_base64()` builds CHIRP `.img` payloads, and `load_image_base64()` plus `upload_selected_radio()` cover the corresponding write path.

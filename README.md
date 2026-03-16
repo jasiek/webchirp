@@ -41,16 +41,18 @@ For radio cloning:
 3. Click `Download Radio` to read channels into the table.
 4. Edit values and click `Upload Radio` to write back.
 
-## Hardware E2E CLI test (read then write same codeplug)
+## Command-line codeplug read/write
 
-You can run a command-line end-to-end clone test against a real radio using the
-same Python runtime bridge (`web/python/runtime_bridge.py`) and filesystem CHIRP
-source provider used by Node tests.
+You can read or write a real-radio codeplug from the command line using the same
+runtime bridge (`web/python/runtime_bridge.py`) and local CHIRP source loading
+path used by the Node tests. This is the intended agent-facing CLI for scripted
+radio access.
 
 From `/Users/jps/github/webchirp`:
 
 ```bash
-npm run test:hw -- --port /dev/ttyUSB0 --module uv5r --class BaofengUV5R
+npm run radio:read -- --port /dev/ttyUSB0 --module uv5r --class BaofengUV5R --format json --output /tmp/uv5r.json
+npm run radio:write -- --port /dev/ttyUSB0 --module uv5r --class BaofengUV5R --format json --input /tmp/uv5r.json
 ```
 
 Optional flags:
@@ -58,13 +60,29 @@ Optional flags:
 - `--baud 9600` to override the driver's default baud.
 - `--chirp-dir /path/to/chirp` (or `WEBCHIRP_CHIRP_DIR=/path/to/chirp`) to load CHIRP sources from a custom directory.
 - `--serial-timeout-s 2.0` to override serial read timeout used by the runtime bridge.
-- `--reboot-delay-ms 5000` to wait between download and upload (useful when radios need reboot time after programming mode).
+
+Supported formats:
+
+- `--format json`: read/write a JSON object containing `rows`, `headers`, `csvText`, `settings`, and binary `imageBase64`.
+- `--format csv`: read/write CHIRP-normalized CSV text.
+- `--format img`: read/write CHIRP `.img` clone files.
 
 The flow is:
 1. Open serial on the selected port.
-2. Run `download_selected_radio(module, class)` (caches image in runtime).
-3. Run `upload_selected_radio(module, class, downloaded_rows)` to write back unchanged data.
+2. `radio:read` runs `download_selected_radio(module, class)` and caches the clone image in runtime before writing the requested output format.
+3. `radio:write` reads JSON/CSV/IMG input and uploads it through `upload_selected_radio(...)`; `.img` input is first loaded through CHIRP image detection so the cached image and selected driver stay aligned.
 4. Disconnect serial.
+
+## Hardware E2E CLI test (read then write same codeplug)
+
+The older live smoke test still exists:
+
+```bash
+npm run test:hw -- --port /dev/ttyUSB0 --module uv5r --class BaofengUV5R
+```
+
+Use `radio:read` / `radio:write` for deterministic agent workflows and
+format-specific codeplug files.
 
 ## Architecture
 

@@ -22,6 +22,12 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   - Upload should use cached image and fail clearly if no cached image exists.
   - Prepare serial session before clone operations (buffer clear, control lines, settle delay).
 
+## Agent CLI
+- For agent-operated real-radio reads, use `npm run radio:read -- --port <path> --module <driver_module> --class <driver_class> --format json|csv|img --output <file>`.
+- For agent-operated real-radio writes, use `npm run radio:write -- --port <path> --module <driver_module> --class <driver_class> --format json|csv|img --input <file>`.
+- Prefer `--format json` when the workflow needs rows, settings, normalized CSV, and binary image in one file.
+- `--format img` means a CHIRP `.img` clone file and is clone-image only; expect it to fail clearly on radios that do not expose clone-mode image workflows.
+
 ## UI Expectations
 - Make/model options must be sourced from CHIRP driver sources.
 - Session status should be concise; detailed diagnostics belong in Debug Output.
