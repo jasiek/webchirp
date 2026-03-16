@@ -812,10 +812,12 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
     )
 
     rows = _radio_rows_from_instance(radio)
+    csv_text = normalize_rows(rows, module_name, class_name)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
         "rows": rows,
         "headers": CSV_HEADERS,
+        "csvText": csv_text,
         "settings": settings_result["settings"],
     }
 
