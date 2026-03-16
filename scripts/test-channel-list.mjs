@@ -224,12 +224,14 @@ _radio = _radio_cls(memmap.MemoryMapBytes(bytes(_size)))
 _apply_rows_to_radio_instance(_radio, _rows)
 _roundtrip = _radio_rows_from_instance(_radio)
 _locations = sorted(int(_r.get("Location", 0) or 0) for _r in _roundtrip)
+_powers = {str(_r.get("Location", "")): str(_r.get("Power", "")) for _r in _roundtrip}
 _image = _radio.get_mmap().get_byte_compatible().get_packed()
 json.dumps({
     "memorySize": _size,
     "imageSize": len(_image),
     "rowCount": len(_roundtrip),
     "locations": _locations,
+    "powers": _powers,
 })
       `,
       {
@@ -245,6 +247,9 @@ json.dumps({
       result.locations,
       rows.map((row) => Number(row.Location)),
     );
+    for (const row of rows) {
+      assert.equal(result.powers[row.Location], row.Power);
+    }
   });
 
   await t.test("preflight validator returns row+column issues for invalid values", async () => {

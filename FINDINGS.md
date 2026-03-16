@@ -9,3 +9,7 @@
 - Radio-settings validation was replaying every serialized value onto a fresh CHIRP settings tree before upload, including immutable fields that the UI correctly disabled. Drivers can reject those no-op assignments with `This value is not mutable`, so bridge-side apply logic must skip non-mutable CHIRP values entirely.
 - Vendored CHIRP's `RadioSettingValueFloat.get_max()` currently returns `None` because the method body has no `return`. Runtime code that serializes float setting bounds must tolerate that upstream defect and fall back to the instance `_max` field.
 - `webchirp-hw-*` temp directories were created by older real-radio CLI test infrastructure in commit `1f820a5`, but that code was removed in `b456a75`. The remaining `.gitignore` entry was stale residue; current tracked code no longer creates repo-root hardware temp directories.
+
+## 2026-03-16
+
+- Direct channel-to-codeplug writes in `web/python/runtime_bridge.py` normalized the CSV `Power` cell but still fed the row through `chirp_common.Memory.really_from_csv()`, which ignores the `Power` column entirely. On radios like `uv5r.BaofengUV5R`, that leaves `mem.power` unset and `set_memory()` falls back to index `0`, which is `High`; a live repro on `/dev/cu.usbserial-110` confirmed that changing channel 0 from `High` to `Low` uploaded successfully but read back as `High`.

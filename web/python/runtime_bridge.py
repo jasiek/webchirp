@@ -548,7 +548,12 @@ def _radio_rows_from_instance(radio):
 
 def _apply_rows_to_radio_instance(radio, rows, module_name="", class_name=""):
     """Apply editable rows to a radio instance and fail on invalid channel writes."""
+    if radio and (not module_name or not class_name):
+        radio_cls = radio.__class__
+        module_name = module_name or str(getattr(radio_cls, "__module__", "")).split(".")[-1]
+        class_name = class_name or str(getattr(radio_cls, "__name__", ""))
     power_map, default_power = _power_label_map_for_radio(module_name, class_name)
+    power_idx = CSV_HEADERS.index("Power")
     valid_numbers = set(_iter_memory_numbers(radio))
     seen_numbers = set()
     for row in rows:
@@ -570,12 +575,12 @@ def _apply_rows_to_radio_instance(radio, rows, module_name="", class_name=""):
         vals = [str(row.get(h, "") or "") for h in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
         vals[0] = str(number)
-        power_idx = CSV_HEADERS.index("Power")
         vals[power_idx] = _normalize_power_value(
             vals[power_idx], power_map, default_power
         )
         mem = chirp_common.Memory()
         mem.really_from_csv(vals)
+        mem.power = chirp_common.parse_power(vals[power_idx]) if vals[power_idx] else None
         mem.number = number
         if not mem.mode:
             mem.mode = "FM"
