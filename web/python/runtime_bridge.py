@@ -203,7 +203,7 @@ def parse_csv(csv_text: str):
 def _power_label_map_for_radio(module_name: str, class_name: str):
     """Map radio power labels (e.g., High) to CSV power specs (e.g., 4.0W)."""
     if not module_name or not class_name:
-        return {}
+        return {}, ""
     try:
         radio_cls = _import_radio_class(module_name, class_name)
         try:
@@ -213,7 +213,7 @@ def _power_label_map_for_radio(module_name: str, class_name: str):
         rf = radio.get_features()
         levels = getattr(rf, "valid_power_levels", None) or []
     except Exception:
-        return {}
+        return {}, ""
 
     mapped = {}
     default_power = ""
@@ -546,8 +546,9 @@ def _radio_rows_from_instance(radio):
     return rows
 
 
-def _apply_rows_to_radio_instance(radio, rows):
+def _apply_rows_to_radio_instance(radio, rows, module_name="", class_name=""):
     """Apply editable rows to a radio instance and fail on invalid channel writes."""
+    power_map, default_power = _power_label_map_for_radio(module_name, class_name)
     valid_numbers = set(_iter_memory_numbers(radio))
     seen_numbers = set()
     for row in rows:
@@ -569,6 +570,10 @@ def _apply_rows_to_radio_instance(radio, rows):
         vals = [str(row.get(h, "") or "") for h in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
         vals[0] = str(number)
+        power_idx = CSV_HEADERS.index("Power")
+        vals[power_idx] = _normalize_power_value(
+            vals[power_idx], power_map, default_power
+        )
         mem = chirp_common.Memory()
         mem.really_from_csv(vals)
         mem.number = number
@@ -827,7 +832,7 @@ def _upload_selected_radio_sync(module_name: str, class_name: str, rows, setting
     pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
     pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
     radio.set_pipe(pipe)
-    _apply_rows_to_radio_instance(radio, rows)
+    _apply_rows_to_radio_instance(radio, rows, module_name, class_name)
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
     )
@@ -906,7 +911,7 @@ def export_image_base64(module_name: str, class_name: str, rows, settings_groups
         base_image = bytes(memsize)
 
     radio = radio_cls(memmap.MemoryMapBytes(base_image))
-    _apply_rows_to_radio_instance(radio, rows or [])
+    _apply_rows_to_radio_instance(radio, rows or [], module_name, class_name)
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
     )
