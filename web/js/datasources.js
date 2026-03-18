@@ -179,6 +179,10 @@ export function buildFrsRows({ createBlankRow, setRowValue, findEnumOption }) {
     if (modeValue) {
       setRowValue(row, "Mode", modeValue);
     }
+    const powerValue = findEnumOption("Power", ["0.5W", "500mW", "Low"], false);
+    if (powerValue) {
+      setRowValue(row, "Power", powerValue);
+    }
     return row;
   });
 }
