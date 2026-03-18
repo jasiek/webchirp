@@ -523,7 +523,7 @@ button:not(:disabled):hover {
   top: calc(100% + 0.25rem);
   left: 0;
   z-index: 20;
-  min-width: 12rem;
+  min-width: 24rem;
   padding: 0.25rem;
   border: 1px solid var(--border);
   border-radius: 4px;
