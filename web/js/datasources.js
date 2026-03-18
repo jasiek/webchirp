@@ -2,6 +2,30 @@ const PMR446_FREQUENCIES_MHZ = Array.from(
   { length: 16 },
   (_, index) => (446.00625 + (index * 0.0125)).toFixed(5),
 );
+const FRS_FREQUENCIES_MHZ = [
+  "462.56250",
+  "462.58750",
+  "462.61250",
+  "462.63750",
+  "462.66250",
+  "462.68750",
+  "462.71250",
+  "467.56250",
+  "467.58750",
+  "467.61250",
+  "467.63750",
+  "467.66250",
+  "467.68750",
+  "467.71250",
+  "462.55000",
+  "462.57500",
+  "462.60000",
+  "462.62500",
+  "462.65000",
+  "462.67500",
+  "462.70000",
+  "462.72500",
+];
 
 const PRZEMIENNIKI_API_URL = "https://api.codeplug.org/przemienniki";
 const PRZEMIENNIKI_META_URL = "https://api.codeplug.org/przemienniki/meta";
@@ -137,6 +161,23 @@ export function buildPmr446Rows({ createBlankRow, setRowValue, findEnumOption })
     const powerValue = findEnumOption("Power", ["0.5W", "500mW", "Low"], false);
     if (powerValue) {
       setRowValue(row, "Power", powerValue);
+    }
+    return row;
+  });
+}
+
+export function buildFrsRows({ createBlankRow, setRowValue, findEnumOption }) {
+  return FRS_FREQUENCIES_MHZ.map((frequency, idx) => {
+    const row = createBlankRow();
+    setRowValue(row, "Name", `FRS ${idx + 1}`);
+    setRowValue(row, "Frequency", frequency);
+    setRowValue(row, "Duplex", "");
+    setRowValue(row, "Offset", "0.000000");
+    setRowValue(row, "Tone", "");
+    setRowValue(row, "CrossMode", "Tone->Tone");
+    const modeValue = findEnumOption("Mode", ["NFM", "FMN", "FM"], false);
+    if (modeValue) {
+      setRowValue(row, "Mode", modeValue);
     }
     return row;
   });
