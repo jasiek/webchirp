@@ -1,4 +1,5 @@
 import {
+  buildGmrsRows,
   buildFrsRows,
   PRZEMIENNIKI_API_URL,
   PRZEMIENNIKI_META_URL,
@@ -40,6 +41,7 @@ export function createUiController() {
   const channelRemoveEl = document.querySelector("#channel-remove");
   const channelMenuToggleEl = document.querySelector("#channel-menu-toggle");
   const channelMenuPopupEl = document.querySelector("#channel-menu-popup");
+  const channelAddGmrsEl = document.querySelector("#channel-add-gmrs");
   const channelAddFrsEl = document.querySelector("#channel-add-frs");
   const channelAddPmr446El = document.querySelector("#channel-add-pmr446");
   const channelImportPrzemiennikiEl = document.querySelector("#channel-import-przemienniki");
@@ -1114,6 +1116,19 @@ export function createUiController() {
     insertRowsAtSelectionOrEnd(rowsToInsert, "FRS");
   }
 
+  function addGmrsChannels() {
+    if (!currentHeaders.length) {
+      setStatus("No channel schema loaded yet.");
+      return;
+    }
+    const rowsToInsert = buildGmrsRows({
+      createBlankRow: createBlankChannelRow,
+      setRowValue: setRowValueIfPresent,
+      findEnumOption,
+    });
+    insertRowsAtSelectionOrEnd(rowsToInsert, "GMRS");
+  }
+
   function insertRowsAtSelectionOrEnd(rowsToInsert, label) {
     if (!currentHeaders.length) {
       setStatus("No channel schema loaded yet.");
@@ -1798,6 +1813,10 @@ export function createUiController() {
     channelMenuToggleEl?.addEventListener("click", (event) => {
       event.stopPropagation();
       toggleChannelMenu();
+    });
+    channelAddGmrsEl?.addEventListener("click", () => {
+      setChannelMenuOpen(false);
+      addGmrsChannels();
     });
     channelAddFrsEl?.addEventListener("click", () => {
       setChannelMenuOpen(false);

@@ -60,6 +60,87 @@ function makeChannelRows({ offset = "0.000000", frequencies = PMR446_FREQS_6DP }
   }));
 }
 
+function makeGmrsRows() {
+  return [
+    {
+      Location: "1",
+      Name: "GMRS 1",
+      Frequency: "462.56250",
+      Duplex: "",
+      Offset: "0.000000",
+      Tone: "",
+      rToneFreq: "88.5",
+      cToneFreq: "88.5",
+      DtcsCode: "023",
+      DtcsPolarity: "NN",
+      RxDtcsCode: "023",
+      CrossMode: "Tone->Tone",
+      Mode: "FM",
+      TStep: "12.50",
+      Skip: "",
+      Power: "Low",
+      Comment: "gmrs-test",
+    },
+    {
+      Location: "2",
+      Name: "GMRS 8",
+      Frequency: "467.56250",
+      Duplex: "",
+      Offset: "0.000000",
+      Tone: "",
+      rToneFreq: "88.5",
+      cToneFreq: "88.5",
+      DtcsCode: "023",
+      DtcsPolarity: "NN",
+      RxDtcsCode: "023",
+      CrossMode: "Tone->Tone",
+      Mode: "NFM",
+      TStep: "12.50",
+      Skip: "",
+      Power: "Low",
+      Comment: "gmrs-test",
+    },
+    {
+      Location: "3",
+      Name: "GMRS 15",
+      Frequency: "462.55000",
+      Duplex: "",
+      Offset: "0.000000",
+      Tone: "",
+      rToneFreq: "88.5",
+      cToneFreq: "88.5",
+      DtcsCode: "023",
+      DtcsPolarity: "NN",
+      RxDtcsCode: "023",
+      CrossMode: "Tone->Tone",
+      Mode: "FM",
+      TStep: "12.50",
+      Skip: "",
+      Power: "High",
+      Comment: "gmrs-test",
+    },
+    {
+      Location: "4",
+      Name: "GMRS 15R",
+      Frequency: "462.55000",
+      Duplex: "+",
+      Offset: "5.000000",
+      Tone: "",
+      rToneFreq: "88.5",
+      cToneFreq: "88.5",
+      DtcsCode: "023",
+      DtcsPolarity: "NN",
+      RxDtcsCode: "023",
+      CrossMode: "Tone->Tone",
+      Mode: "FM",
+      TStep: "12.50",
+      Skip: "",
+      Power: "High",
+      Comment: "gmrs-test",
+    },
+  ];
+}
+
 function installJsBridgeStubs() {
   globalThis.serial_open = async () => ({ connected: true, message: "stub open" });
   globalThis.serial_close = async () => ({ connected: false, message: "stub close" });
@@ -250,6 +331,46 @@ json.dumps({
     for (const row of rows) {
       assert.equal(result.powers[row.Location], row.Power);
     }
+  });
+
+  await t.test("GMRS-style rows preserve bandwidth/power/simplex and repeater fields", async () => {
+    const rows = makeGmrsRows();
+    const result = await runPythonJson(
+      pyodide,
+      `
+_rows = json.loads(_rows_json)
+_radio_cls = _import_radio_class(_sel_module, _sel_class)
+_size = int(getattr(_radio_cls, "_memsize", 0) or 0)
+if _size <= 0:
+    raise RuntimeUnsupportedError("Driver does not expose _memsize for offline codeplug test")
+_radio = _radio_cls(memmap.MemoryMapBytes(bytes(_size)))
+_apply_rows_to_radio_instance(_radio, _rows)
+_roundtrip = _radio_rows_from_instance(_radio)
+_by_location = {str(_r.get("Location", "")): _r for _r in _roundtrip}
+json.dumps({
+    "rowCount": len(_roundtrip),
+    "firstMode": str(_by_location["1"].get("Mode", "")),
+    "secondMode": str(_by_location["2"].get("Mode", "")),
+    "thirdPower": str(_by_location["3"].get("Power", "")),
+    "repeaterDuplex": str(_by_location["4"].get("Duplex", "")),
+    "repeaterOffset": str(_by_location["4"].get("Offset", "")),
+    "repeaterPower": str(_by_location["4"].get("Power", "")),
+})
+      `,
+      {
+        _rows_json: JSON.stringify(rows),
+        _sel_module: TEST_RADIO.module,
+        _sel_class: TEST_RADIO.className,
+      },
+    );
+
+    assert.equal(result.rowCount, rows.length);
+    assert.equal(result.firstMode, "FM");
+    assert.equal(result.secondMode, "NFM");
+    assert.equal(result.thirdPower, "High");
+    assert.equal(result.repeaterDuplex, "+");
+    assert.equal(result.repeaterOffset, "5.000000");
+    assert.equal(result.repeaterPower, "High");
   });
 
   await t.test("preflight validator returns row+column issues for invalid values", async () => {

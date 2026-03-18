@@ -26,6 +26,39 @@ const FRS_FREQUENCIES_MHZ = [
   "462.70000",
   "462.72500",
 ];
+const GMRS_CHANNELS = [
+  { name: "GMRS 1", frequency: "462.56250", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 2", frequency: "462.58750", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 3", frequency: "462.61250", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 4", frequency: "462.63750", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 5", frequency: "462.66250", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 6", frequency: "462.68750", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 7", frequency: "462.71250", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 8", frequency: "467.56250", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 9", frequency: "467.58750", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 10", frequency: "467.61250", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 11", frequency: "467.63750", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 12", frequency: "467.66250", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 13", frequency: "467.68750", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 14", frequency: "467.71250", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 15", frequency: "462.55000", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 16", frequency: "462.57500", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 17", frequency: "462.60000", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 18", frequency: "462.62500", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 19", frequency: "462.65000", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 20", frequency: "462.67500", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 21", frequency: "462.70000", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 22", frequency: "462.72500", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  // The table lists 467 MHz repeater inputs; program receive/output frequency plus +5 MHz offset for usable memories.
+  { name: "GMRS 15R", frequency: "462.55000", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 16R", frequency: "462.57500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 17R", frequency: "462.60000", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 18R", frequency: "462.62500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 19R", frequency: "462.65000", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 20R", frequency: "462.67500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 21R", frequency: "462.70000", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 22R", frequency: "462.72500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+];
 
 const PRZEMIENNIKI_API_URL = "https://api.codeplug.org/przemienniki";
 const PRZEMIENNIKI_META_URL = "https://api.codeplug.org/przemienniki/meta";
@@ -180,6 +213,41 @@ export function buildFrsRows({ createBlankRow, setRowValue, findEnumOption }) {
       setRowValue(row, "Mode", modeValue);
     }
     const powerValue = findEnumOption("Power", ["0.5W", "500mW", "Low"], false);
+    if (powerValue) {
+      setRowValue(row, "Power", powerValue);
+    }
+    return row;
+  });
+}
+
+function findBandwidthMode(findEnumOption, bandwidthKhz) {
+  if (bandwidthKhz <= 12.5) {
+    return findEnumOption("Mode", ["NFM", "FMN", "Narrow", "N-FM", "FM"], true);
+  }
+  return findEnumOption("Mode", ["FM", "Wide", "WFM"], true);
+}
+
+function findPowerTier(findEnumOption, powerTier) {
+  if (powerTier === "high") {
+    return findEnumOption("Power", ["High", "50W", "25W", "10W", "8W", "7W"], true);
+  }
+  return findEnumOption("Power", ["Low", "0.5W", "500mW", "2W", "2.0W", "5W", "5.0W"], true);
+}
+
+export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }) {
+  return GMRS_CHANNELS.map((channel) => {
+    const row = createBlankRow();
+    setRowValue(row, "Name", channel.name);
+    setRowValue(row, "Frequency", channel.frequency);
+    setRowValue(row, "Duplex", channel.duplex);
+    setRowValue(row, "Offset", channel.offset);
+    setRowValue(row, "Tone", "");
+    setRowValue(row, "CrossMode", "Tone->Tone");
+    const modeValue = findBandwidthMode(findEnumOption, channel.bandwidthKhz);
+    if (modeValue) {
+      setRowValue(row, "Mode", modeValue);
+    }
+    const powerValue = findPowerTier(findEnumOption, channel.powerTier);
     if (powerValue) {
       setRowValue(row, "Power", powerValue);
     }
