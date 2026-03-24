@@ -3,6 +3,8 @@ import {
   buildFrsRows,
   PRZEMIENNIKI_API_URL,
   PRZEMIENNIKI_META_URL,
+  REPEATERBOOK_API_URL,
+  REPEATERBOOK_META_URL,
   buildPmr446Rows,
   buildPrzemiennikiRows,
   parsePrzemiennikiMetaJson,
@@ -45,8 +47,10 @@ export function createUiController() {
   const channelAddFrsEl = document.querySelector("#channel-add-frs");
   const channelAddPmr446El = document.querySelector("#channel-add-pmr446");
   const channelImportPrzemiennikiEl = document.querySelector("#channel-import-przemienniki");
+  const channelImportRepeaterbookEl = document.querySelector("#channel-import-repeaterbook");
   const przemiennikiModalEl = document.querySelector("#przemienniki-modal");
   const przemiennikiFormEl = document.querySelector("#przemienniki-form");
+  const przemiennikiModalTitleEl = document.querySelector("#przemienniki-modal-title");
   const przemiennikiCountryEl = document.querySelector("#przemienniki-country");
   const przemiennikiBandListEl = document.querySelector("#przemienniki-band-list");
   const przemiennikiModeListEl = document.querySelector("#przemienniki-mode-list");
@@ -79,8 +83,37 @@ export function createUiController() {
   let invalidSettingKeys = new Set();
   let invalidSettingMessages = new Map();
   let przemiennikiDictionaryPromise = null;
+  let repeaterbookDictionaryPromise = null;
+  let activeRepeaterQuerySource = "przemienniki";
   let sidebarControlsEnabled = false;
   let serialConnected = false;
+
+  const repeaterQuerySources = {
+    przemienniki: {
+      key: "przemienniki",
+      label: "przemienniki.net",
+      actionLabel: "Przemienniki",
+      insertLabel: "przemienniki",
+      apiUrl: PRZEMIENNIKI_API_URL,
+      metaUrl: PRZEMIENNIKI_META_URL,
+      getDictionaryPromise: () => przemiennikiDictionaryPromise,
+      setDictionaryPromise: (value) => {
+        przemiennikiDictionaryPromise = value;
+      },
+    },
+    repeaterbook: {
+      key: "repeaterbook",
+      label: "repeaterbook.com",
+      actionLabel: "RepeaterBook",
+      insertLabel: "repeaterbook",
+      apiUrl: REPEATERBOOK_API_URL,
+      metaUrl: REPEATERBOOK_META_URL,
+      getDictionaryPromise: () => repeaterbookDictionaryPromise,
+      setDictionaryPromise: (value) => {
+        repeaterbookDictionaryPromise = value;
+      },
+    },
+  };
 
   if (!Object.getOwnPropertyDescriptor(globalThis, "currentRows")) {
     Object.defineProperty(globalThis, "currentRows", {
@@ -920,6 +953,21 @@ export function createUiController() {
     replaceCheckboxOptions(przemiennikiModeListEl, Array.from(modes || []), "mode");
   }
 
+  function activeRepeaterSourceConfig() {
+    return repeaterQuerySources[activeRepeaterQuerySource] || repeaterQuerySources.przemienniki;
+  }
+
+  function setActiveRepeaterQuerySource(sourceKey) {
+    if (!repeaterQuerySources[sourceKey]) {
+      activeRepeaterQuerySource = "przemienniki";
+    } else {
+      activeRepeaterQuerySource = sourceKey;
+    }
+    if (przemiennikiModalTitleEl) {
+      przemiennikiModalTitleEl.textContent = `Query ${activeRepeaterSourceConfig().label}`;
+    }
+  }
+
   function selectedPrzemiennikiModes() {
     if (!przemiennikiModeListEl) {
       return [];
@@ -938,12 +986,14 @@ export function createUiController() {
       .filter((value) => value.length > 0);
   }
 
-  async function ensurePrzemiennikiDictionaryLoaded() {
-    if (przemiennikiDictionaryPromise) {
-      return przemiennikiDictionaryPromise;
+  async function ensureRepeaterQueryDictionaryLoaded() {
+    const source = activeRepeaterSourceConfig();
+    const existingPromise = source.getDictionaryPromise();
+    if (existingPromise) {
+      return existingPromise;
     }
-    przemiennikiDictionaryPromise = (async () => {
-      const response = await fetch(PRZEMIENNIKI_META_URL);
+    const dictionaryPromise = (async () => {
+      const response = await fetch(source.metaUrl);
       if (!response.ok) {
         throw new Error(`Dictionary request failed: HTTP ${response.status}`);
       }
@@ -952,13 +1002,14 @@ export function createUiController() {
       populatePrzemiennikiCountryOptions(parsed.countries);
       populatePrzemiennikiBandOptions(parsed.bands);
       populatePrzemiennikiModeOptions(parsed.modes);
-      logDebug("Loaded przemienniki.net filter options from /meta.");
+      logDebug(`Loaded ${source.label} filter options from /meta.`);
       return parsed;
     })();
+    source.setDictionaryPromise(dictionaryPromise);
     try {
-      return await przemiennikiDictionaryPromise;
+      return await dictionaryPromise;
     } catch (error) {
-      przemiennikiDictionaryPromise = null;
+      source.setDictionaryPromise(null);
       throw error;
     }
   }
@@ -977,12 +1028,14 @@ export function createUiController() {
     return Boolean(przemiennikiModalEl && !przemiennikiModalEl.classList.contains("hidden"));
   }
 
-  async function openPrzemiennikiModal() {
+  async function openRepeaterQueryModal(sourceKey) {
+    setActiveRepeaterQuerySource(sourceKey);
+    const source = activeRepeaterSourceConfig();
     setChannelMenuOpen(false);
-    setStatus("Loading przemienniki.net query options...");
-    await ensurePrzemiennikiDictionaryLoaded();
+    setStatus(`Loading ${source.label} query options...`);
+    await ensureRepeaterQueryDictionaryLoaded();
     setPrzemiennikiModalOpen(true);
-    setStatus("Configure przemienniki.net query.");
+    setStatus(`Configure ${source.label} query.`);
   }
 
   function appendQueryParam(url, key, value) {
@@ -993,12 +1046,13 @@ export function createUiController() {
     url.searchParams.set(key, text);
   }
 
-  async function runPrzemiennikiQuery() {
+  async function runRepeaterQuery() {
     if (!currentHeaders.length) {
       setStatus("No channel schema loaded yet.");
       return;
     }
-    const url = new URL(PRZEMIENNIKI_API_URL);
+    const source = activeRepeaterSourceConfig();
+    const url = new URL(source.apiUrl);
     appendQueryParam(url, "country", String(przemiennikiCountryEl?.value || "").toLowerCase());
     const selectedBands = selectedPrzemiennikiBands();
     if (selectedBands.length > 0) {
@@ -1013,11 +1067,11 @@ export function createUiController() {
     appendQueryParam(url, "latitude", przemiennikiLatitudeEl?.value || "");
     appendQueryParam(url, "longitude", przemiennikiLongitudeEl?.value || "");
     appendQueryParam(url, "range", przemiennikiRangeEl?.value || "");
-    setStatus("Querying przemienniki.net...");
+    setStatus(`Querying ${source.label}...`);
     const response = await fetch(url.toString());
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`Przemienniki query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
+      throw new Error(`${source.actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
     }
     const xmlText = await response.text();
     const parsed = parsePrzemiennikiXml(xmlText);
@@ -1026,9 +1080,9 @@ export function createUiController() {
       setRowValue: setRowValueIfPresent,
       findEnumOption,
     });
-    insertRowsAtSelectionOrEnd(rowsToInsert, "przemienniki");
-    logDebug(`PRZEMIENNIKI QUERY ${url.toString()}`);
-    logDebug(`PRZEMIENNIKI RESULTS ${parsed.repeaters.length}`);
+    insertRowsAtSelectionOrEnd(rowsToInsert, source.insertLabel);
+    logDebug(`${source.actionLabel.toUpperCase()} QUERY ${url.toString()}`);
+    logDebug(`${source.actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length}`);
   }
 
   async function geolocatePrzemiennikiQuery() {
@@ -1828,14 +1882,22 @@ export function createUiController() {
     });
     channelImportPrzemiennikiEl?.addEventListener("click", async () => {
       try {
-        await openPrzemiennikiModal();
+        await openRepeaterQueryModal("przemienniki");
       } catch (error) {
         reportActionError("Przemienniki modal", error);
       }
     });
+    channelImportRepeaterbookEl?.addEventListener("click", async () => {
+      try {
+        await openRepeaterQueryModal("repeaterbook");
+      } catch (error) {
+        reportActionError("RepeaterBook modal", error);
+      }
+    });
     przemiennikiCancelEl?.addEventListener("click", () => {
+      const source = activeRepeaterSourceConfig();
       setPrzemiennikiModalOpen(false);
-      setStatus("Cancelled przemienniki.net query.");
+      setStatus(`Cancelled ${source.label} query.`);
     });
     przemiennikiGeolocateEl?.addEventListener("click", async () => {
       try {
@@ -1852,10 +1914,10 @@ export function createUiController() {
     przemiennikiFormEl?.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
-        await runPrzemiennikiQuery();
+        await runRepeaterQuery();
         setPrzemiennikiModalOpen(false);
       } catch (error) {
-        reportActionError("Przemienniki query", error);
+        reportActionError(`${activeRepeaterSourceConfig().actionLabel} query`, error);
       }
     });
 

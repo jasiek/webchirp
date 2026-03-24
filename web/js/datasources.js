@@ -62,6 +62,8 @@ const GMRS_CHANNELS = [
 
 const PRZEMIENNIKI_API_URL = "https://api.codeplug.org/przemienniki";
 const PRZEMIENNIKI_META_URL = "https://api.codeplug.org/przemienniki/meta";
+const REPEATERBOOK_API_URL = "https://api.codeplug.org/repeaterbook";
+const REPEATERBOOK_META_URL = "https://api.codeplug.org/repeaterbook/meta";
 
 function parseXmlDocument(xmlText) {
   const doc = new DOMParser().parseFromString(String(xmlText || ""), "application/xml");
@@ -311,4 +313,9 @@ export function buildPrzemiennikiRows(repeaters, { createBlankRow, setRowValue, 
   });
 }
 
-export { PRZEMIENNIKI_API_URL, PRZEMIENNIKI_META_URL };
+export {
+  PRZEMIENNIKI_API_URL,
+  PRZEMIENNIKI_META_URL,
+  REPEATERBOOK_API_URL,
+  REPEATERBOOK_META_URL,
+};
