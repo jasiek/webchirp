@@ -179,7 +179,7 @@ button:not(:disabled):hover {
 }
 
 .left-panel-main {
-  min-height: 0;
+  flex: 0 0 auto;
 }
 
 .left-panel h2 {
@@ -195,6 +195,7 @@ button:not(:disabled):hover {
   background: linear-gradient(180deg, #fff7e8 0%, #f6e4bf 100%);
   color: #5b3810;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
 }
 
 .sidebar-warning-panel strong {
@@ -232,10 +233,7 @@ button:not(:disabled):hover {
 }
 
 #radio-make,
-#radio-model,
-#tx-hex,
-#rx-bytes,
-#rx-timeout {
+#radio-model {
   width: 100%;
   margin: 0.2rem 0 0.55rem;
   padding: 0.4rem 0.45rem;
@@ -251,11 +249,6 @@ button:not(:disabled):hover {
   border-color: #c4cbd8;
   background: linear-gradient(180deg, #eef2f8 0%, #dee5f0 100%);
   cursor: not-allowed;
-}
-
-#tx-hex {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.8rem;
 }
 
 .serial-actions {
@@ -638,42 +631,10 @@ button:not(:disabled):hover {
   margin-bottom: 2em;
 }
 
-.sidebar-debug-panel {
-  margin-top: auto;
-  border-top: 1px solid var(--border);
-  padding-top: 0.35rem;
-}
-
-.debug-summary {
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
-  user-select: none;
-  padding: 0.45rem 0;
-}
-
-.debug-body {
-  margin-top: 0.3rem;
-}
-
 .debug-output-panel {
   border-top: 1px solid var(--border);
   background: #e6edf8;
   padding: 0.7rem 0.9rem 0.9rem;
-}
-
-.debug-serial-tools {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 0.35rem 0.7rem;
-  align-items: center;
-  max-width: 520px;
-  margin-bottom: 0.7rem;
-}
-
-.debug-serial-tools button {
-  grid-column: 2;
-  justify-self: start;
 }
 
 .debug-header {
@@ -797,19 +758,6 @@ button:not(:disabled):hover {
     display: block;
     border-right: none;
     border-bottom: 1px solid var(--border);
-  }
-
-  .sidebar-debug-panel {
-    margin-top: 0.8rem;
-  }
-
-  .debug-serial-tools {
-    grid-template-columns: 1fr;
-    max-width: none;
-  }
-
-  .debug-serial-tools button {
-    grid-column: 1;
   }
 
   .modal-grid {

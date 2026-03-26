@@ -2094,10 +2094,10 @@ export function createUiController() {
       }
     });
 
-    document.querySelector("#serial-transaction").addEventListener("click", async () => {
-      const txHex = document.querySelector("#tx-hex").value;
-      const rxBytes = Number(document.querySelector("#rx-bytes").value || 32);
-      const timeoutMs = Number(document.querySelector("#rx-timeout").value || 1200);
+    document.querySelector("#serial-transaction")?.addEventListener("click", async () => {
+      const txHex = document.querySelector("#tx-hex")?.value || "";
+      const rxBytes = Number(document.querySelector("#rx-bytes")?.value || 32);
+      const timeoutMs = Number(document.querySelector("#rx-timeout")?.value || 1200);
 
       try {
         setStatus("Running Python serial transaction...");
