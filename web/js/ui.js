@@ -934,7 +934,7 @@ export function createUiController() {
         const name = countryDisplayName(code);
         return {
           value: code,
-          label: `${flagEmojiFromCountryCode(code)} ${code}`.trim(),
+          label: name,
           title: name,
         };
       })
