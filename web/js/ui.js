@@ -932,9 +932,10 @@ export function createUiController() {
     const countries = Array.from(codes || [])
       .map((code) => {
         const name = countryDisplayName(code);
+        const flag = flagEmojiFromCountryCode(code);
         return {
           value: code,
-          label: name,
+          label: `${flag} ${name}`.trim(),
           title: name,
         };
       })
