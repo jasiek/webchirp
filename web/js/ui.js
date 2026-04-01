@@ -355,6 +355,18 @@ export function createUiController() {
     captureErrorSummary(line);
   }
 
+  function trackRadioEvent(eventName, radio) {
+    if (!radio || typeof globalThis.gtag !== "function") {
+      return;
+    }
+    globalThis.gtag("event", eventName, {
+      radio_make: String(radio.vendor || ""),
+      radio_model: String(radio.model || ""),
+      radio_module: String(radio.module || ""),
+      radio_class: String(radio.className || ""),
+    });
+  }
+
   function detectOperatingSystem() {
     const ua = navigator.userAgent || "";
     if (/Windows/i.test(ua)) {
@@ -2134,6 +2146,7 @@ export function createUiController() {
         return;
       }
       try {
+        trackRadioEvent("radio_download", selectedRadio);
         setStatus(`Downloading from ${makeModelLabel(selectedRadio)}...`);
         const result = await requireRuntimeApi().downloadSelectedRadio({
           module: selectedRadio.module,
@@ -2173,6 +2186,7 @@ export function createUiController() {
         return;
       }
       try {
+        trackRadioEvent("radio_upload", selectedRadio);
         setStatus("Running upload preflight validation...");
         const preflight = await runUploadPreflight();
         if (!preflight.valid) {
