@@ -645,6 +645,21 @@ export function createUiController() {
     return hasDuplicateModel ? `${modelLabel} (${radio.className})` : modelLabel;
   }
 
+  function setRadioSelectPlaceholder(label) {
+    const text = String(label || "");
+    for (const selectEl of [radioMakeEl, radioModelEl]) {
+      if (!selectEl) {
+        continue;
+      }
+      selectEl.innerHTML = "";
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = text;
+      selectEl.appendChild(option);
+      selectEl.value = "";
+    }
+  }
+
   // Populate model dropdown for selected vendor and refresh selection state.
   function refreshModelOptions() {
     const vendor = radioMakeEl.value;
@@ -2222,6 +2237,7 @@ export function createUiController() {
     refreshSerialConnectToggleLabel();
     setSerialSupportWarningVisible(!serialSupported);
     setSidebarControlsEnabled(false);
+    setRadioSelectPlaceholder("Loading...");
     try {
       if (!serialSupported) {
         logSerial("Web Serial unsupported in this browser.");
@@ -2240,6 +2256,7 @@ export function createUiController() {
       renderSettingsPanel();
       setSidebarControlsEnabled(true);
     } catch (error) {
+      setRadioSelectPlaceholder("Unavailable");
       reportActionError("Initialization", error);
       setStatus("Initialization failed; sidebar controls remain disabled.");
     }

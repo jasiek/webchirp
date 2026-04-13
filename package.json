@@ -6,7 +6,7 @@
     "build:dist": "node scripts/build-dist.mjs",
     "radio:read": "node --experimental-wasm-stack-switching scripts/radio-codeplug.mjs read",
     "radio:write": "node --experimental-wasm-stack-switching scripts/radio-codeplug.mjs write",
-    "test:channels": "node --test --experimental-wasm-stack-switching scripts/test-channel-list.mjs",
+    "test:channels": "node --test --experimental-wasm-stack-switching scripts/test-channel-list.mjs scripts/test-ui-radio-loading.mjs",
     "test:hw": "node --experimental-wasm-stack-switching scripts/test-hw-radio.mjs",
     "test:settings": "node --test --experimental-wasm-stack-switching scripts/test-radio-settings.mjs"
   },
