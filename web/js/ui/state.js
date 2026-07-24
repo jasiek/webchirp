@@ -26,6 +26,24 @@ export function createUiState() {
   };
 }
 
+export function requireRuntimeApi(state) {
+  if (!state.runtimeApi) {
+    throw new Error("Runtime API client is not initialized");
+  }
+  return state.runtimeApi;
+}
+
+// Metadata and settings loads are tagged with a token so results arriving after
+// the user has moved to another radio can be discarded.
+export function nextRadioLoadToken(state) {
+  state.radioLoadSequence += 1;
+  return state.radioLoadSequence;
+}
+
+export function isStaleRadioLoad(state, loadToken) {
+  return loadToken !== state.radioLoadSequence;
+}
+
 // Expose the live channel rows for debugging from the browser console. Defined
 // as a getter so it always reflects the current array identity, which the
 // channel operations replace rather than mutate in place.

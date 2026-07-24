@@ -30,9 +30,16 @@ import {
 } from "./ui/format.js";
 import { normalizeValue } from "./ui/channel-values.js";
 import { queryUiElements } from "./ui/dom.js";
-import { createUiState, exposeCurrentRowsForDebugging } from "./ui/state.js";
+import {
+  createUiState,
+  exposeCurrentRowsForDebugging,
+  isStaleRadioLoad,
+  nextRadioLoadToken,
+  requireRuntimeApi,
+} from "./ui/state.js";
 import { createDebugLog } from "./ui/debug-log.js";
 import { createIssueReporter } from "./ui/issue-report.js";
+import { createSettingsPanel } from "./ui/settings-panel.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
 export { buildExportFileName };
@@ -61,6 +68,13 @@ export function createUiController() {
   const state = createUiState();
   const log = createDebugLog({ dom });
   const issueReporter = createIssueReporter({ dom, state, log });
+  // Late-bound so modules can call across to each other without import cycles;
+  // every entry is resolved at call time, not at construction.
+  const actions = {
+    updateSerialActionState: () => updateSerialActionState(),
+    setEditorView: (view) => setEditorView(view),
+  };
+  const settings = createSettingsPanel({ dom, state, log, actions });
 
   const {
     tableHead,
@@ -129,15 +143,11 @@ export function createUiController() {
 
   let radioSearchMatches = [];
   let radioSearchActiveIndex = -1;
-  let radioSettingsState = { supported: false, available: false, requiresImage: false, message: "", groups: [] };
   let serialTransportController = null;
   let serialCapability = { supported: false, native: false, webusb: false };
-  let activeSettingsTab = "";
   let selectedRowIndexes = new Set();
   let selectionAnchorIndex = null;
   let invalidCellKeys = new Set();
-  let invalidSettingKeys = new Set();
-  let invalidSettingMessages = new Map();
   let przemiennikiDictionaryPromise = null;
   let repeaterbookDictionaryPromise = null;
   let activeRepeaterQuerySource = "przemienniki";
@@ -223,7 +233,7 @@ export function createUiController() {
     try {
       const baudRate = Number(state.selectedRadio?.baudRate || 9600);
       setStatus(`Connecting serial${preferredTransport === "webusb" ? " via WebUSB" : ""}...`);
-      const result = await requireRuntimeApi().serialConnect({ baudRate });
+      const result = await requireRuntimeApi(state).serialConnect({ baudRate });
       serialConnected = Boolean(result?.connected);
       if (result?.deviceName) {
         logDebug(`SERIAL DEVICE ${result.deviceName}`);
@@ -256,7 +266,7 @@ export function createUiController() {
     setSerialButtonsBusy(true);
     try {
       setStatus("Disconnecting serial...");
-      const result = await requireRuntimeApi().serialDisconnect();
+      const result = await requireRuntimeApi(state).serialDisconnect();
       serialConnected = Boolean(result?.connected);
       if (!serialConnected) {
         serialTransport = "";
@@ -444,21 +454,8 @@ export function createUiController() {
     return `${Number(rowIdx)}:${String(column || "")}`;
   }
 
-  function cloneSettingsGroups(groups) {
-    return JSON.parse(JSON.stringify(Array.isArray(groups) ? groups : []));
-  }
-
-  function settingKey(path, valueIndex = 0) {
-    return `${(Array.isArray(path) ? path : []).join("/")}:${Number(valueIndex)}`;
-  }
-
   function clearInvalidHighlights() {
     invalidCellKeys.clear();
-  }
-
-  function clearInvalidSettings() {
-    invalidSettingKeys.clear();
-    invalidSettingMessages.clear();
   }
 
   function clearInvalidCell(rowIdx, column) {
@@ -471,12 +468,6 @@ export function createUiController() {
       `td[data-row-idx="${Number(rowIdx)}"][data-column="${CSS.escape(String(column || ""))}"]`,
     );
     td?.classList.remove("is-invalid");
-  }
-
-  function clearInvalidSetting(path, valueIndex = 0) {
-    const key = settingKey(path, valueIndex);
-    invalidSettingKeys.delete(key);
-    invalidSettingMessages.delete(key);
   }
 
   function applyRowSelectionVisuals() {
@@ -523,13 +514,6 @@ export function createUiController() {
     applyRowSelectionVisuals();
   }
 
-  function requireRuntimeApi() {
-    if (!state.runtimeApi) {
-      throw new Error("Runtime API client is not initialized");
-    }
-    return state.runtimeApi;
-  }
-
   function currentViewLabel() {
     return state.currentEditorView === "settings" ? "radio settings" : "channels";
   }
@@ -561,27 +545,6 @@ export function createUiController() {
     viewSettingsEl?.classList.toggle("is-active", !channelsActive);
     viewChannelsEl?.setAttribute("aria-selected", channelsActive ? "true" : "false");
     viewSettingsEl?.setAttribute("aria-selected", channelsActive ? "false" : "true");
-  }
-
-  function radioHasSettings() {
-    return Boolean(
-      radioSettingsState?.available &&
-      Array.isArray(radioSettingsState.groups) &&
-      radioSettingsState.groups.length > 0,
-    );
-  }
-
-  function updateViewButtons() {
-    if (viewSettingsEl) {
-      viewSettingsEl.disabled = !radioHasSettings();
-      viewSettingsEl.title = radioHasSettings()
-        ? "Edit radio-wide settings"
-        : (radioSettingsState?.message || "This radio does not expose radio-wide settings");
-    }
-  }
-
-  function hasInvalidSettings() {
-    return invalidSettingKeys.size > 0;
   }
 
   function selectedRadioIsLiveMode() {
@@ -643,35 +606,14 @@ export function createUiController() {
       return;
     }
 
-    radioUploadEl.disabled = !actionsAllowed || hasInvalidSettings();
+    radioUploadEl.disabled = !actionsAllowed || settings.hasInvalidSettings();
     if (liveRadioUnsupported) {
       radioUploadEl.title = "Live-mode radios are not supported in this UI yet";
       return;
     }
-    radioUploadEl.title = hasInvalidSettings()
+    radioUploadEl.title = settings.hasInvalidSettings()
       ? "Fix invalid radio settings before upload"
       : "";
-  }
-
-  function updateSettingsSummary() {
-    if (!settingsSummaryEl) {
-      return;
-    }
-    const count = invalidSettingKeys.size;
-    settingsSummaryEl.hidden = !radioHasSettings();
-    settingsSummaryEl.classList.toggle("has-invalid", count > 0);
-    if (!radioHasSettings()) {
-      settingsSummaryEl.textContent = "";
-      return;
-    }
-    settingsSummaryEl.textContent = count > 0
-      ? `Radio settings have ${count} invalid value${count === 1 ? "" : "s"}. Fix the highlighted fields before upload.`
-      : "Radio settings are ready to write. Immutable values are shown but disabled.";
-    updateSerialActionState();
-  }
-
-  function settingsUnavailableMessage() {
-    return radioSettingsState?.message || "This radio does not expose radio-wide settings.";
   }
 
   // Produce a sorted unique list of vendor names from the radio catalog.
@@ -813,37 +755,28 @@ export function createUiController() {
     updateSerialActionState();
     persistSelectedRadioCookie();
     clearInvalidHighlights();
-    clearInvalidSettings();
+    settings.clearInvalid();
     if (state.selectedRadio && state.selectedRadio.key === state.lastLoadedRadioKey) {
       renderTable();
       return;
     }
-    const loadToken = nextRadioLoadToken();
+    const loadToken = nextRadioLoadToken(state);
     Promise.all([
       loadSelectedRadioMetadata(loadToken),
-      loadSelectedRadioSettings({ loadToken }),
+      settings.load({ loadToken }),
     ])
       .then(() => {
-        if (isStaleRadioLoad(loadToken)) {
+        if (isStaleRadioLoad(state, loadToken)) {
           return;
         }
         state.lastLoadedRadioKey = state.selectedRadio?.key || "";
         renderTable();
       })
       .catch((error) => {
-        if (!isStaleRadioLoad(loadToken)) {
+        if (!isStaleRadioLoad(state, loadToken)) {
           reportActionError("Metadata load", error);
         }
       });
-  }
-
-  function nextRadioLoadToken() {
-    state.radioLoadSequence += 1;
-    return state.radioLoadSequence;
-  }
-
-  function isStaleRadioLoad(loadToken) {
-    return loadToken !== state.radioLoadSequence;
   }
 
   function formatRadioModelOption(radio, hasDuplicateModel) {
@@ -1741,382 +1674,25 @@ export function createUiController() {
   }
 
   // Load selected radio's CHIRP-derived column metadata from Python runtime.
-  async function loadSelectedRadioMetadata(loadToken = nextRadioLoadToken()) {
+  async function loadSelectedRadioMetadata(loadToken = nextRadioLoadToken(state)) {
     if (!state.selectedRadio) {
       return;
     }
-    const meta = await requireRuntimeApi().getRadioMetadata({
+    const meta = await requireRuntimeApi(state).getRadioMetadata({
       module: state.selectedRadio.module,
       className: state.selectedRadio.className,
     });
-    if (isStaleRadioLoad(loadToken)) {
+    if (isStaleRadioLoad(state, loadToken)) {
       return;
     }
     state.radioMetadata = meta || { headers: [], columns: {} };
     state.currentHeaders = state.radioMetadata.headers?.length ? state.radioMetadata.headers : state.currentHeaders;
   }
 
-  async function loadSelectedRadioSettings(options = {}) {
-    const loadToken = options.loadToken ?? nextRadioLoadToken();
-    if (!state.selectedRadio) {
-      radioSettingsState = {
-        supported: false,
-        available: false,
-        requiresImage: false,
-        message: "",
-        groups: [],
-      };
-      clearInvalidSettings();
-      updateViewButtons();
-      renderSettingsPanel();
-      return;
-    }
-    const preserveCurrent = Boolean(options.preserveCurrent);
-    let nextState = {
-      supported: false,
-      available: false,
-      requiresImage: false,
-      message: "",
-      groups: [],
-    };
-    try {
-      const result = await requireRuntimeApi().getRadioSettings({
-        module: state.selectedRadio.module,
-        className: state.selectedRadio.className,
-      });
-      nextState = {
-        supported: Boolean(result?.supported),
-        available: Boolean(result?.available),
-        requiresImage: Boolean(result?.requiresImage),
-        message: String(result?.message || ""),
-        groups: cloneSettingsGroups(result?.groups || []),
-      };
-    } catch (error) {
-      logDebug(`SETTINGS LOAD FALLBACK ${errorSummary(error)}`);
-      nextState.message = "Radio-wide settings could not be prepared.";
-    }
-
-    if (isStaleRadioLoad(loadToken)) {
-      return;
-    }
-
-    if (preserveCurrent && radioHasSettings() && nextState.supported) {
-      const currentByKey = new Map();
-      for (const field of flattenSettingsFields(radioSettingsState.groups)) {
-        currentByKey.set(settingKey(field.path, field.valueIndex), field.current);
-      }
-      for (const field of flattenSettingsFields(nextState.groups)) {
-        const key = settingKey(field.path, field.valueIndex);
-        if (currentByKey.has(key)) {
-          field.valueRef.current = currentByKey.get(key);
-        }
-      }
-    }
-
-    radioSettingsState = nextState;
-    clearInvalidSettings();
-    if (!radioHasSettings() && state.currentEditorView === "settings") {
-      setEditorView("channels");
-    }
-    if (!activeSettingsTab || !radioSettingsState.groups.some((group) => group.id === activeSettingsTab)) {
-      activeSettingsTab = radioSettingsState.groups[0]?.id || "";
-    }
-    updateViewButtons();
-    renderSettingsPanel();
-  }
-
-  function flattenSettingsFields(groups) {
-    const out = [];
-    function walk(node) {
-      if (!node) {
-        return;
-      }
-      if (node.kind === "setting") {
-        const values = Array.isArray(node.values) ? node.values : [];
-        values.forEach((value, valueIndex) => {
-          out.push({
-            path: node.path || [],
-            valueIndex,
-            current: value.current,
-            valueRef: value,
-          });
-        });
-        return;
-      }
-      (node.children || []).forEach(walk);
-    }
-    (groups || []).forEach(walk);
-    return out;
-  }
-
-  function normalizeRadioSettingValue(meta, rawValue, previousValue) {
-    const type = String(meta?.type || "");
-    if (meta?.mutable === false) {
-      return { value: previousValue, error: "" };
-    }
-
-    if (type === "boolean") {
-      return { value: Boolean(rawValue), error: "" };
-    }
-
-    if (type === "enum") {
-      const options = Array.isArray(meta?.options) ? meta.options.map(String) : [];
-      const candidate = String(rawValue ?? "");
-      if (options.length > 0 && !options.includes(candidate)) {
-        return { value: previousValue, error: "Select one of the supported values." };
-      }
-      return { value: candidate, error: "" };
-    }
-
-    if (type === "integer") {
-      const parsed = Number.parseInt(String(rawValue ?? "").trim(), 10);
-      if (!Number.isInteger(parsed)) {
-        return { value: rawValue, error: "Enter an integer." };
-      }
-      if (Number.isFinite(meta.min) && parsed < Number(meta.min)) {
-        return { value: parsed, error: `Value must be at least ${meta.min}.` };
-      }
-      if (Number.isFinite(meta.max) && parsed > Number(meta.max)) {
-        return { value: parsed, error: `Value must be at most ${meta.max}.` };
-      }
-      if (Number.isFinite(meta.step) && Number(meta.step) > 1) {
-        const base = Number.isFinite(meta.min) ? Number(meta.min) : 0;
-        if ((parsed - base) % Number(meta.step) !== 0) {
-          return { value: parsed, error: `Value must increment by ${meta.step}.` };
-        }
-      }
-      return { value: parsed, error: "" };
-    }
-
-    if (type === "float") {
-      const parsed = Number.parseFloat(String(rawValue ?? "").trim());
-      if (!Number.isFinite(parsed)) {
-        return { value: rawValue, error: "Enter a number." };
-      }
-      if (Number.isFinite(meta.min) && parsed < Number(meta.min)) {
-        return { value: parsed, error: `Value must be at least ${meta.min}.` };
-      }
-      if (Number.isFinite(meta.max) && parsed > Number(meta.max)) {
-        return { value: parsed, error: `Value must be at most ${meta.max}.` };
-      }
-      return { value: parsed, error: "" };
-    }
-
-    if (type === "string") {
-      const text = String(rawValue ?? "");
-      if (Number.isFinite(meta.minLength) && text.length < Number(meta.minLength)) {
-        return { value: text, error: `Value must be at least ${meta.minLength} characters.` };
-      }
-      if (Number.isFinite(meta.maxLength) && text.length > Number(meta.maxLength)) {
-        return { value: text, error: `Value must be at most ${meta.maxLength} characters.` };
-      }
-      if (meta.charset) {
-        const allowed = new Set(String(meta.charset).split(""));
-        const invalidChar = text.split("").find((ch) => !allowed.has(ch));
-        if (invalidChar) {
-          return { value: text, error: `Character ${JSON.stringify(invalidChar)} is not allowed.` };
-        }
-      }
-      return { value: text, error: "" };
-    }
-
-    return { value: rawValue, error: "" };
-  }
-
-  function setSettingValue(settingNode, valueIndex, rawValue) {
-    const valueMeta = settingNode?.values?.[valueIndex];
-    if (!valueMeta) {
-      return;
-    }
-    const result = normalizeRadioSettingValue(valueMeta, rawValue, valueMeta.current);
-    valueMeta.current = result.value;
-    const key = settingKey(settingNode.path, valueIndex);
-    if (result.error) {
-      invalidSettingKeys.add(key);
-      invalidSettingMessages.set(key, result.error);
-    } else {
-      clearInvalidSetting(settingNode.path, valueIndex);
-    }
-    updateSettingsSummary();
-    renderSettingsPanel();
-  }
-
-  function findSettingsTabNode(tabId) {
-    return radioSettingsState.groups.find((group) => group.id === tabId) || null;
-  }
-
-  function tabHasInvalidSettings(group) {
-    if (!group) {
-      return false;
-    }
-    return flattenSettingsFields([group]).some((field) =>
-      invalidSettingKeys.has(settingKey(field.path, field.valueIndex)));
-  }
-
-  function renderSettingControl(settingNode, valueMeta, valueIndex) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "settings-field-control";
-    const key = settingKey(settingNode.path, valueIndex);
-    const immutable = settingNode.mutable === false || valueMeta.mutable === false;
-    const errorText = invalidSettingMessages.get(key) || "";
-    wrapper.classList.toggle("is-invalid", Boolean(errorText));
-    wrapper.classList.toggle("is-immutable", immutable);
-
-    const current = valueMeta.current;
-    let control;
-    if (valueMeta.type === "boolean") {
-      control = document.createElement("input");
-      control.type = "checkbox";
-      control.checked = Boolean(current);
-      control.disabled = immutable;
-      control.addEventListener("change", () => {
-        setSettingValue(settingNode, valueIndex, control.checked);
-      });
-    } else if (valueMeta.type === "enum") {
-      control = document.createElement("select");
-      const options = Array.isArray(valueMeta.options) ? valueMeta.options : [];
-      options.forEach((option) => {
-        const optionEl = document.createElement("option");
-        optionEl.value = String(option);
-        optionEl.textContent = String(option);
-        control.appendChild(optionEl);
-      });
-      control.value = String(current ?? "");
-      control.disabled = immutable;
-      control.addEventListener("change", () => {
-        setSettingValue(settingNode, valueIndex, control.value);
-      });
-    } else {
-      control = document.createElement("input");
-      control.type = valueMeta.type === "integer" || valueMeta.type === "float" ? "number" : "text";
-      if (valueMeta.type === "integer" || valueMeta.type === "float") {
-        if (Number.isFinite(valueMeta.min)) {
-          control.min = String(valueMeta.min);
-        }
-        if (Number.isFinite(valueMeta.max)) {
-          control.max = String(valueMeta.max);
-        }
-        if (Number.isFinite(valueMeta.step)) {
-          control.step = String(valueMeta.step);
-        } else if (valueMeta.type === "float") {
-          control.step = "any";
-        }
-      }
-      if (Number.isFinite(valueMeta.maxLength)) {
-        control.maxLength = Number(valueMeta.maxLength);
-      }
-      control.value = current ?? "";
-      control.readOnly = immutable;
-      control.disabled = immutable;
-      control.addEventListener("change", () => {
-        setSettingValue(settingNode, valueIndex, control.value);
-      });
-    }
-
-    wrapper.appendChild(control);
-
-    if (settingNode.warning) {
-      const warningEl = document.createElement("div");
-      warningEl.className = "settings-field-warning";
-      warningEl.textContent = settingNode.warning;
-      wrapper.appendChild(warningEl);
-    }
-    if (errorText) {
-      const errorEl = document.createElement("div");
-      errorEl.className = "settings-field-error";
-      errorEl.textContent = errorText;
-      wrapper.appendChild(errorEl);
-    }
-    return wrapper;
-  }
-
-  function renderSettingNode(parentEl, node) {
-    if (node.kind === "group") {
-      const section = document.createElement("section");
-      section.className = node.path?.length > 1 ? "settings-subgroup" : "settings-group";
-      const heading = document.createElement(node.path?.length > 1 ? "h4" : "h3");
-      heading.textContent = node.label || node.id;
-      section.appendChild(heading);
-      (node.children || []).forEach((child) => renderSettingNode(section, child));
-      parentEl.appendChild(section);
-      return;
-    }
-
-    const fields = document.createElement("div");
-    fields.className = "settings-fields";
-    const values = Array.isArray(node.values) ? node.values : [];
-    values.forEach((valueMeta, valueIndex) => {
-      const labelEl = document.createElement("div");
-      labelEl.className = "settings-field-label";
-      const labelStrong = document.createElement("strong");
-      labelStrong.textContent = values.length > 1 ? `${node.label} ${valueIndex + 1}` : node.label;
-      labelEl.appendChild(labelStrong);
-      if (node.doc) {
-        const docEl = document.createElement("div");
-        docEl.className = "settings-field-doc";
-        docEl.textContent = node.doc;
-        labelEl.appendChild(docEl);
-      }
-      if (node.volatile) {
-        const volatileEl = document.createElement("div");
-        volatileEl.className = "settings-field-doc";
-        volatileEl.textContent = "Volatile setting";
-        labelEl.appendChild(volatileEl);
-      }
-      fields.appendChild(labelEl);
-      fields.appendChild(renderSettingControl(node, valueMeta, valueIndex));
-    });
-    parentEl.appendChild(fields);
-  }
-
-  function renderSettingsPanel() {
-    updateSettingsSummary();
-    updateViewButtons();
-    if (!settingsTabsEl || !settingsContentEl || !settingsEmptyEl) {
-      return;
-    }
-
-    settingsTabsEl.innerHTML = "";
-    settingsContentEl.innerHTML = "";
-    settingsEmptyEl.textContent = settingsUnavailableMessage();
-
-    if (!radioHasSettings()) {
-      settingsEmptyEl.hidden = false;
-      settingsContentEl.hidden = true;
-      return;
-    }
-
-    settingsEmptyEl.hidden = true;
-    settingsContentEl.hidden = false;
-
-    const activeGroup = findSettingsTabNode(activeSettingsTab) || radioSettingsState.groups[0];
-    if (!activeGroup) {
-      settingsEmptyEl.hidden = false;
-      settingsContentEl.hidden = true;
-      return;
-    }
-    activeSettingsTab = activeGroup.id;
-
-    radioSettingsState.groups.forEach((group) => {
-      const tabButton = document.createElement("button");
-      tabButton.type = "button";
-      tabButton.className = "settings-tab";
-      tabButton.textContent = group.label || group.id;
-      tabButton.classList.toggle("is-active", group.id === activeSettingsTab);
-      tabButton.classList.toggle("has-invalid", tabHasInvalidSettings(group));
-      tabButton.addEventListener("click", () => {
-        activeSettingsTab = group.id;
-        renderSettingsPanel();
-      });
-      settingsTabsEl.appendChild(tabButton);
-    });
-    renderSettingNode(settingsContentEl, activeGroup);
-  }
-
   // Parse CSV through Python runtime and refresh table rows and status text.
   async function parseCsvViaRuntime(csvText) {
     setStatus("Parsing CSV with CHIRP Python...");
-    return requireRuntimeApi().parseCsv({ csvText });
+    return requireRuntimeApi(state).parseCsv({ csvText });
   }
 
   // Apply a parsed CSV to the editor: "replace" swaps the channel list out
@@ -2175,7 +1751,7 @@ export function createUiController() {
   // Ask Python runtime to normalize current rows and export as CSV file.
   async function exportCsv() {
     setStatus("Normalizing rows with CHIRP Python...");
-    const csvText = await requireRuntimeApi().normalizeRows({
+    const csvText = await requireRuntimeApi(state).normalizeRows({
       rows: state.currentRows,
       module: state.selectedRadio?.module || "",
       className: state.selectedRadio?.className || "",
@@ -2195,14 +1771,14 @@ export function createUiController() {
       return;
     }
     setStatus("Preparing CHIRP binary codeplug...");
-    const result = await requireRuntimeApi().exportImage({
+    const result = await requireRuntimeApi(state).exportImage({
       module: state.selectedRadio.module,
       className: state.selectedRadio.className,
       rows: state.currentRows,
-      settings: radioSettingsState.groups,
+      settings: settings.getGroups(),
     });
-    radioSettingsState.groups = cloneSettingsGroups(result.settings || radioSettingsState.groups);
-    renderSettingsPanel();
+    settings.setGroups(result.settings);
+    settings.render();
     const bytes = base64ToBytes(result.imageBase64 || "");
     const fileName = buildExportFileName(
       result.vendor || state.selectedRadio.vendor,
@@ -2217,7 +1793,7 @@ export function createUiController() {
     const raw = new Uint8Array(await file.arrayBuffer());
     const imageBase64 = bytesToBase64(raw);
     setStatus("Loading CHIRP binary codeplug...");
-    const loaded = await requireRuntimeApi().loadImage({ imageBase64 });
+    const loaded = await requireRuntimeApi(state).loadImage({ imageBase64 });
     const selected = selectRadioByDetectedImage(loaded);
     if (!selected) {
       throw new Error(
@@ -2225,15 +1801,14 @@ export function createUiController() {
       );
     }
     await loadSelectedRadioMetadata();
-    radioSettingsState = {
+    settings.replaceState({
       supported: Array.isArray(loaded.settings) && loaded.settings.length > 0,
       available: Array.isArray(loaded.settings) && loaded.settings.length > 0,
       requiresImage: false,
       message: "",
-      groups: cloneSettingsGroups(loaded.settings || []),
-    };
-    clearInvalidSettings();
-    activeSettingsTab = radioSettingsState.groups[0]?.id || "";
+      groups: settings.cloneGroups(loaded.settings || []),
+    });
+    settings.clearInvalid();
     state.currentHeaders = state.radioMetadata.headers?.length
       ? state.radioMetadata.headers
       : (loaded.headers || state.currentHeaders);
@@ -2241,8 +1816,8 @@ export function createUiController() {
     clearInvalidHighlights();
     resetRowSelection();
     renderTable();
-    updateViewButtons();
-    renderSettingsPanel();
+    settings.updateViewButtons();
+    settings.render();
     setStatus(
       `Loaded binary codeplug for ${loaded.vendor || state.selectedRadio.vendor} ${loaded.model || state.selectedRadio.model}.`,
     );
@@ -2253,35 +1828,24 @@ export function createUiController() {
       return { valid: false, issues: [{ rowIndex: -1, column: "", message: "No radio selected." }] };
     }
     const [rowResult, settingsResult] = await Promise.all([
-      requireRuntimeApi().validateRowsForUpload({
+      requireRuntimeApi(state).validateRowsForUpload({
         rows: state.currentRows,
         module: state.selectedRadio.module,
         className: state.selectedRadio.className,
       }),
-      requireRuntimeApi().validateRadioSettings({
-        settings: radioSettingsState.groups,
+      requireRuntimeApi(state).validateRadioSettings({
+        settings: settings.getGroups(),
         module: state.selectedRadio.module,
         className: state.selectedRadio.className,
       }),
     ]);
     const result = rowResult;
-    const settingsValidation = settingsResult || { valid: true, issues: [], settings: radioSettingsState.groups };
-    radioSettingsState.groups = cloneSettingsGroups(settingsValidation.settings || radioSettingsState.groups);
-    if (!activeSettingsTab || !radioSettingsState.groups.some((group) => group.id === activeSettingsTab)) {
-      activeSettingsTab = radioSettingsState.groups[0]?.id || "";
-    }
-    clearInvalidSettings();
-    (settingsValidation.issues || []).forEach((issue) => {
-      const path = Array.isArray(issue?.path) ? issue.path : [];
-      const valueIndex = Number(issue?.valueIndex || 0);
-      const key = settingKey(path, valueIndex);
-      invalidSettingKeys.add(key);
-      invalidSettingMessages.set(key, String(issue?.message || "Invalid value"));
-      logDebug(
-        `PREFLIGHT INVALID setting=${path.join(".") || "<unknown>"} value=${valueIndex}: ${issue?.message || "Invalid value"}`,
-      );
-    });
-    updateSettingsSummary();
+    const settingsValidation = settingsResult || { valid: true, issues: [], settings: settings.getGroups() };
+    settings.setGroups(settingsValidation.settings);
+    settings.ensureActiveTab();
+    settings.clearInvalid();
+    settings.applyValidationIssues(settingsValidation.issues);
+    settings.updateSummary();
     clearInvalidHighlights();
     const issues = Array.isArray(result?.issues) ? result.issues : [];
     for (const issue of issues) {
@@ -2297,9 +1861,9 @@ export function createUiController() {
     if (issues.length > 0) {
       renderTable();
     }
-    renderSettingsPanel();
+    settings.render();
     return {
-      valid: Boolean(result?.valid) && Boolean(settingsValidation?.valid) && invalidSettingKeys.size === 0,
+      valid: Boolean(result?.valid) && Boolean(settingsValidation?.valid) && settings.invalidCount() === 0,
       issues: [...issues, ...(settingsValidation.issues || [])],
     };
   }
@@ -2610,12 +2174,12 @@ export function createUiController() {
     });
 
     viewSettingsEl?.addEventListener("click", () => {
-      if (!radioHasSettings()) {
-        setStatus(settingsUnavailableMessage());
+      if (!settings.radioHasSettings()) {
+        setStatus(settings.settingsUnavailableMessage());
         return;
       }
       setEditorView("settings");
-      renderSettingsPanel();
+      settings.render();
     });
 
     serialConnectToggleEl?.addEventListener("click", () => {
@@ -2642,7 +2206,7 @@ export function createUiController() {
 
       try {
         setStatus("Running Python serial transaction...");
-        const result = await requireRuntimeApi().serialTxRx({ txHex, rxBytes, timeoutMs });
+        const result = await requireRuntimeApi(state).serialTxRx({ txHex, rxBytes, timeoutMs });
         setStatus("Python serial transaction complete.");
         logSerial(`PY TX ${result.tx.hex} | PY RX ${result.rx.hex || "<none>"}`);
       } catch (error) {
@@ -2697,7 +2261,7 @@ export function createUiController() {
         trackRadioEvent("radio_download", state.selectedRadio);
         setStatus(`Downloading from ${makeModelLabel(state.selectedRadio)}...`);
         beginCloneProgress(`Downloading from ${makeModelLabel(state.selectedRadio)}...`);
-        const result = await requireRuntimeApi().downloadSelectedRadio({
+        const result = await requireRuntimeApi(state).downloadSelectedRadio({
           module: state.selectedRadio.module,
           className: state.selectedRadio.className,
         });
@@ -2705,20 +2269,19 @@ export function createUiController() {
           ? state.radioMetadata.headers
           : (result.headers || []);
         state.currentRows = result.rows;
-        radioSettingsState = {
+        settings.replaceState({
           supported: Array.isArray(result.settings) && result.settings.length > 0,
           available: Array.isArray(result.settings) && result.settings.length > 0,
           requiresImage: false,
           message: "",
-          groups: cloneSettingsGroups(result.settings || []),
-        };
-        activeSettingsTab = radioSettingsState.groups[0]?.id || "";
+          groups: settings.cloneGroups(result.settings || []),
+        });
         clearInvalidHighlights();
-        clearInvalidSettings();
+        settings.clearInvalid();
         resetRowSelection();
         renderTable();
-        updateViewButtons();
-        renderSettingsPanel();
+        settings.updateViewButtons();
+        settings.render();
         setStatus(`${makeModelLabel(state.selectedRadio)} download complete (${state.currentRows.length} channels).`);
         if (result.ident) {
           logSerial(`IDENT ${result.ident}`);
@@ -2751,15 +2314,15 @@ export function createUiController() {
         }
         setStatus(`Uploading to ${makeModelLabel(state.selectedRadio)}...`);
         beginCloneProgress(`Uploading to ${makeModelLabel(state.selectedRadio)}...`);
-        const uploadResult = await requireRuntimeApi().uploadSelectedRadio({
+        const uploadResult = await requireRuntimeApi(state).uploadSelectedRadio({
           module: state.selectedRadio.module,
           className: state.selectedRadio.className,
           rows: state.currentRows,
-          settings: radioSettingsState.groups,
+          settings: settings.getGroups(),
         });
-        radioSettingsState.groups = cloneSettingsGroups(uploadResult.settings || radioSettingsState.groups);
-        clearInvalidSettings();
-        renderSettingsPanel();
+        settings.setGroups(uploadResult.settings);
+        settings.clearInvalid();
+        settings.render();
         setStatus(`${makeModelLabel(state.selectedRadio)} upload complete.`);
       } catch (error) {
         reportActionError("Upload", error);
@@ -2783,16 +2346,16 @@ export function createUiController() {
       } else {
         logSerial("Web Serial available.");
       }
-      const catalog = await requireRuntimeApi().listRadios();
+      const catalog = await requireRuntimeApi(state).listRadios();
       state.radioCatalog = catalog.radios || [];
-      state.runtimeInfo = (await requireRuntimeApi().getRuntimeInfo()) || state.runtimeInfo;
+      state.runtimeInfo = (await requireRuntimeApi(state).getRuntimeInfo()) || state.runtimeInfo;
       refreshMakeOptions();
       restoreSelectedRadioCookie();
       await loadSelectedRadioMetadata();
-      await loadSelectedRadioSettings();
+      await settings.load();
       setStatus(`Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources.`);
       await loadCsvText(DEFAULT_SAMPLE_CSV);
-      renderSettingsPanel();
+      settings.render();
       setSidebarControlsEnabled(true);
     } catch (error) {
       setRadioSelectPlaceholder("Unavailable");
