@@ -6,7 +6,7 @@ import { requireRuntimeApi } from "./state.js";
 // bar, and the download/upload clone operations with their preflight. Owns the
 // connection and capability state.
 export function createSerialActions(ctx) {
-  const { dom, state, log } = ctx;
+  const { dom, state, log, actions } = ctx;
 
   let transportController = null;
   let capability = { supported: false, native: false, webusb: false };
@@ -357,7 +357,7 @@ export function createSerialActions(ctx) {
         const count = Array.isArray(preflight.issues) ? preflight.issues.length : 0;
         log.setStatus(
           count > 0
-            ? `Upload blocked: ${count} invalid value(s) highlighted in red in ${ctx.actions.currentViewLabel()}.`
+            ? `Upload blocked: ${count} invalid value(s) highlighted in red in ${actions.currentViewLabel()}.`
             : "Upload blocked: preflight validation failed.",
         );
         return;
