@@ -41,6 +41,7 @@ import { createDebugLog } from "./ui/debug-log.js";
 import { createIssueReporter } from "./ui/issue-report.js";
 import { createSettingsPanel } from "./ui/settings-panel.js";
 import { createChannelTable } from "./ui/channel-table.js";
+import { createRadioCatalog } from "./ui/radio-catalog.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
 export { buildExportFileName };
@@ -60,8 +61,6 @@ function resolveRepeaterApiBase() {
 }
 
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
-const LAST_RADIO_COOKIE = "webchirp_last_radio";
-const RADIO_SEARCH_MAX_RESULTS = 50;
 
 // Create and manage all DOM/UI state and user interaction behavior.
 export function createUiController() {
@@ -76,8 +75,14 @@ export function createUiController() {
     setEditorView: (view) => setEditorView(view),
     isRepeaterModalOpen: () => isPrzemiennikiModalOpen(),
   };
-  const settings = createSettingsPanel({ dom, state, log, actions });
-  const table = createChannelTable({ dom, state, log, actions });
+  // Modules are hung off one context object so siblings can call each other
+  // through it; every such call happens after construction, so the forward
+  // references below are resolved by the time they run.
+  const ctx = { dom, state, log, actions };
+  const settings = createSettingsPanel(ctx);
+  const table = createChannelTable(ctx);
+  const catalog = createRadioCatalog(ctx);
+  Object.assign(ctx, { settings, table, catalog });
 
   const {
     tableHead,
@@ -144,8 +149,6 @@ export function createUiController() {
 
   const { logDebug, logSerial, setStatus, reportActionError } = log;
 
-  let radioSearchMatches = [];
-  let radioSearchActiveIndex = -1;
   let serialTransportController = null;
   let serialCapability = { supported: false, native: false, webusb: false };
   let przemiennikiDictionaryPromise = null;
@@ -371,66 +374,6 @@ export function createUiController() {
     }
   }
 
-  function setCookie(name, value, maxAgeSeconds = 31536000) {
-    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
-  }
-
-  function getCookie(name) {
-    const prefix = `${name}=`;
-    const parts = String(document.cookie || "").split(";").map((v) => v.trim());
-    for (const part of parts) {
-      if (part.startsWith(prefix)) {
-        return decodeURIComponent(part.slice(prefix.length));
-      }
-    }
-    return "";
-  }
-
-  function persistSelectedRadioCookie() {
-    if (!state.selectedRadio) {
-      return;
-    }
-    const value = JSON.stringify({
-      make: state.selectedRadio.vendor,
-      key: state.selectedRadio.key,
-    });
-    setCookie(LAST_RADIO_COOKIE, value);
-  }
-
-  function restoreSelectedRadioCookie() {
-    const raw = getCookie(LAST_RADIO_COOKIE);
-    if (!raw) {
-      return false;
-    }
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return false;
-    }
-    const make = String(parsed?.make || "");
-    const key = String(parsed?.key || "");
-    if (!make || !key) {
-      return false;
-    }
-    if (!state.radioCatalog.some((r) => r.vendor === make && r.key === key)) {
-      return false;
-    }
-    clearRadioFilter();
-    radioMakeEl.value = make;
-    refreshModelOptions();
-    radioModelEl.value = key;
-    state.selectedRadio = state.radioCatalog.find((r) => r.key === key) || null;
-    if (!state.selectedRadio) {
-      return false;
-    }
-    updateSerialActionState();
-    logDebug(
-      `RADIO RESTORE ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
-    );
-    return true;
-  }
-
   function currentViewLabel() {
     return state.currentEditorView === "settings" ? "radio settings" : "channels";
   }
@@ -531,286 +474,6 @@ export function createUiController() {
     radioUploadEl.title = settings.hasInvalidSettings()
       ? "Fix invalid radio settings before upload"
       : "";
-  }
-
-  // Produce a sorted unique list of vendor names from the radio catalog.
-  function uniqueVendors(radios) {
-    return Array.from(new Set(radios.map((r) => r.vendor))).sort((a, b) =>
-      a.localeCompare(b),
-    );
-  }
-
-  // Match a radio against a search query; every whitespace-separated token must
-  // appear somewhere in the "vendor model class" text (case-insensitive).
-  function radioMatchesFilter(radio, tokens) {
-    if (tokens.length === 0) {
-      return true;
-    }
-    const haystack = `${radio.vendor} ${radio.model} ${radio.className}`.toLowerCase();
-    return tokens.every((token) => haystack.includes(token));
-  }
-
-  // Catalog entries matching a free-text search query.
-  function matchingRadios(query) {
-    const tokens = String(query || "").toLowerCase().split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) {
-      return [];
-    }
-    return state.radioCatalog.filter((radio) => radioMatchesFilter(radio, tokens));
-  }
-
-  // "<Make> <Model>" label for a search suggestion; the driver class is added
-  // when several catalog entries share the same vendor+model text.
-  function radioSearchLabel(radio, hasDuplicateLabel) {
-    const base = makeModelLabel(radio);
-    const label = radio.isLiveRadio ? `⚡ ${base}` : base;
-    return hasDuplicateLabel ? `${label} (${radio.className})` : label;
-  }
-
-  function hideRadioSearchResults() {
-    radioSearchMatches = [];
-    radioSearchActiveIndex = -1;
-    if (radioSearchResultsEl) {
-      radioSearchResultsEl.hidden = true;
-      radioSearchResultsEl.innerHTML = "";
-    }
-    radioSearchEl?.setAttribute("aria-expanded", "false");
-  }
-
-  // Clear the search box and close its suggestion list (programmatic selections).
-  function clearRadioFilter() {
-    if (radioSearchEl) {
-      radioSearchEl.value = "";
-    }
-    hideRadioSearchResults();
-  }
-
-  // Render the autocomplete dropdown for the current search box contents.
-  function renderRadioSearchResults() {
-    if (!radioSearchResultsEl) {
-      return;
-    }
-    const query = String(radioSearchEl?.value || "").trim();
-    if (!query) {
-      hideRadioSearchResults();
-      return;
-    }
-    const matches = matchingRadios(query);
-    radioSearchMatches = matches.slice(0, RADIO_SEARCH_MAX_RESULTS);
-    radioSearchActiveIndex = radioSearchMatches.length > 0 ? 0 : -1;
-    radioSearchResultsEl.innerHTML = "";
-
-    if (matches.length === 0) {
-      const li = document.createElement("li");
-      li.classList.add("radio-search-empty");
-      li.textContent = "No matching radios";
-      radioSearchResultsEl.appendChild(li);
-    } else {
-      const labelCounts = new Map();
-      for (const radio of radioSearchMatches) {
-        const label = makeModelLabel(radio);
-        labelCounts.set(label, (labelCounts.get(label) || 0) + 1);
-      }
-      radioSearchMatches.forEach((radio, index) => {
-        const li = document.createElement("li");
-        li.setAttribute("role", "option");
-        li.dataset.index = String(index);
-        const hasDuplicateLabel = (labelCounts.get(makeModelLabel(radio)) || 0) > 1;
-        li.textContent = radioSearchLabel(radio, hasDuplicateLabel);
-        if (index === radioSearchActiveIndex) {
-          li.classList.add("is-active");
-        }
-        radioSearchResultsEl.appendChild(li);
-      });
-      if (matches.length > radioSearchMatches.length) {
-        const li = document.createElement("li");
-        li.classList.add("radio-search-more");
-        li.textContent = `${matches.length - radioSearchMatches.length} more — keep typing to narrow down`;
-        radioSearchResultsEl.appendChild(li);
-      }
-    }
-
-    radioSearchResultsEl.hidden = false;
-    radioSearchEl?.setAttribute("aria-expanded", "true");
-  }
-
-  // Move the keyboard highlight in the suggestion list by delta and keep it in view.
-  function moveRadioSearchActive(delta) {
-    if (radioSearchMatches.length === 0) {
-      return;
-    }
-    const count = radioSearchMatches.length;
-    radioSearchActiveIndex = (radioSearchActiveIndex + delta + count) % count;
-    const items = radioSearchResultsEl?.querySelectorAll("li[role='option']") || [];
-    items.forEach((li, index) => {
-      li.classList.toggle("is-active", index === radioSearchActiveIndex);
-    });
-    items[radioSearchActiveIndex]?.scrollIntoView({ block: "nearest" });
-  }
-
-  // Apply a suggestion: sync the make/model dropdowns and load the radio.
-  function applyRadioSearchSelection(radio) {
-    if (!radio) {
-      return;
-    }
-    if (radioSearchEl) {
-      radioSearchEl.value = makeModelLabel(radio);
-    }
-    hideRadioSearchResults();
-    radioMakeEl.value = radio.vendor;
-    refreshModelOptions();
-    radioModelEl.value = radio.key;
-    state.selectedRadio = radio;
-    logDebug(
-      `RADIO SELECT ${makeModelLabel(radio)} (${radio.module}.${radio.className})`,
-    );
-    reloadForSelectedRadio();
-  }
-
-  // Shared side effects after the selected radio changes via make/model/search.
-  function reloadForSelectedRadio() {
-    updateSerialActionState();
-    persistSelectedRadioCookie();
-    table.clearInvalidHighlights();
-    settings.clearInvalid();
-    if (state.selectedRadio && state.selectedRadio.key === state.lastLoadedRadioKey) {
-      table.render();
-      return;
-    }
-    const loadToken = nextRadioLoadToken(state);
-    Promise.all([
-      loadSelectedRadioMetadata(loadToken),
-      settings.load({ loadToken }),
-    ])
-      .then(() => {
-        if (isStaleRadioLoad(state, loadToken)) {
-          return;
-        }
-        state.lastLoadedRadioKey = state.selectedRadio?.key || "";
-        table.render();
-      })
-      .catch((error) => {
-        if (!isStaleRadioLoad(state, loadToken)) {
-          reportActionError("Metadata load", error);
-        }
-      });
-  }
-
-  function formatRadioModelOption(radio, hasDuplicateModel) {
-    const modelLabel = radio.isLiveRadio ? `⚡ ${radio.model}` : radio.model;
-    return hasDuplicateModel ? `${modelLabel} (${radio.className})` : modelLabel;
-  }
-
-  function setRadioSelectPlaceholder(label) {
-    const text = String(label || "");
-    for (const selectEl of [radioMakeEl, radioModelEl]) {
-      if (!selectEl) {
-        continue;
-      }
-      selectEl.innerHTML = "";
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = text;
-      selectEl.appendChild(option);
-      selectEl.value = "";
-    }
-  }
-
-  // Populate model dropdown for selected vendor and refresh selection state.
-  function refreshModelOptions() {
-    const vendor = radioMakeEl.value;
-    const models = state.radioCatalog.filter((r) => r.vendor === vendor);
-    const modelCounts = new Map();
-    for (const radio of models) {
-      modelCounts.set(radio.model, (modelCounts.get(radio.model) || 0) + 1);
-    }
-    radioModelEl.innerHTML = "";
-
-    for (const radio of models) {
-      const option = document.createElement("option");
-      option.value = radio.key;
-      const hasDuplicateModel = (modelCounts.get(radio.model) || 0) > 1;
-      option.textContent = formatRadioModelOption(radio, hasDuplicateModel);
-      radioModelEl.appendChild(option);
-    }
-
-    const selectedKey = radioModelEl.value || models[0]?.key;
-    state.selectedRadio = models.find((r) => r.key === selectedKey) || null;
-    updateSerialActionState();
-    if (state.selectedRadio) {
-      radioModelEl.value = state.selectedRadio.key;
-      logDebug(
-        `RADIO SELECT ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
-      );
-    }
-  }
-
-  function selectRadioByDriver(moduleName, className) {
-    const target = state.radioCatalog.find(
-      (r) => r.module === moduleName && r.className === className,
-    );
-    if (!target) {
-      return false;
-    }
-    clearRadioFilter();
-    radioMakeEl.value = target.vendor;
-    refreshModelOptions();
-    radioModelEl.value = target.key;
-    state.selectedRadio = target;
-    persistSelectedRadioCookie();
-    return true;
-  }
-
-  function selectRadioByDetectedImage(loaded) {
-    if (selectRadioByDriver(loaded.module, loaded.className)) {
-      return true;
-    }
-    const vendor = String(loaded.vendor || "");
-    const model = String(loaded.model || "");
-    const fallback = state.radioCatalog.find(
-      (r) =>
-        r.module === loaded.module
-        && r.vendor === vendor
-        && r.model === model,
-    );
-    if (!fallback) {
-      return false;
-    }
-    clearRadioFilter();
-    radioMakeEl.value = fallback.vendor;
-    refreshModelOptions();
-    radioModelEl.value = fallback.key;
-    state.selectedRadio = fallback;
-    persistSelectedRadioCookie();
-    return true;
-  }
-
-  // Populate make dropdown from the catalog and initialize model options,
-  // preserving the current vendor when it is still present.
-  function refreshMakeOptions() {
-    const previousVendor = radioMakeEl.value;
-    const vendors = uniqueVendors(state.radioCatalog);
-    radioMakeEl.innerHTML = "";
-
-    if (vendors.length === 0) {
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = "No matching radios";
-      radioMakeEl.appendChild(option);
-      radioModelEl.innerHTML = "";
-      state.selectedRadio = null;
-      updateSerialActionState();
-      return;
-    }
-
-    for (const vendor of vendors) {
-      const option = document.createElement("option");
-      option.value = vendor;
-      option.textContent = vendor;
-      radioMakeEl.appendChild(option);
-    }
-    radioMakeEl.value = vendors.includes(previousVendor) ? previousVendor : vendors[0];
-    refreshModelOptions();
   }
 
   function replaceOptions(selectEl, options, placeholderLabel) {
@@ -1067,22 +730,6 @@ export function createUiController() {
     logDebug(`PRZEMIENNIKI GEO ${latitude.toFixed(6)},${longitude.toFixed(6)}`);
   }
 
-  // Load selected radio's CHIRP-derived column metadata from Python runtime.
-  async function loadSelectedRadioMetadata(loadToken = nextRadioLoadToken(state)) {
-    if (!state.selectedRadio) {
-      return;
-    }
-    const meta = await requireRuntimeApi(state).getRadioMetadata({
-      module: state.selectedRadio.module,
-      className: state.selectedRadio.className,
-    });
-    if (isStaleRadioLoad(state, loadToken)) {
-      return;
-    }
-    state.radioMetadata = meta || { headers: [], columns: {} };
-    state.currentHeaders = state.radioMetadata.headers?.length ? state.radioMetadata.headers : state.currentHeaders;
-  }
-
   // Parse CSV through Python runtime and refresh table rows and status text.
   async function parseCsvViaRuntime(csvText) {
     setStatus("Parsing CSV with CHIRP Python...");
@@ -1188,13 +835,13 @@ export function createUiController() {
     const imageBase64 = bytesToBase64(raw);
     setStatus("Loading CHIRP binary codeplug...");
     const loaded = await requireRuntimeApi(state).loadImage({ imageBase64 });
-    const selected = selectRadioByDetectedImage(loaded);
+    const selected = catalog.selectRadioByDetectedImage(loaded);
     if (!selected) {
       throw new Error(
         `Loaded image radio ${loaded.module}.${loaded.className} is not available in current radio catalog`,
       );
     }
-    await loadSelectedRadioMetadata();
+    await catalog.loadSelectedRadioMetadata();
     settings.replaceState({
       supported: Array.isArray(loaded.settings) && loaded.settings.length > 0,
       available: Array.isArray(loaded.settings) && loaded.settings.length > 0,
@@ -1409,70 +1056,7 @@ export function createUiController() {
       }
     });
 
-    // Typing opens an autocomplete list of "<Make> <Model>" suggestions; the
-    // (Pyodide-backed) metadata/settings load only happens once the user picks
-    // a suggestion via keyboard or mouse.
-    radioSearchEl?.addEventListener("input", () => {
-      renderRadioSearchResults();
-    });
-
-    radioSearchEl?.addEventListener("focus", () => {
-      renderRadioSearchResults();
-    });
-
-    radioSearchEl?.addEventListener("keydown", (event) => {
-      const isOpen = radioSearchResultsEl && !radioSearchResultsEl.hidden;
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        if (!isOpen) {
-          renderRadioSearchResults();
-          return;
-        }
-        moveRadioSearchActive(event.key === "ArrowDown" ? 1 : -1);
-      } else if (event.key === "Enter") {
-        if (isOpen && radioSearchActiveIndex >= 0) {
-          event.preventDefault();
-          applyRadioSearchSelection(radioSearchMatches[radioSearchActiveIndex]);
-        }
-      } else if (event.key === "Escape") {
-        if (isOpen) {
-          event.stopPropagation();
-          hideRadioSearchResults();
-        }
-      }
-    });
-
-    radioSearchEl?.addEventListener("blur", () => {
-      // Delay so a click on a suggestion (which blurs the input) still lands.
-      setTimeout(() => hideRadioSearchResults(), 150);
-    });
-
-    radioSearchResultsEl?.addEventListener("mousedown", (event) => {
-      // Prevent the input blur so the click handler below sees the list open.
-      event.preventDefault();
-      const li = event.target.closest("li[role='option']");
-      if (!li) {
-        return;
-      }
-      const index = Number(li.dataset.index);
-      applyRadioSearchSelection(radioSearchMatches[index]);
-    });
-
-    radioMakeEl.addEventListener("change", () => {
-      refreshModelOptions();
-      reloadForSelectedRadio();
-    });
-
-    radioModelEl.addEventListener("change", () => {
-      const key = radioModelEl.value;
-      state.selectedRadio = state.radioCatalog.find((r) => r.key === key) || null;
-      if (state.selectedRadio) {
-        logDebug(
-          `RADIO SELECT ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
-        );
-      }
-      reloadForSelectedRadio();
-    });
+    catalog.bindEvents();
 
     viewChannelsEl?.addEventListener("click", () => {
       setEditorView("channels");
@@ -1644,26 +1228,26 @@ export function createUiController() {
     refreshSerialConnectToggleLabel();
     setSerialSupportWarningVisible(!serialSupported);
     setSidebarControlsEnabled(false);
-    setRadioSelectPlaceholder("Loading...");
+    catalog.setRadioSelectPlaceholder("Loading...");
     try {
       if (!serialSupported) {
         logSerial("Web Serial unsupported in this browser.");
       } else {
         logSerial("Web Serial available.");
       }
-      const catalog = await requireRuntimeApi(state).listRadios();
-      state.radioCatalog = catalog.radios || [];
+      const catalogResponse = await requireRuntimeApi(state).listRadios();
+      state.radioCatalog = catalogResponse.radios || [];
       state.runtimeInfo = (await requireRuntimeApi(state).getRuntimeInfo()) || state.runtimeInfo;
-      refreshMakeOptions();
-      restoreSelectedRadioCookie();
-      await loadSelectedRadioMetadata();
+      catalog.refreshMakeOptions();
+      catalog.restoreSelectedRadioCookie();
+      await catalog.loadSelectedRadioMetadata();
       await settings.load();
       setStatus(`Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources.`);
       await loadCsvText(DEFAULT_SAMPLE_CSV);
       settings.render();
       setSidebarControlsEnabled(true);
     } catch (error) {
-      setRadioSelectPlaceholder("Unavailable");
+      catalog.setRadioSelectPlaceholder("Unavailable");
       reportActionError("Initialization", error);
       setStatus("Initialization failed; sidebar controls remain disabled.");
     }
