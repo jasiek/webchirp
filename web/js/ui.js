@@ -29,6 +29,10 @@ import {
   makeModelLabel,
 } from "./ui/format.js";
 import { normalizeValue } from "./ui/channel-values.js";
+import { queryUiElements } from "./ui/dom.js";
+import { createUiState, exposeCurrentRowsForDebugging } from "./ui/state.js";
+import { createDebugLog } from "./ui/debug-log.js";
+import { createIssueReporter } from "./ui/issue-report.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
 export { buildExportFileName };
@@ -48,97 +52,86 @@ function resolveRepeaterApiBase() {
 }
 
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
-const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
-const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
 
 // Create and manage all DOM/UI state and user interaction behavior.
 export function createUiController() {
-  const tableHead = document.querySelector("#mem-table thead");
-  const tableBody = document.querySelector("#mem-table tbody");
-  const channelEditorEl = document.querySelector("#channel-editor");
-  const settingsEditorEl = document.querySelector("#settings-editor");
-  const viewChannelsEl = document.querySelector("#view-channels");
-  const viewSettingsEl = document.querySelector("#view-settings");
-  const settingsTabsEl = document.querySelector("#settings-tabs");
-  const settingsSummaryEl = document.querySelector("#settings-summary");
-  const settingsEmptyEl = document.querySelector("#settings-empty");
-  const settingsContentEl = document.querySelector("#settings-content");
-  const fileInput = document.querySelector("#csv-file");
-  const imgFileInput = document.querySelector("#img-file");
-  const debugOutputEl = document.querySelector("#debug-output");
-  const reportIssueEl = document.querySelector("#report-issue");
-  const serialSupportWarningEl = document.querySelector("#webserial-support-warning");
-  const liveRadioSupportWarningEl = document.querySelector("#live-radio-support-warning");
-  const radioSearchEl = document.querySelector("#radio-search");
-  const radioSearchResultsEl = document.querySelector("#radio-search-results");
-  const radioMakeEl = document.querySelector("#radio-make");
-  const radioModelEl = document.querySelector("#radio-model");
-  const serialConnectToggleEl = document.querySelector("#serial-connect-toggle");
-  const webusbConnectToggleEl = document.querySelector("#serial-connect-webusb");
-  const radioDownloadEl = document.querySelector("#radio-download");
-  const radioUploadEl = document.querySelector("#radio-upload");
-  const cloneProgressEl = document.querySelector("#clone-progress");
-  const cloneProgressBarEl = document.querySelector("#clone-progress-bar");
-  const cloneProgressLabelEl = document.querySelector("#clone-progress-label");
-  const cloneProgressPercentEl = document.querySelector("#clone-progress-percent");
-  const channelInsertEl = document.querySelector("#channel-insert");
-  const channelRemoveEl = document.querySelector("#channel-remove");
-  const channelMoveUpEl = document.querySelector("#channel-move-up");
-  const channelMoveDownEl = document.querySelector("#channel-move-down");
-  const channelCopyEl = document.querySelector("#channel-copy");
-  const channelCutEl = document.querySelector("#channel-cut");
-  const channelPasteEl = document.querySelector("#channel-paste");
-  const channelMenuToggleEl = document.querySelector("#channel-menu-toggle");
-  const channelMenuPopupEl = document.querySelector("#channel-menu-popup");
-  const channelAddGmrsEl = document.querySelector("#channel-add-gmrs");
-  const channelAddFrsEl = document.querySelector("#channel-add-frs");
-  const channelAddPmr446El = document.querySelector("#channel-add-pmr446");
-  const channelImportPrzemiennikiEl = document.querySelector("#channel-import-przemienniki");
-  const channelImportRepeaterbookEl = document.querySelector("#channel-import-repeaterbook");
-  const przemiennikiModalEl = document.querySelector("#przemienniki-modal");
-  const przemiennikiFormEl = document.querySelector("#przemienniki-form");
-  const przemiennikiModalTitleEl = document.querySelector("#przemienniki-modal-title");
-  const przemiennikiCountryEl = document.querySelector("#przemienniki-country");
-  const przemiennikiBandListEl = document.querySelector("#przemienniki-band-list");
-  const przemiennikiModeListEl = document.querySelector("#przemienniki-mode-list");
-  const przemiennikiOnlyWorkingEl = document.querySelector("#przemienniki-onlyworking");
-  const przemiennikiLatitudeEl = document.querySelector("#przemienniki-latitude");
-  const przemiennikiLongitudeEl = document.querySelector("#przemienniki-longitude");
-  const przemiennikiRangeEl = document.querySelector("#przemienniki-range");
-  const przemiennikiGeolocateEl = document.querySelector("#przemienniki-geolocate");
-  const przemiennikiCancelEl = document.querySelector("#przemienniki-cancel");
-  const importChoiceModalEl = document.querySelector("#import-choice-modal");
-  const importChoiceMessageEl = document.querySelector("#import-choice-message");
-  const importChoiceReplaceEl = document.querySelector("#import-choice-replace");
-  const importChoiceMergeEl = document.querySelector("#import-choice-merge");
-  const importChoiceCancelEl = document.querySelector("#import-choice-cancel");
-  const sidebarControlEls = Array.from(
-    document.querySelectorAll(".left-panel select, .left-panel button, .left-panel input"),
-  );
+  const dom = queryUiElements();
+  const state = createUiState();
+  const log = createDebugLog({ dom });
+  const issueReporter = createIssueReporter({ dom, state, log });
 
-  let runtimeApi = null;
-  let currentHeaders = [];
-  let currentRows = [];
-  let radioCatalog = [];
+  const {
+    tableHead,
+    tableBody,
+    channelEditorEl,
+    settingsEditorEl,
+    viewChannelsEl,
+    viewSettingsEl,
+    settingsTabsEl,
+    settingsSummaryEl,
+    settingsEmptyEl,
+    settingsContentEl,
+    fileInput,
+    imgFileInput,
+    debugOutputEl,
+    reportIssueEl,
+    serialSupportWarningEl,
+    liveRadioSupportWarningEl,
+    radioSearchEl,
+    radioSearchResultsEl,
+    radioMakeEl,
+    radioModelEl,
+    serialConnectToggleEl,
+    webusbConnectToggleEl,
+    radioDownloadEl,
+    radioUploadEl,
+    cloneProgressEl,
+    cloneProgressBarEl,
+    cloneProgressLabelEl,
+    cloneProgressPercentEl,
+    channelInsertEl,
+    channelRemoveEl,
+    channelMoveUpEl,
+    channelMoveDownEl,
+    channelCopyEl,
+    channelCutEl,
+    channelPasteEl,
+    channelMenuToggleEl,
+    channelMenuPopupEl,
+    channelAddGmrsEl,
+    channelAddFrsEl,
+    channelAddPmr446El,
+    channelImportPrzemiennikiEl,
+    channelImportRepeaterbookEl,
+    przemiennikiModalEl,
+    przemiennikiFormEl,
+    przemiennikiModalTitleEl,
+    przemiennikiCountryEl,
+    przemiennikiBandListEl,
+    przemiennikiModeListEl,
+    przemiennikiOnlyWorkingEl,
+    przemiennikiLatitudeEl,
+    przemiennikiLongitudeEl,
+    przemiennikiRangeEl,
+    przemiennikiGeolocateEl,
+    przemiennikiCancelEl,
+    importChoiceModalEl,
+    importChoiceMessageEl,
+    importChoiceReplaceEl,
+    importChoiceMergeEl,
+    importChoiceCancelEl,
+    sidebarControlEls,
+  } = dom;
+
+  const { logDebug, logSerial, setStatus, reportActionError } = log;
+
   let radioSearchMatches = [];
   let radioSearchActiveIndex = -1;
-  let selectedRadio = null;
-  let radioMetadata = { headers: [], columns: {} };
   let radioSettingsState = { supported: false, available: false, requiresImage: false, message: "", groups: [] };
-  // Only the newest metadata/settings load may apply its results; older
-  // in-flight responses would otherwise overwrite state for a radio the user
-  // has already navigated away from.
-  let radioLoadSequence = 0;
-  let lastLoadedRadioKey = "";
-  let runtimeInfo = { chirpRevision: "" };
-  let lastUsbVendorId = "";
-  let lastUsbProductId = "";
   let serialTransportController = null;
   let serialCapability = { supported: false, native: false, webusb: false };
-  let lastErrorSummary = "";
-  let currentEditorView = "channels";
   let activeSettingsTab = "";
   let selectedRowIndexes = new Set();
   let selectionAnchorIndex = null;
@@ -197,15 +190,10 @@ export function createUiController() {
     },
   };
 
-  if (!Object.getOwnPropertyDescriptor(globalThis, "currentRows")) {
-    Object.defineProperty(globalThis, "currentRows", {
-      configurable: true,
-      get: () => currentRows,
-    });
-  }
+  exposeCurrentRowsForDebugging(state);
 
   function setRuntimeApi(api) {
-    runtimeApi = api;
+    state.runtimeApi = api;
   }
 
   // Wire the serial bridge's transport controls (capability + forced transport)
@@ -233,7 +221,7 @@ export function createUiController() {
     serialTransportController?.setPreferredTransport(preferredTransport);
     setSerialButtonsBusy(true);
     try {
-      const baudRate = Number(selectedRadio?.baudRate || 9600);
+      const baudRate = Number(state.selectedRadio?.baudRate || 9600);
       setStatus(`Connecting serial${preferredTransport === "webusb" ? " via WebUSB" : ""}...`);
       const result = await requireRuntimeApi().serialConnect({ baudRate });
       serialConnected = Boolean(result?.connected);
@@ -245,13 +233,13 @@ export function createUiController() {
         logSerial(`Transport: ${result.transport}`);
       }
       if (result?.usbVendorId) {
-        lastUsbVendorId = result.usbVendorId;
+        state.lastUsbVendorId = result.usbVendorId;
       }
       if (result?.usbProductId) {
-        lastUsbProductId = result.usbProductId;
+        state.lastUsbProductId = result.usbProductId;
       }
-      if (lastUsbVendorId || lastUsbProductId) {
-        logDebug(`SERIAL USB ID ${lastUsbVendorId || "unknown"}:${lastUsbProductId || "unknown"}`);
+      if (state.lastUsbVendorId || state.lastUsbProductId) {
+        logDebug(`SERIAL USB ID ${state.lastUsbVendorId || "unknown"}:${state.lastUsbProductId || "unknown"}`);
       }
       setStatus(result.message || "Serial connected.");
     } catch (error) {
@@ -389,12 +377,12 @@ export function createUiController() {
   }
 
   function persistSelectedRadioCookie() {
-    if (!selectedRadio) {
+    if (!state.selectedRadio) {
       return;
     }
     const value = JSON.stringify({
-      make: selectedRadio.vendor,
-      key: selectedRadio.key,
+      make: state.selectedRadio.vendor,
+      key: state.selectedRadio.key,
     });
     setCookie(LAST_RADIO_COOKIE, value);
   }
@@ -415,36 +403,36 @@ export function createUiController() {
     if (!make || !key) {
       return false;
     }
-    if (!radioCatalog.some((r) => r.vendor === make && r.key === key)) {
+    if (!state.radioCatalog.some((r) => r.vendor === make && r.key === key)) {
       return false;
     }
     clearRadioFilter();
     radioMakeEl.value = make;
     refreshModelOptions();
     radioModelEl.value = key;
-    selectedRadio = radioCatalog.find((r) => r.key === key) || null;
-    if (!selectedRadio) {
+    state.selectedRadio = state.radioCatalog.find((r) => r.key === key) || null;
+    if (!state.selectedRadio) {
       return false;
     }
     updateSerialActionState();
     logDebug(
-      `RADIO RESTORE ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
+      `RADIO RESTORE ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
     );
     return true;
   }
 
   function sortedSelectedRowIndexes() {
     return Array.from(selectedRowIndexes)
-      .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < currentRows.length)
+      .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < state.currentRows.length)
       .sort((a, b) => a - b);
   }
 
   function selectedRowsForOperations() {
     const indexes = sortedSelectedRowIndexes();
     if (indexes.length === 0) {
-      return currentRows;
+      return state.currentRows;
     }
-    return indexes.map((idx) => currentRows[idx]).filter(Boolean);
+    return indexes.map((idx) => state.currentRows[idx]).filter(Boolean);
   }
 
   function resetRowSelection() {
@@ -506,7 +494,7 @@ export function createUiController() {
 
   function selectRowRange(fromIdx, toIdx, addToExisting) {
     const start = Math.max(0, Math.min(fromIdx, toIdx));
-    const end = Math.min(currentRows.length - 1, Math.max(fromIdx, toIdx));
+    const end = Math.min(state.currentRows.length - 1, Math.max(fromIdx, toIdx));
     const next = addToExisting ? new Set(selectedRowIndexes) : new Set();
     for (let idx = start; idx <= end; idx += 1) {
       next.add(idx);
@@ -536,42 +524,14 @@ export function createUiController() {
   }
 
   function requireRuntimeApi() {
-    if (!runtimeApi) {
+    if (!state.runtimeApi) {
       throw new Error("Runtime API client is not initialized");
     }
-    return runtimeApi;
-  }
-
-  // Emit status updates into the debug output stream.
-  function setStatus(text) {
-    logDebug(`STATUS ${text}`);
+    return state.runtimeApi;
   }
 
   function currentViewLabel() {
-    return currentEditorView === "settings" ? "radio settings" : "channels";
-  }
-
-  function captureErrorSummary(line) {
-    const text = String(line || "");
-    if (!/\b(error|traceback|exception)\b/i.test(text)) {
-      return;
-    }
-    lastErrorSummary = text.replace(/\s+/g, " ").trim().slice(0, 180);
-  }
-
-  // Record serial-related events in the central debug output stream.
-  function logSerial(line) {
-    logDebug(`SERIAL ${String(line || "")}`);
-  }
-
-  // Append a timestamped line to the bottom debug console panel.
-  function logDebug(line) {
-    const stamp = new Date().toISOString();
-    const text = `[${stamp}] ${String(line || "")}`;
-    const current = debugOutputEl.value ? `${debugOutputEl.value}\n` : "";
-    debugOutputEl.value = `${current}${text}`;
-    debugOutputEl.scrollTop = debugOutputEl.scrollHeight;
-    captureErrorSummary(line);
+    return state.currentEditorView === "settings" ? "radio settings" : "channels";
   }
 
   function trackRadioEvent(eventName, radio) {
@@ -586,70 +546,9 @@ export function createUiController() {
     });
   }
 
-  function latestDebugTail(lineCount) {
-    const lines = String(debugOutputEl.value || "")
-      .split("\n")
-      .filter(Boolean);
-    if (lines.length <= lineCount) {
-      return lines.join("\n");
-    }
-    return lines.slice(lines.length - lineCount).join("\n");
-  }
-
-  function buildIssueUrl() {
-    const radioMake = selectedRadio?.vendor || radioMakeEl.value || "Not selected";
-    const radioModel = selectedRadio?.model || radioModelEl.value || "Not selected";
-    const bugSummary = lastErrorSummary || "manual report";
-    const issueTitle = `Bug report: ${radioMake} ${radioModel} - ${bugSummary}`;
-    const debugTail = latestDebugTail(120);
-    const steps = [
-      "1. Open WebCHIRP",
-      "2. Select a radio make/model if relevant",
-      "3. Perform the action that shows the bug",
-      "4. Describe what happened",
-    ].join("\n");
-    const actualBehavior = [
-      lastErrorSummary || "Manual report with no captured runtime error yet.",
-      "",
-      "Debug output excerpt:",
-      "```",
-      debugTail || "<no debug logs captured>",
-      "```",
-    ].join("\n");
-
-    const params = new URLSearchParams({
-      template: ISSUE_TEMPLATE_NAME,
-      title: issueTitle.slice(0, 240),
-      radio_make: radioMake,
-      radio_model: radioModel,
-      usb_vendor_id: lastUsbVendorId || "Unknown / not connected",
-      usb_product_id: lastUsbProductId || "Unknown / not connected",
-      operating_system: detectOperatingSystem(),
-      browser_and_version: detectBrowserVersion(),
-      chirp_revision: runtimeInfo.chirpRevision || "unknown",
-      steps_to_reproduce: steps,
-      expected_behavior: "The reported action should work without the observed bug.",
-      actual_behavior: actualBehavior,
-    });
-    return `${ISSUE_NEW_URL}?${params.toString()}`;
-  }
-
-  function openPrefilledIssue() {
-    const url = buildIssueUrl();
-    window.open(url, "_blank", "noopener,noreferrer");
-    logDebug("Opened pre-filled GitHub issue form.");
-  }
-
-  // Centralized UI + debug handling for action-level failures.
-  function reportActionError(action, error) {
-    const details = errorDetails(error);
-    logDebug(`${action.toUpperCase()} ERROR\n${details}`);
-    setStatus(`${action} failed (see Debug Output).`);
-  }
-
   function setEditorView(nextView) {
-    currentEditorView = nextView === "settings" ? "settings" : "channels";
-    const channelsActive = currentEditorView === "channels";
+    state.currentEditorView = nextView === "settings" ? "settings" : "channels";
+    const channelsActive = state.currentEditorView === "channels";
     channelEditorEl?.classList.toggle("is-active", channelsActive);
     settingsEditorEl?.classList.toggle("is-active", !channelsActive);
     if (channelEditorEl) {
@@ -686,7 +585,7 @@ export function createUiController() {
   }
 
   function selectedRadioIsLiveMode() {
-    return Boolean(selectedRadio?.isLiveRadio);
+    return Boolean(state.selectedRadio?.isLiveRadio);
   }
 
   function updateSerialActionState() {
@@ -798,7 +697,7 @@ export function createUiController() {
     if (tokens.length === 0) {
       return [];
     }
-    return radioCatalog.filter((radio) => radioMatchesFilter(radio, tokens));
+    return state.radioCatalog.filter((radio) => radioMatchesFilter(radio, tokens));
   }
 
   // "<Make> <Model>" label for a search suggestion; the driver class is added
@@ -902,7 +801,7 @@ export function createUiController() {
     radioMakeEl.value = radio.vendor;
     refreshModelOptions();
     radioModelEl.value = radio.key;
-    selectedRadio = radio;
+    state.selectedRadio = radio;
     logDebug(
       `RADIO SELECT ${makeModelLabel(radio)} (${radio.module}.${radio.className})`,
     );
@@ -915,7 +814,7 @@ export function createUiController() {
     persistSelectedRadioCookie();
     clearInvalidHighlights();
     clearInvalidSettings();
-    if (selectedRadio && selectedRadio.key === lastLoadedRadioKey) {
+    if (state.selectedRadio && state.selectedRadio.key === state.lastLoadedRadioKey) {
       renderTable();
       return;
     }
@@ -928,7 +827,7 @@ export function createUiController() {
         if (isStaleRadioLoad(loadToken)) {
           return;
         }
-        lastLoadedRadioKey = selectedRadio?.key || "";
+        state.lastLoadedRadioKey = state.selectedRadio?.key || "";
         renderTable();
       })
       .catch((error) => {
@@ -939,12 +838,12 @@ export function createUiController() {
   }
 
   function nextRadioLoadToken() {
-    radioLoadSequence += 1;
-    return radioLoadSequence;
+    state.radioLoadSequence += 1;
+    return state.radioLoadSequence;
   }
 
   function isStaleRadioLoad(loadToken) {
-    return loadToken !== radioLoadSequence;
+    return loadToken !== state.radioLoadSequence;
   }
 
   function formatRadioModelOption(radio, hasDuplicateModel) {
@@ -970,7 +869,7 @@ export function createUiController() {
   // Populate model dropdown for selected vendor and refresh selection state.
   function refreshModelOptions() {
     const vendor = radioMakeEl.value;
-    const models = radioCatalog.filter((r) => r.vendor === vendor);
+    const models = state.radioCatalog.filter((r) => r.vendor === vendor);
     const modelCounts = new Map();
     for (const radio of models) {
       modelCounts.set(radio.model, (modelCounts.get(radio.model) || 0) + 1);
@@ -986,18 +885,18 @@ export function createUiController() {
     }
 
     const selectedKey = radioModelEl.value || models[0]?.key;
-    selectedRadio = models.find((r) => r.key === selectedKey) || null;
+    state.selectedRadio = models.find((r) => r.key === selectedKey) || null;
     updateSerialActionState();
-    if (selectedRadio) {
-      radioModelEl.value = selectedRadio.key;
+    if (state.selectedRadio) {
+      radioModelEl.value = state.selectedRadio.key;
       logDebug(
-        `RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
+        `RADIO SELECT ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
       );
     }
   }
 
   function selectRadioByDriver(moduleName, className) {
-    const target = radioCatalog.find(
+    const target = state.radioCatalog.find(
       (r) => r.module === moduleName && r.className === className,
     );
     if (!target) {
@@ -1007,7 +906,7 @@ export function createUiController() {
     radioMakeEl.value = target.vendor;
     refreshModelOptions();
     radioModelEl.value = target.key;
-    selectedRadio = target;
+    state.selectedRadio = target;
     persistSelectedRadioCookie();
     return true;
   }
@@ -1018,7 +917,7 @@ export function createUiController() {
     }
     const vendor = String(loaded.vendor || "");
     const model = String(loaded.model || "");
-    const fallback = radioCatalog.find(
+    const fallback = state.radioCatalog.find(
       (r) =>
         r.module === loaded.module
         && r.vendor === vendor
@@ -1031,7 +930,7 @@ export function createUiController() {
     radioMakeEl.value = fallback.vendor;
     refreshModelOptions();
     radioModelEl.value = fallback.key;
-    selectedRadio = fallback;
+    state.selectedRadio = fallback;
     persistSelectedRadioCookie();
     return true;
   }
@@ -1040,7 +939,7 @@ export function createUiController() {
   // preserving the current vendor when it is still present.
   function refreshMakeOptions() {
     const previousVendor = radioMakeEl.value;
-    const vendors = uniqueVendors(radioCatalog);
+    const vendors = uniqueVendors(state.radioCatalog);
     radioMakeEl.innerHTML = "";
 
     if (vendors.length === 0) {
@@ -1049,7 +948,7 @@ export function createUiController() {
       option.textContent = "No matching radios";
       radioMakeEl.appendChild(option);
       radioModelEl.innerHTML = "";
-      selectedRadio = null;
+      state.selectedRadio = null;
       updateSerialActionState();
       return;
     }
@@ -1068,7 +967,7 @@ export function createUiController() {
     if (column === "Location") {
       return "";
     }
-    const meta = radioMetadata.columns?.[column] || {};
+    const meta = state.radioMetadata.columns?.[column] || {};
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
       return String(meta.options[0]);
     }
@@ -1079,31 +978,31 @@ export function createUiController() {
   }
 
   function reindexLocationColumn() {
-    if (!currentHeaders.includes("Location")) {
+    if (!state.currentHeaders.includes("Location")) {
       return;
     }
-    currentRows.forEach((row, idx) => {
+    state.currentRows.forEach((row, idx) => {
       row.Location = String(idx);
     });
   }
 
   function createBlankChannelRow() {
     const row = {};
-    for (const column of currentHeaders) {
+    for (const column of state.currentHeaders) {
       row[column] = defaultValueForColumn(column);
     }
     return row;
   }
 
   function insertNewChannelRow() {
-    if (!currentHeaders.length) {
+    if (!state.currentHeaders.length) {
       setStatus("No channel schema loaded yet.");
       return;
     }
 
     const selectedIndexes = sortedSelectedRowIndexes();
-    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : currentRows.length;
-    currentRows.splice(insertAt, 0, createBlankChannelRow());
+    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
+    state.currentRows.splice(insertAt, 0, createBlankChannelRow());
     reindexLocationColumn();
     clearInvalidHighlights();
 
@@ -1303,7 +1202,7 @@ export function createUiController() {
   // A row counts as a real channel when it has a usable frequency or a name;
   // blank inserted rows should not trigger the data-loss prompt.
   function hasRealChannels() {
-    return currentRows.some((row) => {
+    return state.currentRows.some((row) => {
       const frequency = Number.parseFloat(String(row?.Frequency ?? ""));
       if (Number.isFinite(frequency) && frequency > 0) {
         return true;
@@ -1334,7 +1233,7 @@ export function createUiController() {
   }
 
   async function runRepeaterQuery() {
-    if (!currentHeaders.length) {
+    if (!state.currentHeaders.length) {
       setStatus("No channel schema loaded yet.");
       return;
     }
@@ -1400,18 +1299,18 @@ export function createUiController() {
   }
 
   function setRowValueIfPresent(row, column, value) {
-    if (!currentHeaders.includes(column)) {
+    if (!state.currentHeaders.includes(column)) {
       return;
     }
-    const meta = radioMetadata.columns?.[column] || {};
+    const meta = state.radioMetadata.columns?.[column] || {};
     row[column] = normalizeValue(column, value, meta, row[column], { allowReadOnly: true });
   }
 
   function findEnumOption(column, choices, caseInsensitive = false) {
-    if (!currentHeaders.includes(column)) {
+    if (!state.currentHeaders.includes(column)) {
       return "";
     }
-    const meta = radioMetadata.columns?.[column] || {};
+    const meta = state.radioMetadata.columns?.[column] || {};
     const options = Array.isArray(meta.options) ? meta.options.map(String) : [];
     if (caseInsensitive) {
       const normalized = new Map(options.map((option) => [option.toLowerCase(), option]));
@@ -1432,7 +1331,7 @@ export function createUiController() {
   }
 
   function addPmr446Channels() {
-    if (!currentHeaders.length) {
+    if (!state.currentHeaders.length) {
       setStatus("No channel schema loaded yet.");
       return;
     }
@@ -1445,7 +1344,7 @@ export function createUiController() {
   }
 
   function addFrsChannels() {
-    if (!currentHeaders.length) {
+    if (!state.currentHeaders.length) {
       setStatus("No channel schema loaded yet.");
       return;
     }
@@ -1458,7 +1357,7 @@ export function createUiController() {
   }
 
   function addGmrsChannels() {
-    if (!currentHeaders.length) {
+    if (!state.currentHeaders.length) {
       setStatus("No channel schema loaded yet.");
       return;
     }
@@ -1471,7 +1370,7 @@ export function createUiController() {
   }
 
   function insertRowsAtSelectionOrEnd(rowsToInsert, label) {
-    if (!currentHeaders.length) {
+    if (!state.currentHeaders.length) {
       setStatus("No channel schema loaded yet.");
       return false;
     }
@@ -1480,8 +1379,8 @@ export function createUiController() {
       return false;
     }
     const selectedIndexes = sortedSelectedRowIndexes();
-    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : currentRows.length;
-    currentRows.splice(insertAt, 0, ...rowsToInsert);
+    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
+    state.currentRows.splice(insertAt, 0, ...rowsToInsert);
     reindexLocationColumn();
     clearInvalidHighlights();
 
@@ -1500,10 +1399,10 @@ export function createUiController() {
   // pending. Returns how many rows were actually removed.
   function removeChannelRows(rowsToRemove) {
     const identity = new Set(rowsToRemove);
-    const firstIndex = currentRows.findIndex((row) => identity.has(row));
-    const before = currentRows.length;
-    currentRows = currentRows.filter((row) => !identity.has(row));
-    const removed = before - currentRows.length;
+    const firstIndex = state.currentRows.findIndex((row) => identity.has(row));
+    const before = state.currentRows.length;
+    state.currentRows = state.currentRows.filter((row) => !identity.has(row));
+    const removed = before - state.currentRows.length;
     if (removed === 0) {
       return 0;
     }
@@ -1511,8 +1410,8 @@ export function createUiController() {
     clearInvalidHighlights();
 
     resetRowSelection();
-    if (currentRows.length > 0) {
-      const nextIndex = Math.min(firstIndex, currentRows.length - 1);
+    if (state.currentRows.length > 0) {
+      const nextIndex = Math.min(firstIndex, state.currentRows.length - 1);
       selectedRowIndexes = new Set([nextIndex]);
       selectionAnchorIndex = nextIndex;
     }
@@ -1526,7 +1425,7 @@ export function createUiController() {
       setStatus("Select one or more channels to remove.");
       return;
     }
-    const removed = removeChannelRows(selectedIndexes.map((idx) => currentRows[idx]));
+    const removed = removeChannelRows(selectedIndexes.map((idx) => state.currentRows[idx]));
     setStatus(`Removed ${removed} selected channel(s).`);
   }
 
@@ -1539,7 +1438,7 @@ export function createUiController() {
   // no modal open and no cell editor (or other field) focused. Copy/cut also
   // defer to a regular DOM text selection (e.g. copying Debug Output text).
   function channelShortcutsActive(event, { respectTextSelection = false } = {}) {
-    if (currentEditorView !== "channels") {
+    if (state.currentEditorView !== "channels") {
       return false;
     }
     if (isPrzemiennikiModalOpen()) {
@@ -1566,7 +1465,7 @@ export function createUiController() {
       setStatus(`Select one or more channels to ${actionLabel}.`);
       return null;
     }
-    const rows = selectedIndexes.map((idx) => currentRows[idx]);
+    const rows = selectedIndexes.map((idx) => state.currentRows[idx]);
     return {
       tsv: serializeRowsToTsv(rows),
       count: rows.length,
@@ -1626,7 +1525,7 @@ export function createUiController() {
   // past the end, and require confirmation when non-empty rows would be
   // overwritten. With no selection, pasted rows append at the end.
   function pasteChannelsFromText(text) {
-    if (!currentHeaders.length) {
+    if (!state.currentHeaders.length) {
       setStatus("No channel schema loaded yet.");
       return;
     }
@@ -1644,10 +1543,10 @@ export function createUiController() {
       return;
     }
     const selectedIndexes = sortedSelectedRowIndexes();
-    const startAt = selectedIndexes.length > 0 ? selectedIndexes[0] : currentRows.length;
+    const startAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
     const overwriteLocations = [];
-    for (let offset = 0; offset < rows.length && startAt + offset < currentRows.length; offset += 1) {
-      const target = currentRows[startAt + offset];
+    for (let offset = 0; offset < rows.length && startAt + offset < state.currentRows.length; offset += 1) {
+      const target = state.currentRows[startAt + offset];
       if (rowLooksNonEmpty(target)) {
         overwriteLocations.push(String(target.Location ?? startAt + offset));
       }
@@ -1666,10 +1565,10 @@ export function createUiController() {
     }
     rows.forEach((row, offset) => {
       const at = startAt + offset;
-      if (at < currentRows.length) {
-        currentRows[at] = row;
+      if (at < state.currentRows.length) {
+        state.currentRows[at] = row;
       } else {
-        currentRows.push(row);
+        state.currentRows.push(row);
       }
     });
     reindexLocationColumn();
@@ -1706,7 +1605,7 @@ export function createUiController() {
       return;
     }
     const { order, selected, moved } = computeMovedRowOrder(
-      currentRows.length,
+      state.currentRows.length,
       selectedIndexes,
       direction,
     );
@@ -1718,7 +1617,7 @@ export function createUiController() {
       );
       return;
     }
-    currentRows = order.map((idx) => currentRows[idx]);
+    state.currentRows = order.map((idx) => state.currentRows[idx]);
     reindexLocationColumn();
     clearInvalidHighlights();
 
@@ -1730,7 +1629,7 @@ export function createUiController() {
 
   // Create a table cell editor (input/select) based on CHIRP column metadata.
   function createCellEditor(row, rowIdx, column) {
-    const meta = radioMetadata.columns?.[column] || {};
+    const meta = state.radioMetadata.columns?.[column] || {};
     const current = String(row[column] ?? "");
     const readOnly = column === "Location" || meta.editable === false;
 
@@ -1771,7 +1670,7 @@ export function createUiController() {
         clearInvalidCell(rowIdx, column);
         const next = normalizeValue(column, select.value, meta, row[column]);
         row[column] = next;
-        currentRows[rowIdx][column] = next;
+        state.currentRows[rowIdx][column] = next;
         select.value = next;
       });
       return markReadOnly(select);
@@ -1791,7 +1690,7 @@ export function createUiController() {
     input.addEventListener("blur", () => {
       const next = normalizeValue(column, input.value, meta, row[column]);
       row[column] = next;
-      currentRows[rowIdx][column] = next;
+      state.currentRows[rowIdx][column] = next;
       input.value = next;
     });
     return markReadOnly(input);
@@ -1799,7 +1698,7 @@ export function createUiController() {
 
   // Render the editable channel table using current rows and metadata rules.
   function renderTable() {
-    const columns = currentHeaders.slice();
+    const columns = state.currentHeaders.slice();
 
     tableHead.innerHTML = "";
     tableBody.innerHTML = "";
@@ -1810,7 +1709,7 @@ export function createUiController() {
       th.textContent = column;
       // Mirror the cell treatment: grey + tooltip on headers of columns the
       // selected radio marks read-only (Location stays the selection handle).
-      const meta = radioMetadata.columns?.[column] || {};
+      const meta = state.radioMetadata.columns?.[column] || {};
       if (meta.editable === false && column !== "Location") {
         th.classList.add("readonly-cell");
         th.title = `${column} is read-only for this radio.`;
@@ -1819,7 +1718,7 @@ export function createUiController() {
     });
     tableHead.appendChild(headerRow);
 
-    currentRows.forEach((row, rowIdx) => {
+    state.currentRows.forEach((row, rowIdx) => {
       const tr = document.createElement("tr");
       if (selectedRowIndexes.has(rowIdx)) {
         tr.classList.add("is-selected");
@@ -1843,23 +1742,23 @@ export function createUiController() {
 
   // Load selected radio's CHIRP-derived column metadata from Python runtime.
   async function loadSelectedRadioMetadata(loadToken = nextRadioLoadToken()) {
-    if (!selectedRadio) {
+    if (!state.selectedRadio) {
       return;
     }
     const meta = await requireRuntimeApi().getRadioMetadata({
-      module: selectedRadio.module,
-      className: selectedRadio.className,
+      module: state.selectedRadio.module,
+      className: state.selectedRadio.className,
     });
     if (isStaleRadioLoad(loadToken)) {
       return;
     }
-    radioMetadata = meta || { headers: [], columns: {} };
-    currentHeaders = radioMetadata.headers?.length ? radioMetadata.headers : currentHeaders;
+    state.radioMetadata = meta || { headers: [], columns: {} };
+    state.currentHeaders = state.radioMetadata.headers?.length ? state.radioMetadata.headers : state.currentHeaders;
   }
 
   async function loadSelectedRadioSettings(options = {}) {
     const loadToken = options.loadToken ?? nextRadioLoadToken();
-    if (!selectedRadio) {
+    if (!state.selectedRadio) {
       radioSettingsState = {
         supported: false,
         available: false,
@@ -1882,8 +1781,8 @@ export function createUiController() {
     };
     try {
       const result = await requireRuntimeApi().getRadioSettings({
-        module: selectedRadio.module,
-        className: selectedRadio.className,
+        module: state.selectedRadio.module,
+        className: state.selectedRadio.className,
       });
       nextState = {
         supported: Boolean(result?.supported),
@@ -1916,7 +1815,7 @@ export function createUiController() {
 
     radioSettingsState = nextState;
     clearInvalidSettings();
-    if (!radioHasSettings() && currentEditorView === "settings") {
+    if (!radioHasSettings() && state.currentEditorView === "settings") {
       setEditorView("channels");
     }
     if (!activeSettingsTab || !radioSettingsState.groups.some((group) => group.id === activeSettingsTab)) {
@@ -2224,15 +2123,15 @@ export function createUiController() {
   // wholesale (Locations come from the file); "merge" appends the imported
   // channels below the existing ones and renumbers Locations.
   function applyParsedCsv(parsed, mode = "replace") {
-    const headersFromMeta = radioMetadata.headers || [];
+    const headersFromMeta = state.radioMetadata.headers || [];
     const parsedHeaders = parsed.headers || [];
-    currentHeaders = headersFromMeta.length ? headersFromMeta : parsedHeaders;
+    state.currentHeaders = headersFromMeta.length ? headersFromMeta : parsedHeaders;
     const imported = parsed.rows || [];
     if (mode === "merge") {
-      currentRows = currentRows.concat(imported);
+      state.currentRows = state.currentRows.concat(imported);
       reindexLocationColumn();
     } else {
-      currentRows = imported;
+      state.currentRows = imported;
     }
     clearInvalidHighlights();
     resetRowSelection();
@@ -2242,9 +2141,9 @@ export function createUiController() {
       ? ` (${parsed.errors.length} parse warnings)`
       : "";
     if (mode === "merge") {
-      setStatus(`Merged ${imported.length} imported channel(s); ${currentRows.length} total${issues}.`);
+      setStatus(`Merged ${imported.length} imported channel(s); ${state.currentRows.length} total${issues}.`);
     } else {
-      setStatus(`Loaded ${currentRows.length} channel(s)${issues}.`);
+      setStatus(`Loaded ${state.currentRows.length} channel(s)${issues}.`);
     }
   }
 
@@ -2277,13 +2176,13 @@ export function createUiController() {
   async function exportCsv() {
     setStatus("Normalizing rows with CHIRP Python...");
     const csvText = await requireRuntimeApi().normalizeRows({
-      rows: currentRows,
-      module: selectedRadio?.module || "",
-      className: selectedRadio?.className || "",
+      rows: state.currentRows,
+      module: state.selectedRadio?.module || "",
+      className: state.selectedRadio?.className || "",
     });
     const fileName = buildExportFileName(
-      selectedRadio?.vendor || "webchirp",
-      selectedRadio?.model || "export",
+      state.selectedRadio?.vendor || "webchirp",
+      state.selectedRadio?.model || "export",
       "csv",
     );
     downloadText(fileName, csvText);
@@ -2291,23 +2190,23 @@ export function createUiController() {
   }
 
   async function exportBinaryCodeplug() {
-    if (!selectedRadio) {
+    if (!state.selectedRadio) {
       setStatus("Select a radio make/model first.");
       return;
     }
     setStatus("Preparing CHIRP binary codeplug...");
     const result = await requireRuntimeApi().exportImage({
-      module: selectedRadio.module,
-      className: selectedRadio.className,
-      rows: currentRows,
+      module: state.selectedRadio.module,
+      className: state.selectedRadio.className,
+      rows: state.currentRows,
       settings: radioSettingsState.groups,
     });
     radioSettingsState.groups = cloneSettingsGroups(result.settings || radioSettingsState.groups);
     renderSettingsPanel();
     const bytes = base64ToBytes(result.imageBase64 || "");
     const fileName = buildExportFileName(
-      result.vendor || selectedRadio.vendor,
-      result.model || selectedRadio.model,
+      result.vendor || state.selectedRadio.vendor,
+      result.model || state.selectedRadio.model,
       "img",
     );
     downloadBytes(fileName, bytes);
@@ -2335,34 +2234,34 @@ export function createUiController() {
     };
     clearInvalidSettings();
     activeSettingsTab = radioSettingsState.groups[0]?.id || "";
-    currentHeaders = radioMetadata.headers?.length
-      ? radioMetadata.headers
-      : (loaded.headers || currentHeaders);
-    currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
+    state.currentHeaders = state.radioMetadata.headers?.length
+      ? state.radioMetadata.headers
+      : (loaded.headers || state.currentHeaders);
+    state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
     clearInvalidHighlights();
     resetRowSelection();
     renderTable();
     updateViewButtons();
     renderSettingsPanel();
     setStatus(
-      `Loaded binary codeplug for ${loaded.vendor || selectedRadio.vendor} ${loaded.model || selectedRadio.model}.`,
+      `Loaded binary codeplug for ${loaded.vendor || state.selectedRadio.vendor} ${loaded.model || state.selectedRadio.model}.`,
     );
   }
 
   async function runUploadPreflight() {
-    if (!selectedRadio) {
+    if (!state.selectedRadio) {
       return { valid: false, issues: [{ rowIndex: -1, column: "", message: "No radio selected." }] };
     }
     const [rowResult, settingsResult] = await Promise.all([
       requireRuntimeApi().validateRowsForUpload({
-        rows: currentRows,
-        module: selectedRadio.module,
-        className: selectedRadio.className,
+        rows: state.currentRows,
+        module: state.selectedRadio.module,
+        className: state.selectedRadio.className,
       }),
       requireRuntimeApi().validateRadioSettings({
         settings: radioSettingsState.groups,
-        module: selectedRadio.module,
-        className: selectedRadio.className,
+        module: state.selectedRadio.module,
+        className: state.selectedRadio.className,
       }),
     ]);
     const result = rowResult;
@@ -2388,11 +2287,11 @@ export function createUiController() {
     for (const issue of issues) {
       const rowIdx = Number(issue?.rowIndex);
       const column = String(issue?.column || "");
-      if (!Number.isInteger(rowIdx) || rowIdx < 0 || rowIdx >= currentRows.length || !column) {
+      if (!Number.isInteger(rowIdx) || rowIdx < 0 || rowIdx >= state.currentRows.length || !column) {
         continue;
       }
       invalidCellKeys.add(invalidCellKey(rowIdx, column));
-      const channel = currentRows[rowIdx]?.Location ?? rowIdx;
+      const channel = state.currentRows[rowIdx]?.Location ?? rowIdx;
       logDebug(`PREFLIGHT INVALID channel=${channel} column=${column}: ${issue?.message || "Invalid value"}`);
     }
     if (issues.length > 0) {
@@ -2589,7 +2488,7 @@ export function createUiController() {
         let mode = "replace";
         if (hasRealChannels()) {
           const choice = await askImportChoice(
-            `The editor holds ${currentRows.length} channel(s) that will be lost if replaced. `
+            `The editor holds ${state.currentRows.length} channel(s) that will be lost if replaced. `
             + `The selected file contains ${(parsed.rows || []).length} channel(s). `
             + "Replace the existing channels, or merge by appending the imported channels below them?",
           );
@@ -2697,10 +2596,10 @@ export function createUiController() {
 
     radioModelEl.addEventListener("change", () => {
       const key = radioModelEl.value;
-      selectedRadio = radioCatalog.find((r) => r.key === key) || null;
-      if (selectedRadio) {
+      state.selectedRadio = state.radioCatalog.find((r) => r.key === key) || null;
+      if (state.selectedRadio) {
         logDebug(
-          `RADIO SELECT ${makeModelLabel(selectedRadio)} (${selectedRadio.module}.${selectedRadio.className})`,
+          `RADIO SELECT ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
         );
       }
       reloadForSelectedRadio();
@@ -2753,8 +2652,7 @@ export function createUiController() {
     });
 
     document.querySelector("#debug-clear").addEventListener("click", () => {
-      debugOutputEl.value = "";
-      lastErrorSummary = "";
+      log.clear();
     });
 
     document.querySelector("#debug-copy")?.addEventListener("click", async () => {
@@ -2778,7 +2676,7 @@ export function createUiController() {
     });
 
     reportIssueEl?.addEventListener("click", () => {
-      openPrefilledIssue();
+      issueReporter.openPrefilledIssue();
     });
 
     window.addEventListener("error", (event) => {
@@ -2791,22 +2689,22 @@ export function createUiController() {
     });
 
     document.querySelector("#radio-download").addEventListener("click", async () => {
-      if (!selectedRadio) {
+      if (!state.selectedRadio) {
         setStatus("Select a radio make/model first.");
         return;
       }
       try {
-        trackRadioEvent("radio_download", selectedRadio);
-        setStatus(`Downloading from ${makeModelLabel(selectedRadio)}...`);
-        beginCloneProgress(`Downloading from ${makeModelLabel(selectedRadio)}...`);
+        trackRadioEvent("radio_download", state.selectedRadio);
+        setStatus(`Downloading from ${makeModelLabel(state.selectedRadio)}...`);
+        beginCloneProgress(`Downloading from ${makeModelLabel(state.selectedRadio)}...`);
         const result = await requireRuntimeApi().downloadSelectedRadio({
-          module: selectedRadio.module,
-          className: selectedRadio.className,
+          module: state.selectedRadio.module,
+          className: state.selectedRadio.className,
         });
-        currentHeaders = radioMetadata.headers?.length
-          ? radioMetadata.headers
+        state.currentHeaders = state.radioMetadata.headers?.length
+          ? state.radioMetadata.headers
           : (result.headers || []);
-        currentRows = result.rows;
+        state.currentRows = result.rows;
         radioSettingsState = {
           supported: Array.isArray(result.settings) && result.settings.length > 0,
           available: Array.isArray(result.settings) && result.settings.length > 0,
@@ -2821,7 +2719,7 @@ export function createUiController() {
         renderTable();
         updateViewButtons();
         renderSettingsPanel();
-        setStatus(`${makeModelLabel(selectedRadio)} download complete (${currentRows.length} channels).`);
+        setStatus(`${makeModelLabel(state.selectedRadio)} download complete (${state.currentRows.length} channels).`);
         if (result.ident) {
           logSerial(`IDENT ${result.ident}`);
         }
@@ -2834,12 +2732,12 @@ export function createUiController() {
     });
 
     document.querySelector("#radio-upload").addEventListener("click", async () => {
-      if (!selectedRadio) {
+      if (!state.selectedRadio) {
         setStatus("Select a radio make/model first.");
         return;
       }
       try {
-        trackRadioEvent("radio_upload", selectedRadio);
+        trackRadioEvent("radio_upload", state.selectedRadio);
         setStatus("Running upload preflight validation...");
         const preflight = await runUploadPreflight();
         if (!preflight.valid) {
@@ -2851,18 +2749,18 @@ export function createUiController() {
           );
           return;
         }
-        setStatus(`Uploading to ${makeModelLabel(selectedRadio)}...`);
-        beginCloneProgress(`Uploading to ${makeModelLabel(selectedRadio)}...`);
+        setStatus(`Uploading to ${makeModelLabel(state.selectedRadio)}...`);
+        beginCloneProgress(`Uploading to ${makeModelLabel(state.selectedRadio)}...`);
         const uploadResult = await requireRuntimeApi().uploadSelectedRadio({
-          module: selectedRadio.module,
-          className: selectedRadio.className,
-          rows: currentRows,
+          module: state.selectedRadio.module,
+          className: state.selectedRadio.className,
+          rows: state.currentRows,
           settings: radioSettingsState.groups,
         });
         radioSettingsState.groups = cloneSettingsGroups(uploadResult.settings || radioSettingsState.groups);
         clearInvalidSettings();
         renderSettingsPanel();
-        setStatus(`${makeModelLabel(selectedRadio)} upload complete.`);
+        setStatus(`${makeModelLabel(state.selectedRadio)} upload complete.`);
       } catch (error) {
         reportActionError("Upload", error);
         logSerial(`ERROR ${errorSummary(error)}`);
@@ -2886,13 +2784,13 @@ export function createUiController() {
         logSerial("Web Serial available.");
       }
       const catalog = await requireRuntimeApi().listRadios();
-      radioCatalog = catalog.radios || [];
-      runtimeInfo = (await requireRuntimeApi().getRuntimeInfo()) || runtimeInfo;
+      state.radioCatalog = catalog.radios || [];
+      state.runtimeInfo = (await requireRuntimeApi().getRuntimeInfo()) || state.runtimeInfo;
       refreshMakeOptions();
       restoreSelectedRadioCookie();
       await loadSelectedRadioMetadata();
       await loadSelectedRadioSettings();
-      setStatus(`Loaded ${radioCatalog.length} radio definitions from CHIRP sources.`);
+      setStatus(`Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources.`);
       await loadCsvText(DEFAULT_SAMPLE_CSV);
       renderSettingsPanel();
       setSidebarControlsEnabled(true);
