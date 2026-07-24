@@ -1,40 +1,15 @@
 import {
-  buildGmrsRows,
-  buildFrsRows,
-  DEFAULT_REPEATER_API_BASE,
-  buildRepeaterEndpoints,
-  buildPmr446Rows,
-  buildPrzemiennikiRows,
-  parsePrzemiennikiMetaJson,
-  parsePrzemiennikiXml,
-} from "./datasources.js";
-import {
-  buildRowsFromClipboardText,
-  computeMovedRowOrder,
-  looksLikeChannelTsv,
-  rowLooksNonEmpty,
-  serializeRowsToTsv,
-} from "./clipboard.js";
-import {
   base64ToBytes,
   buildExportFileName,
   bytesToBase64,
-  countryDisplayName,
-  detectBrowserVersion,
-  detectOperatingSystem,
-  errorDetails,
   errorSummary,
-  flagEmojiFromCountryCode,
   isAndroidPlatform,
   makeModelLabel,
 } from "./ui/format.js";
-import { normalizeValue } from "./ui/channel-values.js";
 import { queryUiElements } from "./ui/dom.js";
 import {
   createUiState,
   exposeCurrentRowsForDebugging,
-  isStaleRadioLoad,
-  nextRadioLoadToken,
   requireRuntimeApi,
 } from "./ui/state.js";
 import { createDebugLog } from "./ui/debug-log.js";
@@ -42,23 +17,10 @@ import { createIssueReporter } from "./ui/issue-report.js";
 import { createSettingsPanel } from "./ui/settings-panel.js";
 import { createChannelTable } from "./ui/channel-table.js";
 import { createRadioCatalog } from "./ui/radio-catalog.js";
+import { createRepeaterQuery } from "./ui/repeater-query.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
 export { buildExportFileName };
-
-const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
-
-// Resolve the repeater-query API base for this deployment. A
-// <meta name="webchirp-repeater-api-base"> tag overrides the built-in default:
-// its content (a proxy base URL, or blank to disable the online-query
-// features) wins when the tag is present; without the tag the default applies.
-function resolveRepeaterApiBase() {
-  const meta = document.querySelector(`meta[name="${REPEATER_API_BASE_META}"]`);
-  if (meta) {
-    return String(meta.getAttribute("content") || "").trim();
-  }
-  return DEFAULT_REPEATER_API_BASE;
-}
 
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
 
@@ -73,7 +35,7 @@ export function createUiController() {
   const actions = {
     updateSerialActionState: () => updateSerialActionState(),
     setEditorView: (view) => setEditorView(view),
-    isRepeaterModalOpen: () => isPrzemiennikiModalOpen(),
+    isRepeaterModalOpen: () => ctx.repeaterQuery.isModalOpen(),
   };
   // Modules are hung off one context object so siblings can call each other
   // through it; every such call happens after construction, so the forward
@@ -82,29 +44,20 @@ export function createUiController() {
   const settings = createSettingsPanel(ctx);
   const table = createChannelTable(ctx);
   const catalog = createRadioCatalog(ctx);
-  Object.assign(ctx, { settings, table, catalog });
+  const repeaterQuery = createRepeaterQuery(ctx);
+  Object.assign(ctx, { settings, table, catalog, repeaterQuery });
 
   const {
-    tableHead,
-    tableBody,
     channelEditorEl,
     settingsEditorEl,
     viewChannelsEl,
     viewSettingsEl,
-    settingsTabsEl,
-    settingsSummaryEl,
-    settingsEmptyEl,
-    settingsContentEl,
     fileInput,
     imgFileInput,
     debugOutputEl,
     reportIssueEl,
     serialSupportWarningEl,
     liveRadioSupportWarningEl,
-    radioSearchEl,
-    radioSearchResultsEl,
-    radioMakeEl,
-    radioModelEl,
     serialConnectToggleEl,
     webusbConnectToggleEl,
     radioDownloadEl,
@@ -113,32 +66,6 @@ export function createUiController() {
     cloneProgressBarEl,
     cloneProgressLabelEl,
     cloneProgressPercentEl,
-    channelInsertEl,
-    channelRemoveEl,
-    channelMoveUpEl,
-    channelMoveDownEl,
-    channelCopyEl,
-    channelCutEl,
-    channelPasteEl,
-    channelMenuToggleEl,
-    channelMenuPopupEl,
-    channelAddGmrsEl,
-    channelAddFrsEl,
-    channelAddPmr446El,
-    channelImportPrzemiennikiEl,
-    channelImportRepeaterbookEl,
-    przemiennikiModalEl,
-    przemiennikiFormEl,
-    przemiennikiModalTitleEl,
-    przemiennikiCountryEl,
-    przemiennikiBandListEl,
-    przemiennikiModeListEl,
-    przemiennikiOnlyWorkingEl,
-    przemiennikiLatitudeEl,
-    przemiennikiLongitudeEl,
-    przemiennikiRangeEl,
-    przemiennikiGeolocateEl,
-    przemiennikiCancelEl,
     importChoiceModalEl,
     importChoiceMessageEl,
     importChoiceReplaceEl,
@@ -151,9 +78,6 @@ export function createUiController() {
 
   let serialTransportController = null;
   let serialCapability = { supported: false, native: false, webusb: false };
-  let przemiennikiDictionaryPromise = null;
-  let repeaterbookDictionaryPromise = null;
-  let activeRepeaterQuerySource = "przemienniki";
   let sidebarControlsEnabled = false;
   let serialConnected = false;
   let importChoiceResolve = null;
@@ -161,47 +85,6 @@ export function createUiController() {
   // collapse the two connect toggles to a single Disconnect button when both
   // are visible (Android).
   let serialTransport = "";
-
-  // Online repeater queries depend on a CORS proxy; when none is configured
-  // (blank base) the endpoints are null and these features are disabled: the
-  // menu items are hidden so they can't fire requests that will fail.
-  const repeaterEndpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
-  const repeaterQueryEnabled = repeaterEndpoints !== null;
-  if (!repeaterQueryEnabled) {
-    if (channelImportPrzemiennikiEl) {
-      channelImportPrzemiennikiEl.hidden = true;
-    }
-    if (channelImportRepeaterbookEl) {
-      channelImportRepeaterbookEl.hidden = true;
-    }
-  }
-
-  const repeaterQuerySources = {
-    przemienniki: {
-      key: "przemienniki",
-      label: "przemienniki.net",
-      actionLabel: "Przemienniki",
-      insertLabel: "przemienniki",
-      apiUrl: repeaterEndpoints?.przemienniki.apiUrl || "",
-      metaUrl: repeaterEndpoints?.przemienniki.metaUrl || "",
-      getDictionaryPromise: () => przemiennikiDictionaryPromise,
-      setDictionaryPromise: (value) => {
-        przemiennikiDictionaryPromise = value;
-      },
-    },
-    repeaterbook: {
-      key: "repeaterbook",
-      label: "repeaterbook.com",
-      actionLabel: "RepeaterBook",
-      insertLabel: "repeaterbook",
-      apiUrl: repeaterEndpoints?.repeaterbook.apiUrl || "",
-      metaUrl: repeaterEndpoints?.repeaterbook.metaUrl || "",
-      getDictionaryPromise: () => repeaterbookDictionaryPromise,
-      setDictionaryPromise: (value) => {
-        repeaterbookDictionaryPromise = value;
-      },
-    },
-  };
 
   exposeCurrentRowsForDebugging(state);
 
@@ -476,148 +359,6 @@ export function createUiController() {
       : "";
   }
 
-  function replaceOptions(selectEl, options, placeholderLabel) {
-    if (!selectEl) {
-      return;
-    }
-    selectEl.innerHTML = "";
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = placeholderLabel;
-    selectEl.appendChild(placeholder);
-    for (const option of options) {
-      const opt = document.createElement("option");
-      opt.value = option.value;
-      opt.textContent = option.label;
-      if (option.title) {
-        opt.title = option.title;
-      }
-      selectEl.appendChild(opt);
-    }
-  }
-
-  function replaceCheckboxOptions(containerEl, options, name) {
-    if (!containerEl) {
-      return;
-    }
-    containerEl.innerHTML = "";
-    options.forEach((option) => {
-      const label = document.createElement("label");
-      label.className = "modal-mode-option";
-      label.title = option.title || option.label || option.value;
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.value = option.value;
-      checkbox.name = name;
-      const text = document.createElement("span");
-      text.textContent = option.label || option.value;
-      label.appendChild(checkbox);
-      label.appendChild(text);
-      containerEl.appendChild(label);
-    });
-  }
-
-  function populatePrzemiennikiCountryOptions(codes) {
-    const countries = Array.from(codes || [])
-      .map((code) => {
-        const name = countryDisplayName(code);
-        const flag = flagEmojiFromCountryCode(code);
-        return {
-          value: code,
-          label: `${flag} ${name}`.trim(),
-          title: name,
-        };
-      })
-      .sort((a, b) => a.title.localeCompare(b.title));
-    replaceOptions(przemiennikiCountryEl, countries, "Any country");
-  }
-
-  function populatePrzemiennikiBandOptions(bands) {
-    const options = Array.from(bands || [])
-      .map((band) => ({ value: band, label: band, title: band }))
-      .sort((a, b) => a.value.localeCompare(b.value));
-    replaceCheckboxOptions(przemiennikiBandListEl, options, "band");
-  }
-
-  function populatePrzemiennikiModeOptions(modes) {
-    replaceCheckboxOptions(przemiennikiModeListEl, Array.from(modes || []), "mode");
-  }
-
-  function activeRepeaterSourceConfig() {
-    return repeaterQuerySources[activeRepeaterQuerySource] || repeaterQuerySources.przemienniki;
-  }
-
-  function setActiveRepeaterQuerySource(sourceKey) {
-    if (!repeaterQuerySources[sourceKey]) {
-      activeRepeaterQuerySource = "przemienniki";
-    } else {
-      activeRepeaterQuerySource = sourceKey;
-    }
-    if (przemiennikiModalTitleEl) {
-      przemiennikiModalTitleEl.textContent = `Query ${activeRepeaterSourceConfig().label}`;
-    }
-  }
-
-  function selectedPrzemiennikiModes() {
-    if (!przemiennikiModeListEl) {
-      return [];
-    }
-    return Array.from(przemiennikiModeListEl.querySelectorAll('input[name="mode"]:checked'))
-      .map((el) => String(el.value || "").trim().toLowerCase())
-      .filter((value) => value.length > 0);
-  }
-
-  function selectedPrzemiennikiBands() {
-    if (!przemiennikiBandListEl) {
-      return [];
-    }
-    return Array.from(przemiennikiBandListEl.querySelectorAll('input[name="band"]:checked'))
-      .map((el) => String(el.value || "").trim().toLowerCase())
-      .filter((value) => value.length > 0);
-  }
-
-  async function ensureRepeaterQueryDictionaryLoaded() {
-    const source = activeRepeaterSourceConfig();
-    const existingPromise = source.getDictionaryPromise();
-    if (existingPromise) {
-      return existingPromise;
-    }
-    const dictionaryPromise = (async () => {
-      const response = await fetch(source.metaUrl);
-      if (!response.ok) {
-        throw new Error(`Dictionary request failed: HTTP ${response.status}`);
-      }
-      const jsonText = await response.text();
-      const parsed = parsePrzemiennikiMetaJson(jsonText);
-      populatePrzemiennikiCountryOptions(parsed.countries);
-      populatePrzemiennikiBandOptions(parsed.bands);
-      populatePrzemiennikiModeOptions(parsed.modes);
-      logDebug(`Loaded ${source.label} filter options from /meta.`);
-      return parsed;
-    })();
-    source.setDictionaryPromise(dictionaryPromise);
-    try {
-      return await dictionaryPromise;
-    } catch (error) {
-      source.setDictionaryPromise(null);
-      throw error;
-    }
-  }
-
-  function setPrzemiennikiModalOpen(open) {
-    if (!przemiennikiModalEl) {
-      return;
-    }
-    przemiennikiModalEl.classList.toggle("hidden", !open);
-    if (open) {
-      przemiennikiCountryEl?.focus();
-    }
-  }
-
-  function isPrzemiennikiModalOpen() {
-    return Boolean(przemiennikiModalEl && !przemiennikiModalEl.classList.contains("hidden"));
-  }
-
   function isImportChoiceModalOpen() {
     return Boolean(importChoiceModalEl && !importChoiceModalEl.classList.contains("hidden"));
   }
@@ -645,89 +386,6 @@ export function createUiController() {
     return new Promise((resolve) => {
       importChoiceResolve = resolve;
     });
-  }
-
-  async function openRepeaterQueryModal(sourceKey) {
-    if (!repeaterQueryEnabled) {
-      return;
-    }
-    setActiveRepeaterQuerySource(sourceKey);
-    const source = activeRepeaterSourceConfig();
-    table.setMenuOpen(false);
-    setStatus(`Loading ${source.label} query options...`);
-    await ensureRepeaterQueryDictionaryLoaded();
-    setPrzemiennikiModalOpen(true);
-    setStatus(`Configure ${source.label} query.`);
-  }
-
-  function appendQueryParam(url, key, value) {
-    const text = String(value ?? "").trim();
-    if (!text) {
-      return;
-    }
-    url.searchParams.set(key, text);
-  }
-
-  async function runRepeaterQuery() {
-    if (!state.currentHeaders.length) {
-      setStatus("No channel schema loaded yet.");
-      return;
-    }
-    const source = activeRepeaterSourceConfig();
-    const url = new URL(source.apiUrl);
-    appendQueryParam(url, "country", String(przemiennikiCountryEl?.value || "").toLowerCase());
-    const selectedBands = selectedPrzemiennikiBands();
-    if (selectedBands.length > 0) {
-      url.searchParams.set("band", selectedBands.join(","));
-    }
-    selectedPrzemiennikiModes().forEach((mode) => {
-      url.searchParams.append("mode", mode);
-    });
-    if (przemiennikiOnlyWorkingEl?.checked) {
-      url.searchParams.set("onlyworking", "true");
-    }
-    appendQueryParam(url, "latitude", przemiennikiLatitudeEl?.value || "");
-    appendQueryParam(url, "longitude", przemiennikiLongitudeEl?.value || "");
-    appendQueryParam(url, "range", przemiennikiRangeEl?.value || "");
-    setStatus(`Querying ${source.label}...`);
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`${source.actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
-    }
-    const xmlText = await response.text();
-    const parsed = parsePrzemiennikiXml(xmlText);
-    const rowsToInsert = buildPrzemiennikiRows(parsed.repeaters, table.rowBuilderHooks());
-    table.insertRowsAtSelectionOrEnd(rowsToInsert, source.insertLabel);
-    logDebug(`${source.actionLabel.toUpperCase()} QUERY ${url.toString()}`);
-    logDebug(`${source.actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length}`);
-  }
-
-  async function geolocatePrzemiennikiQuery() {
-    if (!navigator.geolocation) {
-      throw new Error("Geolocation API is not available in this browser.");
-    }
-    setStatus("Requesting browser geolocation...");
-    const position = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      });
-    });
-    const latitude = Number(position?.coords?.latitude);
-    const longitude = Number(position?.coords?.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      throw new Error("Geolocation did not return valid coordinates.");
-    }
-    if (przemiennikiLatitudeEl) {
-      przemiennikiLatitudeEl.value = latitude.toFixed(6);
-    }
-    if (przemiennikiLongitudeEl) {
-      przemiennikiLongitudeEl.value = longitude.toFixed(6);
-    }
-    setStatus("Geolocation loaded into latitude/longitude fields.");
-    logDebug(`PRZEMIENNIKI GEO ${latitude.toFixed(6)},${longitude.toFixed(6)}`);
   }
 
   // Parse CSV through Python runtime and refresh table rows and status text.
@@ -903,20 +561,7 @@ export function createUiController() {
   // Register all UI event handlers and action bindings.
   function bindEvents() {
     table.bindEvents();
-    channelImportPrzemiennikiEl?.addEventListener("click", async () => {
-      try {
-        await openRepeaterQueryModal("przemienniki");
-      } catch (error) {
-        reportActionError("Przemienniki modal", error);
-      }
-    });
-    channelImportRepeaterbookEl?.addEventListener("click", async () => {
-      try {
-        await openRepeaterQueryModal("repeaterbook");
-      } catch (error) {
-        reportActionError("RepeaterBook modal", error);
-      }
-    });
+    repeaterQuery.bindEvents();
     importChoiceReplaceEl?.addEventListener("click", () => {
       resolveImportChoice("replace");
     });
@@ -931,41 +576,14 @@ export function createUiController() {
         resolveImportChoice("cancel");
       }
     });
-    przemiennikiCancelEl?.addEventListener("click", () => {
-      const source = activeRepeaterSourceConfig();
-      setPrzemiennikiModalOpen(false);
-      setStatus(`Cancelled ${source.label} query.`);
-    });
-    przemiennikiGeolocateEl?.addEventListener("click", async () => {
-      try {
-        await geolocatePrzemiennikiQuery();
-      } catch (error) {
-        reportActionError("Przemienniki geolocation", error);
-      }
-    });
-    przemiennikiModalEl?.addEventListener("click", (event) => {
-      if (event.target === przemiennikiModalEl) {
-        setPrzemiennikiModalOpen(false);
-      }
-    });
-    przemiennikiFormEl?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      try {
-        await runRepeaterQuery();
-        setPrzemiennikiModalOpen(false);
-      } catch (error) {
-        reportActionError(`${activeRepeaterSourceConfig().actionLabel} query`, error);
-      }
-    });
-
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         if (isImportChoiceModalOpen()) {
           resolveImportChoice("cancel");
           return;
         }
-        if (isPrzemiennikiModalOpen()) {
-          setPrzemiennikiModalOpen(false);
+        if (repeaterQuery.isModalOpen()) {
+          repeaterQuery.setModalOpen(false);
           return;
         }
         table.setMenuOpen(false);
