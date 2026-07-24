@@ -15,6 +15,23 @@ import {
   rowLooksNonEmpty,
   serializeRowsToTsv,
 } from "./clipboard.js";
+import {
+  base64ToBytes,
+  buildExportFileName,
+  bytesToBase64,
+  countryDisplayName,
+  detectBrowserVersion,
+  detectOperatingSystem,
+  errorDetails,
+  errorSummary,
+  flagEmojiFromCountryCode,
+  isAndroidPlatform,
+  makeModelLabel,
+} from "./ui/format.js";
+import { normalizeValue } from "./ui/channel-values.js";
+
+// Re-exported so existing importers (and tests) keep a stable entry point.
+export { buildExportFileName };
 
 const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
 
@@ -35,29 +52,6 @@ const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
 const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
-
-function sanitizeFileNamePart(text) {
-  return String(text || "")
-    .trim()
-    .replace(/[^\w.-]+/g, "_")
-    .replace(/^_+|_+$/g, "") || "radio";
-}
-
-function dateStampForFileName(date) {
-  const pad2 = (n) => String(n).padStart(2, "0");
-  const y = date.getFullYear();
-  const m = pad2(date.getMonth() + 1);
-  const d = pad2(date.getDate());
-  return `${y}${m}${d}`;
-}
-
-// Derive an export file name like Baofeng_BF-888_20231218.img
-// (<brand>_<model>_<date>.<format>).
-export function buildExportFileName(vendor, model, extension, date = new Date()) {
-  const vendorPart = sanitizeFileNamePart(vendor);
-  const modelPart = sanitizeFileNamePart(model);
-  return `${vendorPart}_${modelPart}_${dateStampForFileName(date)}.${extension}`;
-}
 
 // Create and manage all DOM/UI state and user interaction behavior.
 export function createUiController() {
@@ -592,38 +586,6 @@ export function createUiController() {
     });
   }
 
-  function detectOperatingSystem() {
-    const ua = navigator.userAgent || "";
-    if (/Windows/i.test(ua)) {
-      return "Windows";
-    }
-    if (/Macintosh|Mac OS X/i.test(ua)) {
-      return "macOS";
-    }
-    if (/Linux|X11/i.test(ua)) {
-      return "Linux";
-    }
-    return "Other";
-  }
-
-  function detectBrowserVersion() {
-    const ua = navigator.userAgent || "";
-    const matchers = [
-      [/Edg\/([\d.]+)/, "Microsoft Edge"],
-      [/OPR\/([\d.]+)/, "Opera"],
-      [/Firefox\/([\d.]+)/, "Firefox"],
-      [/Chrome\/([\d.]+)/, "Chrome"],
-      [/Version\/([\d.]+).*Safari/, "Safari"],
-    ];
-    for (const [regex, name] of matchers) {
-      const match = ua.match(regex);
-      if (match?.[1]) {
-        return `${name} ${match[1]}`;
-      }
-    }
-    return navigator.appVersion || "Unknown browser";
-  }
-
   function latestDebugTail(lineCount) {
     const lines = String(debugOutputEl.value || "")
       .split("\n")
@@ -678,33 +640,6 @@ export function createUiController() {
     logDebug("Opened pre-filled GitHub issue form.");
   }
 
-  // Normalize unknown error shapes into a detailed string for diagnostics.
-  function errorDetails(error) {
-    if (!error) {
-      return "Unknown error";
-    }
-    if (typeof error === "string") {
-      return error;
-    }
-    if (typeof error.stack === "string" && error.stack.length > 0) {
-      return error.stack;
-    }
-    if (typeof error.message === "string" && error.message.length > 0) {
-      return error.message;
-    }
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-
-  // Extract a short first-line summary from a detailed error payload.
-  function errorSummary(error) {
-    const firstLine = errorDetails(error).split("\n")[0].trim();
-    return firstLine || "Unknown error";
-  }
-
   // Centralized UI + debug handling for action-level failures.
   function reportActionError(action, error) {
     const details = errorDetails(error);
@@ -752,12 +687,6 @@ export function createUiController() {
 
   function selectedRadioIsLiveMode() {
     return Boolean(selectedRadio?.isLiveRadio);
-  }
-
-  // Android's native Web Serial only reaches Bluetooth RFCOMM serial ports, so
-  // the WebUSB connect path must stay available there for wired USB adapters.
-  function isAndroidPlatform() {
-    return /\bAndroid\b/i.test(navigator.userAgent || "");
   }
 
   function updateSerialActionState() {
@@ -844,30 +773,6 @@ export function createUiController() {
 
   function settingsUnavailableMessage() {
     return radioSettingsState?.message || "This radio does not expose radio-wide settings.";
-  }
-
-  // Build a short user-facing label for a selected radio catalog entry.
-  function makeModelLabel(radio) {
-    return `${radio.vendor} ${radio.model}`;
-  }
-
-  function base64ToBytes(base64) {
-    const binary = atob(String(base64 || ""));
-    const out = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      out[i] = binary.charCodeAt(i);
-    }
-    return out;
-  }
-
-  function bytesToBase64(bytes) {
-    let out = "";
-    const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      out += String.fromCharCode(...chunk);
-    }
-    return btoa(out);
   }
 
   // Produce a sorted unique list of vendor names from the radio catalog.
@@ -1159,102 +1064,6 @@ export function createUiController() {
     refreshModelOptions();
   }
 
-  // Parse CHIRP-style frequency text (MHz) to integer Hz for validation checks.
-  function parseFreqToHz(value) {
-    const text = String(value || "").trim();
-    if (!text) {
-      return 0;
-    }
-    if (!/^\d+(\.\d+)?$/.test(text)) {
-      return null;
-    }
-    const n = Number.parseFloat(text);
-    if (!Number.isFinite(n)) {
-      return null;
-    }
-    return Math.round(n * 1_000_000);
-  }
-
-  // Check whether a frequency in Hz falls within any allowed CHIRP band range.
-  function inAnyBand(hz, bands) {
-    if (!Array.isArray(bands) || bands.length === 0) {
-      return true;
-    }
-    return bands.some(([lo, hi]) => hz >= Number(lo) && hz < Number(hi));
-  }
-
-  // Coerce and constrain edited cell values according to CHIRP column metadata.
-  // allowReadOnly lets programmatic row builders (paste, repeater imports) fill
-  // columns the grid renders read-only (e.g. TStep on radios with
-  // has_tuning_step=False); kind/options validation still applies.
-  function normalizeValue(column, value, meta, previous, { allowReadOnly = false } = {}) {
-    let v = String(value ?? "");
-    if (!meta || (meta.editable === false && !allowReadOnly)) {
-      return String(previous ?? v);
-    }
-
-    if (meta.kind === "text") {
-      if (meta.validChars) {
-        const allowed = new Set(String(meta.validChars).split(""));
-        v = v
-          .split("")
-          .filter((ch) => allowed.has(ch))
-          .join("");
-      }
-      if (Number.isFinite(meta.maxLength)) {
-        v = v.slice(0, Number(meta.maxLength));
-      }
-      return v;
-    }
-
-    if (meta.kind === "int") {
-      const parsed = Number.parseInt(v, 10);
-      if (Number.isNaN(parsed)) {
-        return String(previous ?? "");
-      }
-      let out = parsed;
-      if (Number.isFinite(meta.min)) {
-        out = Math.max(out, Number(meta.min));
-      }
-      if (Number.isFinite(meta.max)) {
-        out = Math.min(out, Number(meta.max));
-      }
-      return String(out);
-    }
-
-    if (meta.kind === "freq") {
-      const hz = parseFreqToHz(v);
-      if (hz === null) {
-        return String(previous ?? "");
-      }
-      const shouldCheckBands = column !== "Offset";
-      if (shouldCheckBands && !inAnyBand(hz, meta.bands || [])) {
-        return String(previous ?? "");
-      }
-      return v;
-    }
-
-    if (meta.kind === "enum") {
-      const options = Array.isArray(meta.options) ? meta.options.map(String) : [];
-      if (options.length > 0 && !options.includes(v)) {
-        // Numeric enums (TStep "5.00", rToneFreq "88.5", DtcsCode "023") may
-        // arrive from spreadsheets without CHIRP's zero padding ("5", "23");
-        // match them by numeric value before giving up.
-        const numeric = Number.parseFloat(v);
-        const numericMatch = Number.isFinite(numeric)
-          ? options.find((option) => Number.parseFloat(option) === numeric)
-          : undefined;
-        if (numericMatch !== undefined) {
-          return numericMatch;
-        }
-        return String(previous ?? options[0] ?? "");
-      }
-      return v;
-    }
-
-    return v;
-  }
-
   function defaultValueForColumn(column) {
     if (column === "Location") {
       return "";
@@ -1320,17 +1129,6 @@ export function createUiController() {
     setChannelMenuOpen(shouldOpen);
   }
 
-  function flagEmojiFromCountryCode(countryCode) {
-    const code = String(countryCode || "").trim().toUpperCase();
-    const emojiCode = code === "UK" ? "GB" : code;
-    if (!/^[A-Z]{2}$/.test(emojiCode)) {
-      return code;
-    }
-    return Array.from(emojiCode)
-      .map((char) => String.fromCodePoint(char.charCodeAt(0) + 127397))
-      .join("");
-  }
-
   function replaceOptions(selectEl, options, placeholderLabel) {
     if (!selectEl) {
       return;
@@ -1370,18 +1168,6 @@ export function createUiController() {
       label.appendChild(text);
       containerEl.appendChild(label);
     });
-  }
-
-  function countryDisplayName(countryCode) {
-    if (countryCode === "UK" || countryCode === "GB") {
-      return "United Kingdom";
-    }
-    try {
-      const displayNames = new Intl.DisplayNames([navigator.language || "en-US"], { type: "region" });
-      return String(displayNames.of(countryCode) || countryCode);
-    } catch {
-      return countryCode;
-    }
   }
 
   function populatePrzemiennikiCountryOptions(codes) {
