@@ -11,6 +11,14 @@
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Base URL of the proxy that fronts przemienniki.net and repeaterbook.com
+      for the online repeater-query features. The default proxy only accepts
+      requests from https://codeplug.org, so forks hosted elsewhere should
+      point this at their own proxy, or set content="" to hide the query
+      features. Removing this tag falls back to the built-in default.
+    -->
+    <meta name="webchirp-repeater-api-base" content="https://api.codeplug.org" />
     <title>WebCHIRP | Browser-based CHIRP radio programming</title>
     <meta
       name="description"

@@ -60,10 +60,34 @@ const GMRS_CHANNELS = [
   { name: "GMRS 22R", frequency: "462.72500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
 ];
 
-const PRZEMIENNIKI_API_URL = "https://api.codeplug.org/przemienniki";
-const PRZEMIENNIKI_META_URL = "https://api.codeplug.org/przemienniki/meta";
-const REPEATERBOOK_API_URL = "https://api.codeplug.org/repeaterbook";
-const REPEATERBOOK_META_URL = "https://api.codeplug.org/repeaterbook/meta";
+// Base URL of the proxy that fronts przemienniki.net and repeaterbook.com.
+// Those upstreams don't send browser CORS headers, so the online-query
+// features depend on a proxy that adds them. api.codeplug.org restricts its
+// CORS allowlist to https://codeplug.org, so forks hosted elsewhere must
+// point this at their own proxy or leave it blank to disable the features.
+// Overridable per-deployment via a <meta name="webchirp-repeater-api-base">
+// tag (see index.html and buildRepeaterEndpoints).
+const DEFAULT_REPEATER_API_BASE = "https://api.codeplug.org";
+
+// Derive the przemienniki/repeaterbook endpoint URLs from an API base. Returns
+// null when the base is blank so callers can disable the online-query features
+// instead of firing requests that will fail.
+function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
+  const base = String(apiBase ?? "").trim().replace(/\/+$/, "");
+  if (!base) {
+    return null;
+  }
+  return {
+    przemienniki: {
+      apiUrl: `${base}/przemienniki`,
+      metaUrl: `${base}/przemienniki/meta`,
+    },
+    repeaterbook: {
+      apiUrl: `${base}/repeaterbook`,
+      metaUrl: `${base}/repeaterbook/meta`,
+    },
+  };
+}
 
 function parseXmlDocument(xmlText) {
   const doc = new DOMParser().parseFromString(String(xmlText || ""), "application/xml");
@@ -314,8 +338,6 @@ export function buildPrzemiennikiRows(repeaters, { createBlankRow, setRowValue, 
 }
 
 export {
-  PRZEMIENNIKI_API_URL,
-  PRZEMIENNIKI_META_URL,
-  REPEATERBOOK_API_URL,
-  REPEATERBOOK_META_URL,
+  DEFAULT_REPEATER_API_BASE,
+  buildRepeaterEndpoints,
 };

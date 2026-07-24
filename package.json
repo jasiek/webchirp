@@ -9,7 +9,7 @@
     "screenshots": "node scripts/update-screenshots.mjs",
     "radio:read": "node --experimental-wasm-stack-switching scripts/radio-codeplug.mjs read",
     "radio:write": "node --experimental-wasm-stack-switching scripts/radio-codeplug.mjs write",
-    "test:channels": "node --test --experimental-wasm-stack-switching scripts/test-channel-list.mjs scripts/test-ui-radio-loading.mjs scripts/test-call-queue.mjs scripts/test-driver-import-race.mjs scripts/test-clipboard.mjs scripts/test-ui-channel-cut.mjs scripts/test-export-filename.mjs scripts/test-image-metadata.mjs",
+    "test:channels": "node --test --experimental-wasm-stack-switching scripts/test-channel-list.mjs scripts/test-ui-radio-loading.mjs scripts/test-call-queue.mjs scripts/test-driver-import-race.mjs scripts/test-clipboard.mjs scripts/test-ui-channel-cut.mjs scripts/test-export-filename.mjs scripts/test-image-metadata.mjs scripts/test-datasources.mjs scripts/test-ui-repeater-query.mjs",
     "test:hw": "node --experimental-wasm-stack-switching scripts/test-hw-radio.mjs",
     "test:settings": "node --test --experimental-wasm-stack-switching scripts/test-radio-settings.mjs"
   },

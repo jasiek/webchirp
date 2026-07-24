@@ -1,10 +1,8 @@
 import {
   buildGmrsRows,
   buildFrsRows,
-  PRZEMIENNIKI_API_URL,
-  PRZEMIENNIKI_META_URL,
-  REPEATERBOOK_API_URL,
-  REPEATERBOOK_META_URL,
+  DEFAULT_REPEATER_API_BASE,
+  buildRepeaterEndpoints,
   buildPmr446Rows,
   buildPrzemiennikiRows,
   parsePrzemiennikiMetaJson,
@@ -17,6 +15,20 @@ import {
   rowLooksNonEmpty,
   serializeRowsToTsv,
 } from "./clipboard.js";
+
+const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
+
+// Resolve the repeater-query API base for this deployment. A
+// <meta name="webchirp-repeater-api-base"> tag overrides the built-in default:
+// its content (a proxy base URL, or blank to disable the online-query
+// features) wins when the tag is present; without the tag the default applies.
+function resolveRepeaterApiBase() {
+  const meta = document.querySelector(`meta[name="${REPEATER_API_BASE_META}"]`);
+  if (meta) {
+    return String(meta.getAttribute("content") || "").trim();
+  }
+  return DEFAULT_REPEATER_API_BASE;
+}
 
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
 const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
@@ -150,14 +162,28 @@ export function createUiController() {
   // are visible (Android).
   let serialTransport = "";
 
+  // Online repeater queries depend on a CORS proxy; when none is configured
+  // (blank base) the endpoints are null and these features are disabled: the
+  // menu items are hidden so they can't fire requests that will fail.
+  const repeaterEndpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
+  const repeaterQueryEnabled = repeaterEndpoints !== null;
+  if (!repeaterQueryEnabled) {
+    if (channelImportPrzemiennikiEl) {
+      channelImportPrzemiennikiEl.hidden = true;
+    }
+    if (channelImportRepeaterbookEl) {
+      channelImportRepeaterbookEl.hidden = true;
+    }
+  }
+
   const repeaterQuerySources = {
     przemienniki: {
       key: "przemienniki",
       label: "przemienniki.net",
       actionLabel: "Przemienniki",
       insertLabel: "przemienniki",
-      apiUrl: PRZEMIENNIKI_API_URL,
-      metaUrl: PRZEMIENNIKI_META_URL,
+      apiUrl: repeaterEndpoints?.przemienniki.apiUrl || "",
+      metaUrl: repeaterEndpoints?.przemienniki.metaUrl || "",
       getDictionaryPromise: () => przemiennikiDictionaryPromise,
       setDictionaryPromise: (value) => {
         przemiennikiDictionaryPromise = value;
@@ -168,8 +194,8 @@ export function createUiController() {
       label: "repeaterbook.com",
       actionLabel: "RepeaterBook",
       insertLabel: "repeaterbook",
-      apiUrl: REPEATERBOOK_API_URL,
-      metaUrl: REPEATERBOOK_META_URL,
+      apiUrl: repeaterEndpoints?.repeaterbook.apiUrl || "",
+      metaUrl: repeaterEndpoints?.repeaterbook.metaUrl || "",
       getDictionaryPromise: () => repeaterbookDictionaryPromise,
       setDictionaryPromise: (value) => {
         repeaterbookDictionaryPromise = value;
@@ -1501,6 +1527,9 @@ export function createUiController() {
   }
 
   async function openRepeaterQueryModal(sourceKey) {
+    if (!repeaterQueryEnabled) {
+      return;
+    }
     setActiveRepeaterQuerySource(sourceKey);
     const source = activeRepeaterSourceConfig();
     setChannelMenuOpen(false);
