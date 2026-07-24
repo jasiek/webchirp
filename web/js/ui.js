@@ -40,6 +40,7 @@ import {
 import { createDebugLog } from "./ui/debug-log.js";
 import { createIssueReporter } from "./ui/issue-report.js";
 import { createSettingsPanel } from "./ui/settings-panel.js";
+import { createChannelTable } from "./ui/channel-table.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
 export { buildExportFileName };
@@ -73,8 +74,10 @@ export function createUiController() {
   const actions = {
     updateSerialActionState: () => updateSerialActionState(),
     setEditorView: (view) => setEditorView(view),
+    isRepeaterModalOpen: () => isPrzemiennikiModalOpen(),
   };
   const settings = createSettingsPanel({ dom, state, log, actions });
+  const table = createChannelTable({ dom, state, log, actions });
 
   const {
     tableHead,
@@ -145,9 +148,6 @@ export function createUiController() {
   let radioSearchActiveIndex = -1;
   let serialTransportController = null;
   let serialCapability = { supported: false, native: false, webusb: false };
-  let selectedRowIndexes = new Set();
-  let selectionAnchorIndex = null;
-  let invalidCellKeys = new Set();
   let przemiennikiDictionaryPromise = null;
   let repeaterbookDictionaryPromise = null;
   let activeRepeaterQuerySource = "przemienniki";
@@ -431,89 +431,6 @@ export function createUiController() {
     return true;
   }
 
-  function sortedSelectedRowIndexes() {
-    return Array.from(selectedRowIndexes)
-      .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < state.currentRows.length)
-      .sort((a, b) => a - b);
-  }
-
-  function selectedRowsForOperations() {
-    const indexes = sortedSelectedRowIndexes();
-    if (indexes.length === 0) {
-      return state.currentRows;
-    }
-    return indexes.map((idx) => state.currentRows[idx]).filter(Boolean);
-  }
-
-  function resetRowSelection() {
-    selectedRowIndexes.clear();
-    selectionAnchorIndex = null;
-  }
-
-  function invalidCellKey(rowIdx, column) {
-    return `${Number(rowIdx)}:${String(column || "")}`;
-  }
-
-  function clearInvalidHighlights() {
-    invalidCellKeys.clear();
-  }
-
-  function clearInvalidCell(rowIdx, column) {
-    const key = invalidCellKey(rowIdx, column);
-    if (!invalidCellKeys.has(key)) {
-      return;
-    }
-    invalidCellKeys.delete(key);
-    const td = tableBody.querySelector(
-      `td[data-row-idx="${Number(rowIdx)}"][data-column="${CSS.escape(String(column || ""))}"]`,
-    );
-    td?.classList.remove("is-invalid");
-  }
-
-  function applyRowSelectionVisuals() {
-    const selected = selectedRowIndexes;
-    const rows = tableBody.querySelectorAll("tr");
-    rows.forEach((tr, rowIdx) => {
-      const isSelected = selected.has(rowIdx);
-      tr.classList.toggle("is-selected", isSelected);
-      const locationButton = tr.querySelector(".channel-location-button");
-      if (locationButton) {
-        locationButton.setAttribute("aria-pressed", isSelected ? "true" : "false");
-      }
-    });
-  }
-
-  function selectRowRange(fromIdx, toIdx, addToExisting) {
-    const start = Math.max(0, Math.min(fromIdx, toIdx));
-    const end = Math.min(state.currentRows.length - 1, Math.max(fromIdx, toIdx));
-    const next = addToExisting ? new Set(selectedRowIndexes) : new Set();
-    for (let idx = start; idx <= end; idx += 1) {
-      next.add(idx);
-    }
-    selectedRowIndexes = next;
-  }
-
-  function updateRowSelectionFromLocationClick(event, rowIdx) {
-    const wantsToggle = event.metaKey || event.ctrlKey;
-    const wantsRange = event.shiftKey && Number.isInteger(selectionAnchorIndex);
-
-    if (wantsRange) {
-      selectRowRange(selectionAnchorIndex, rowIdx, wantsToggle);
-    } else if (wantsToggle) {
-      if (selectedRowIndexes.has(rowIdx)) {
-        selectedRowIndexes.delete(rowIdx);
-      } else {
-        selectedRowIndexes.add(rowIdx);
-      }
-      selectionAnchorIndex = rowIdx;
-    } else {
-      selectedRowIndexes = new Set([rowIdx]);
-      selectionAnchorIndex = rowIdx;
-    }
-
-    applyRowSelectionVisuals();
-  }
-
   function currentViewLabel() {
     return state.currentEditorView === "settings" ? "radio settings" : "channels";
   }
@@ -754,10 +671,10 @@ export function createUiController() {
   function reloadForSelectedRadio() {
     updateSerialActionState();
     persistSelectedRadioCookie();
-    clearInvalidHighlights();
+    table.clearInvalidHighlights();
     settings.clearInvalid();
     if (state.selectedRadio && state.selectedRadio.key === state.lastLoadedRadioKey) {
-      renderTable();
+      table.render();
       return;
     }
     const loadToken = nextRadioLoadToken(state);
@@ -770,7 +687,7 @@ export function createUiController() {
           return;
         }
         state.lastLoadedRadioKey = state.selectedRadio?.key || "";
-        renderTable();
+        table.render();
       })
       .catch((error) => {
         if (!isStaleRadioLoad(state, loadToken)) {
@@ -894,71 +811,6 @@ export function createUiController() {
     }
     radioMakeEl.value = vendors.includes(previousVendor) ? previousVendor : vendors[0];
     refreshModelOptions();
-  }
-
-  function defaultValueForColumn(column) {
-    if (column === "Location") {
-      return "";
-    }
-    const meta = state.radioMetadata.columns?.[column] || {};
-    if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
-      return String(meta.options[0]);
-    }
-    if (meta.kind === "int" && Number.isFinite(meta.min)) {
-      return String(meta.min);
-    }
-    return "";
-  }
-
-  function reindexLocationColumn() {
-    if (!state.currentHeaders.includes("Location")) {
-      return;
-    }
-    state.currentRows.forEach((row, idx) => {
-      row.Location = String(idx);
-    });
-  }
-
-  function createBlankChannelRow() {
-    const row = {};
-    for (const column of state.currentHeaders) {
-      row[column] = defaultValueForColumn(column);
-    }
-    return row;
-  }
-
-  function insertNewChannelRow() {
-    if (!state.currentHeaders.length) {
-      setStatus("No channel schema loaded yet.");
-      return;
-    }
-
-    const selectedIndexes = sortedSelectedRowIndexes();
-    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
-    state.currentRows.splice(insertAt, 0, createBlankChannelRow());
-    reindexLocationColumn();
-    clearInvalidHighlights();
-
-    selectedRowIndexes = new Set([insertAt]);
-    selectionAnchorIndex = insertAt;
-    renderTable();
-    setStatus(`Inserted new channel at channel ${insertAt}.`);
-  }
-
-  function setChannelMenuOpen(open) {
-    if (!channelMenuToggleEl || !channelMenuPopupEl) {
-      return;
-    }
-    channelMenuPopupEl.classList.toggle("hidden", !open);
-    channelMenuToggleEl.setAttribute("aria-expanded", open ? "true" : "false");
-  }
-
-  function toggleChannelMenu() {
-    if (!channelMenuPopupEl) {
-      return;
-    }
-    const shouldOpen = channelMenuPopupEl.classList.contains("hidden");
-    setChannelMenuOpen(shouldOpen);
   }
 
   function replaceOptions(selectEl, options, placeholderLabel) {
@@ -1132,25 +984,13 @@ export function createUiController() {
     });
   }
 
-  // A row counts as a real channel when it has a usable frequency or a name;
-  // blank inserted rows should not trigger the data-loss prompt.
-  function hasRealChannels() {
-    return state.currentRows.some((row) => {
-      const frequency = Number.parseFloat(String(row?.Frequency ?? ""));
-      if (Number.isFinite(frequency) && frequency > 0) {
-        return true;
-      }
-      return String(row?.Name ?? "").trim() !== "";
-    });
-  }
-
   async function openRepeaterQueryModal(sourceKey) {
     if (!repeaterQueryEnabled) {
       return;
     }
     setActiveRepeaterQuerySource(sourceKey);
     const source = activeRepeaterSourceConfig();
-    setChannelMenuOpen(false);
+    table.setMenuOpen(false);
     setStatus(`Loading ${source.label} query options...`);
     await ensureRepeaterQueryDictionaryLoaded();
     setPrzemiennikiModalOpen(true);
@@ -1194,12 +1034,8 @@ export function createUiController() {
     }
     const xmlText = await response.text();
     const parsed = parsePrzemiennikiXml(xmlText);
-    const rowsToInsert = buildPrzemiennikiRows(parsed.repeaters, {
-      createBlankRow: createBlankChannelRow,
-      setRowValue: setRowValueIfPresent,
-      findEnumOption,
-    });
-    insertRowsAtSelectionOrEnd(rowsToInsert, source.insertLabel);
+    const rowsToInsert = buildPrzemiennikiRows(parsed.repeaters, table.rowBuilderHooks());
+    table.insertRowsAtSelectionOrEnd(rowsToInsert, source.insertLabel);
     logDebug(`${source.actionLabel.toUpperCase()} QUERY ${url.toString()}`);
     logDebug(`${source.actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length}`);
   }
@@ -1229,448 +1065,6 @@ export function createUiController() {
     }
     setStatus("Geolocation loaded into latitude/longitude fields.");
     logDebug(`PRZEMIENNIKI GEO ${latitude.toFixed(6)},${longitude.toFixed(6)}`);
-  }
-
-  function setRowValueIfPresent(row, column, value) {
-    if (!state.currentHeaders.includes(column)) {
-      return;
-    }
-    const meta = state.radioMetadata.columns?.[column] || {};
-    row[column] = normalizeValue(column, value, meta, row[column], { allowReadOnly: true });
-  }
-
-  function findEnumOption(column, choices, caseInsensitive = false) {
-    if (!state.currentHeaders.includes(column)) {
-      return "";
-    }
-    const meta = state.radioMetadata.columns?.[column] || {};
-    const options = Array.isArray(meta.options) ? meta.options.map(String) : [];
-    if (caseInsensitive) {
-      const normalized = new Map(options.map((option) => [option.toLowerCase(), option]));
-      for (const choice of choices) {
-        const match = normalized.get(String(choice || "").toLowerCase());
-        if (match) {
-          return match;
-        }
-      }
-      return "";
-    }
-    for (const choice of choices) {
-      if (options.includes(choice)) {
-        return choice;
-      }
-    }
-    return "";
-  }
-
-  function addPmr446Channels() {
-    if (!state.currentHeaders.length) {
-      setStatus("No channel schema loaded yet.");
-      return;
-    }
-    const rowsToInsert = buildPmr446Rows({
-      createBlankRow: createBlankChannelRow,
-      setRowValue: setRowValueIfPresent,
-      findEnumOption,
-    });
-    insertRowsAtSelectionOrEnd(rowsToInsert, "PMR446");
-  }
-
-  function addFrsChannels() {
-    if (!state.currentHeaders.length) {
-      setStatus("No channel schema loaded yet.");
-      return;
-    }
-    const rowsToInsert = buildFrsRows({
-      createBlankRow: createBlankChannelRow,
-      setRowValue: setRowValueIfPresent,
-      findEnumOption,
-    });
-    insertRowsAtSelectionOrEnd(rowsToInsert, "FRS");
-  }
-
-  function addGmrsChannels() {
-    if (!state.currentHeaders.length) {
-      setStatus("No channel schema loaded yet.");
-      return;
-    }
-    const rowsToInsert = buildGmrsRows({
-      createBlankRow: createBlankChannelRow,
-      setRowValue: setRowValueIfPresent,
-      findEnumOption,
-    });
-    insertRowsAtSelectionOrEnd(rowsToInsert, "GMRS");
-  }
-
-  function insertRowsAtSelectionOrEnd(rowsToInsert, label) {
-    if (!state.currentHeaders.length) {
-      setStatus("No channel schema loaded yet.");
-      return false;
-    }
-    if (!Array.isArray(rowsToInsert) || rowsToInsert.length === 0) {
-      setStatus(`No ${label} entries to insert.`);
-      return false;
-    }
-    const selectedIndexes = sortedSelectedRowIndexes();
-    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
-    state.currentRows.splice(insertAt, 0, ...rowsToInsert);
-    reindexLocationColumn();
-    clearInvalidHighlights();
-
-    selectedRowIndexes = new Set(
-      rowsToInsert.map((_, offset) => insertAt + offset),
-    );
-    selectionAnchorIndex = insertAt;
-    renderTable();
-    setStatus(`Inserted ${rowsToInsert.length} ${label} channel(s) at channel ${insertAt}.`);
-    return true;
-  }
-
-  // Remove exactly these row objects. Identity-based so a removal captured
-  // before an await (Cut's clipboard write) deletes the rows that were
-  // serialized even if the selection or row order changed while it was
-  // pending. Returns how many rows were actually removed.
-  function removeChannelRows(rowsToRemove) {
-    const identity = new Set(rowsToRemove);
-    const firstIndex = state.currentRows.findIndex((row) => identity.has(row));
-    const before = state.currentRows.length;
-    state.currentRows = state.currentRows.filter((row) => !identity.has(row));
-    const removed = before - state.currentRows.length;
-    if (removed === 0) {
-      return 0;
-    }
-    reindexLocationColumn();
-    clearInvalidHighlights();
-
-    resetRowSelection();
-    if (state.currentRows.length > 0) {
-      const nextIndex = Math.min(firstIndex, state.currentRows.length - 1);
-      selectedRowIndexes = new Set([nextIndex]);
-      selectionAnchorIndex = nextIndex;
-    }
-    renderTable();
-    return removed;
-  }
-
-  function removeSelectedChannelRows() {
-    const selectedIndexes = sortedSelectedRowIndexes();
-    if (selectedIndexes.length === 0) {
-      setStatus("Select one or more channels to remove.");
-      return;
-    }
-    const removed = removeChannelRows(selectedIndexes.map((idx) => state.currentRows[idx]));
-    setStatus(`Removed ${removed} selected channel(s).`);
-  }
-
-  function hasDomTextSelection() {
-    const selection = window.getSelection();
-    return Boolean(selection && !selection.isCollapsed && String(selection).trim() !== "");
-  }
-
-  // Channel clipboard/reorder shortcuts only apply in the channel view, with
-  // no modal open and no cell editor (or other field) focused. Copy/cut also
-  // defer to a regular DOM text selection (e.g. copying Debug Output text).
-  function channelShortcutsActive(event, { respectTextSelection = false } = {}) {
-    if (state.currentEditorView !== "channels") {
-      return false;
-    }
-    if (isPrzemiennikiModalOpen()) {
-      return false;
-    }
-    const target = event.target;
-    if (
-      target instanceof Element &&
-      target.closest("input, select, textarea, [contenteditable='true'], [contenteditable='']")
-    ) {
-      return false;
-    }
-    if (respectTextSelection && hasDomTextSelection()) {
-      return false;
-    }
-    return true;
-  }
-
-  // Serialize the explicitly selected rows (never the select-nothing-means-
-  // all-rows fallback: cut would otherwise silently delete every channel).
-  function selectedChannelTsv(actionLabel) {
-    const selectedIndexes = sortedSelectedRowIndexes();
-    if (selectedIndexes.length === 0) {
-      setStatus(`Select one or more channels to ${actionLabel}.`);
-      return null;
-    }
-    const rows = selectedIndexes.map((idx) => state.currentRows[idx]);
-    return {
-      tsv: serializeRowsToTsv(rows),
-      count: rows.length,
-      rows,
-    };
-  }
-
-  function copySelectedChannels(event) {
-    const payload = selectedChannelTsv("copy");
-    if (!payload) {
-      return;
-    }
-    event.clipboardData.setData("text/plain", payload.tsv);
-    event.preventDefault();
-    setStatus(`Copied ${payload.count} channel(s) to clipboard.`);
-  }
-
-  function cutSelectedChannels(event) {
-    const payload = selectedChannelTsv("cut");
-    if (!payload) {
-      return;
-    }
-    event.clipboardData.setData("text/plain", payload.tsv);
-    event.preventDefault();
-    const removed = removeChannelRows(payload.rows);
-    setStatus(`Cut ${removed} channel(s) to clipboard.`);
-  }
-
-  async function writeChannelTsvToClipboard(actionLabel, remove) {
-    const payload = selectedChannelTsv(actionLabel);
-    if (!payload) {
-      return;
-    }
-    if (!navigator.clipboard?.writeText) {
-      setStatus(`Clipboard write not available; press Ctrl+${remove ? "X" : "C"} / Cmd+${remove ? "X" : "C"} instead.`);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(payload.tsv);
-    } catch (error) {
-      logDebug(`CLIPBOARD write failed: ${error}`);
-      setStatus(`Clipboard write blocked; press Ctrl+${remove ? "X" : "C"} / Cmd+${remove ? "X" : "C"} instead.`);
-      return;
-    }
-    if (remove) {
-      // The write may have been parked behind a permission prompt; delete the
-      // rows that were serialized, not whatever is selected now.
-      const removed = removeChannelRows(payload.rows);
-      setStatus(`Cut ${removed} channel(s) to clipboard.`);
-    } else {
-      setStatus(`Copied ${payload.count} channel(s) to clipboard.`);
-    }
-  }
-
-  // Paste-overwrite starting at the first selected row (CHIRP desktop
-  // semantics): pasted rows replace existing rows downward, extend the list
-  // past the end, and require confirmation when non-empty rows would be
-  // overwritten. With no selection, pasted rows append at the end.
-  function pasteChannelsFromText(text) {
-    if (!state.currentHeaders.length) {
-      setStatus("No channel schema loaded yet.");
-      return;
-    }
-    if (!looksLikeChannelTsv(text)) {
-      setStatus("Clipboard does not contain tab-separated channel data.");
-      return;
-    }
-    const built = buildRowsFromClipboardText(text, {
-      createBlankRow: createBlankChannelRow,
-      setRowValue: setRowValueIfPresent,
-    });
-    const rows = built?.rows ?? [];
-    if (rows.length === 0) {
-      setStatus("No channels found in pasted text.");
-      return;
-    }
-    const selectedIndexes = sortedSelectedRowIndexes();
-    const startAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
-    const overwriteLocations = [];
-    for (let offset = 0; offset < rows.length && startAt + offset < state.currentRows.length; offset += 1) {
-      const target = state.currentRows[startAt + offset];
-      if (rowLooksNonEmpty(target)) {
-        overwriteLocations.push(String(target.Location ?? startAt + offset));
-      }
-    }
-    if (overwriteLocations.length > 0) {
-      const summary =
-        overwriteLocations.length === 1
-          ? `channel ${overwriteLocations[0]}`
-          : overwriteLocations.length > 10
-            ? `${overwriteLocations.length} existing channels`
-            : `channels ${overwriteLocations.join(", ")}`;
-      if (!window.confirm(`Pasted channels will overwrite ${summary}. Continue?`)) {
-        setStatus("Paste cancelled.");
-        return;
-      }
-    }
-    rows.forEach((row, offset) => {
-      const at = startAt + offset;
-      if (at < state.currentRows.length) {
-        state.currentRows[at] = row;
-      } else {
-        state.currentRows.push(row);
-      }
-    });
-    reindexLocationColumn();
-    clearInvalidHighlights();
-
-    selectedRowIndexes = new Set(rows.map((_, offset) => startAt + offset));
-    selectionAnchorIndex = startAt;
-    renderTable();
-    setStatus(`Pasted ${rows.length} channel(s) at channel ${startAt}.`);
-  }
-
-  async function pasteChannelsViaApi() {
-    if (!navigator.clipboard?.readText) {
-      setStatus("Clipboard read not available; press Ctrl+V / Cmd+V in the channel view instead.");
-      return;
-    }
-    let text = "";
-    try {
-      text = await navigator.clipboard.readText();
-    } catch (error) {
-      logDebug(`CLIPBOARD read failed: ${error}`);
-      setStatus("Clipboard read blocked; press Ctrl+V / Cmd+V in the channel view instead.");
-      return;
-    }
-    pasteChannelsFromText(text);
-  }
-
-  // Move each selected row by one position, preserving relative order and
-  // clamping at the edges; Location renumbers to match the new order.
-  function moveSelectedChannelRows(direction) {
-    const selectedIndexes = sortedSelectedRowIndexes();
-    if (selectedIndexes.length === 0) {
-      setStatus("Select one or more channels to move.");
-      return;
-    }
-    const { order, selected, moved } = computeMovedRowOrder(
-      state.currentRows.length,
-      selectedIndexes,
-      direction,
-    );
-    if (!moved) {
-      setStatus(
-        direction < 0
-          ? "Selected channels are already at the top."
-          : "Selected channels are already at the bottom.",
-      );
-      return;
-    }
-    state.currentRows = order.map((idx) => state.currentRows[idx]);
-    reindexLocationColumn();
-    clearInvalidHighlights();
-
-    selectedRowIndexes = new Set(selected);
-    selectionAnchorIndex = direction < 0 ? Math.min(...selected) : Math.max(...selected);
-    renderTable();
-    setStatus(`Moved ${selected.length} channel(s) ${direction < 0 ? "up" : "down"}.`);
-  }
-
-  // Create a table cell editor (input/select) based on CHIRP column metadata.
-  function createCellEditor(row, rowIdx, column) {
-    const meta = state.radioMetadata.columns?.[column] || {};
-    const current = String(row[column] ?? "");
-    const readOnly = column === "Location" || meta.editable === false;
-
-    // Grey out read-only cells and explain why; Location is excluded because
-    // its button is the row-selection handle, not a disabled editor.
-    function markReadOnly(editor) {
-      if (readOnly && column !== "Location") {
-        editor.classList.add("readonly-cell");
-        editor.title = `${column} is read-only for this radio.`;
-      }
-      return editor;
-    }
-    if (column === "Location") {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "channel-location-button";
-      button.textContent = current;
-      button.addEventListener("click", (event) => {
-        updateRowSelectionFromLocationClick(event, rowIdx);
-      });
-      return button;
-    }
-    if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
-      const select = document.createElement("select");
-      const options = meta.options.map(String);
-      if (!options.includes(current)) {
-        options.unshift(current);
-      }
-      for (const opt of options) {
-        const optionEl = document.createElement("option");
-        optionEl.value = opt;
-        optionEl.textContent = opt;
-        select.appendChild(optionEl);
-      }
-      select.value = current;
-      select.disabled = readOnly;
-      select.addEventListener("change", () => {
-        clearInvalidCell(rowIdx, column);
-        const next = normalizeValue(column, select.value, meta, row[column]);
-        row[column] = next;
-        state.currentRows[rowIdx][column] = next;
-        select.value = next;
-      });
-      return markReadOnly(select);
-    }
-
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = current;
-    input.readOnly = readOnly;
-    input.disabled = readOnly;
-    if (Number.isFinite(meta.maxLength)) {
-      input.maxLength = Number(meta.maxLength);
-    }
-    input.addEventListener("input", () => {
-      clearInvalidCell(rowIdx, column);
-    });
-    input.addEventListener("blur", () => {
-      const next = normalizeValue(column, input.value, meta, row[column]);
-      row[column] = next;
-      state.currentRows[rowIdx][column] = next;
-      input.value = next;
-    });
-    return markReadOnly(input);
-  }
-
-  // Render the editable channel table using current rows and metadata rules.
-  function renderTable() {
-    const columns = state.currentHeaders.slice();
-
-    tableHead.innerHTML = "";
-    tableBody.innerHTML = "";
-
-    const headerRow = document.createElement("tr");
-    columns.forEach((column) => {
-      const th = document.createElement("th");
-      th.textContent = column;
-      // Mirror the cell treatment: grey + tooltip on headers of columns the
-      // selected radio marks read-only (Location stays the selection handle).
-      const meta = state.radioMetadata.columns?.[column] || {};
-      if (meta.editable === false && column !== "Location") {
-        th.classList.add("readonly-cell");
-        th.title = `${column} is read-only for this radio.`;
-      }
-      headerRow.appendChild(th);
-    });
-    tableHead.appendChild(headerRow);
-
-    state.currentRows.forEach((row, rowIdx) => {
-      const tr = document.createElement("tr");
-      if (selectedRowIndexes.has(rowIdx)) {
-        tr.classList.add("is-selected");
-      }
-
-      columns.forEach((column) => {
-        const td = document.createElement("td");
-        td.dataset.rowIdx = String(rowIdx);
-        td.dataset.column = String(column);
-        td.classList.toggle("is-invalid", invalidCellKeys.has(invalidCellKey(rowIdx, column)));
-        const editor = createCellEditor(row, rowIdx, column);
-        td.appendChild(editor);
-        tr.appendChild(td);
-      });
-
-      tableBody.appendChild(tr);
-    });
-
-    applyRowSelectionVisuals();
   }
 
   // Load selected radio's CHIRP-derived column metadata from Python runtime.
@@ -1705,13 +1099,13 @@ export function createUiController() {
     const imported = parsed.rows || [];
     if (mode === "merge") {
       state.currentRows = state.currentRows.concat(imported);
-      reindexLocationColumn();
+      table.reindexLocationColumn();
     } else {
       state.currentRows = imported;
     }
-    clearInvalidHighlights();
-    resetRowSelection();
-    renderTable();
+    table.clearInvalidHighlights();
+    table.resetRowSelection();
+    table.render();
 
     const issues = parsed.errors.length
       ? ` (${parsed.errors.length} parse warnings)`
@@ -1813,9 +1207,9 @@ export function createUiController() {
       ? state.radioMetadata.headers
       : (loaded.headers || state.currentHeaders);
     state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
-    clearInvalidHighlights();
-    resetRowSelection();
-    renderTable();
+    table.clearInvalidHighlights();
+    table.resetRowSelection();
+    table.render();
     settings.updateViewButtons();
     settings.render();
     setStatus(
@@ -1846,20 +1240,11 @@ export function createUiController() {
     settings.clearInvalid();
     settings.applyValidationIssues(settingsValidation.issues);
     settings.updateSummary();
-    clearInvalidHighlights();
+    table.clearInvalidHighlights();
     const issues = Array.isArray(result?.issues) ? result.issues : [];
-    for (const issue of issues) {
-      const rowIdx = Number(issue?.rowIndex);
-      const column = String(issue?.column || "");
-      if (!Number.isInteger(rowIdx) || rowIdx < 0 || rowIdx >= state.currentRows.length || !column) {
-        continue;
-      }
-      invalidCellKeys.add(invalidCellKey(rowIdx, column));
-      const channel = state.currentRows[rowIdx]?.Location ?? rowIdx;
-      logDebug(`PREFLIGHT INVALID channel=${channel} column=${column}: ${issue?.message || "Invalid value"}`);
-    }
+    table.applyValidationIssues(issues);
     if (issues.length > 0) {
-      renderTable();
+      table.render();
     }
     settings.render();
     return {
@@ -1870,46 +1255,7 @@ export function createUiController() {
 
   // Register all UI event handlers and action bindings.
   function bindEvents() {
-    channelInsertEl?.addEventListener("click", () => {
-      insertNewChannelRow();
-    });
-    channelRemoveEl?.addEventListener("click", () => {
-      removeSelectedChannelRows();
-    });
-    channelMoveUpEl?.addEventListener("click", () => {
-      moveSelectedChannelRows(-1);
-    });
-    channelMoveDownEl?.addEventListener("click", () => {
-      moveSelectedChannelRows(1);
-    });
-    channelMenuToggleEl?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      toggleChannelMenu();
-    });
-    channelCopyEl?.addEventListener("click", async () => {
-      setChannelMenuOpen(false);
-      await writeChannelTsvToClipboard("copy", false);
-    });
-    channelCutEl?.addEventListener("click", async () => {
-      setChannelMenuOpen(false);
-      await writeChannelTsvToClipboard("cut", true);
-    });
-    channelPasteEl?.addEventListener("click", async () => {
-      setChannelMenuOpen(false);
-      await pasteChannelsViaApi();
-    });
-    channelAddGmrsEl?.addEventListener("click", () => {
-      setChannelMenuOpen(false);
-      addGmrsChannels();
-    });
-    channelAddFrsEl?.addEventListener("click", () => {
-      setChannelMenuOpen(false);
-      addFrsChannels();
-    });
-    channelAddPmr446El?.addEventListener("click", () => {
-      setChannelMenuOpen(false);
-      addPmr446Channels();
-    });
+    table.bindEvents();
     channelImportPrzemiennikiEl?.addEventListener("click", async () => {
       try {
         await openRepeaterQueryModal("przemienniki");
@@ -1965,20 +1311,6 @@ export function createUiController() {
       }
     });
 
-    document.addEventListener("click", (event) => {
-      if (!channelMenuPopupEl || channelMenuPopupEl.classList.contains("hidden")) {
-        return;
-      }
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (channelMenuPopupEl.contains(target) || channelMenuToggleEl?.contains(target)) {
-        return;
-      }
-      setChannelMenuOpen(false);
-    });
-
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         if (isImportChoiceModalOpen()) {
@@ -1989,43 +1321,16 @@ export function createUiController() {
           setPrzemiennikiModalOpen(false);
           return;
         }
-        setChannelMenuOpen(false);
+        table.setMenuOpen(false);
         return;
       }
       if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-        if (!channelShortcutsActive(event)) {
+        if (!table.channelShortcutsActive(event)) {
           return;
         }
         event.preventDefault();
-        moveSelectedChannelRows(event.key === "ArrowUp" ? -1 : 1);
+        table.moveSelectedChannelRows(event.key === "ArrowUp" ? -1 : 1);
       }
-    });
-
-    // Ctrl/Cmd+C, X, V arrive as native clipboard events, which supply
-    // clipboardData synchronously and need no permission prompt (unlike the
-    // async navigator.clipboard API used by the menu items). The guard defers
-    // to normal browser behavior inside inputs/selects and text selections.
-    document.addEventListener("copy", (event) => {
-      if (!channelShortcutsActive(event, { respectTextSelection: true })) {
-        return;
-      }
-      copySelectedChannels(event);
-    });
-
-    document.addEventListener("cut", (event) => {
-      if (!channelShortcutsActive(event, { respectTextSelection: true })) {
-        return;
-      }
-      cutSelectedChannels(event);
-    });
-
-    document.addEventListener("paste", (event) => {
-      if (!channelShortcutsActive(event)) {
-        return;
-      }
-      const text = event.clipboardData?.getData("text/plain") ?? "";
-      event.preventDefault();
-      pasteChannelsFromText(text);
     });
 
     document.querySelector("#load-sample").addEventListener("click", async () => {
@@ -2050,7 +1355,7 @@ export function createUiController() {
         const csvText = await file.text();
         const parsed = await parseCsvViaRuntime(csvText);
         let mode = "replace";
-        if (hasRealChannels()) {
+        if (table.hasRealChannels()) {
           const choice = await askImportChoice(
             `The editor holds ${state.currentRows.length} channel(s) that will be lost if replaced. `
             + `The selected file contains ${(parsed.rows || []).length} channel(s). `
@@ -2276,10 +1581,10 @@ export function createUiController() {
           message: "",
           groups: settings.cloneGroups(result.settings || []),
         });
-        clearInvalidHighlights();
+        table.clearInvalidHighlights();
         settings.clearInvalid();
-        resetRowSelection();
-        renderTable();
+        table.resetRowSelection();
+        table.render();
         settings.updateViewButtons();
         settings.render();
         setStatus(`${makeModelLabel(state.selectedRadio)} download complete (${state.currentRows.length} channels).`);
@@ -2372,7 +1677,7 @@ export function createUiController() {
     logDebug,
     updateCloneProgress,
     init,
-    selectedRowsForOperations,
+    selectedRowsForOperations: table.selectedRowsForOperations,
     onRuntimeCrash(message) {
       logDebug(`RUNTIME CRASH ${message}`);
     },
