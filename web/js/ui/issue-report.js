@@ -6,10 +6,13 @@ const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
 // Pre-fills the GitHub bug-report template with the selected radio, the USB ids
 // seen on the last connect, the browser/OS, the CHIRP revision, and a tail of
 // the debug panel — so a report arrives with the diagnostics already attached.
-export function createIssueReporter({ dom, state, log }) {
+export function createIssueReporter({ state, log }) {
   function buildIssueUrl() {
-    const radioMake = state.selectedRadio?.vendor || dom.radioMakeEl.value || "Not selected";
-    const radioModel = state.selectedRadio?.model || dom.radioModelEl.value || "Not selected";
+    // Read the selection from state, never from the make/model dropdowns: every
+    // path that sets those also sets state.selectedRadio, so the dropdowns are
+    // a copy that can only drift, never a better answer.
+    const radioMake = state.selectedRadio?.vendor || "Not selected";
+    const radioModel = state.selectedRadio?.model || "Not selected";
     const lastErrorSummary = log.getLastErrorSummary();
     const bugSummary = lastErrorSummary || "manual report";
     const issueTitle = `Bug report: ${radioMake} ${radioModel} - ${bugSummary}`;

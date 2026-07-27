@@ -26,7 +26,7 @@ export function createUiController() {
   const dom = queryUiElements();
   const state = createUiState();
   const log = createDebugLog({ dom });
-  const issueReporter = createIssueReporter({ dom, state, log });
+  const issueReporter = createIssueReporter({ state, log });
 
   // Cross-module calls go through this registry rather than direct imports, so
   // no module has to import a sibling that imports it back. Every entry is
@@ -74,9 +74,10 @@ export function createUiController() {
   }
 
   // Register the handlers that are not owned by a single feature module: the
-  // view switch, the global Escape key, the debug panel controls and the
-  // window-level error sinks.
+  // view switch, the global Escape key, the issue link and the window-level
+  // error sinks.
   function bindEvents() {
+    log.bindEvents();
     table.bindEvents();
     repeaterQuery.bindEvents();
     codeplugIo.bindEvents();
@@ -120,29 +121,6 @@ export function createUiController() {
       settings.render();
     });
 
-    dom.debugClearEl.addEventListener("click", () => {
-      log.clear();
-    });
-
-    dom.debugCopyEl.addEventListener("click", async () => {
-      const text = dom.debugOutputEl.value || "";
-      try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(text);
-        } else {
-          // Fallback for browsers/contexts without the async clipboard API.
-          dom.debugOutputEl.focus();
-          dom.debugOutputEl.select();
-          document.execCommand("copy");
-        }
-        log.setStatus("Debug log copied to clipboard.");
-      } catch {
-        // Last resort: select the text so the user can copy manually.
-        dom.debugOutputEl.focus();
-        dom.debugOutputEl.select();
-        log.setStatus("Could not copy automatically; log text is selected — copy it manually.");
-      }
-    });
 
     dom.reportIssueEl.addEventListener("click", () => {
       issueReporter.openPrefilledIssue();

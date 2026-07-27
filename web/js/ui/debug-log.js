@@ -56,13 +56,45 @@ export function createDebugLog({ dom }) {
     lastErrorSummary = "";
   }
 
+  // Hand the whole log to the clipboard. Falls back to selecting the text when
+  // the async clipboard API is unavailable or blocked, so the user can always
+  // get the diagnostics out of the panel by hand.
+  async function copyToClipboard() {
+    const text = dom.debugOutputEl.value || "";
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        dom.debugOutputEl.focus();
+        dom.debugOutputEl.select();
+        document.execCommand("copy");
+      }
+      setStatus("Debug log copied to clipboard.");
+    } catch {
+      dom.debugOutputEl.focus();
+      dom.debugOutputEl.select();
+      setStatus("Could not copy automatically; log text is selected — copy it manually.");
+    }
+  }
+
+  function bindEvents() {
+    dom.debugClearEl.addEventListener("click", () => {
+      clear();
+    });
+    dom.debugCopyEl.addEventListener("click", () => {
+      copyToClipboard();
+    });
+  }
+
   return {
+    bindEvents,
     logDebug,
     logSerial,
     setStatus,
     reportActionError,
     latestDebugTail,
     clear,
+    copyToClipboard,
     getLastErrorSummary: () => lastErrorSummary,
   };
 }
