@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  channelCountBucket,
   classifyErrorKind,
+  codeplugParams,
   errorTypeName,
   firstIssueColumn,
   radioEventParams,
@@ -89,6 +91,41 @@ test("firstIssueColumn reports a column name, never a rejected value", () => {
   );
   assert.equal(firstIssueColumn([]), "");
   assert.equal(firstIssueColumn(undefined), "");
+});
+
+test("channelCountBucket covers each range at its boundaries", () => {
+  assert.equal(channelCountBucket(0), "0");
+  assert.equal(channelCountBucket(1), "1-16");
+  assert.equal(channelCountBucket(16), "1-16");
+  assert.equal(channelCountBucket(17), "17-128");
+  assert.equal(channelCountBucket(128), "17-128");
+  assert.equal(channelCountBucket(129), "129-512");
+  assert.equal(channelCountBucket(512), "129-512");
+  assert.equal(channelCountBucket(513), "512+");
+});
+
+test("channelCountBucket refuses to invent a bucket for a non-count", () => {
+  assert.equal(channelCountBucket(-1), "unknown");
+  assert.equal(channelCountBucket(1.5), "unknown");
+  assert.equal(channelCountBucket(NaN), "unknown");
+  assert.equal(channelCountBucket(undefined), "unknown");
+});
+
+test("codeplugParams reports the editor's scale and provenance", () => {
+  assert.deepEqual(
+    codeplugParams({ currentRows: new Array(200).fill({}), codeplugSource: "img" }),
+    { channel_count: 200, channel_count_bucket: "129-512", codeplug_source: "img" },
+  );
+  // Before anything has been loaded there is no provenance to report, and an
+  // empty editor must not be reported as a zero-channel codeplug someone made.
+  assert.deepEqual(
+    codeplugParams({ currentRows: [], codeplugSource: "" }),
+    { channel_count: 0, channel_count_bucket: "0", codeplug_source: "unknown" },
+  );
+  assert.deepEqual(
+    codeplugParams(undefined),
+    { channel_count: 0, channel_count_bucket: "0", codeplug_source: "unknown" },
+  );
 });
 
 test("trackEvent is inert without gtag and survives a throwing one", () => {

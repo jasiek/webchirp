@@ -1,6 +1,7 @@
 import { errorSummary, isAndroidPlatform, makeModelLabel } from "./format.js";
 import {
   classifyErrorKind,
+  codeplugParams,
   errorTypeName,
   firstIssueColumn,
   radioEventParams,
@@ -331,6 +332,7 @@ export function createSerialActions(ctx) {
         ? state.radioMetadata.headers
         : (result.headers || []);
       state.currentRows = result.rows;
+      state.codeplugSource = "radio";
       ctx.settings.replaceState({
         supported: Array.isArray(result.settings) && result.settings.length > 0,
         available: Array.isArray(result.settings) && result.settings.length > 0,
@@ -345,9 +347,7 @@ export function createSerialActions(ctx) {
       ctx.settings.updateViewButtons();
       ctx.settings.render();
       log.setStatus(`${makeModelLabel(state.selectedRadio)} download complete (${state.currentRows.length} channels).`);
-      trackCloneOutcome("radio_download_success", radio, startedAt, {
-        channel_count: state.currentRows.length,
-      });
+      trackCloneOutcome("radio_download_success", radio, startedAt, codeplugParams(state));
       if (result.ident) {
         log.logSerial(`IDENT ${result.ident}`);
       }
@@ -377,6 +377,7 @@ export function createSerialActions(ctx) {
       if (!preflight.valid) {
         const count = Array.isArray(preflight.issues) ? preflight.issues.length : 0;
         trackRadioEvent("upload_blocked_preflight", radio, {
+          ...codeplugParams(state),
           issue_count: count,
           first_column: firstIssueColumn(preflight.issues),
         });
@@ -400,9 +401,10 @@ export function createSerialActions(ctx) {
       ctx.settings.clearInvalid();
       ctx.settings.render();
       log.setStatus(`${makeModelLabel(state.selectedRadio)} upload complete.`);
-      trackCloneOutcome("radio_upload_success", radio, startedAt, {
-        channel_count: state.currentRows.length,
-      });
+      // codeplug_source is the question this event exists to answer on the
+      // write path: whether people upload what they just read off the radio,
+      // or a file they brought with them.
+      trackCloneOutcome("radio_upload_success", radio, startedAt, codeplugParams(state));
     } catch (error) {
       trackCloneOutcome("radio_upload_failure", radio, startedAt, cloneFailureParams(error, stage));
       log.reportActionError("Upload", error);

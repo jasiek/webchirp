@@ -44,6 +44,43 @@ export function radioEventParams(radio) {
   };
 }
 
+// Codeplug sizes as a handful of ranges. A raw count is a metric GA4 can only
+// average; a bucket is a dimension every report can group by, which is what
+// answers "how big are the codeplugs people actually work with" — and so which
+// sizes the channel grid has to stay usable at.
+export function channelCountBucket(count) {
+  const n = Number(count);
+  if (!Number.isInteger(n) || n < 0) {
+    return "unknown";
+  }
+  if (n === 0) {
+    return "0";
+  }
+  if (n <= 16) {
+    return "1-16";
+  }
+  if (n <= 128) {
+    return "17-128";
+  }
+  if (n <= 512) {
+    return "129-512";
+  }
+  return "512+";
+}
+
+// Scale and provenance of whatever is currently in the editor. Provenance is
+// the part that is not derivable from anything else: it says whether the
+// codeplug someone is about to write to a radio came off that radio, out of a
+// file, or from the sample.
+export function codeplugParams(state) {
+  const count = Array.isArray(state?.currentRows) ? state.currentRows.length : 0;
+  return {
+    channel_count: count,
+    channel_count_bucket: channelCountBucket(count),
+    codeplug_source: state?.codeplugSource || "unknown",
+  };
+}
+
 // Failure causes worth telling apart in reporting, matched against the whole
 // error detail rather than its first line: a Pyodide failure arrives as a
 // Python traceback whose first line is always "Traceback (most recent call

@@ -1,5 +1,5 @@
 import { base64ToBytes, buildExportFileName, bytesToBase64 } from "./format.js";
-import { radioEventParams, trackEvent } from "./analytics.js";
+import { codeplugParams, radioEventParams, trackEvent } from "./analytics.js";
 import { requireRuntimeApi } from "./state.js";
 
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
@@ -41,6 +41,7 @@ export function createCodeplugIo(ctx) {
   function trackCodeplugImport(format, source, mode) {
     trackEvent("codeplug_import", {
       ...radioEventParams(state.selectedRadio),
+      ...codeplugParams(state),
       format,
       source,
       mode,
@@ -80,16 +81,18 @@ export function createCodeplugIo(ctx) {
   // Apply a parsed CSV to the editor: "replace" swaps the channel list out
   // wholesale (Locations come from the file); "merge" appends the imported
   // channels below the existing ones and renumbers Locations.
-  function applyParsedCsv(parsed, mode = "replace") {
+  function applyParsedCsv(parsed, mode = "replace", csvSource = "csv") {
     const headersFromMeta = state.radioMetadata.headers || [];
     const parsedHeaders = parsed.headers || [];
     state.currentHeaders = headersFromMeta.length ? headersFromMeta : parsedHeaders;
     const imported = parsed.rows || [];
     if (mode === "merge") {
       state.currentRows = state.currentRows.concat(imported);
+      state.codeplugSource = "mixed";
       ctx.table.reindexLocationColumn();
     } else {
       state.currentRows = imported;
+      state.codeplugSource = csvSource;
     }
     ctx.table.clearInvalidHighlights();
     ctx.table.resetRowSelection();
@@ -106,7 +109,7 @@ export function createCodeplugIo(ctx) {
   }
 
   async function loadCsvText(csvText) {
-    applyParsedCsv(await parseCsvViaRuntime(csvText), "replace");
+    applyParsedCsv(await parseCsvViaRuntime(csvText), "replace", "sample");
   }
 
   // Load a CSV file into the editor, asking first when doing so would discard
@@ -168,6 +171,7 @@ export function createCodeplugIo(ctx) {
     downloadText(fileName, csvText);
     trackEvent("codeplug_export", {
       ...radioEventParams(state.selectedRadio),
+      ...codeplugParams(state),
       format: "csv",
     });
     log.setStatus(`Exported ${fileName}`);
@@ -196,6 +200,7 @@ export function createCodeplugIo(ctx) {
     downloadBytes(fileName, bytes);
     trackEvent("codeplug_export", {
       ...radioEventParams(state.selectedRadio),
+      ...codeplugParams(state),
       format: "img",
     });
     log.setStatus(`Exported ${fileName}`);
@@ -225,6 +230,7 @@ export function createCodeplugIo(ctx) {
       ? state.radioMetadata.headers
       : (loaded.headers || state.currentHeaders);
     state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
+    state.codeplugSource = "img";
     ctx.table.clearInvalidHighlights();
     ctx.table.resetRowSelection();
     ctx.table.render();

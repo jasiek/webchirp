@@ -9,6 +9,10 @@ export function createUiState() {
     // modules read these for export, upload and repeater-import payloads.
     currentHeaders: [],
     currentRows: [],
+    // Where the rows in the editor came from: "radio", "csv", "img", "sample",
+    // or "mixed" once an import has been merged into them. Reporting-only —
+    // no behaviour reads this.
+    codeplugSource: "",
     // Radio catalog and the entry the user has selected.
     radioCatalog: [],
     selectedRadio: null,
