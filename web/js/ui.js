@@ -13,7 +13,12 @@ import { createRadioCatalog } from "./ui/radio-catalog.js";
 import { createRepeaterQuery } from "./ui/repeater-query.js";
 import { createCodeplugIo } from "./ui/codeplug-io.js";
 import { createSerialActions } from "./ui/serial-actions.js";
-import { classifyErrorKind, errorTypeName, trackEvent } from "./ui/analytics.js";
+import {
+  classifyErrorKind,
+  errorTypeName,
+  radioEventParams,
+  trackEvent,
+} from "./ui/analytics.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
 export { buildExportFileName };
@@ -117,16 +122,23 @@ export function createUiController() {
     });
 
     dom.viewSettingsEl.addEventListener("click", () => {
+      // Not reported: updateViewButtons() disables this tab on exactly this
+      // condition, so the branch is unreachable defence rather than something
+      // a user can hit, and an event here would always read as zero.
       if (!settings.radioHasSettings()) {
         log.setStatus(settings.settingsUnavailableMessage());
         return;
       }
+      trackEvent("settings_view_opened", radioEventParams(state.selectedRadio));
       setEditorView("settings");
       settings.render();
     });
 
 
     dom.reportIssueEl.addEventListener("click", () => {
+      // A frustration signal, and one that pairs with the clone failure events:
+      // it says how much of what breaks is actually being reported to us.
+      trackEvent("report_issue_clicked", radioEventParams(state.selectedRadio));
       issueReporter.openPrefilledIssue();
     });
 

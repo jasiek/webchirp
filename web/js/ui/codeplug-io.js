@@ -1,4 +1,5 @@
 import { base64ToBytes, buildExportFileName, bytesToBase64 } from "./format.js";
+import { radioEventParams, trackEvent } from "./analytics.js";
 import { requireRuntimeApi } from "./state.js";
 
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
@@ -32,6 +33,19 @@ export function createCodeplugIo(ctx) {
   // overlay is driven by the depth of nested enters rather than by any single
   // leave event.
   let dragDepth = 0;
+
+  // File names are never reported: the format, how the file arrived, and what
+  // the user did with the replace-or-merge prompt are the parts that say
+  // anything about the feature. "cancelled" is a mode of its own because an
+  // abandoned import is the interesting outcome of that prompt.
+  function trackCodeplugImport(format, source, mode) {
+    trackEvent("codeplug_import", {
+      ...radioEventParams(state.selectedRadio),
+      format,
+      source,
+      mode,
+    });
+  }
 
   function isImportChoiceModalOpen() {
     return !dom.importChoiceModalEl.classList.contains("hidden");
@@ -97,7 +111,7 @@ export function createCodeplugIo(ctx) {
 
   // Load a CSV file into the editor, asking first when doing so would discard
   // channels the user already has. Shared by the Import CSV button and drops.
-  async function importCsvFile(file) {
+  async function importCsvFile(file, source = "button") {
     const parsed = await parseCsvViaRuntime(await file.text());
     let mode = "replace";
     if (ctx.table.hasRealChannels()) {
@@ -107,12 +121,14 @@ export function createCodeplugIo(ctx) {
         + "Replace the existing channels, or merge by appending the imported channels below them?",
       );
       if (choice === "cancel") {
+        trackCodeplugImport("csv", source, "cancelled");
         log.setStatus("CSV import cancelled.");
         return;
       }
       mode = choice;
     }
     applyParsedCsv(parsed, mode);
+    trackCodeplugImport("csv", source, mode);
   }
 
   // Trigger client-side download of generated text content as a file.
@@ -150,6 +166,10 @@ export function createCodeplugIo(ctx) {
       "csv",
     );
     downloadText(fileName, csvText);
+    trackEvent("codeplug_export", {
+      ...radioEventParams(state.selectedRadio),
+      format: "csv",
+    });
     log.setStatus(`Exported ${fileName}`);
   }
 
@@ -174,10 +194,14 @@ export function createCodeplugIo(ctx) {
       "img",
     );
     downloadBytes(fileName, bytes);
+    trackEvent("codeplug_export", {
+      ...radioEventParams(state.selectedRadio),
+      format: "img",
+    });
     log.setStatus(`Exported ${fileName}`);
   }
 
-  async function importBinaryCodeplug(file) {
+  async function importBinaryCodeplug(file, source = "button") {
     const raw = new Uint8Array(await file.arrayBuffer());
     const imageBase64 = bytesToBase64(raw);
     log.setStatus("Loading CHIRP binary codeplug...");
@@ -206,6 +230,10 @@ export function createCodeplugIo(ctx) {
     ctx.table.render();
     ctx.settings.updateViewButtons();
     ctx.settings.render();
+    // Reported after the image has selected its radio, so the event names the
+    // driver the file turned out to need rather than whatever was selected
+    // before the load.
+    trackCodeplugImport("img", source, "replace");
     log.setStatus(
       `Loaded binary codeplug for ${loaded.vendor || state.selectedRadio.vendor} ${loaded.model || state.selectedRadio.model}.`,
     );
@@ -239,10 +267,10 @@ export function createCodeplugIo(ctx) {
       return;
     }
     if (kind === "csv") {
-      await importCsvFile(file);
+      await importCsvFile(file, "drag_drop");
       return;
     }
-    await importBinaryCodeplug(file);
+    await importBinaryCodeplug(file, "drag_drop");
   }
 
   // Only file drags are ours to handle; text dragged within the page (between
@@ -336,6 +364,9 @@ export function createCodeplugIo(ctx) {
     });
 
     dom.loadSampleEl.addEventListener("click", async () => {
+      // Separates people evaluating the app from people working on their own
+      // codeplug; init() loads the same sample without going through here.
+      trackEvent("sample_loaded", radioEventParams(state.selectedRadio));
       await runFileLoad("Sample load", () => loadCsvText(DEFAULT_SAMPLE_CSV));
     });
 

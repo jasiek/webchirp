@@ -1,4 +1,5 @@
 import { errorSummary } from "./format.js";
+import { radioEventParams, trackEvent } from "./analytics.js";
 import { isStaleRadioLoad, nextRadioLoadToken, requireRuntimeApi } from "./state.js";
 
 // Radio-wide settings: the tabbed editor, its per-value validation, and the
@@ -352,6 +353,13 @@ export function createSettingsPanel({ dom, state, log, actions }) {
       tabButton.classList.toggle("is-active", group.id === activeTab);
       tabButton.classList.toggle("has-invalid", tabHasInvalidSettings(group));
       tabButton.addEventListener("click", () => {
+        // Group ids come from the driver's own settings tree, so this says
+        // which parts of a radio's configuration people actually go looking
+        // for. Only the group id travels, never a setting value.
+        trackEvent("settings_tab_opened", {
+          ...radioEventParams(state.selectedRadio),
+          tab: String(group.id || ""),
+        });
         activeTab = group.id;
         render();
       });
