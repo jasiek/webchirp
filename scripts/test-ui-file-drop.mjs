@@ -143,7 +143,9 @@ class FakeElement {
 }
 
 // Collects window listeners so tests can fire drag events and await whatever
-// async work the handler kicks off.
+// async work the handler kicks off. emit() resolves to whether any handler
+// called preventDefault(), which is what decides between "the app takes this
+// drag" and "the browser navigates away from the app".
 function createFakeWindow() {
   const listeners = new Map();
   return {
@@ -157,9 +159,17 @@ function createFakeWindow() {
     open() {},
     getSelection: () => null,
     async emit(type, event) {
+      let defaultPrevented = false;
       for (const handler of listeners.get(String(type)) || []) {
-        await handler({ preventDefault() {}, ...event, type });
+        await handler({
+          ...event,
+          type,
+          preventDefault() {
+            defaultPrevented = true;
+          },
+        });
       }
+      return defaultPrevented;
     },
   };
 }
@@ -338,6 +348,60 @@ test("a dropped CSV goes through the same replace-or-merge prompt as Import CSV"
   await pending;
 
   assert.match(debugOutputEl.value, /STATUS Merged 1 imported channel\(s\); 2 total/);
+});
+
+test("a drop is refused while an earlier load is still waiting on the prompt", async () => {
+  const { window, debugOutputEl, importChoiceModalEl, importChoiceMergeEl } = installFakeDom();
+  const { calls } = await bootUi();
+  importChoiceModalEl.classList.add("hidden");
+
+  await window.emit("drop", dropEvent([fakeFile("first.csv", { text: "Location,Name\n0,A\n" })]));
+  const pending = window.emit("drop", dropEvent([fakeFile("second.csv", { text: "Location,Name\n0,B\n" })]));
+  await flushAsync();
+  assert.equal(importChoiceModalEl.classList.contains("hidden"), false);
+
+  // Starting a third load here would overwrite second.csv's pending choice and
+  // leave its promise unresolved forever.
+  await window.emit("drop", dropEvent([fakeFile("third.csv", { text: "Location,Name\n0,C\n" })]));
+  assert.match(debugOutputEl.value, /STATUS A file is already loading/);
+  assert.equal(calls.parseCsv.length, 2, "third.csv must not reach the parser");
+
+  // The refused drop must not have disturbed the load it collided with.
+  importChoiceMergeEl.dispatchEvent({ type: "click" });
+  await pending;
+  assert.match(debugOutputEl.value, /STATUS Merged 1 imported channel\(s\); 2 total/);
+});
+
+test("dropping several files loads the first and records the rest as ignored", async () => {
+  const { window, debugOutputEl } = installFakeDom();
+  const { calls } = await bootUi();
+
+  await window.emit("drop", dropEvent([
+    fakeFile("first.csv", { text: "Location,Name\n0,A\n" }),
+    fakeFile("second.csv", { text: "Location,Name\n0,B\n" }),
+    fakeFile("third.img"),
+  ]));
+
+  assert.equal(calls.parseCsv.length, 1);
+  assert.equal(calls.loadImage.length, 0);
+  assert.match(debugOutputEl.value, /DROP first\.csv; ignoring 2 other file\(s\)/);
+});
+
+test("file drags are claimed from the browser, other drags are not", async () => {
+  const { window } = installFakeDom();
+  await bootUi();
+  const fileDrag = { dataTransfer: { types: ["Files"] } };
+  const textDrag = { dataTransfer: { types: ["text/plain"] } };
+
+  // An unprevented dragover default means "not a drop target": the drop event
+  // never fires and the browser navigates to the file instead.
+  assert.equal(await window.emit("dragover", fileDrag), true);
+  assert.equal(await window.emit("dragenter", fileDrag), true);
+  assert.equal(await window.emit("drop", dropEvent([fakeFile("channels.csv", { text: "Location\n0\n" })])), true);
+
+  assert.equal(await window.emit("dragover", textDrag), false, "text drags must keep native behaviour");
+  assert.equal(await window.emit("dragenter", textDrag), false);
+  assert.equal(await window.emit("drop", { dataTransfer: { types: ["text/plain"], files: [] } }), false);
 });
 
 test("dropping an unsupported file loads nothing and says what is accepted", async () => {
