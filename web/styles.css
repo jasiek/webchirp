@@ -799,6 +799,49 @@ button:not(:disabled):hover {
   margin: 0.25rem 0.2rem;
 }
 
+/* Drag-and-drop file loading (web/js/ui/codeplug-io.js). The whole page is the
+   drop target, so this only signals that a dragged file will be accepted.
+   pointer-events stay off so the overlay appearing under the cursor cannot
+   become the drag target and cancel the drag it is announcing. */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay);
+  padding: 1rem;
+  pointer-events: none;
+}
+
+.drop-overlay.hidden {
+  display: none;
+}
+
+.drop-overlay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 16px 36px var(--shadow-color);
+  padding: 1.4rem 2rem;
+  text-align: center;
+}
+
+.drop-overlay-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.drop-overlay-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;

@@ -19,6 +19,7 @@ export const REQUIRED_ELEMENTS = {
   settingsContentEl: "#settings-content",
   fileInput: "#csv-file",
   imgFileInput: "#img-file",
+  dropOverlayEl: "#drop-overlay",
   debugOutputEl: "#debug-output",
   debugClearEl: "#debug-clear",
   debugCopyEl: "#debug-copy",

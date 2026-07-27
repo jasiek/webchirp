@@ -3,12 +3,35 @@ import { requireRuntimeApi } from "./state.js";
 
 const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
 
+const LOADABLE_FILE_KINDS = new Map([
+  [".csv", "csv"],
+  [".img", "img"],
+]);
+
+export const DROPPABLE_FILE_DESCRIPTION = "a CHIRP CSV (.csv) or binary codeplug (.img) file";
+
+// Decide which loader a file belongs to, or null when it is neither kind we can
+// read. Dispatch is on the extension rather than the MIME type because
+// browsers report .img files inconsistently (empty type on some platforms,
+// application/octet-stream on others) and report CSV as anything from
+// text/csv to application/vnd.ms-excel depending on what is installed.
+export function classifyLoadableFile(fileName) {
+  const extension = String(fileName || "").toLowerCase().match(/\.[^.\\/]+$/)?.[0];
+  return LOADABLE_FILE_KINDS.get(extension) || null;
+}
+
 // Reading and writing channel data as files: CSV parse/export through the
-// Python runtime, CHIRP binary .img import/export, and the replace-or-merge
-// prompt shown when an import would discard channels already in the editor.
+// Python runtime, CHIRP binary .img import/export, drag-and-drop loading of
+// either kind, and the replace-or-merge prompt shown when an import would
+// discard channels already in the editor.
 export function createCodeplugIo(ctx) {
   const { dom, state, log } = ctx;
   let importChoiceResolve = null;
+  let fileLoadInFlight = false;
+  // dragenter/dragleave fire once per element the pointer crosses, so the
+  // overlay is driven by the depth of nested enters rather than by any single
+  // leave event.
+  let dragDepth = 0;
 
   function isImportChoiceModalOpen() {
     return !dom.importChoiceModalEl.classList.contains("hidden");
@@ -70,6 +93,26 @@ export function createCodeplugIo(ctx) {
 
   async function loadCsvText(csvText) {
     applyParsedCsv(await parseCsvViaRuntime(csvText), "replace");
+  }
+
+  // Load a CSV file into the editor, asking first when doing so would discard
+  // channels the user already has. Shared by the Import CSV button and drops.
+  async function importCsvFile(file) {
+    const parsed = await parseCsvViaRuntime(await file.text());
+    let mode = "replace";
+    if (ctx.table.hasRealChannels()) {
+      const choice = await askImportChoice(
+        `The editor holds ${state.currentRows.length} channel(s) that will be lost if replaced. `
+        + `${file.name} contains ${(parsed.rows || []).length} channel(s). `
+        + "Replace the existing channels, or merge by appending the imported channels below them?",
+      );
+      if (choice === "cancel") {
+        log.setStatus("CSV import cancelled.");
+        return;
+      }
+      mode = choice;
+    }
+    applyParsedCsv(parsed, mode);
   }
 
   // Trigger client-side download of generated text content as a file.
@@ -168,7 +211,115 @@ export function createCodeplugIo(ctx) {
     );
   }
 
+  // Serialize file loads. A second load starting while the replace-or-merge
+  // prompt is open would overwrite the pending choice and strand the first
+  // one's promise forever, and two loads racing to replace the channel list
+  // would leave the editor showing whichever finished last.
+  async function runFileLoad(label, work) {
+    if (fileLoadInFlight) {
+      log.setStatus("A file is already loading; wait for it to finish.");
+      return;
+    }
+    fileLoadInFlight = true;
+    try {
+      await work();
+    } catch (error) {
+      log.reportActionError(label, error);
+    } finally {
+      fileLoadInFlight = false;
+    }
+  }
+
+  // Route a file to the CSV or binary loader by its extension.
+  async function loadCodeplugFile(file) {
+    const kind = classifyLoadableFile(file.name);
+    if (!kind) {
+      log.setStatus(`Cannot load ${file.name}: drop ${DROPPABLE_FILE_DESCRIPTION}.`);
+      log.logDebug(`DROP REJECTED ${file.name} (unsupported file type)`);
+      return;
+    }
+    if (kind === "csv") {
+      await importCsvFile(file);
+      return;
+    }
+    await importBinaryCodeplug(file);
+  }
+
+  // Only file drags are ours to handle; text dragged within the page (between
+  // channel cells, say) must keep its native behaviour.
+  function dragCarriesFiles(event) {
+    const types = event.dataTransfer?.types;
+    return types ? Array.from(types).includes("Files") : false;
+  }
+
+  function setDropOverlayVisible(visible) {
+    dom.dropOverlayEl.classList.toggle("hidden", !visible);
+  }
+
+  async function handleFileDrop(event) {
+    if (!dragCarriesFiles(event)) {
+      return;
+    }
+    // Without this the browser leaves the app and displays the dropped file.
+    event.preventDefault();
+    dragDepth = 0;
+    setDropOverlayVisible(false);
+
+    const files = Array.from(event.dataTransfer?.files || []);
+    if (files.length === 0) {
+      return;
+    }
+    // Named in the log up front so the file is identifiable even when the load
+    // fails with a traceback that does not mention it.
+    const [file] = files;
+    const ignored = files.length > 1 ? `; ignoring ${files.length - 1} other file(s)` : "";
+    log.logDebug(`DROP ${file.name}${ignored}`);
+    await runFileLoad("File drop", () => loadCodeplugFile(file));
+  }
+
+  // Files dropped anywhere on the page load into the channel browser, so these
+  // listeners live on the window rather than on a single drop target.
+  function bindDragAndDrop() {
+    window.addEventListener("dragenter", (event) => {
+      if (!dragCarriesFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      dragDepth += 1;
+      setDropOverlayVisible(true);
+    });
+
+    window.addEventListener("dragover", (event) => {
+      if (!dragCarriesFiles(event)) {
+        return;
+      }
+      // A dragover default that is not prevented means "not a drop target",
+      // and the drop event never fires.
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "copy";
+      }
+      // Covers drags that entered the window before the page finished wiring
+      // up, which produce dragover without a matching dragenter.
+      setDropOverlayVisible(true);
+    });
+
+    window.addEventListener("dragleave", (event) => {
+      if (!dragCarriesFiles(event)) {
+        return;
+      }
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) {
+        setDropOverlayVisible(false);
+      }
+    });
+
+    window.addEventListener("drop", handleFileDrop);
+  }
+
   function bindEvents() {
+    bindDragAndDrop();
+
     dom.importChoiceReplaceEl.addEventListener("click", () => {
       resolveImportChoice("replace");
     });
@@ -185,11 +336,7 @@ export function createCodeplugIo(ctx) {
     });
 
     dom.loadSampleEl.addEventListener("click", async () => {
-      try {
-        await loadCsvText(DEFAULT_SAMPLE_CSV);
-      } catch (error) {
-        log.reportActionError("Sample load", error);
-      }
+      await runFileLoad("Sample load", () => loadCsvText(DEFAULT_SAMPLE_CSV));
     });
 
     dom.importCsvEl.addEventListener("click", () => {
@@ -203,24 +350,7 @@ export function createCodeplugIo(ctx) {
       }
 
       try {
-        const csvText = await file.text();
-        const parsed = await parseCsvViaRuntime(csvText);
-        let mode = "replace";
-        if (ctx.table.hasRealChannels()) {
-          const choice = await askImportChoice(
-            `The editor holds ${state.currentRows.length} channel(s) that will be lost if replaced. `
-            + `The selected file contains ${(parsed.rows || []).length} channel(s). `
-            + "Replace the existing channels, or merge by appending the imported channels below them?",
-          );
-          if (choice === "cancel") {
-            log.setStatus("CSV import cancelled.");
-            return;
-          }
-          mode = choice;
-        }
-        applyParsedCsv(parsed, mode);
-      } catch (error) {
-        log.reportActionError("CSV import", error);
+        await runFileLoad("CSV import", () => importCsvFile(file));
       } finally {
         dom.fileInput.value = "";
       }
@@ -252,9 +382,7 @@ export function createCodeplugIo(ctx) {
         return;
       }
       try {
-        await importBinaryCodeplug(file);
-      } catch (error) {
-        log.reportActionError("Binary import", error);
+        await runFileLoad("Binary import", () => importBinaryCodeplug(file));
       } finally {
         dom.imgFileInput.value = "";
       }
