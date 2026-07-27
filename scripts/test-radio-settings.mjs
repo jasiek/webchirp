@@ -77,6 +77,7 @@ json.dumps({
     "settingsAvailable": bool(_settings.get("available")),
     "settingsRequiresImage": bool(_settings.get("requiresImage")),
     "settingsGroupCount": len(_settings.get("groups") or []),
+    "settingsError": str(_settings.get("error") or ""),
 })
         `,
         {
@@ -87,6 +88,13 @@ json.dumps({
 
       assert.ok(result.headerCount > 0, `${label}: expected metadata headers`);
       assert.ok(result.columnCount > 0, `${label}: expected metadata columns`);
+      // get_radio_settings() reports every failure as "backing state missing",
+      // so a missing name is a runtime-setup bug wearing that disguise.
+      assert.doesNotMatch(
+        result.settingsError,
+        /name '\w+' is not defined/,
+        `${label}: settings failed on a missing runtime name, not on backing state`,
+      );
       if (result.settingsAvailable) {
         assert.ok(result.settingsGroupCount > 0, `${label}: settings claimed support but returned no groups`);
       }
