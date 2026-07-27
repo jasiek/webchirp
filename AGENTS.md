@@ -9,7 +9,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - `web/js/ui.js`: Composes the UI modules and exposes `createUiController()`.
 - `web/js/ui/`: One module per UI area — `channel-table`, `settings-panel`,
   `radio-catalog`, `repeater-query`, `codeplug-io`, `serial-actions`, plus the
-  shared `dom`, `state`, `debug-log`, `issue-report`, `format` and
+  shared `dom`, `state`, `debug-log`, `issue-report`, `format`, `analytics` and
   `channel-values` helpers.
 - `web/python/runtime_bridge.py`: Versioned Python runtime logic (no embedded Python in JS files).
 - `chirp/`: Upstream CHIRP source as a git submodule.

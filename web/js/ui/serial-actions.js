@@ -1,4 +1,11 @@
 import { errorSummary, isAndroidPlatform, makeModelLabel } from "./format.js";
+import {
+  classifyErrorKind,
+  errorTypeName,
+  firstIssueColumn,
+  radioEventParams,
+  trackEvent,
+} from "./analytics.js";
 import { requireRuntimeApi } from "./state.js";
 
 // Everything on the serial path: connect/disconnect over Web Serial or WebUSB,
@@ -207,16 +214,29 @@ export function createSerialActions(ctx) {
       : "";
   }
 
-  function trackRadioEvent(eventName, radio) {
-    if (!radio || typeof globalThis.gtag !== "function") {
+  function trackRadioEvent(eventName, radio, params = {}) {
+    if (!radio) {
       return;
     }
-    globalThis.gtag("event", eventName, {
-      radio_make: String(radio.vendor || ""),
-      radio_model: String(radio.model || ""),
-      radio_module: String(radio.module || ""),
-      radio_class: String(radio.className || ""),
+    trackEvent(eventName, { ...radioEventParams(radio), ...params });
+  }
+
+  // Report how a clone ended. The attempt events on their own only count who
+  // pressed the button; pairing them with an outcome is what turns the reports
+  // into a per-driver record of which radios actually work in the browser.
+  function trackCloneOutcome(eventName, radio, startedAt, params = {}) {
+    trackRadioEvent(eventName, radio, {
+      duration_ms: Date.now() - startedAt,
+      ...params,
     });
+  }
+
+  function cloneFailureParams(error, stage) {
+    return {
+      stage,
+      error_kind: classifyErrorKind(error),
+      error_type: errorTypeName(error),
+    };
   }
 
   // Validate rows and radio-wide settings before a write, highlighting every
@@ -265,8 +285,13 @@ export function createSerialActions(ctx) {
       log.setStatus("Select a radio make/model first.");
       return;
     }
+    // Captured up front: a clone runs long enough for the user to pick a
+    // different radio while it is in flight, and the outcome belongs to the
+    // radio the transfer actually ran against.
+    const radio = state.selectedRadio;
+    const startedAt = Date.now();
     try {
-      trackRadioEvent("radio_download", state.selectedRadio);
+      trackRadioEvent("radio_download", radio);
       log.setStatus(`Downloading from ${makeModelLabel(state.selectedRadio)}...`);
       beginCloneProgress(`Downloading from ${makeModelLabel(state.selectedRadio)}...`);
       const result = await requireRuntimeApi(state).downloadSelectedRadio({
@@ -291,10 +316,14 @@ export function createSerialActions(ctx) {
       ctx.settings.updateViewButtons();
       ctx.settings.render();
       log.setStatus(`${makeModelLabel(state.selectedRadio)} download complete (${state.currentRows.length} channels).`);
+      trackCloneOutcome("radio_download_success", radio, startedAt, {
+        channel_count: state.currentRows.length,
+      });
       if (result.ident) {
         log.logSerial(`IDENT ${result.ident}`);
       }
     } catch (error) {
+      trackCloneOutcome("radio_download_failure", radio, startedAt, cloneFailureParams(error, "transfer"));
       log.reportActionError("Download", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -307,12 +336,21 @@ export function createSerialActions(ctx) {
       log.setStatus("Select a radio make/model first.");
       return;
     }
+    const radio = state.selectedRadio;
+    const startedAt = Date.now();
+    // Distinguishes a codeplug CHIRP itself rejected from a transfer that
+    // reached the radio and failed there.
+    let stage = "preflight";
     try {
-      trackRadioEvent("radio_upload", state.selectedRadio);
+      trackRadioEvent("radio_upload", radio);
       log.setStatus("Running upload preflight validation...");
       const preflight = await runUploadPreflight();
       if (!preflight.valid) {
         const count = Array.isArray(preflight.issues) ? preflight.issues.length : 0;
+        trackRadioEvent("upload_blocked_preflight", radio, {
+          issue_count: count,
+          first_column: firstIssueColumn(preflight.issues),
+        });
         log.setStatus(
           count > 0
             ? `Upload blocked: ${count} invalid value(s) highlighted in red in ${actions.currentViewLabel()}.`
@@ -320,6 +358,7 @@ export function createSerialActions(ctx) {
         );
         return;
       }
+      stage = "transfer";
       log.setStatus(`Uploading to ${makeModelLabel(state.selectedRadio)}...`);
       beginCloneProgress(`Uploading to ${makeModelLabel(state.selectedRadio)}...`);
       const uploadResult = await requireRuntimeApi(state).uploadSelectedRadio({
@@ -332,7 +371,11 @@ export function createSerialActions(ctx) {
       ctx.settings.clearInvalid();
       ctx.settings.render();
       log.setStatus(`${makeModelLabel(state.selectedRadio)} upload complete.`);
+      trackCloneOutcome("radio_upload_success", radio, startedAt, {
+        channel_count: state.currentRows.length,
+      });
     } catch (error) {
+      trackCloneOutcome("radio_upload_failure", radio, startedAt, cloneFailureParams(error, stage));
       log.reportActionError("Upload", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
