@@ -3,11 +3,13 @@ import test from "node:test";
 
 import { createIssueReporter } from "../web/js/ui/issue-report.js";
 
+// The debug excerpt is capped at a line count, with a URL-length backstop:
 // GitHub answers an over-long issue-prefill URL with HTTP 414 rather than the
-// form, and there is no POST prefill to fall back on, so the reporter has to
-// keep the generated URL inside its own budget no matter how big the debug
-// panel has grown. These tests pin that budget and the trimming order.
+// form, and there is no POST prefill to fall back on. These tests pin the line
+// cap, the backstop, and the fact that either kind of cut is disclosed in the
+// report rather than passing for a complete log.
 const URL_LIMIT = 6000;
+const TAIL_LINES = 40;
 
 function makeReporter({ debugLines = [], lastErrorSummary = "" } = {}) {
   const state = {
@@ -35,9 +37,24 @@ function actualBehaviorOf(url) {
   return params.get("actual_behavior");
 }
 
-test("a huge debug log still yields a URL within the budget", () => {
+test("a long session is cut to the last N lines and says so", () => {
   const debugLines = Array.from({ length: 400 }, (_, index) =>
     stampedLine(index, `SERIAL wrote 64 bytes in frame ${index} of the clone stream`),
+  );
+  const body = actualBehaviorOf(makeReporter({ debugLines }).buildIssueUrl());
+  const excerpt = body.split("```")[1].trim().split("\n");
+
+  assert.equal(excerpt.length, TAIL_LINES + 1, "N lines plus the trim note");
+  assert.match(excerpt[0], /earlier debug lines trimmed/);
+  assert.ok(excerpt.at(-1).includes("frame 399"), "newest line must survive");
+  assert.ok(!body.includes("frame 359 "), `only the last ${TAIL_LINES} lines ride along`);
+});
+
+test("one pathological line cannot push the URL past the backstop", () => {
+  // A single hex dump can outweigh the whole line budget, which is why the line
+  // cap alone is not enough to keep the URL inside GitHub's limit.
+  const debugLines = Array.from({ length: 10 }, (_, index) =>
+    stampedLine(index, `SERIAL read block ${index}: ${"A1B2C3D4 ".repeat(500)}`),
   );
   const url = makeReporter({ debugLines }).buildIssueUrl();
 
@@ -46,16 +63,6 @@ test("a huge debug log still yields a URL within the budget", () => {
     `expected URL within ${URL_LIMIT} chars, got ${url.length}`,
   );
   assert.match(actualBehaviorOf(url), /earlier debug lines trimmed/);
-});
-
-test("trimming keeps the newest lines and drops the oldest", () => {
-  const debugLines = Array.from({ length: 400 }, (_, index) =>
-    stampedLine(index, `SERIAL frame ${index} padding ${"x".repeat(60)}`),
-  );
-  const body = actualBehaviorOf(makeReporter({ debugLines }).buildIssueUrl());
-
-  assert.ok(body.includes("SERIAL frame 399 "), "newest line must survive");
-  assert.ok(!body.includes("SERIAL frame 0 "), "oldest line must be dropped");
 });
 
 test("a short log is reported in full, with no truncation note", () => {

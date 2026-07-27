@@ -2,14 +2,16 @@ import { detectBrowserVersion, detectOperatingSystem } from "./format.js";
 
 const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
 const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
-// GitHub answers over-long prefill URLs with HTTP 414 instead of the form, and
-// a long debug session can produce a query string many times that size. There
-// is no POST prefill to fall back on — the issue form only reads query params —
-// so the whole URL is budgeted and the debug excerpt is trimmed to fit.
+// How much of the debug panel rides along. This is the knob that decides the
+// URL length in practice: 40 lines holds a full CHIRP traceback plus the serial
+// traffic leading up to it, for roughly a 3k-character URL.
+const DEBUG_TAIL_LINES = 40;
+// Backstop only. GitHub answers over-long prefill URLs with HTTP 414 instead of
+// the form, and there is no POST prefill to fall back on — the issue form only
+// reads query params. Normal lines never reach this; one pathological line (a
+// hex dump, a single-line traceback) would, so the built URL is measured and
+// trimmed rather than trusted to the line count alone.
 const ISSUE_URL_LIMIT = 6000;
-// Ask the panel for more lines than will usually fit: the URL budget above is
-// the real governor, so short lines buy more context instead of wasting room.
-const DEBUG_TAIL_LINES = 120;
 const NO_DEBUG_PLACEHOLDER = "<no debug logs captured>";
 const TRUNCATION_NOTE =
   "<earlier debug lines trimmed - use Copy in Debug Output for the full log>";
@@ -30,11 +32,12 @@ function compactDebugLines(tail) {
 // the built URL still fits. `measure` builds the real URL rather than estimating
 // the encoded size, because the estimate and URLSearchParams disagree on every
 // space, and a debug tail is mostly spaces.
-function fitDebugExcerpt(lines, measure, limit) {
+function fitDebugExcerpt(lines, { measure, limit, alreadyTrimmed }) {
   if (!lines.length) {
     return NO_DEBUG_PLACEHOLDER;
   }
-  const whole = lines.join("\n");
+  const head = alreadyTrimmed ? [TRUNCATION_NOTE] : [];
+  const whole = [...head, ...lines].join("\n");
   if (measure(whole) <= limit) {
     return whole;
   }
@@ -96,14 +99,20 @@ export function createIssueReporter({ state, log }) {
       return `${ISSUE_NEW_URL}?${params.toString()}`;
     };
 
+    // Ask for one line more than is kept: getting it back is how we learn the
+    // panel held more than the excerpt shows, so the report can say the log was
+    // cut rather than looking like the session started at the first line here.
+    const available = compactDebugLines(log.latestDebugTail(DEBUG_TAIL_LINES + 1));
+    const cutByLineCount = available.length > DEBUG_TAIL_LINES;
+
     // The fixed fields alone can overrun the limit on a pathological error
     // summary, in which case no debug line fits and only the truncation note
     // survives — the report is still worth filing without the excerpt.
-    const excerpt = fitDebugExcerpt(
-      compactDebugLines(log.latestDebugTail(DEBUG_TAIL_LINES)),
-      (debugExcerpt) => buildUrl(debugExcerpt).length,
-      ISSUE_URL_LIMIT,
-    );
+    const excerpt = fitDebugExcerpt(available.slice(cutByLineCount ? 1 : 0), {
+      measure: (debugExcerpt) => buildUrl(debugExcerpt).length,
+      limit: ISSUE_URL_LIMIT,
+      alreadyTrimmed: cutByLineCount,
+    });
     return buildUrl(excerpt);
   }
 
