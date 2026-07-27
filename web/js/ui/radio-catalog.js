@@ -4,6 +4,7 @@ import {
   requireRuntimeApi,
 } from "./state.js";
 import { makeModelLabel } from "./format.js";
+import { radioEventParams, trackEvent } from "./analytics.js";
 
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
@@ -71,10 +72,27 @@ export function createRadioCatalog(ctx) {
       return false;
     }
     actions.updateSerialActionState();
+    trackRadioSelected(state.selectedRadio, "restored");
     log.logDebug(
       `RADIO RESTORE ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
     );
     return true;
+  }
+
+  // Report which radio a user landed on and how they got there. Deliberately
+  // not fired from refreshModelOptions(), which also runs at boot and when a
+  // vendor change defaults the model: only the paths below are a user choosing
+  // a radio. The live-mode flag rides along because picking one of those is a
+  // dead end in this UI, and the size of that group is worth knowing.
+  function trackRadioSelected(radio, method) {
+    if (!radio) {
+      return;
+    }
+    trackEvent("radio_selected", {
+      ...radioEventParams(radio),
+      method,
+      radio_support: radio.isLiveRadio ? "live_unsupported" : "clone",
+    });
   }
 
   // Produce a sorted unique list of vendor names from the radio catalog.
@@ -196,6 +214,7 @@ export function createRadioCatalog(ctx) {
     refreshModelOptions();
     dom.radioModelEl.value = radio.key;
     state.selectedRadio = radio;
+    trackRadioSelected(radio, "search");
     log.logDebug(
       `RADIO SELECT ${makeModelLabel(radio)} (${radio.module}.${radio.className})`,
     );
@@ -298,6 +317,7 @@ export function createRadioCatalog(ctx) {
 
   function selectRadioByDetectedImage(loaded) {
     if (selectRadioByDriver(loaded.module, loaded.className)) {
+      trackRadioSelected(state.selectedRadio, "image");
       return true;
     }
     const vendor = String(loaded.vendor || "");
@@ -316,6 +336,7 @@ export function createRadioCatalog(ctx) {
     refreshModelOptions();
     dom.radioModelEl.value = fallback.key;
     state.selectedRadio = fallback;
+    trackRadioSelected(fallback, "image");
     persistSelectedRadioCookie();
     return true;
   }
@@ -418,6 +439,7 @@ export function createRadioCatalog(ctx) {
 
     dom.radioMakeEl.addEventListener("change", () => {
       refreshModelOptions();
+      trackRadioSelected(state.selectedRadio, "make");
       reloadForSelectedRadio();
     });
 
@@ -425,6 +447,7 @@ export function createRadioCatalog(ctx) {
       const key = dom.radioModelEl.value;
       state.selectedRadio = state.radioCatalog.find((r) => r.key === key) || null;
       if (state.selectedRadio) {
+        trackRadioSelected(state.selectedRadio, "model");
         log.logDebug(
           `RADIO SELECT ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
         );

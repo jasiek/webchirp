@@ -32,6 +32,22 @@ export function createSerialActions(ctx) {
     updateSerialActionState();
   }
 
+  // The browser's serial story as one reportable value. Sent with app_ready so
+  // the share of visitors whose browser can never reach a radio is measured
+  // against the same denominator as everyone who got that far.
+  function capabilityLabel() {
+    if (capability.native && capability.webusb) {
+      return "native+webusb";
+    }
+    if (capability.native) {
+      return "native";
+    }
+    if (capability.webusb) {
+      return "webusb";
+    }
+    return "none";
+  }
+
   function setSerialButtonsBusy(busy) {
     dom.serialConnectToggleEl.disabled = busy;
     dom.webusbConnectToggleEl.disabled = busy;
@@ -66,7 +82,20 @@ export function createSerialActions(ctx) {
         log.logDebug(`SERIAL USB ID ${state.lastUsbVendorId || "unknown"}:${state.lastUsbProductId || "unknown"}`);
       }
       log.setStatus(result.message || "Serial connected.");
+      trackEvent("serial_connected", {
+        ...radioEventParams(state.selectedRadio),
+        transport: transport || "unknown",
+        requested_transport: preferredTransport,
+      });
     } catch (error) {
+      // A user who closes the browser's port picker lands here too; error_kind
+      // separates that from an adapter the browser could not open.
+      trackEvent("serial_connect_failed", {
+        ...radioEventParams(state.selectedRadio),
+        requested_transport: preferredTransport,
+        error_kind: classifyErrorKind(error),
+        error_type: errorTypeName(error),
+      });
       log.reportActionError("Serial connect", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -411,6 +440,7 @@ export function createSerialActions(ctx) {
 
   return {
     bindEvents,
+    capabilityLabel,
     setSerialController,
     setSidebarControlsEnabled,
     setSerialSupportWarningVisible,

@@ -20,6 +20,11 @@ const pythonSource = createBrowserCdnPythonSource({
 let pyodide;
 let bootstrapPromise;
 let radioCatalogCache = null;
+// Which path filled radioCatalogCache: "static" (prebuilt file) or "sources"
+// (every driver imported in Pyodide). Reported to callers because the fallback
+// is otherwise silent, and it costs a user the whole Pyodide boot before the
+// dropdowns can appear.
+let radioCatalogSource = "";
 let handleSerialRpc = null;
 let bootstrapFailed = false;
 let debugLog = null;
@@ -137,6 +142,7 @@ async function loadRadioCatalogFromSources() {
   });
 
   radioCatalogCache = allRadios;
+  radioCatalogSource = "sources";
   return radioCatalogCache;
 }
 
@@ -149,6 +155,7 @@ async function loadRadioCatalog() {
   const fromStatic = await loadRadioCatalogFromStatic();
   if (fromStatic) {
     radioCatalogCache = sortRadioCatalog(fromStatic);
+    radioCatalogSource = "static";
     return radioCatalogCache;
   }
   return loadRadioCatalogFromSources();
@@ -195,7 +202,7 @@ async function handleGetRuntimeInfo() {
 
 async function handleListRadios() {
   const radios = await loadRadioCatalog();
-  return { radios };
+  return { radios, source: radioCatalogSource };
 }
 
 async function handleParseCsv(payload = {}) {
