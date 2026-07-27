@@ -744,7 +744,14 @@ export function createChannelTable({ dom, state, log, actions }) {
   // to do it, unlike a toolbar click, which blurs the editor before it fires.
   function captureFocusedCell() {
     const active = globalThis.document?.activeElement;
-    if (!active || !dom.tableBody.contains?.(active)) {
+    // Only an editor holds an uncommitted value. The Location button is
+    // focusable but is the row-selection handle, not an editor: committing
+    // through it would push its empty .value at the Location column, which
+    // only normalizeValue's editable:false guard currently absorbs.
+    if (!active || (active.tagName !== "INPUT" && active.tagName !== "SELECT")) {
+      return null;
+    }
+    if (!dom.tableBody.contains?.(active)) {
       return null;
     }
     const cell = cellReferenceFor(active);
