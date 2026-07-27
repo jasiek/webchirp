@@ -1,5 +1,12 @@
 # Release Notes
 
+## 2026-07-27
+- Dragging a CHIRP CSV or binary `.img` file anywhere onto the page now loads it, with the same replace-or-merge prompt as the Import CSV picker (#19).
+- Virtualized the channel grid: insert/remove/move on a 500-channel codeplug now takes 2–9 ms instead of 2.0–3.7 s (#18).
+- Fixed radio settings failing with `NameError` on drivers that call CHIRP's translation builtins, e.g. the Quansheng UV-K5 (#21).
+- Capped the pre-filled "Report Bug" GitHub URL at the last 40 debug lines so GitHub no longer answers with HTTP 414 (#22).
+- Split the 3,200-line `web/js/ui.js` into one module per UI area under `web/js/ui/`; no user-visible change (#16).
+
 ## 2026-07-24
 - CSV import no longer silently destroys existing channels (#12, contributed by lanrat): importing a CSV while the editor holds real channels (a usable frequency or name — blank inserted rows don't count) now prompts with how many channels would be lost and how many the file contains, offering Replace (previous behavior), Merge (append the imported channels and renumber Locations), or Cancel. Escape or clicking outside cancels. Imports into an empty editor and the sample loader are unchanged. Internally `loadCsvText` split into a side-effect-free `parseCsvViaRuntime` plus `applyParsedCsv(mode)` so the promise-based prompt can sit between parsing and applying.
 - The online repeater-query API base is now configurable per deployment (#14, contributed by lanrat). The przemienniki.net / repeaterbook.com actions fetch through a CORS proxy that was hardcoded to `api.codeplug.org`, whose allowlist only permits the `codeplug.org` origin — so forks hosted elsewhere hit 403 "Failed to fetch". The base now comes from a `<meta name="webchirp-repeater-api-base">` tag (defaulting to `api.codeplug.org`, so codeplug.org is unaffected); deployments with their own proxy point the tag at it, and setting `content=""` blanks the base and hides the two online-query menu items instead of offering actions that can only fail. Repeater-query tests are wired into `npm run test:channels`.
