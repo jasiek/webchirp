@@ -100,9 +100,13 @@
             ></a>
           </div>
           <button id="load-sample">Load Sample</button>
-          <button id="import-csv">Import CSV</button>
+          <button id="import-csv" title="Load a CHIRP CSV file (or drag one onto the page)">
+            Import CSV
+          </button>
           <button id="export-csv">Export CSV</button>
-          <button id="import-binary">Load Binary</button>
+          <button id="import-binary" title="Load a CHIRP binary codeplug (or drag an .img onto the page)">
+            Load Binary
+          </button>
           <button id="export-binary">Export Binary</button>
         </div>
       </header>
@@ -331,6 +335,21 @@
           <button id="import-choice-merge" type="button">Merge (append)</button>
           <button id="import-choice-replace" type="button">Replace</button>
         </div>
+      </div>
+    </div>
+
+    <!--
+      Held out of the accessibility tree deliberately, not as an oversight of
+      the visibility toggle. This overlay is feedback for a drag in progress —
+      a pointer-only gesture with no keyboard equivalent — and its text repeats
+      the Import CSV / Load Binary tooltips, which do reach assistive tech.
+      Exposing it would either add unannounced stray content to the tree or, if
+      given a live region, re-announce instructions on every drag.
+    -->
+    <div id="drop-overlay" class="drop-overlay hidden" aria-hidden="true">
+      <div class="drop-overlay-card">
+        <span class="drop-overlay-title">Drop to load into the channel browser</span>
+        <span class="drop-overlay-hint">CHIRP CSV (.csv) or binary codeplug (.img)</span>
       </div>
     </div>
 
