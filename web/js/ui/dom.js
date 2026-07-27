@@ -7,6 +7,8 @@
 export const REQUIRED_ELEMENTS = {
   tableHead: "#mem-table thead",
   tableBody: "#mem-table tbody",
+  // The channel grid's scroll viewport: what the table virtualizes against.
+  tableScrollEl: "#mem-table-scroll",
   channelEditorEl: "#channel-editor",
   settingsEditorEl: "#settings-editor",
   viewChannelsEl: "#view-channels",

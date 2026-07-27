@@ -22,6 +22,38 @@ export function createChannelTable({ dom, state, log, actions }) {
   let selectionAnchorIndex = null;
   const invalidCellKeys = new Set();
 
+  // --- Grid rendering -----------------------------------------------------
+  // This grid is the heaviest DOM in the app: every enum cell carries a full
+  // CHIRP option list (tone, DTCS, mode), so a 500-channel codeplug is ~190k
+  // elements and building it from scratch takes 2-3 seconds. Each row
+  // operation used to pay exactly that. Three things keep the cost
+  // proportional to what the user can see instead of to the codeplug:
+  //   * only the rows overlapping the viewport (plus overscan) are in the DOM,
+  //     with spacer rows standing in for the rest;
+  //   * row elements are recycled — scrolling or editing rebinds the existing
+  //     inputs and selects to different channels, which is what avoids
+  //     rebuilding those option lists;
+  //   * cell events are delegated to the tbody, so a recycled row needs no
+  //     listener rebinding and no row carries per-cell closures.
+  // Rows outside the window are still fully present in state.currentRows; only
+  // their elements are absent. The trade-off is that browser find-in-page and
+  // Tab only reach the rendered rows.
+  const OVERSCAN_ROWS = 8;
+  const ESTIMATED_ROW_HEIGHT = 30;
+
+  // The schema the current row elements were built for; a change to either
+  // invalidates every editor.
+  let renderedColumns = [];
+  let renderedMetadata = null;
+  let locationColumnIndex = -1;
+  // The window: rowElements[i] shows channel windowStart + i.
+  let rowElements = [];
+  let spacers = null;
+  let windowStart = 0;
+  let measuredRowHeight = 0;
+  let windowUpdateHandle = 0;
+  let isRemeasuring = false;
+
   function sortedSelectedRowIndexes() {
     return Array.from(selectedRowIndexes)
       .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < state.currentRows.length)
@@ -55,19 +87,18 @@ export function createChannelTable({ dom, state, log, actions }) {
       return;
     }
     invalidCellKeys.delete(key);
-    const td = dom.tableBody.querySelector(
-      `td[data-row-idx="${Number(rowIdx)}"][data-column="${CSS.escape(String(column || ""))}"]`,
-    );
-    td?.classList.remove("is-invalid");
+    cellElement(Number(rowIdx), String(column || ""))?.classList.remove("is-invalid");
   }
 
+  // Selection is a per-row class, so it can be repainted without rebinding the
+  // cells. Only the rows currently in the window need touching; rows outside it
+  // pick the class up from bindRowElement when they scroll back in.
   function applyRowSelectionVisuals() {
-    const selected = selectedRowIndexes;
-    const rows = dom.tableBody.querySelectorAll("tr");
-    rows.forEach((tr, rowIdx) => {
-      const isSelected = selected.has(rowIdx);
+    rowElements.forEach((tr, offset) => {
+      const rowIdx = windowStart + offset;
+      const isSelected = selectedRowIndexes.has(rowIdx);
       tr.classList.toggle("is-selected", isSelected);
-      const locationButton = tr.querySelector(".channel-location-button");
+      const locationButton = locationButtonIn(tr);
       if (locationButton) {
         locationButton.setAttribute("aria-pressed", isSelected ? "true" : "false");
       }
@@ -473,10 +504,12 @@ export function createChannelTable({ dom, state, log, actions }) {
     insertRowsAtSelectionOrEnd(buildRows(rowBuilderHooks()), label);
   }
 
-  // Create a table cell editor (input/select) based on CHIRP column metadata.
-  function createCellEditor(row, rowIdx, column) {
+  // Create a table cell editor (input/select) from the CHIRP column metadata.
+  // Structure only — kind, options and read-only state depend on the column,
+  // never on a row — so the element stays valid for any row until the schema
+  // changes. bindCellEditor() is what puts a row's data into it.
+  function createCellEditor(column) {
     const meta = state.radioMetadata.columns?.[column] || {};
-    const current = String(row[column] ?? "");
     const readOnly = column === "Location" || meta.editable === false;
 
     // Grey out read-only cells and explain why; Location is excluded because
@@ -492,65 +525,135 @@ export function createChannelTable({ dom, state, log, actions }) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "channel-location-button";
-      button.textContent = current;
-      button.addEventListener("click", (event) => {
-        updateRowSelectionFromLocationClick(event, rowIdx);
-      });
       return button;
     }
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
       const select = document.createElement("select");
-      const options = meta.options.map(String);
-      if (!options.includes(current)) {
-        options.unshift(current);
-      }
-      for (const opt of options) {
+      for (const opt of meta.options.map(String)) {
         const optionEl = document.createElement("option");
         optionEl.value = opt;
         optionEl.textContent = opt;
         select.appendChild(optionEl);
       }
-      select.value = current;
+      // How many options came from the driver, so bindCellEditor can tell them
+      // apart from one it had to add for an off-list row value.
+      select.dataset.driverOptions = String(select.children.length);
       select.disabled = readOnly;
-      select.addEventListener("change", () => {
-        clearInvalidCell(rowIdx, column);
-        const next = normalizeValue(column, select.value, meta, row[column]);
-        row[column] = next;
-        state.currentRows[rowIdx][column] = next;
-        select.value = next;
-      });
       return markReadOnly(select);
     }
 
     const input = document.createElement("input");
     input.type = "text";
-    input.value = current;
     input.readOnly = readOnly;
     input.disabled = readOnly;
     if (Number.isFinite(meta.maxLength)) {
       input.maxLength = Number(meta.maxLength);
     }
-    input.addEventListener("input", () => {
-      clearInvalidCell(rowIdx, column);
-    });
-    input.addEventListener("blur", () => {
-      const next = normalizeValue(column, input.value, meta, row[column]);
-      row[column] = next;
-      state.currentRows[rowIdx][column] = next;
-      input.value = next;
-    });
     return markReadOnly(input);
   }
 
-  // Render the editable channel table using current rows and metadata rules.
-  function render() {
-    const columns = state.currentHeaders.slice();
+  function bindCellEditor(editor, row, column) {
+    const value = String(row[column] ?? "");
+    if (editor.tagName === "BUTTON") {
+      editor.textContent = value;
+      return;
+    }
+    if (editor.tagName !== "SELECT") {
+      editor.value = value;
+      return;
+    }
+    // Drop any option added for a previous occupant of this recycled element,
+    // so the list a row offers is the driver's plus at most that row's own
+    // off-list value — exactly what a freshly built select would show.
+    const driverOptions = Number(editor.dataset.driverOptions);
+    if (Number.isInteger(driverOptions) && editor.length > driverOptions) {
+      editor.length = driverOptions;
+    }
+    editor.value = value;
+    if (value !== "" && editor.value !== value) {
+      // The stored value is outside this driver's option list (a hand-edited or
+      // imported codeplug). Show what is really there rather than silently
+      // snapping the cell to some other value.
+      const optionEl = document.createElement("option");
+      optionEl.value = value;
+      optionEl.textContent = value;
+      editor.appendChild(optionEl);
+      editor.value = value;
+    }
+  }
 
+  // Build one row's elements. Called only when the window grows or the schema
+  // changes — never per render.
+  function createRowElement() {
+    const tr = document.createElement("tr");
+    for (const column of renderedColumns) {
+      const td = document.createElement("td");
+      td.dataset.column = String(column);
+      td.appendChild(createCellEditor(column));
+      tr.appendChild(td);
+    }
+    return tr;
+  }
+
+  // Point an existing row element at a model row: values, selection and
+  // invalid-cell classes. This is the whole per-row cost of a render.
+  function bindRowElement(tr, rowIdx) {
+    const row = state.currentRows[rowIdx];
+    if (!row) {
+      return;
+    }
+    tr.dataset.rowIdx = String(rowIdx);
+    const isSelected = selectedRowIndexes.has(rowIdx);
+    tr.classList.toggle("is-selected", isSelected);
+    renderedColumns.forEach((column, columnIdx) => {
+      const td = tr.children[columnIdx];
+      td.classList.toggle("is-invalid", invalidCellKeys.has(invalidCellKey(rowIdx, column)));
+      bindCellEditor(td.children[0], row, column);
+    });
+    const locationButton = locationButtonIn(tr);
+    if (locationButton) {
+      locationButton.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    }
+  }
+
+  function locationButtonIn(tr) {
+    if (locationColumnIndex < 0) {
+      return null;
+    }
+    return tr.children[locationColumnIndex]?.children[0] || null;
+  }
+
+  function cellElement(rowIdx, column) {
+    const tr = rowElements[rowIdx - windowStart];
+    if (!tr || tr.dataset.rowIdx !== String(rowIdx)) {
+      return null;
+    }
+    const columnIdx = renderedColumns.indexOf(column);
+    return columnIdx < 0 ? null : tr.children[columnIdx] || null;
+  }
+
+  // A spacer row stands in for the rows kept out of the DOM, so the scrollbar
+  // and the scroll position match the full channel list.
+  function createSpacerRow() {
+    const tr = document.createElement("tr");
+    tr.className = "mem-row-spacer";
+    tr.setAttribute("aria-hidden", "true");
+    const cell = document.createElement("td");
+    cell.colSpan = Math.max(1, renderedColumns.length);
+    tr.appendChild(cell);
+    return { tr, cell };
+  }
+
+  function schemaChanged(columns) {
+    return renderedMetadata !== state.radioMetadata
+      || columns.length !== renderedColumns.length
+      || columns.some((column, idx) => column !== renderedColumns[idx]);
+  }
+
+  function renderHeader() {
     dom.tableHead.innerHTML = "";
-    dom.tableBody.innerHTML = "";
-
     const headerRow = document.createElement("tr");
-    columns.forEach((column) => {
+    renderedColumns.forEach((column) => {
       const th = document.createElement("th");
       th.textContent = column;
       // Mirror the cell treatment: grey + tooltip on headers of columns the
@@ -563,27 +666,168 @@ export function createChannelTable({ dom, state, log, actions }) {
       headerRow.appendChild(th);
     });
     dom.tableHead.appendChild(headerRow);
+  }
 
-    state.currentRows.forEach((row, rowIdx) => {
-      const tr = document.createElement("tr");
-      if (selectedRowIndexes.has(rowIdx)) {
-        tr.classList.add("is-selected");
-      }
+  function discardRowElements() {
+    dom.tableBody.innerHTML = "";
+    rowElements = [];
+    spacers = null;
+    windowStart = 0;
+    // Row height is a property of the editors, so it has to be re-measured
+    // whenever they are rebuilt.
+    measuredRowHeight = 0;
+  }
 
-      columns.forEach((column) => {
-        const td = document.createElement("td");
-        td.dataset.rowIdx = String(rowIdx);
-        td.dataset.column = String(column);
-        td.classList.toggle("is-invalid", invalidCellKeys.has(invalidCellKey(rowIdx, column)));
-        const editor = createCellEditor(row, rowIdx, column);
-        td.appendChild(editor);
-        tr.appendChild(td);
-      });
+  // Which slice of the channel list has to exist in the DOM.
+  function visibleRowRange() {
+    const total = state.currentRows.length;
+    const viewportHeight = dom.tableScrollEl.clientHeight;
+    // Headless callers (the tests' DOM stub) have no layout to virtualize
+    // against; render every row so assertions see the whole grid.
+    if (!Number.isFinite(viewportHeight)) {
+      return { start: 0, count: total };
+    }
+    const rowHeight = measuredRowHeight || ESTIMATED_ROW_HEIGHT;
+    const windowSize = Math.ceil(Math.max(0, viewportHeight) / rowHeight) + OVERSCAN_ROWS * 2;
+    // The header scrolls with the rows, so it offsets every row's position.
+    const headerHeight = dom.tableHead.getBoundingClientRect?.().height || 0;
+    const scrollTop = (Number(dom.tableScrollEl.scrollTop) || 0) - headerHeight;
+    const firstVisible = Math.floor(scrollTop / rowHeight) - OVERSCAN_ROWS;
+    const start = Math.max(0, Math.min(firstVisible, total - windowSize));
+    return { start, count: Math.max(0, Math.min(windowSize, total - start)) };
+  }
 
+  // Grow or shrink the pool of row elements. Elements that survive are put back
+  // in place rather than rebuilt, so only the size change costs anything.
+  function syncRowElementCount(count) {
+    if (rowElements.length === count && spacers) {
+      return;
+    }
+    while (rowElements.length < count) {
+      rowElements.push(createRowElement());
+    }
+    rowElements.length = count;
+    if (!spacers) {
+      spacers = { above: createSpacerRow(), below: createSpacerRow() };
+    }
+    dom.tableBody.innerHTML = "";
+    dom.tableBody.appendChild(spacers.above.tr);
+    for (const tr of rowElements) {
       dom.tableBody.appendChild(tr);
-    });
+    }
+    dom.tableBody.appendChild(spacers.below.tr);
+  }
 
-    applyRowSelectionVisuals();
+  function applySpacerHeights(start, count) {
+    if (!spacers) {
+      return;
+    }
+    const rowHeight = measuredRowHeight || ESTIMATED_ROW_HEIGHT;
+    const below = Math.max(0, state.currentRows.length - start - count);
+    spacers.above.cell.style.height = `${Math.round(start * rowHeight)}px`;
+    spacers.below.cell.style.height = `${Math.round(below * rowHeight)}px`;
+  }
+
+  // Returns whether the height changed, i.e. whether the window that was just
+  // laid out against the previous value is now wrong.
+  function measureRowHeight() {
+    const height = rowElements[0]?.getBoundingClientRect?.().height;
+    if (!Number.isFinite(height) || height <= 0 || Math.abs(height - measuredRowHeight) < 0.5) {
+      return false;
+    }
+    measuredRowHeight = height;
+    return true;
+  }
+
+  // Row elements are recycled by position, so a scroll hands the focused editor
+  // to a different channel. Commit whatever was typed first — there is no blur
+  // to do it, unlike a toolbar click, which blurs the editor before it fires.
+  function captureFocusedCell() {
+    const active = globalThis.document?.activeElement;
+    // Only an editor holds an uncommitted value. The Location button is
+    // focusable but is the row-selection handle, not an editor: committing
+    // through it would push its empty .value at the Location column, which
+    // only normalizeValue's editable:false guard currently absorbs.
+    if (!active || (active.tagName !== "INPUT" && active.tagName !== "SELECT")) {
+      return null;
+    }
+    if (!dom.tableBody.contains?.(active)) {
+      return null;
+    }
+    const cell = cellReferenceFor(active);
+    if (!cell) {
+      return null;
+    }
+    commitCellValue(cell, active);
+    return { ...cell, selectionStart: active.selectionStart, selectionEnd: active.selectionEnd };
+  }
+
+  // Hand focus to whichever element now shows the row that had it, so typing
+  // continues in the same channel it started in.
+  function restoreFocusedCell(captured) {
+    const editor = captured && cellElement(captured.rowIdx, captured.column)?.children[0];
+    if (!editor || editor === globalThis.document?.activeElement) {
+      return;
+    }
+    editor.focus?.({ preventScroll: true });
+    if (Number.isFinite(captured.selectionStart) && editor.setSelectionRange) {
+      editor.setSelectionRange(captured.selectionStart, captured.selectionEnd);
+    }
+  }
+
+  function renderRowWindow() {
+    if (renderedColumns.length === 0) {
+      discardRowElements();
+      return;
+    }
+    const focused = captureFocusedCell();
+    const { start, count } = visibleRowRange();
+    syncRowElementCount(count);
+    windowStart = start;
+    for (let offset = 0; offset < count; offset += 1) {
+      bindRowElement(rowElements[offset], start + offset);
+    }
+    applySpacerHeights(start, count);
+    if (measureRowHeight() && !isRemeasuring) {
+      // The window above was sized against an estimate; redo it now that the
+      // real row height is known. Bounded to one extra pass, which leaves focus
+      // to the outer one below.
+      isRemeasuring = true;
+      try {
+        renderRowWindow();
+      } finally {
+        isRemeasuring = false;
+      }
+    }
+    restoreFocusedCell(focused);
+  }
+
+  // Coalesce scroll and resize into one update per frame.
+  function scheduleWindowUpdate() {
+    if (windowUpdateHandle) {
+      return;
+    }
+    if (typeof requestAnimationFrame !== "function") {
+      renderRowWindow();
+      return;
+    }
+    windowUpdateHandle = requestAnimationFrame(() => {
+      windowUpdateHandle = 0;
+      renderRowWindow();
+    });
+  }
+
+  // Render the editable channel table using current rows and metadata rules.
+  function render() {
+    const columns = state.currentHeaders.slice();
+    if (schemaChanged(columns)) {
+      renderedColumns = columns;
+      renderedMetadata = state.radioMetadata;
+      locationColumnIndex = columns.indexOf("Location");
+      renderHeader();
+      discardRowElements();
+    }
+    renderRowWindow();
   }
 
   // Record per-cell issues reported by the upload preflight. Returns how many
@@ -616,7 +860,80 @@ export function createChannelTable({ dom, state, log, actions }) {
     setMenuOpen(dom.channelMenuPopupEl.classList.contains("hidden"));
   }
 
+  // Resolve which channel and column an event inside the grid belongs to. The
+  // row index is read from the element at event time, never captured when the
+  // element was built, so recycled rows always report the channel they are
+  // currently showing.
+  function cellReferenceFor(target) {
+    const td = target?.closest?.("td[data-column]");
+    const rowIdx = Number(td?.parentNode?.dataset?.rowIdx);
+    if (!td || !Number.isInteger(rowIdx) || !state.currentRows[rowIdx]) {
+      return null;
+    }
+    return { rowIdx, column: td.dataset.column };
+  }
+
+  function commitCellValue({ rowIdx, column }, editor) {
+    const row = state.currentRows[rowIdx];
+    const meta = state.radioMetadata.columns?.[column] || {};
+    const next = normalizeValue(column, editor.value, meta, row[column]);
+    row[column] = next;
+    editor.value = next;
+  }
+
+  // One listener per event type for the whole grid, instead of three per cell.
+  function bindGridEvents() {
+    dom.tableBody.addEventListener("click", (event) => {
+      const button = event.target?.closest?.(".channel-location-button");
+      const cell = button && cellReferenceFor(button);
+      if (cell) {
+        updateRowSelectionFromLocationClick(event, cell.rowIdx);
+      }
+    });
+
+    dom.tableBody.addEventListener("input", (event) => {
+      const cell = cellReferenceFor(event.target);
+      if (cell) {
+        clearInvalidCell(cell.rowIdx, cell.column);
+      }
+    });
+
+    dom.tableBody.addEventListener("change", (event) => {
+      if (event.target?.tagName !== "SELECT") {
+        return;
+      }
+      const cell = cellReferenceFor(event.target);
+      if (cell) {
+        clearInvalidCell(cell.rowIdx, cell.column);
+        commitCellValue(cell, event.target);
+      }
+    });
+
+    // Text cells normalize when they lose focus. blur does not bubble, so the
+    // delegated equivalent is focusout.
+    dom.tableBody.addEventListener("focusout", (event) => {
+      if (event.target?.tagName !== "INPUT") {
+        return;
+      }
+      const cell = cellReferenceFor(event.target);
+      if (cell) {
+        commitCellValue(cell, event.target);
+      }
+    });
+
+    dom.tableScrollEl.addEventListener("scroll", scheduleWindowUpdate, { passive: true });
+    // A ResizeObserver also fires when the grid is shown again after the
+    // settings view hid it (zero-sized box to real box), which a window resize
+    // listener would miss.
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver(scheduleWindowUpdate).observe(dom.tableScrollEl);
+    } else {
+      window.addEventListener("resize", scheduleWindowUpdate);
+    }
+  }
+
   function bindEvents() {
+    bindGridEvents();
     dom.channelInsertEl.addEventListener("click", () => {
       insertNewChannelRow();
     });
@@ -717,5 +1034,6 @@ export function createChannelTable({ dom, state, log, actions }) {
     channelShortcutsActive,
     moveSelectedChannelRows,
     setMenuOpen,
+    refreshVisibleRows: renderRowWindow,
   };
 }

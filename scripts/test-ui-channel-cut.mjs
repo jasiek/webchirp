@@ -70,11 +70,37 @@ class FakeElement {
   }
 
   appendChild(child) {
+    child.parentNode = this;
     this.children.push(child);
     if (this.tagName === "SELECT" && !this._value) {
       this._value = child.value || "";
     }
     return child;
+  }
+
+  // The channel grid delegates cell events to the tbody, so a dispatched event
+  // has to be resolvable back to its cell the same way the browser does it.
+  matches(selector) {
+    if (selector.startsWith(".")) {
+      return this.className === selector.slice(1);
+    }
+    const attribute = selector.match(/^(\w+)\[data-([\w-]+)\]$/);
+    if (attribute) {
+      const [, tag, name] = attribute;
+      return this.tagName === tag.toUpperCase() && this.dataset[name] !== undefined;
+    }
+    return false;
+  }
+
+  closest(selector) {
+    let node = this;
+    while (node) {
+      if (node.matches?.(selector)) {
+        return node;
+      }
+      node = node.parentNode;
+    }
+    return null;
   }
 
   addEventListener(type, handler) {
@@ -166,16 +192,25 @@ const SAMPLE_ROWS = [
   { Location: "2", Name: "Charlie", Frequency: "446.000000" },
 ];
 
-function tableNames(document) {
+// The grid renders spacer rows around the windowed channel rows, so the
+// channel rows are the ones carrying a row index.
+function channelRows(document) {
   const tbody = document.querySelector("#mem-table tbody");
-  return tbody.children.map((tr) => tr.children[1]?.children[0]?.value ?? "");
+  return tbody.children.filter((tr) => tr.dataset.rowIdx !== undefined);
 }
 
+function tableNames(document) {
+  return channelRows(document).map((tr) => tr.children[1]?.children[0]?.value ?? "");
+}
+
+// Cell events are delegated to the tbody; dispatch there with the button as
+// the target, which is what bubbling gives the handler in a real browser.
 function clickLocationButton(document, rowIdx) {
   const tbody = document.querySelector("#mem-table tbody");
-  const button = tbody.children[rowIdx].children[0].children[0];
-  button.dispatchEvent({
+  const button = channelRows(document)[rowIdx].children[0].children[0];
+  tbody.dispatchEvent({
     type: "click",
+    target: button,
     shiftKey: false,
     ctrlKey: false,
     metaKey: false,
@@ -263,8 +298,7 @@ test("paste preserves read-only column values and matches unpadded numeric enums
   document.querySelector("#channel-paste").dispatchEvent({ type: "click" });
   await flushMicrotasks();
 
-  const tbody = document.querySelector("#mem-table tbody");
-  const tstepValues = tbody.children.map((tr) => tr.children[3]?.children[0]?.value ?? "");
+  const tstepValues = channelRows(document).map((tr) => tr.children[3]?.children[0]?.value ?? "");
   assert.deepEqual(tableNames(document), ["Alpha", "Bravo"]);
   assert.deepEqual(tstepValues, ["5.00", "12.50"]);
 });
