@@ -63,18 +63,14 @@ export function createUiController() {
   function setEditorView(nextView) {
     state.currentEditorView = nextView === "settings" ? "settings" : "channels";
     const channelsActive = state.currentEditorView === "channels";
-    dom.channelEditorEl?.classList.toggle("is-active", channelsActive);
-    dom.settingsEditorEl?.classList.toggle("is-active", !channelsActive);
-    if (dom.channelEditorEl) {
-      dom.channelEditorEl.hidden = !channelsActive;
-    }
-    if (dom.settingsEditorEl) {
-      dom.settingsEditorEl.hidden = channelsActive;
-    }
-    dom.viewChannelsEl?.classList.toggle("is-active", channelsActive);
-    dom.viewSettingsEl?.classList.toggle("is-active", !channelsActive);
-    dom.viewChannelsEl?.setAttribute("aria-selected", channelsActive ? "true" : "false");
-    dom.viewSettingsEl?.setAttribute("aria-selected", channelsActive ? "false" : "true");
+    dom.channelEditorEl.classList.toggle("is-active", channelsActive);
+    dom.settingsEditorEl.classList.toggle("is-active", !channelsActive);
+    dom.channelEditorEl.hidden = !channelsActive;
+    dom.settingsEditorEl.hidden = channelsActive;
+    dom.viewChannelsEl.classList.toggle("is-active", channelsActive);
+    dom.viewSettingsEl.classList.toggle("is-active", !channelsActive);
+    dom.viewChannelsEl.setAttribute("aria-selected", channelsActive ? "true" : "false");
+    dom.viewSettingsEl.setAttribute("aria-selected", channelsActive ? "false" : "true");
   }
 
   // Register the handlers that are not owned by a single feature module: the
@@ -111,11 +107,11 @@ export function createUiController() {
       }
     });
 
-    dom.viewChannelsEl?.addEventListener("click", () => {
+    dom.viewChannelsEl.addEventListener("click", () => {
       setEditorView("channels");
     });
 
-    dom.viewSettingsEl?.addEventListener("click", () => {
+    dom.viewSettingsEl.addEventListener("click", () => {
       if (!settings.radioHasSettings()) {
         log.setStatus(settings.settingsUnavailableMessage());
         return;
@@ -124,11 +120,11 @@ export function createUiController() {
       settings.render();
     });
 
-    document.querySelector("#debug-clear").addEventListener("click", () => {
+    dom.debugClearEl.addEventListener("click", () => {
       log.clear();
     });
 
-    document.querySelector("#debug-copy")?.addEventListener("click", async () => {
+    dom.debugCopyEl.addEventListener("click", async () => {
       const text = dom.debugOutputEl.value || "";
       try {
         if (navigator.clipboard?.writeText) {
@@ -148,7 +144,7 @@ export function createUiController() {
       }
     });
 
-    dom.reportIssueEl?.addEventListener("click", () => {
+    dom.reportIssueEl.addEventListener("click", () => {
       issueReporter.openPrefilledIssue();
     });
 

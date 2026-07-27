@@ -11,7 +11,7 @@ export function createCodeplugIo(ctx) {
   let importChoiceResolve = null;
 
   function isImportChoiceModalOpen() {
-    return Boolean(dom.importChoiceModalEl && !dom.importChoiceModalEl.classList.contains("hidden"));
+    return !dom.importChoiceModalEl.classList.contains("hidden");
   }
 
   function resolveImportChoice(choice) {
@@ -20,19 +20,14 @@ export function createCodeplugIo(ctx) {
     }
     const resolve = importChoiceResolve;
     importChoiceResolve = null;
-    dom.importChoiceModalEl?.classList.add("hidden");
+    dom.importChoiceModalEl.classList.add("hidden");
     resolve(choice);
   }
 
   // Ask the user what to do with imported channels when the editor already
   // holds real ones. Resolves to "replace", "merge", or "cancel".
   function askImportChoice(message) {
-    if (!dom.importChoiceModalEl) {
-      return Promise.resolve("replace");
-    }
-    if (dom.importChoiceMessageEl) {
-      dom.importChoiceMessageEl.textContent = message;
-    }
+    dom.importChoiceMessageEl.textContent = message;
     dom.importChoiceModalEl.classList.remove("hidden");
     return new Promise((resolve) => {
       importChoiceResolve = resolve;
@@ -174,22 +169,22 @@ export function createCodeplugIo(ctx) {
   }
 
   function bindEvents() {
-    dom.importChoiceReplaceEl?.addEventListener("click", () => {
+    dom.importChoiceReplaceEl.addEventListener("click", () => {
       resolveImportChoice("replace");
     });
-    dom.importChoiceMergeEl?.addEventListener("click", () => {
+    dom.importChoiceMergeEl.addEventListener("click", () => {
       resolveImportChoice("merge");
     });
-    dom.importChoiceCancelEl?.addEventListener("click", () => {
+    dom.importChoiceCancelEl.addEventListener("click", () => {
       resolveImportChoice("cancel");
     });
-    dom.importChoiceModalEl?.addEventListener("click", (event) => {
+    dom.importChoiceModalEl.addEventListener("click", (event) => {
       if (event.target === dom.importChoiceModalEl) {
         resolveImportChoice("cancel");
       }
     });
 
-    document.querySelector("#load-sample").addEventListener("click", async () => {
+    dom.loadSampleEl.addEventListener("click", async () => {
       try {
         await loadCsvText(DEFAULT_SAMPLE_CSV);
       } catch (error) {
@@ -197,7 +192,7 @@ export function createCodeplugIo(ctx) {
       }
     });
 
-    document.querySelector("#import-csv").addEventListener("click", () => {
+    dom.importCsvEl.addEventListener("click", () => {
       dom.fileInput.click();
     });
 
@@ -231,7 +226,7 @@ export function createCodeplugIo(ctx) {
       }
     });
 
-    document.querySelector("#export-csv").addEventListener("click", async () => {
+    dom.exportCsvEl.addEventListener("click", async () => {
       try {
         await exportCsv();
       } catch (error) {
@@ -239,7 +234,7 @@ export function createCodeplugIo(ctx) {
       }
     });
 
-    document.querySelector("#export-binary").addEventListener("click", async () => {
+    dom.exportBinaryEl.addEventListener("click", async () => {
       try {
         await exportBinaryCodeplug();
       } catch (error) {
@@ -247,7 +242,7 @@ export function createCodeplugIo(ctx) {
       }
     });
 
-    document.querySelector("#import-binary").addEventListener("click", () => {
+    dom.importBinaryEl.addEventListener("click", () => {
       dom.imgFileInput.click();
     });
 

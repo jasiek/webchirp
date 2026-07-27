@@ -38,12 +38,8 @@ export function createRepeaterQuery(ctx) {
   const endpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
   const enabled = endpoints !== null;
   if (!enabled) {
-    if (dom.channelImportPrzemiennikiEl) {
-      dom.channelImportPrzemiennikiEl.hidden = true;
-    }
-    if (dom.channelImportRepeaterbookEl) {
-      dom.channelImportRepeaterbookEl.hidden = true;
-    }
+    dom.channelImportPrzemiennikiEl.hidden = true;
+    dom.channelImportRepeaterbookEl.hidden = true;
   }
 
   const sources = {
@@ -79,15 +75,10 @@ export function createRepeaterQuery(ctx) {
 
   function setActiveSource(sourceKey) {
     activeSource = sources[sourceKey] ? sourceKey : "przemienniki";
-    if (dom.przemiennikiModalTitleEl) {
-      dom.przemiennikiModalTitleEl.textContent = `Query ${activeSourceConfig().label}`;
-    }
+    dom.przemiennikiModalTitleEl.textContent = `Query ${activeSourceConfig().label}`;
   }
 
   function replaceOptions(selectEl, options, placeholderLabel) {
-    if (!selectEl) {
-      return;
-    }
     selectEl.innerHTML = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
@@ -105,9 +96,6 @@ export function createRepeaterQuery(ctx) {
   }
 
   function replaceCheckboxOptions(containerEl, options, name) {
-    if (!containerEl) {
-      return;
-    }
     containerEl.innerHTML = "";
     options.forEach((option) => {
       const label = document.createElement("label");
@@ -152,18 +140,12 @@ export function createRepeaterQuery(ctx) {
   }
 
   function selectedModes() {
-    if (!dom.przemiennikiModeListEl) {
-      return [];
-    }
     return Array.from(dom.przemiennikiModeListEl.querySelectorAll('input[name="mode"]:checked'))
       .map((el) => String(el.value || "").trim().toLowerCase())
       .filter((value) => value.length > 0);
   }
 
   function selectedBands() {
-    if (!dom.przemiennikiBandListEl) {
-      return [];
-    }
     return Array.from(dom.przemiennikiBandListEl.querySelectorAll('input[name="band"]:checked'))
       .map((el) => String(el.value || "").trim().toLowerCase())
       .filter((value) => value.length > 0);
@@ -198,17 +180,14 @@ export function createRepeaterQuery(ctx) {
   }
 
   function setModalOpen(open) {
-    if (!dom.przemiennikiModalEl) {
-      return;
-    }
     dom.przemiennikiModalEl.classList.toggle("hidden", !open);
     if (open) {
-      dom.przemiennikiCountryEl?.focus();
+      dom.przemiennikiCountryEl.focus();
     }
   }
 
   function isModalOpen() {
-    return Boolean(dom.przemiennikiModalEl && !dom.przemiennikiModalEl.classList.contains("hidden"));
+    return !dom.przemiennikiModalEl.classList.contains("hidden");
   }
 
   async function openModal(sourceKey) {
@@ -239,7 +218,7 @@ export function createRepeaterQuery(ctx) {
     }
     const source = activeSourceConfig();
     const url = new URL(source.apiUrl);
-    appendQueryParam(url, "country", String(dom.przemiennikiCountryEl?.value || "").toLowerCase());
+    appendQueryParam(url, "country", String(dom.przemiennikiCountryEl.value || "").toLowerCase());
     const bands = selectedBands();
     if (bands.length > 0) {
       url.searchParams.set("band", bands.join(","));
@@ -247,12 +226,12 @@ export function createRepeaterQuery(ctx) {
     selectedModes().forEach((mode) => {
       url.searchParams.append("mode", mode);
     });
-    if (dom.przemiennikiOnlyWorkingEl?.checked) {
+    if (dom.przemiennikiOnlyWorkingEl.checked) {
       url.searchParams.set("onlyworking", "true");
     }
-    appendQueryParam(url, "latitude", dom.przemiennikiLatitudeEl?.value || "");
-    appendQueryParam(url, "longitude", dom.przemiennikiLongitudeEl?.value || "");
-    appendQueryParam(url, "range", dom.przemiennikiRangeEl?.value || "");
+    appendQueryParam(url, "latitude", dom.przemiennikiLatitudeEl.value || "");
+    appendQueryParam(url, "longitude", dom.przemiennikiLongitudeEl.value || "");
+    appendQueryParam(url, "range", dom.przemiennikiRangeEl.value || "");
     log.setStatus(`Querying ${source.label}...`);
     const response = await fetch(url.toString());
     if (!response.ok) {
@@ -284,49 +263,45 @@ export function createRepeaterQuery(ctx) {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       throw new Error("Geolocation did not return valid coordinates.");
     }
-    if (dom.przemiennikiLatitudeEl) {
-      dom.przemiennikiLatitudeEl.value = latitude.toFixed(6);
-    }
-    if (dom.przemiennikiLongitudeEl) {
-      dom.przemiennikiLongitudeEl.value = longitude.toFixed(6);
-    }
+    dom.przemiennikiLatitudeEl.value = latitude.toFixed(6);
+    dom.przemiennikiLongitudeEl.value = longitude.toFixed(6);
     log.setStatus("Geolocation loaded into latitude/longitude fields.");
     log.logDebug(`PRZEMIENNIKI GEO ${latitude.toFixed(6)},${longitude.toFixed(6)}`);
   }
 
   function bindEvents() {
-    dom.channelImportPrzemiennikiEl?.addEventListener("click", async () => {
+    dom.channelImportPrzemiennikiEl.addEventListener("click", async () => {
       try {
         await openModal("przemienniki");
       } catch (error) {
         log.reportActionError("Przemienniki modal", error);
       }
     });
-    dom.channelImportRepeaterbookEl?.addEventListener("click", async () => {
+    dom.channelImportRepeaterbookEl.addEventListener("click", async () => {
       try {
         await openModal("repeaterbook");
       } catch (error) {
         log.reportActionError("RepeaterBook modal", error);
       }
     });
-    dom.przemiennikiCancelEl?.addEventListener("click", () => {
+    dom.przemiennikiCancelEl.addEventListener("click", () => {
       const source = activeSourceConfig();
       setModalOpen(false);
       log.setStatus(`Cancelled ${source.label} query.`);
     });
-    dom.przemiennikiGeolocateEl?.addEventListener("click", async () => {
+    dom.przemiennikiGeolocateEl.addEventListener("click", async () => {
       try {
         await geolocate();
       } catch (error) {
         log.reportActionError("Przemienniki geolocation", error);
       }
     });
-    dom.przemiennikiModalEl?.addEventListener("click", (event) => {
+    dom.przemiennikiModalEl.addEventListener("click", (event) => {
       if (event.target === dom.przemiennikiModalEl) {
         setModalOpen(false);
       }
     });
-    dom.przemiennikiFormEl?.addEventListener("submit", async (event) => {
+    dom.przemiennikiFormEl.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
         await runQuery();

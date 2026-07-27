@@ -114,27 +114,20 @@ export function createRadioCatalog(ctx) {
   function hideRadioSearchResults() {
     searchMatches = [];
     searchActiveIndex = -1;
-    if (dom.radioSearchResultsEl) {
-      dom.radioSearchResultsEl.hidden = true;
-      dom.radioSearchResultsEl.innerHTML = "";
-    }
-    dom.radioSearchEl?.setAttribute("aria-expanded", "false");
+    dom.radioSearchResultsEl.hidden = true;
+    dom.radioSearchResultsEl.innerHTML = "";
+    dom.radioSearchEl.setAttribute("aria-expanded", "false");
   }
 
   // Clear the search box and close its suggestion list (programmatic selections).
   function clearRadioFilter() {
-    if (dom.radioSearchEl) {
-      dom.radioSearchEl.value = "";
-    }
+    dom.radioSearchEl.value = "";
     hideRadioSearchResults();
   }
 
   // Render the autocomplete dropdown for the current search box contents.
   function renderRadioSearchResults() {
-    if (!dom.radioSearchResultsEl) {
-      return;
-    }
-    const query = String(dom.radioSearchEl?.value || "").trim();
+    const query = String(dom.radioSearchEl.value || "").trim();
     if (!query) {
       hideRadioSearchResults();
       return;
@@ -175,7 +168,7 @@ export function createRadioCatalog(ctx) {
     }
 
     dom.radioSearchResultsEl.hidden = false;
-    dom.radioSearchEl?.setAttribute("aria-expanded", "true");
+    dom.radioSearchEl.setAttribute("aria-expanded", "true");
   }
 
   // Move the keyboard highlight in the suggestion list by delta and keep it in view.
@@ -185,7 +178,7 @@ export function createRadioCatalog(ctx) {
     }
     const count = searchMatches.length;
     searchActiveIndex = (searchActiveIndex + delta + count) % count;
-    const items = dom.radioSearchResultsEl?.querySelectorAll("li[role='option']") || [];
+    const items = dom.radioSearchResultsEl.querySelectorAll("li[role='option']");
     items.forEach((li, index) => {
       li.classList.toggle("is-active", index === searchActiveIndex);
     });
@@ -197,9 +190,7 @@ export function createRadioCatalog(ctx) {
     if (!radio) {
       return;
     }
-    if (dom.radioSearchEl) {
-      dom.radioSearchEl.value = makeModelLabel(radio);
-    }
+    dom.radioSearchEl.value = makeModelLabel(radio);
     hideRadioSearchResults();
     dom.radioMakeEl.value = radio.vendor;
     refreshModelOptions();
@@ -379,16 +370,16 @@ export function createRadioCatalog(ctx) {
     // Typing opens an autocomplete list of "<Make> <Model>" suggestions; the
     // (Pyodide-backed) metadata/settings load only happens once the user picks
     // a suggestion via keyboard or mouse.
-    dom.radioSearchEl?.addEventListener("input", () => {
+    dom.radioSearchEl.addEventListener("input", () => {
       renderRadioSearchResults();
     });
 
-    dom.radioSearchEl?.addEventListener("focus", () => {
+    dom.radioSearchEl.addEventListener("focus", () => {
       renderRadioSearchResults();
     });
 
-    dom.radioSearchEl?.addEventListener("keydown", (event) => {
-      const isOpen = dom.radioSearchResultsEl && !dom.radioSearchResultsEl.hidden;
+    dom.radioSearchEl.addEventListener("keydown", (event) => {
+      const isOpen = !dom.radioSearchResultsEl.hidden;
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         if (!isOpen) {
@@ -409,12 +400,12 @@ export function createRadioCatalog(ctx) {
       }
     });
 
-    dom.radioSearchEl?.addEventListener("blur", () => {
+    dom.radioSearchEl.addEventListener("blur", () => {
       // Delay so a click on a suggestion (which blurs the input) still lands.
       setTimeout(() => hideRadioSearchResults(), 150);
     });
 
-    dom.radioSearchResultsEl?.addEventListener("mousedown", (event) => {
+    dom.radioSearchResultsEl.addEventListener("mousedown", (event) => {
       // Prevent the input blur so the click handler below sees the list open.
       event.preventDefault();
       const li = event.target.closest("li[role='option']");

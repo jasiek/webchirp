@@ -26,12 +26,8 @@ export function createSerialActions(ctx) {
   }
 
   function setSerialButtonsBusy(busy) {
-    if (dom.serialConnectToggleEl) {
-      dom.serialConnectToggleEl.disabled = busy;
-    }
-    if (dom.webusbConnectToggleEl) {
-      dom.webusbConnectToggleEl.disabled = busy;
-    }
+    dom.serialConnectToggleEl.disabled = busy;
+    dom.webusbConnectToggleEl.disabled = busy;
   }
 
   // Connect using the requested transport ("auto" or "webusb").
@@ -102,16 +98,10 @@ export function createSerialActions(ctx) {
   }
 
   function setSerialSupportWarningVisible(visible) {
-    if (!dom.serialSupportWarningEl) {
-      return;
-    }
     dom.serialSupportWarningEl.hidden = !visible;
   }
 
   function setLiveRadioSupportWarningVisible(visible) {
-    if (!dom.liveRadioSupportWarningEl) {
-      return;
-    }
     dom.liveRadioSupportWarningEl.hidden = !visible;
   }
 
@@ -119,66 +109,44 @@ export function createSerialActions(ctx) {
     // Mobile has no hover tooltips, so on Android the labels themselves say
     // what each transport is for.
     const mobile = isAndroidPlatform();
-    if (dom.serialConnectToggleEl) {
-      dom.serialConnectToggleEl.textContent = connected
-        ? "Disconnect"
-        : (mobile ? "Connect via WebSerial (Bluetooth)" : "Connect via WebSerial");
-    }
-    if (dom.webusbConnectToggleEl) {
-      dom.webusbConnectToggleEl.textContent = connected
-        ? "Disconnect"
-        : (mobile ? "Connect via WebUSB (wired adapter)" : "Connect via WebUSB");
-    }
+    dom.serialConnectToggleEl.textContent = connected
+      ? "Disconnect"
+      : (mobile ? "Connect via WebSerial (Bluetooth)" : "Connect via WebSerial");
+    dom.webusbConnectToggleEl.textContent = connected
+      ? "Disconnect"
+      : (mobile ? "Connect via WebUSB (wired adapter)" : "Connect via WebUSB");
   }
 
   // Show the clone progress bar in its indeterminate state until the driver's
   // first status report arrives with real block counts.
   function beginCloneProgress(label) {
-    if (!dom.cloneProgressEl) {
-      return;
-    }
-    if (dom.cloneProgressLabelEl) {
-      dom.cloneProgressLabelEl.textContent = String(label || "Working...");
-    }
-    if (dom.cloneProgressPercentEl) {
-      dom.cloneProgressPercentEl.textContent = "";
-    }
-    dom.cloneProgressBarEl?.removeAttribute?.("value");
+    dom.cloneProgressLabelEl.textContent = String(label || "Working...");
+    dom.cloneProgressPercentEl.textContent = "";
+    dom.cloneProgressBarEl.removeAttribute?.("value");
     dom.cloneProgressEl.hidden = false;
   }
 
   // CHIRP drivers report status once per transferred block (cur/max may be -1
   // when a driver reports no counts; the bar then stays indeterminate).
   function updateCloneProgress(cur, max, msg) {
-    if (!dom.cloneProgressEl) {
-      return;
-    }
     dom.cloneProgressEl.hidden = false;
-    if (msg && dom.cloneProgressLabelEl) {
+    if (msg) {
       dom.cloneProgressLabelEl.textContent = msg;
     }
     if (Number.isFinite(cur) && Number.isFinite(max) && max > 0 && cur >= 0) {
       const percent = Math.max(0, Math.min(100, Math.round((cur / max) * 100)));
-      if (dom.cloneProgressBarEl) {
-        dom.cloneProgressBarEl.value = percent;
-      }
-      if (dom.cloneProgressPercentEl) {
-        dom.cloneProgressPercentEl.textContent = `${percent}%`;
-      }
+      dom.cloneProgressBarEl.value = percent;
+      dom.cloneProgressPercentEl.textContent = `${percent}%`;
     } else {
       // A no-count report must not leave the previous phase's percentage on
       // screen: removing value makes the <progress> bar indeterminate again.
-      dom.cloneProgressBarEl?.removeAttribute?.("value");
-      if (dom.cloneProgressPercentEl) {
-        dom.cloneProgressPercentEl.textContent = "";
-      }
+      dom.cloneProgressBarEl.removeAttribute?.("value");
+      dom.cloneProgressPercentEl.textContent = "";
     }
   }
 
   function endCloneProgress() {
-    if (dom.cloneProgressEl) {
-      dom.cloneProgressEl.hidden = true;
-    }
+    dom.cloneProgressEl.hidden = true;
   }
 
   function selectedRadioIsLiveMode() {
@@ -210,34 +178,24 @@ export function createSerialActions(ctx) {
       showWebSerialToggle = !showWebUsbToggle;
     }
 
-    if (dom.serialConnectToggleEl) {
-      dom.serialConnectToggleEl.hidden = !showWebSerialToggle;
-      dom.serialConnectToggleEl.disabled = !actionsAllowed;
-      dom.serialConnectToggleEl.title = liveRadioUnsupported
-        ? "Live-mode radios are not supported in this UI yet"
-        : (isAndroidPlatform()
-          ? "Connect over native Web Serial, for use with Bluetooth serial ports"
-          : "");
-    }
+    dom.serialConnectToggleEl.hidden = !showWebSerialToggle;
+    dom.serialConnectToggleEl.disabled = !actionsAllowed;
+    dom.serialConnectToggleEl.title = liveRadioUnsupported
+      ? "Live-mode radios are not supported in this UI yet"
+      : (isAndroidPlatform()
+        ? "Connect over native Web Serial, for use with Bluetooth serial ports"
+        : "");
 
-    if (dom.webusbConnectToggleEl) {
-      dom.webusbConnectToggleEl.hidden = !showWebUsbToggle;
-      dom.webusbConnectToggleEl.disabled = !actionsAllowed;
-      dom.webusbConnectToggleEl.title = liveRadioUnsupported
-        ? "Live-mode radios are not supported in this UI yet"
-        : "Connect over WebUSB, for use with FTDI FT231X/FT232R or Prolific PL2303";
-    }
+    dom.webusbConnectToggleEl.hidden = !showWebUsbToggle;
+    dom.webusbConnectToggleEl.disabled = !actionsAllowed;
+    dom.webusbConnectToggleEl.title = liveRadioUnsupported
+      ? "Live-mode radios are not supported in this UI yet"
+      : "Connect over WebUSB, for use with FTDI FT231X/FT232R or Prolific PL2303";
 
-    if (dom.radioDownloadEl) {
-      dom.radioDownloadEl.disabled = !actionsAllowed;
-      dom.radioDownloadEl.title = liveRadioUnsupported
-        ? "Live-mode radios are not supported in this UI yet"
-        : "";
-    }
-
-    if (!dom.radioUploadEl) {
-      return;
-    }
+    dom.radioDownloadEl.disabled = !actionsAllowed;
+    dom.radioDownloadEl.title = liveRadioUnsupported
+      ? "Live-mode radios are not supported in this UI yet"
+      : "";
 
     dom.radioUploadEl.disabled = !actionsAllowed || ctx.settings.hasInvalidSettings();
     if (liveRadioUnsupported) {
@@ -383,7 +341,7 @@ export function createSerialActions(ctx) {
   }
 
   function bindEvents() {
-    dom.serialConnectToggleEl?.addEventListener("click", () => {
+    dom.serialConnectToggleEl.addEventListener("click", () => {
       if (connected) {
         disconnectSerial();
       } else {
@@ -391,7 +349,7 @@ export function createSerialActions(ctx) {
       }
     });
 
-    dom.webusbConnectToggleEl?.addEventListener("click", () => {
+    dom.webusbConnectToggleEl.addEventListener("click", () => {
       if (connected) {
         disconnectSerial();
       } else {
@@ -399,27 +357,11 @@ export function createSerialActions(ctx) {
       }
     });
 
-    document.querySelector("#serial-transaction")?.addEventListener("click", async () => {
-      const txHex = document.querySelector("#tx-hex")?.value || "";
-      const rxBytes = Number(document.querySelector("#rx-bytes")?.value || 32);
-      const timeoutMs = Number(document.querySelector("#rx-timeout")?.value || 1200);
-
-      try {
-        log.setStatus("Running Python serial transaction...");
-        const result = await requireRuntimeApi(state).serialTxRx({ txHex, rxBytes, timeoutMs });
-        log.setStatus("Python serial transaction complete.");
-        log.logSerial(`PY TX ${result.tx.hex} | PY RX ${result.rx.hex || "<none>"}`);
-      } catch (error) {
-        log.reportActionError("Serial transaction", error);
-        log.logSerial(`ERROR ${errorSummary(error)}`);
-      }
-    });
-
-    document.querySelector("#radio-download").addEventListener("click", () => {
+    dom.radioDownloadEl.addEventListener("click", () => {
       downloadFromRadio();
     });
 
-    document.querySelector("#radio-upload").addEventListener("click", () => {
+    dom.radioUploadEl.addEventListener("click", () => {
       uploadToRadio();
     });
   }

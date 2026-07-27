@@ -52,18 +52,13 @@ export function createSettingsPanel({ dom, state, log, actions }) {
   }
 
   function updateViewButtons() {
-    if (dom.viewSettingsEl) {
-      dom.viewSettingsEl.disabled = !radioHasSettings();
-      dom.viewSettingsEl.title = radioHasSettings()
-        ? "Edit radio-wide settings"
-        : (settingsState?.message || "This radio does not expose radio-wide settings");
-    }
+    dom.viewSettingsEl.disabled = !radioHasSettings();
+    dom.viewSettingsEl.title = radioHasSettings()
+      ? "Edit radio-wide settings"
+      : (settingsState?.message || "This radio does not expose radio-wide settings");
   }
 
   function updateSummary() {
-    if (!dom.settingsSummaryEl) {
-      return;
-    }
     const count = invalidKeys.size;
     dom.settingsSummaryEl.hidden = !radioHasSettings();
     dom.settingsSummaryEl.classList.toggle("has-invalid", count > 0);

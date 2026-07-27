@@ -613,50 +613,47 @@ export function createChannelTable({ dom, state, log, actions }) {
   }
 
   function toggleMenu() {
-    if (!dom.channelMenuPopupEl) {
-      return;
-    }
     setMenuOpen(dom.channelMenuPopupEl.classList.contains("hidden"));
   }
 
   function bindEvents() {
-    dom.channelInsertEl?.addEventListener("click", () => {
+    dom.channelInsertEl.addEventListener("click", () => {
       insertNewChannelRow();
     });
-    dom.channelRemoveEl?.addEventListener("click", () => {
+    dom.channelRemoveEl.addEventListener("click", () => {
       removeSelectedChannelRows();
     });
-    dom.channelMoveUpEl?.addEventListener("click", () => {
+    dom.channelMoveUpEl.addEventListener("click", () => {
       moveSelectedChannelRows(-1);
     });
-    dom.channelMoveDownEl?.addEventListener("click", () => {
+    dom.channelMoveDownEl.addEventListener("click", () => {
       moveSelectedChannelRows(1);
     });
-    dom.channelMenuToggleEl?.addEventListener("click", (event) => {
+    dom.channelMenuToggleEl.addEventListener("click", (event) => {
       event.stopPropagation();
       toggleMenu();
     });
-    dom.channelCopyEl?.addEventListener("click", async () => {
+    dom.channelCopyEl.addEventListener("click", async () => {
       setMenuOpen(false);
       await writeChannelTsvToClipboard("copy", false);
     });
-    dom.channelCutEl?.addEventListener("click", async () => {
+    dom.channelCutEl.addEventListener("click", async () => {
       setMenuOpen(false);
       await writeChannelTsvToClipboard("cut", true);
     });
-    dom.channelPasteEl?.addEventListener("click", async () => {
+    dom.channelPasteEl.addEventListener("click", async () => {
       setMenuOpen(false);
       await pasteChannelsViaApi();
     });
-    dom.channelAddGmrsEl?.addEventListener("click", () => {
+    dom.channelAddGmrsEl.addEventListener("click", () => {
       setMenuOpen(false);
       addBandPlanChannels(buildGmrsRows, "GMRS");
     });
-    dom.channelAddFrsEl?.addEventListener("click", () => {
+    dom.channelAddFrsEl.addEventListener("click", () => {
       setMenuOpen(false);
       addBandPlanChannels(buildFrsRows, "FRS");
     });
-    dom.channelAddPmr446El?.addEventListener("click", () => {
+    dom.channelAddPmr446El.addEventListener("click", () => {
       setMenuOpen(false);
       addBandPlanChannels(buildPmr446Rows, "PMR446");
     });
@@ -669,7 +666,7 @@ export function createChannelTable({ dom, state, log, actions }) {
       if (!(target instanceof Node)) {
         return;
       }
-      if (dom.channelMenuPopupEl.contains(target) || dom.channelMenuToggleEl?.contains(target)) {
+      if (dom.channelMenuPopupEl.contains(target) || dom.channelMenuToggleEl.contains(target)) {
         return;
       }
       setMenuOpen(false);
