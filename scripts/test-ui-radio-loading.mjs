@@ -191,8 +191,16 @@ class FakeDocument {
     return element;
   }
 
+  // index.html always provides every element web/js/ui/dom.js requires, so an
+  // unregistered selector stands for markup the test simply does not care
+  // about — not a missing element. Auto-vivify it; tests register the specific
+  // elements they assert on.
   querySelector(selector) {
-    return this.elements.get(String(selector)) || null;
+    const key = String(selector);
+    if (!this.elements.has(key)) {
+      this.elements.set(key, new FakeElement("div", this));
+    }
+    return this.elements.get(key);
   }
 
   querySelectorAll(selector) {

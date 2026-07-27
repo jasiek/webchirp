@@ -6,8 +6,25 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 ## Core Architecture
 - `web/app.js`: Browser UI and Web Serial bridge implementation.
 - `web/js/runtime-rpc.js`: Main-thread runtime RPC layer and Pyodide bootstrap.
+- `web/js/ui.js`: Composes the UI modules and exposes `createUiController()`.
+- `web/js/ui/`: One module per UI area — `channel-table`, `settings-panel`,
+  `radio-catalog`, `repeater-query`, `codeplug-io`, `serial-actions`, plus the
+  shared `dom`, `state`, `debug-log`, `issue-report`, `format` and
+  `channel-values` helpers.
 - `web/python/runtime_bridge.py`: Versioned Python runtime logic (no embedded Python in JS files).
 - `chirp/`: Upstream CHIRP source as a git submodule.
+
+### UI module conventions
+- Each module is a `create<Area>(ctx)` factory. `ctx` carries `dom`, `state`,
+  `log`, `actions` and every constructed sibling module.
+- Keep state private to the module that owns it; expose accessors instead.
+  `web/js/ui/state.js` is only for state that genuinely spans modules.
+- Call siblings through `ctx` (`ctx.table.render()`) or `ctx.actions`, never by
+  importing them — that keeps the module graph free of cycles. Such calls must
+  happen after construction, never in a factory body.
+- Modules bind their own DOM listeners in a `bindEvents()`; `ui.js` only binds
+  what no single module owns.
+- Query document elements in `web/js/ui/dom.js`, not in feature modules.
 
 ## Rules for Agents
 - Keep Python and JavaScript separated. Put runtime Python code in `web/python/*.py`.
