@@ -1036,6 +1036,15 @@ button:not(:disabled):hover {
   background: var(--focus-bg);
 }
 
+/* Stand-ins for the rows the grid keeps out of the DOM (see channel-table.js):
+   pure height, no box of their own. */
+#mem-table tbody tr.mem-row-spacer td {
+  padding: 0;
+  border: 0;
+  font-size: 0;
+  line-height: 0;
+}
+
 #mem-table tbody tr.is-selected td {
   background: var(--selected-bg);
 }

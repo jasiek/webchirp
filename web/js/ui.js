@@ -110,6 +110,9 @@ export function createUiController() {
 
     dom.viewChannelsEl.addEventListener("click", () => {
       setEditorView("channels");
+      // The grid sizes its rendered window against its viewport, which has no
+      // height while the settings view is showing.
+      table.refreshVisibleRows();
     });
 
     dom.viewSettingsEl.addEventListener("click", () => {
