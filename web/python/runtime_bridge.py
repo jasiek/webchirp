@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import builtins
 import csv
 import io
 import importlib
@@ -11,6 +12,26 @@ import sys
 import tempfile
 
 sys.path.insert(0, "/webchirp_runtime")
+
+
+def _install_gettext_builtins() -> None:
+    """Provide the translation builtins CHIRP expects from its wx frontend.
+
+    CHIRP modules call ``_()``/``ngettext()`` as builtins, which upstream only
+    installs when ``chirp.wxui`` boots. We never translate, so pass the source
+    strings straight through instead of pulling in a locale machinery.
+    """
+    # A REPL leaves ``builtins._`` bound to the last result, so only a callable
+    # counts as an already-installed translator.
+    if not callable(getattr(builtins, "_", None)):
+        builtins._ = lambda message: message
+    if not callable(getattr(builtins, "ngettext", None)):
+        builtins.ngettext = (
+            lambda singular, plural, n: singular if n == 1 else plural
+        )
+
+
+_install_gettext_builtins()
 
 from chirp import chirp_common, directory, errors, memmap, settings as chirp_settings
 from chirp.drivers.generic_csv import CSVRadio
