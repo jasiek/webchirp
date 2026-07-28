@@ -264,7 +264,9 @@ export class Ch340SerialPort {
       }
     }
     if (!this._inEndpoint || !this._outEndpoint) {
-      throw new Error("CH340: bulk IN/OUT endpoints not found on interface 0");
+      throw new Error(
+        `CH340: bulk IN/OUT endpoints not found on interface ${this._interfaceNumber}`,
+      );
     }
 
     this.version = await this._readVersion();

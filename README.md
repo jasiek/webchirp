@@ -63,7 +63,9 @@ dispatched to a chip-specific driver:
   verified end-to-end on Android Chrome.
 - **WCH CH340/CH341** adapters use a built-in CH340-over-WebUSB driver that
   reads the chip version to pick the right register map and probes for the
-  clone-silicon prescaler quirk. Not yet verified against real hardware.
+  clone-silicon prescaler quirk. Enumeration and baud/line configuration are
+  verified against a real adapter; a full clone against a radio has not been
+  exercised yet, so the bulk read path is still untested.
 - **USB CDC-ACM** devices are dispatched to Google's `web-serial-polyfill`.
   This path is wired up but untested — most radio programming cables are not
   CDC-ACM.
