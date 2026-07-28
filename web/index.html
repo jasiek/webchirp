@@ -1,13 +1,36 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-80DP6MQ180"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
+    <!--
+      Analytics runs only on the production deployment. Anyone can serve this
+      app — dev servers on localhost, forks on their own Pages site — and every
+      one of those copies carries this measurement ID, so without the host check
+      they all report into the same property. One developer reloading localhost
+      all day is indistinguishable from real traffic there.
 
-      gtag('config', 'G-80DP6MQ180');
+      The tag itself is gated rather than just our own events: the snippet sends
+      page_view and session_start on its own, which is exactly the traffic that
+      has to stay out. Off-domain nothing is requested from googletagmanager,
+      gtag stays undefined, and web/js/ui/analytics.js no-ops.
+
+      www is allowed alongside the apex because CNAME points at the apex and a
+      www visitor who is not redirected is real traffic we would otherwise drop.
+      Forks are unaffected by that: they are on github.io or a domain of their
+      own. Keep this list in step with scripts/test-analytics.mjs.
+    -->
+    <script>
+      if (location.hostname === 'codeplug.org' || location.hostname === 'www.codeplug.org') {
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function gtag(){dataLayer.push(arguments);};
+        gtag('js', new Date());
+
+        gtag('config', 'G-80DP6MQ180');
+
+        var gtagScript = document.createElement('script');
+        gtagScript.async = true;
+        gtagScript.src = 'https://www.googletagmanager.com/gtag/js?id=G-80DP6MQ180';
+        document.head.appendChild(gtagScript);
+      }
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
