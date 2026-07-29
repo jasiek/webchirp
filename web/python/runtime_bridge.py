@@ -441,8 +441,10 @@ def _memory_from_row_values(vals, level_map=None):
 
     mem.name = str(vals[1] or "")
 
+    # parse_freq(), not to_MHz(float(...)): the latter is what really_from_csv
+    # used and it truncates, turning an 8.219000 MHz offset into 8218999 Hz.
     try:
-        mem.freq = chirp_common.to_MHz(float(str(vals[2]).strip()))
+        mem.freq = chirp_common.parse_freq(str(vals[2]).strip())
     except Exception:
         raise RuntimeUnsupportedError("Frequency is not a valid number")
 
@@ -452,7 +454,7 @@ def _memory_from_row_values(vals, level_map=None):
     mem.duplex = duplex
 
     try:
-        mem.offset = chirp_common.to_MHz(float(str(vals[4]).strip()))
+        mem.offset = chirp_common.parse_freq(str(vals[4]).strip())
     except Exception:
         raise RuntimeUnsupportedError("Offset is not a valid number")
 

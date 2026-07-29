@@ -157,6 +157,31 @@ json.dumps({
   assert.equal(result.blankResolvesToNone, true);
 });
 
+// to_MHz(float(text)) truncates: an 8.219000 MHz offset lands on 8218999 Hz,
+// so 27 channels of the IC-M710 image drifted by 1 Hz on every write.
+test("frequencies and offsets keep full precision across a write", async () => {
+  const harness = await createTestRadioHarness({ repoRoot });
+  const parsed = await harness.runPythonJson(
+    `json.dumps({"legacy": chirp_common.to_MHz(float("8.219000")),
+                 "current": chirp_common.parse_freq("8.219000")})`,
+  );
+  assert.equal(parsed.legacy, 8218999, "expected the legacy conversion to truncate");
+  assert.equal(parsed.current, 8219000);
+
+  const catalog = await readCatalog();
+  const { match, loaded } = await loadImageFor(harness, catalog, "Icom_IC-M710.img");
+  const exported = await harness.exportCodeplugBinary(
+    match.module,
+    match.className,
+    loaded.rows,
+    loaded.settings || [],
+  );
+  const reloaded = await harness.loadCodeplugBinary(exported.image);
+  const before = loaded.rows.map((row) => `${row.Location}:${row.Frequency}:${row.Offset}`);
+  const after = reloaded.rows.map((row) => `${row.Location}:${row.Frequency}:${row.Offset}`);
+  assert.deepEqual(after, before, "frequencies drifted across a write");
+});
+
 test("unsupported power text fails with the radio's valid values, not an index error", async () => {
   const harness = await createTestRadioHarness({ repoRoot });
   await assert.rejects(
