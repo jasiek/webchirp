@@ -63,6 +63,10 @@ CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
 DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
 LAST_IMAGE_BY_DRIVER = {}
 DEFAULT_EXPORT_POWER = "50W"
+# Duplex values CHIRP drivers actually emit. chirp_common has no single
+# constant for these: RadioFeatures defaults valid_duplexes to ["", "+", "-"],
+# and drivers extend it with "split" and "off".
+DUPLEX_VALUES = ("", "+", "-", "split", "off")
 DEFAULT_SERIAL_PIPE_TIMEOUT = 1.2
 
 
@@ -323,6 +327,58 @@ def _power_label_map_from_features(rf):
     return mapped, default_power
 
 
+def _valid_power_levels_for_driver(module_name: str, class_name: str):
+    """Return a driver's own PowerLevel objects, or an empty list if unavailable."""
+    rf = _driver_features(module_name, class_name)
+    return list(getattr(rf, "valid_power_levels", None) or []) if rf else []
+
+
+def _power_levels_by_label(levels):
+    """Index a driver's PowerLevel objects by every label they round-trip as.
+
+    Rows carry power as text: `Memory.to_csv()` writes the driver's own label
+    ("High"), while CSV exported from this app writes the watt form ("50W").
+    Both must resolve back to the *driver's* object, because PowerLevel equality
+    compares dBm as a float and a rebuilt level almost never compares equal.
+    """
+    mapped = {}
+    for level in levels or []:
+        keys = [str(level)]
+        try:
+            keys.append(_watts_label(level))
+        except Exception:
+            pass
+        for key in keys:
+            key = key.strip()
+            if key:
+                mapped.setdefault(key, level)
+    return mapped
+
+
+def _resolve_power_level(power_text, level_map):
+    """Resolve row power text to the driver's own PowerLevel object."""
+    text = str(power_text or "").strip()
+    # Memory.to_csv() renders an unset power as "%s" % None, so a channel that
+    # carries no power level round-trips as the literal string "None". Treat it
+    # as unset; the previous code fell through to a default and silently wrote
+    # the radio's first power level onto such channels.
+    if not text or text == "None":
+        return None
+    level = level_map.get(text)
+    if level is not None:
+        return level
+    if not level_map:
+        # Driver publishes no power levels; hand CHIRP the parsed value.
+        try:
+            return chirp_common.parse_power(text)
+        except Exception:
+            return None
+    valid = ", ".join(sorted({str(value) for value in level_map.values()}))
+    raise RuntimeUnsupportedError(
+        f"Power {text!r} is not supported by this radio; valid values: {valid}"
+    )
+
+
 def _power_label_map_for_radio(module_name: str, class_name: str):
     """Map a selected driver's power labels to CSV power specs."""
     return _power_label_map_from_features(_driver_features(module_name, class_name))
@@ -341,6 +397,97 @@ def _normalize_power_value(value, power_map, default_power):
         return text
     except Exception:
         return fallback
+
+
+def _row_float(text, fallback, label):
+    """Parse an optional float row field, keeping the Memory default if blank."""
+    value = str(text or "").strip()
+    if not value:
+        return fallback
+    try:
+        return float(value)
+    except Exception:
+        raise RuntimeUnsupportedError(f"{label} is not a valid number")
+
+
+def _row_int(text, fallback, label):
+    """Parse an optional integer row field, keeping the Memory default if blank."""
+    value = str(text or "").strip()
+    if not value:
+        return fallback
+    try:
+        return int(value, 10)
+    except Exception:
+        raise RuntimeUnsupportedError(f"{label} is not a valid number")
+
+
+def _memory_from_row_values(vals, level_map=None):
+    """Build a Memory from row values, inverting chirp_common.Memory.to_csv().
+
+    chirp_common.Memory.really_from_csv() looks like the natural inverse, but it
+    is a legacy parser that rejects values CHIRP itself emits: it allows only
+    "+", "-" and "" for duplex, so a channel read back as "split" or "off"
+    cannot be written again. It also insists every tone and DTCS code appear in
+    the standard tables. CHIRP's own generic_csv driver does not use it either.
+
+    Parse the fields here instead and leave the final say to the driver's
+    set_memory(), which is the component that actually knows what it supports.
+    """
+    mem = chirp_common.Memory()
+    try:
+        mem.number = int(str(vals[0]).strip())
+    except Exception:
+        raise RuntimeUnsupportedError(f"Location {vals[0]!r} is not a valid integer")
+
+    mem.name = str(vals[1] or "")
+
+    try:
+        mem.freq = chirp_common.to_MHz(float(str(vals[2]).strip()))
+    except Exception:
+        raise RuntimeUnsupportedError("Frequency is not a valid number")
+
+    duplex = str(vals[3] or "").strip()
+    if duplex not in DUPLEX_VALUES:
+        raise RuntimeUnsupportedError(f"Duplex {duplex!r} is not valid")
+    mem.duplex = duplex
+
+    try:
+        mem.offset = chirp_common.to_MHz(float(str(vals[4]).strip()))
+    except Exception:
+        raise RuntimeUnsupportedError("Offset is not a valid number")
+
+    tmode = str(vals[5] or "").strip()
+    if tmode and tmode not in chirp_common.TONE_MODES:
+        raise RuntimeUnsupportedError(f"Tone mode {tmode!r} is not valid")
+    mem.tmode = tmode
+
+    mem.rtone = _row_float(vals[6], mem.rtone, "rTone")
+    mem.ctone = _row_float(vals[7], mem.ctone, "cTone")
+    mem.dtcs = _row_int(vals[8], mem.dtcs, "DTCS code")
+
+    polarity = str(vals[9] or "").strip()
+    if polarity:
+        if polarity not in ("NN", "NR", "RN", "RR"):
+            raise RuntimeUnsupportedError("DtcsPolarity is not valid")
+        mem.dtcs_polarity = polarity
+
+    mem.rx_dtcs = _row_int(vals[10], mem.rx_dtcs, "DTCS Rx code")
+
+    cross_mode = str(vals[11] or "").strip()
+    if cross_mode:
+        mem.cross_mode = cross_mode
+
+    mode = str(vals[12] or "").strip()
+    if mode:
+        if mode not in chirp_common.MODES:
+            raise RuntimeUnsupportedError(f"Mode {mode!r} is not valid")
+        mem.mode = mode
+
+    mem.tuning_step = _row_float(vals[13], mem.tuning_step, "TStep")
+    mem.skip = str(vals[14] or "")
+    mem.power = _resolve_power_level(vals[15], level_map or {})
+    mem.comment = str(vals[16] or "")
+    return mem
 
 
 def _coerce_csv_vals_for_chirp(vals):
@@ -484,16 +631,15 @@ def _infer_csv_error_column(error_text: str):
 
 def validate_rows_for_upload(rows, module_name="", class_name=""):
     """Validate row values with CHIRP CSV parsing and return per-cell issues."""
-    power_map, default_power = _power_label_map_for_radio(module_name, class_name)
+    level_map = _power_levels_by_label(
+        _valid_power_levels_for_driver(module_name, class_name)
+    )
     issues = []
     for row_index, row in enumerate(rows or []):
         vals = [str((row or {}).get(header, "") or "") for header in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
-        power_idx = CSV_HEADERS.index("Power")
-        vals[power_idx] = _normalize_power_value(vals[power_idx], power_map, default_power)
         try:
-            mem = chirp_common.Memory()
-            mem.really_from_csv(vals)
+            _memory_from_row_values(vals, level_map)
         except Exception as exc:
             error_text = str(exc)
             issues.append(
@@ -734,8 +880,10 @@ def _apply_rows_to_radio_instance(radio, rows, module_name="", class_name=""):
         radio_cls = radio.__class__
         module_name = module_name or str(getattr(radio_cls, "__module__", "")).split(".")[-1]
         class_name = class_name or str(getattr(radio_cls, "__name__", ""))
-    power_map, default_power = _power_label_map_for_radio(module_name, class_name)
-    power_idx = CSV_HEADERS.index("Power")
+    level_map = _power_levels_by_label(
+        list(radio.get_features().valid_power_levels or [])
+        or _valid_power_levels_for_driver(module_name, class_name)
+    )
     valid_numbers = set(_iter_memory_numbers(radio))
     seen_numbers = set()
     for row in rows:
@@ -757,12 +905,7 @@ def _apply_rows_to_radio_instance(radio, rows, module_name="", class_name=""):
         vals = [str(row.get(h, "") or "") for h in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
         vals[0] = str(number)
-        vals[power_idx] = _normalize_power_value(
-            vals[power_idx], power_map, default_power
-        )
-        mem = chirp_common.Memory()
-        mem.really_from_csv(vals)
-        mem.power = chirp_common.parse_power(vals[power_idx]) if vals[power_idx] else None
+        mem = _memory_from_row_values(vals, level_map)
         mem.number = number
         if not mem.mode:
             mem.mode = "FM"
