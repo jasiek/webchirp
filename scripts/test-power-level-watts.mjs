@@ -123,6 +123,7 @@ function renderGridWithPowerColumn(columns) {
     tableHead: new StubElement("thead"),
     tableBody: new StubElement("tbody"),
     tableScrollEl: new StubElement("div"),
+    channelEmptyStateEl: new StubElement("div"),
   };
   const state = {
     currentHeaders: ["Location", "Power"],

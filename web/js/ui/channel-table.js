@@ -843,6 +843,14 @@ export function createChannelTable({ dom, state, log, actions }) {
     });
   }
 
+  // With no channels there is nothing for the header row to label, so the whole
+  // grid gives way to the centred "how to get channels in here" notice.
+  function renderEmptyState() {
+    const isEmpty = state.currentRows.length === 0;
+    dom.channelEmptyStateEl.hidden = !isEmpty;
+    dom.tableScrollEl.hidden = isEmpty;
+  }
+
   // Render the editable channel table using current rows and metadata rules.
   function render() {
     const columns = state.currentHeaders.slice();
@@ -853,6 +861,7 @@ export function createChannelTable({ dom, state, log, actions }) {
       renderHeader();
       discardRowElements();
     }
+    renderEmptyState();
     renderRowWindow();
   }
 

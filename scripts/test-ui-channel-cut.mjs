@@ -192,6 +192,15 @@ const SAMPLE_ROWS = [
   { Location: "2", Name: "Charlie", Frequency: "446.000000" },
 ];
 
+// Drive the Import CSV path the way the file picker does: hand the hidden
+// input a file and fire the change event it listens for.
+async function importSampleCsv(document) {
+  const fileInput = document.querySelector("#csv-file");
+  fileInput.files = [{ name: "sample.csv", text: async () => "" }];
+  fileInput.dispatchEvent({ type: "change" });
+  await flushMicrotasks();
+}
+
 // The grid renders spacer rows around the windowed channel rows, so the
 // channel rows are the ones carrying a row index.
 function channelRows(document) {
@@ -231,12 +240,17 @@ test("cut deletes the rows captured at copy time, not the selection at write com
       ],
     }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name", "Frequency"], columns: {} }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers: ["Location", "Name", "Frequency"], rows: SAMPLE_ROWS, errors: [] }),
   });
 
+  // init() leaves the grid empty, so the channels these assertions operate on
+  // come from a CSV import (the stubbed parser returns SAMPLE_ROWS whatever
+  // the file holds).
   await ui.init(true);
+  await importSampleCsv(document);
   assert.deepEqual(tableNames(document), ["Alpha", "Bravo", "Charlie"]);
 
   // Select Alpha, then trigger Cut; the clipboard write stays pending as if
@@ -281,6 +295,7 @@ test("paste preserves read-only column values and matches unpadded numeric enums
       ],
     }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers, columns }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers, rows: [], errors: [] }),
