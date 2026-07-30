@@ -36,6 +36,24 @@ async function main() {
     { _modules: modules },
   );
 
+  // list_registered_radios drops unimportable modules silently; surface them
+  // here so a driver missing from the catalog is recorded, not inferred.
+  const importFailures = await harness.runPythonJson(
+    `
+_failures = {}
+for _name in _modules:
+    try:
+        importlib.import_module("chirp.drivers." + str(_name))
+    except Exception as _exc:
+        _failures[str(_name)] = "%s: %s" % (type(_exc).__name__, _exc)
+json.dumps(_failures)
+    `,
+    { _modules: modules },
+  );
+  for (const name of Object.keys(importFailures).sort()) {
+    console.warn(`Driver module not importable, absent from catalog: ${name} (${importFailures[name]})`);
+  }
+
   const sorted = sortRadioCatalog(radios);
   const chirpRevision = await resolveChirpRevision(harness.pythonSource.getRuntimeInfo().chirpPackageDir);
 
@@ -57,8 +75,9 @@ async function main() {
 
   await writeFile(OUTPUT_PATH, `${JSON.stringify(catalog, null, 0)}\n`, "utf8");
   // eslint-disable-next-line no-console
+  const failureCount = Object.keys(importFailures).length;
   console.log(
-    `Wrote ${sorted.length} radios from ${modules.length} driver modules to ${path.relative(REPO_ROOT, OUTPUT_PATH)} (chirp ${chirpRevision.slice(0, 12)}).`,
+    `Wrote ${sorted.length} radios from ${modules.length} driver modules to ${path.relative(REPO_ROOT, OUTPUT_PATH)} (chirp ${chirpRevision.slice(0, 12)}${failureCount ? `, ${failureCount} modules unimportable` : ""}).`,
   );
 }
 
