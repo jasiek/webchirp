@@ -11,6 +11,10 @@ const CORE_CHIRP_RELATIVE_FILES = [
   "chirp/memmap.py",
   "chirp/chirp_common.py",
   "chirp/directory.py",
+  // CSV export runs memories through import_logic the way CHIRP's own export
+  // does, so it has to be seeded before runtime_bridge.py imports it — the
+  // lazy CDN finder is installed further down that same module.
+  "chirp/import_logic.py",
   "chirp/pyPEG.py",
   "chirp/bitwise_grammar.py",
   "chirp/bitwise.py",
