@@ -33,6 +33,9 @@ tmp/
 
 # Editor backups
 *~
+# Emacs lock files: symlinks to user@host:pid that exist only while a buffer is
+# open, so a `git add -A` during an edit session commits a dangling symlink.
+.#*
 
 # Claude Code session state and worktrees
 .claude/
