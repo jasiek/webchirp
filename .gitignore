@@ -37,5 +37,8 @@ tmp/
 # open, so a `git add -A` during an edit session commits a dangling symlink.
 .#*
 
+# Personal scratch list, not a shared roadmap.
+TODO.md
+
 # Claude Code session state and worktrees
 .claude/
