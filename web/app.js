@@ -16,6 +16,7 @@ const serialRpcHandler = createSerialRpcHandler({
 const rpcClient = createRuntimeRpcClient({
   handleSerialRpc: serialRpcHandler,
   logDebug: ui.logDebug,
+  onProgress: ui.beginProgress,
   onRuntimeCrash: ui.onRuntimeCrash,
 });
 

@@ -268,6 +268,27 @@
       </main>
 
       <section class="debug-output-panel">
+        <!--
+          App-wide progress for long runtime work that is not tied to one panel.
+          It lives inside this panel, above the header, so it shares the panel's
+          single top border and background rather than adding a second rule
+          across the page. A bar inside a collapsible sidebar section (see
+          #clone-progress) is invisible exactly when it matters, which is why
+          this one is not there.
+        -->
+        <div id="app-progress" class="app-progress" hidden>
+          <div class="app-progress-text">
+            <!--
+              aria-live sits on the label, not the container: the label changes
+              once per operation, while the count ticks once per driver module —
+              a live region around both would announce ~191 times during one
+              sweep. The <progress> element carries the numbers on request.
+            -->
+            <span id="app-progress-label" class="app-progress-label" aria-live="polite"></span>
+            <span id="app-progress-count"></span>
+          </div>
+          <progress id="app-progress-bar" max="100"></progress>
+        </div>
         <div class="debug-header">
           <h2>Debug Output</h2>
           <div class="debug-actions">

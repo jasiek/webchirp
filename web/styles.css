@@ -144,11 +144,25 @@
   box-sizing: border-box;
 }
 
+/* Form controls do not inherit font-family from an ancestor — without this
+   they fall back to the user agent's own default, which is Arial on macOS but
+   not everywhere, so the app's buttons, dropdowns and grid cells drifted away
+   from the body font by platform. Only the family is inherited: the `font`
+   shorthand would also pull in the body font-size and grow every control from
+   the UA's ~13px to 16px. #debug-output overrides the family with its
+   monospace stack; nothing else should. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 body {
   margin: 0;
   background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
   color: var(--text);
-  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -499,6 +513,38 @@ button:not(:disabled):hover {
 }
 
 .clone-progress progress {
+  display: block;
+  width: 100%;
+  height: 0.6rem;
+  accent-color: var(--accent);
+}
+
+/* App-wide progress strip, rendered as the first row inside the Debug Output
+   panel. It deliberately carries no border or background of its own: the panel
+   already supplies both, and a second rule here would read as a divider
+   splitting the panel in two. */
+.app-progress {
+  margin-bottom: 0.6rem;
+}
+
+.app-progress[hidden] {
+  display: none;
+}
+
+.app-progress-text {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.app-progress-label {
+  color: var(--text);
+}
+
+.app-progress progress {
   display: block;
   width: 100%;
   height: 0.6rem;
