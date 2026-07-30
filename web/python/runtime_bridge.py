@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import tempfile
+import types
 
 sys.path.insert(0, "/webchirp_runtime")
 
@@ -30,6 +31,62 @@ def _install_gettext_builtins() -> None:
 
 
 _install_gettext_builtins()
+
+
+def _install_pyserial_shim() -> None:
+    """Provide a stand-in ``serial`` module so pyserial-importing drivers load.
+
+    Pyodide has no pyserial, so drivers that ``import serial`` at module scope
+    (tg_uv2p, idrp) would fail to import and never register with CHIRP's
+    directory. They only need the module's constants — radio I/O always goes
+    through :class:`WebSerialPipe` — so the shim carries pyserial's public
+    constants and a ``Serial`` class that refuses construction with a clear
+    error instead of failing with ``ModuleNotFoundError`` at import time.
+    """
+    try:
+        import serial  # noqa: F401
+        return
+    except ImportError:
+        pass
+
+    shim = types.ModuleType("serial")
+    shim.__doc__ = "Minimal pyserial stand-in for the webchirp Pyodide runtime."
+
+    shim.FIVEBITS = 5
+    shim.SIXBITS = 6
+    shim.SEVENBITS = 7
+    shim.EIGHTBITS = 8
+    shim.PARITY_NONE = "N"
+    shim.PARITY_EVEN = "E"
+    shim.PARITY_ODD = "O"
+    shim.PARITY_MARK = "M"
+    shim.PARITY_SPACE = "S"
+    shim.STOPBITS_ONE = 1
+    shim.STOPBITS_ONE_POINT_FIVE = 1.5
+    shim.STOPBITS_TWO = 2
+
+    class SerialException(OSError):
+        """Matches pyserial's base exception type."""
+
+    class SerialTimeoutException(SerialException):
+        """Matches pyserial's write-timeout exception type."""
+
+    class Serial:
+        """Unusable port stand-in: this runtime drives radios via WebSerialPipe."""
+
+        def __init__(self, *args, **kwargs):
+            raise SerialException(
+                "pyserial is unavailable in the browser runtime; "
+                "radio I/O goes through the Web Serial bridge"
+            )
+
+    shim.SerialException = SerialException
+    shim.SerialTimeoutException = SerialTimeoutException
+    shim.Serial = Serial
+    sys.modules["serial"] = shim
+
+
+_install_pyserial_shim()
 
 from chirp import (
     chirp_common,
