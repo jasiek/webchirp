@@ -1,6 +1,9 @@
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs";
 import { createCallQueue } from "./call-queue.mjs";
-import { findCatalogRadioForImageMetadata } from "./image-metadata.mjs";
+import {
+  findCatalogRadioForImageMetadata,
+  loadImageWithDriverFallback,
+} from "./image-metadata.mjs";
 import {
   createBrowserCdnPythonSource,
   DEFAULT_CHIRP_REVISION,
@@ -340,20 +343,22 @@ async function handleLoadImage(payload = {}) {
       );
     }
   }
-  if (!resolvedDriver) {
+  if (!resolvedDriver && debugLog) {
     // Nothing identified the driver: either the image predates the metadata
     // trailer, or its metadata names a model the catalog does not list. Either
     // way the only route left is match_model against every driver, which can
     // only match drivers that have been imported.
-    if (debugLog) {
-      debugLog(
-        `IMAGE ${metadata?.hasMetadata ? "metadata unmatched" : "metadata absent"}; `
-        + "importing all drivers for detection",
-      );
-    }
-    await ensureAllDriverModules();
+    debugLog(
+      `IMAGE ${metadata?.hasMetadata ? "metadata unmatched" : "metadata absent"}; `
+      + "importing all drivers for detection",
+    );
   }
-  return runPythonJson("json.dumps(load_image_base64(_image_b64))");
+  return loadImageWithDriverFallback({
+    resolvedDriver,
+    loadImage: () => runPythonJson("json.dumps(load_image_base64(_image_b64))"),
+    importAllDrivers: () => ensureAllDriverModules(),
+    log: debugLog,
+  });
 }
 
 async function handleSerialConnect(payload = {}) {

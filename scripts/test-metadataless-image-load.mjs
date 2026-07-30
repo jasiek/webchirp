@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { findCatalogRadioForImageMetadata } from "../web/js/image-metadata.mjs";
 import { listDriverModules } from "../web/js/python-sources.mjs";
 import { createTestRadioHarness } from "./test-radio-harness.mjs";
 
@@ -89,4 +90,40 @@ test("import_all_driver_modules reports unimportable drivers instead of hiding t
   );
   assert.equal(result.imported, 1);
   assert.match(result.failed.definitely_not_a_driver, /ModuleNotFoundError/);
+});
+
+// Quansheng_UV-K5_egzumer.img is the case where a resolved-but-WRONG match was
+// worse than no match: vendor/model alone resolved uvk5.OSFWUVK5Radio, a real
+// non-live catalog entry, so the sweep was skipped and detection then raised
+// "Unsupported model Quansheng UV-K5". The right driver lives in a different
+// module and is only reachable when the variant is taken into account.
+test("an image whose driver is distinguished only by variant resolves directly", async () => {
+  const harness = await createTestRadioHarness({ repoRoot });
+  const catalog = JSON.parse(
+    await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8"),
+  ).radios;
+  const image = await readImage("Quansheng_UV-K5_egzumer.img");
+
+  const metadata = await harness.runPythonJson(
+    "json.dumps(read_image_metadata_base64(_b))",
+    { _b: Buffer.from(image).toString("base64") },
+  );
+  assert.equal(metadata.variant, "egzumer");
+  assert.ok(
+    catalog.filter((r) => r.vendor === metadata.vendor && r.model === metadata.model).length > 1,
+    "vendor/model alone must still be ambiguous, or this test proves nothing",
+  );
+
+  const match = findCatalogRadioForImageMetadata(catalog, metadata);
+  assert.equal(match?.module, "uvk5_egzumer");
+  assert.equal(match?.className, "UVK5RadioEgzumer");
+
+  // Importing only the resolved module must be enough — no all-drivers sweep.
+  await harness.runPythonJson("json.dumps({'ok': bool(ensure_radio_module(_m))})", {
+    _m: match.module,
+  });
+  const loaded = await harness.loadCodeplugBinary(image);
+  assert.equal(loaded.module, "uvk5_egzumer");
+  assert.equal(loaded.className, "UVK5RadioEgzumer");
+  assert.ok(loaded.rows.length > 0, "expected channels to be populated");
 });

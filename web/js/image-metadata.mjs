@@ -2,29 +2,109 @@
 // driver module can be imported before image detection runs. CHIRP's
 // directory.get_radio_by_image only searches drivers that are already
 // imported, so the caller must resolve module names from metadata up front.
+//
+// The governing constraint: a resolved-but-WRONG match is worse than no match,
+// because it suppresses the all-drivers fallback that would have found the
+// right driver. So this must be at least as precise as the detection it front-
+// runs — which compares VENDOR/MODEL/VARIANT across `rclass.ALIASES + [rclass]`
+// (chirp/directory.py) — and must report ambiguity rather than guessing.
+
+function identitiesFor(radio) {
+  if (Array.isArray(radio.aliases) && radio.aliases.length > 0) {
+    return radio.aliases;
+  }
+  // Catalogs built before aliases were recorded still match on the class's own
+  // identity.
+  return [{ vendor: radio.vendor, model: radio.model, variant: radio.variant || "" }];
+}
+
+function matchesIdentity(radio, vendor, model, variant) {
+  return identitiesFor(radio).some((identity) => {
+    if (String(identity.vendor || "") !== vendor || String(identity.model || "") !== model) {
+      return false;
+    }
+    // CHIRP skips the variant comparison when the image records none, but a
+    // recorded variant must match exactly — that is what separates
+    // uvk5_egzumer.UVK5RadioEgzumer ("egzumer") from the plain uvk5 drivers.
+    return variant === null || String(identity.variant || "") === variant;
+  });
+}
+
 export function findCatalogRadioForImageMetadata(radioCatalog, metadata) {
   if (!metadata?.hasMetadata) {
     return null;
   }
   const catalog = Array.isArray(radioCatalog) ? radioCatalog : [];
+  const vendor = String(metadata.vendor || "");
+  const model = String(metadata.model || "");
+  // null means the trailer records no variant, which CHIRP treats as "any";
+  // "" is an explicitly empty variant and must match one.
+  const variant =
+    metadata.variant === undefined || metadata.variant === null
+      ? null
+      : String(metadata.variant);
 
   // The metadata rclass is the concrete driver class name, so it is the most
-  // precise selector when the class still exists in the catalog.
+  // precise selector when the class still exists in the catalog. It often does
+  // not: CHIRP stamps the synthetic "DynamicRadioAlias" whenever detection went
+  // through an alias, so vendor/model is the common path rather than a rare
+  // fallback.
   const rclass = String(metadata.rclass || "");
-  if (rclass) {
-    const byClass = catalog.find((radio) => radio.className === rclass);
-    if (byClass) {
-      return byClass;
+  if (rclass && vendor && model) {
+    // A class name is not unique across modules (TS480Radio exists in both
+    // kenwood_live and ts480), and a class can be renamed out from under an
+    // image, so a name match only counts when the recorded identity agrees.
+    const byClass = catalog.filter(
+      (radio) => radio.className === rclass && matchesIdentity(radio, vendor, model, variant),
+    );
+    if (byClass.length === 1) {
+      return byClass[0];
     }
   }
 
-  // Fall back to vendor/model identity, which survives driver class renames.
-  const vendor = String(metadata.vendor || "");
-  const model = String(metadata.model || "");
+  // Fall back to vendor/model/variant identity, which survives driver class
+  // renames and is what CHIRP itself compares.
   if (!vendor || !model) {
     return null;
   }
-  return (
-    catalog.find((radio) => radio.vendor === vendor && radio.model === model) || null
-  );
+
+  const matches = catalog.filter((radio) => matchesIdentity(radio, vendor, model, variant));
+  if (matches.length === 1) {
+    return matches[0];
+  }
+  if (matches.length > 1) {
+    // Several drivers claim this identity (12 vendor/model pairs do, and
+    // ('Quansheng','UV-K5') alone has four). Picking one would suppress the
+    // sweep that can actually tell them apart, so decline to guess.
+    return null;
+  }
+  return null;
+}
+
+// Detection after a fast-path resolve, with the all-drivers sweep as a
+// backstop. Matching can be wrong in ways the catalog cannot see — a driver
+// whose match_model rejects an image its metadata claims, a future CHIRP that
+// records something new — and without this retry a wrong match is worse than
+// no match at all, because it skips the sweep that would have succeeded.
+// Injectable rather than inlined so it can be tested without a Pyodide runtime.
+export async function loadImageWithDriverFallback({
+  resolvedDriver,
+  loadImage,
+  importAllDrivers,
+  log,
+}) {
+  if (!resolvedDriver) {
+    await importAllDrivers();
+    return loadImage();
+  }
+  try {
+    return await loadImage();
+  } catch (error) {
+    log?.(
+      `IMAGE detection failed with ${resolvedDriver.module}.${resolvedDriver.className} `
+      + `(${error?.message || error}); retrying against all drivers`,
+    );
+    await importAllDrivers();
+    return loadImage();
+  }
 }

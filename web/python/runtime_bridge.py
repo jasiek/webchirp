@@ -295,17 +295,46 @@ def list_registered_radios(module_short_names):
         except Exception:
             baud_rate = None
 
-        radios.append(
-            {
-                "key": key,
-                "module": module_short,
-                "className": radio_cls.__name__,
-                "vendor": str(vendor),
-                "model": str(model),
-                "baudRate": baud_rate,
-                "isLiveRadio": bool(issubclass(radio_cls, chirp_common.LiveRadio)),
+        # directory.get_radio_by_image() matches image metadata against
+        # VENDOR/MODEL/VARIANT over ``rclass.ALIASES + [rclass]``. Catalog
+        # matching runs before any driver is imported, so it needs the same
+        # identities recorded up front or it cannot be as precise as the
+        # detection it front-runs.
+        aliases = []
+        for alias_cls in list(getattr(radio_cls, "ALIASES", []) or []) + [radio_cls]:
+            alias_vendor = getattr(alias_cls, "VENDOR", None)
+            alias_model = getattr(alias_cls, "MODEL", None)
+            if alias_vendor is None or alias_model is None:
+                continue
+            identity = {
+                "vendor": str(alias_vendor),
+                "model": str(alias_model),
+                "variant": str(getattr(alias_cls, "VARIANT", "") or ""),
             }
-        )
+            if identity not in aliases:
+                aliases.append(identity)
+
+        entry = {
+            "key": key,
+            "module": module_short,
+            "className": radio_cls.__name__,
+            "vendor": str(vendor),
+            "model": str(model),
+            "baudRate": baud_rate,
+            "isLiveRadio": bool(issubclass(radio_cls, chirp_common.LiveRadio)),
+        }
+        # Both fields are omitted at their default — an empty variant, and an
+        # alias list holding nothing but the class's own identity — because the
+        # catalog ships to every visitor and these would otherwise add ~50 kB
+        # of "" and duplicated vendor/model to 551 entries. Consumers treat a
+        # missing variant as empty and a missing alias list as the class's own
+        # identity, which is exactly what those defaults mean.
+        variant = str(getattr(radio_cls, "VARIANT", "") or "")
+        if variant:
+            entry["variant"] = variant
+        if len(aliases) > 1:
+            entry["aliases"] = aliases
+        radios.append(entry)
 
     radios.sort(key=lambda r: (r["vendor"], r["model"], r["className"]))
     return radios
@@ -1389,7 +1418,11 @@ def read_image_metadata_base64(image_b64: str):
         "rclass": str(metadata.get("rclass", "") or ""),
         "vendor": vendor,
         "model": model,
-        "variant": "" if variant is None else str(variant),
+        # None (no variant recorded) and "" (an explicitly empty variant) are
+        # different to CHIRP: get_radio_by_image skips the variant comparison
+        # for the former and demands VARIANT == "" for the latter. Collapsing
+        # them here would make catalog matching disagree with detection.
+        "variant": None if variant is None else str(variant),
     }
 
 
