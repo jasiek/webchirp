@@ -1,8 +1,6 @@
 import asyncio
 import base64
 import builtins
-import csv
-import io
 import importlib
 import importlib.abc
 import json
@@ -33,7 +31,14 @@ def _install_gettext_builtins() -> None:
 
 _install_gettext_builtins()
 
-from chirp import chirp_common, directory, errors, memmap, settings as chirp_settings
+from chirp import (
+    chirp_common,
+    directory,
+    errors,
+    import_logic,
+    memmap,
+    settings as chirp_settings,
+)
 from chirp.drivers.generic_csv import CSVRadio
 from js import (
     fetch_chirp_source,
@@ -59,6 +64,14 @@ DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
 LAST_IMAGE_BY_DRIVER = {}
 DEFAULT_EXPORT_POWER = "50W"
 DEFAULT_SERIAL_PIPE_TIMEOUT = 1.2
+
+
+def _log_debug(message) -> None:
+    """Send a diagnostic line to the browser debug panel without ever raising."""
+    try:
+        serial_log(str(message))
+    except Exception:
+        pass  # Diagnostics must never break the operation being diagnosed.
 
 
 def _js_to_py(value):
@@ -200,18 +213,49 @@ def list_registered_radios(module_short_names):
     return radios
 
 
+def _blank_csv_radio(max_memory: int = 999):
+    """Return an empty generic CSV radio.
+
+    ``CSVRadio(None)`` seeds a default channel 0 at 146.010000/50W, and
+    ``CSVRadio._load()`` — unlike ``load()`` — never calls ``_blank()``, so that
+    channel survives ``load_from()`` and lands in whatever we parse or export.
+    CHIRP's own CSV export erases it explicitly for the same reason
+    (``chirp/wxui/memedit.py``).
+    """
+    radio = CSVRadio(None, max_memory=max(0, int(max_memory)))
+    radio.erase_memory(0)
+    return radio
+
+
+def _row_values_for_csv(mem):
+    """Return ``CSV_FORMAT``-aligned values for a memory.
+
+    ``DVMemory.to_csv()`` upstream still emits a pre-RxDtcsCode/CrossMode/Power
+    layout of 18 fields, so zipping it against ``Memory.CSV_FORMAT`` shifts
+    every column from RxDtcsCode on — the D-STAR mode string lands in
+    RxDtcsCode and the row no longer parses. CHIRP never hits this because its
+    CSV export forces a plain ``Memory`` (``import_mem(..., mem_cls=Memory)``);
+    do the same here. D-STAR call signs are dropped, exactly as CHIRP drops
+    them when exporting CSV.
+    """
+    if isinstance(mem, chirp_common.DVMemory):
+        plain = chirp_common.Memory()
+        plain.clone(mem)
+        mem = plain
+    return mem.to_csv()
+
+
 def parse_csv(csv_text: str):
     """Parse CSV content with CHIRP's CSV driver and return row dictionaries."""
-    radio = CSVRadio(None, max_memory=999)
+    radio = _blank_csv_radio()
     radio.load_from(csv_text)
     rows = []
 
     for mem in radio.memories:
         if mem.empty:
             continue
-        values = mem.to_csv()
         row = {}
-        for header, value in zip(CSV_HEADERS, values):
+        for header, value in zip(CSV_HEADERS, _row_values_for_csv(mem)):
             row[header] = str(value)
         rows.append(row)
 
@@ -222,26 +266,45 @@ def parse_csv(csv_text: str):
     }
 
 
-def _power_label_map_for_radio(module_name: str, class_name: str):
-    """Map radio power labels (e.g., High) to CSV power specs (e.g., 4.0W)."""
+def _driver_features(module_name: str, class_name: str):
+    """Return a driver's RadioFeatures, preferring the cached image.
+
+    Some drivers read their capabilities out of the codeplug: ``Rt98Radio``
+    advertises the PMR power levels (Low = 0.5W) on a blank instance and the
+    full Low/Mid/High set once an image is parsed, so a blank instance reports
+    levels the loaded radio does not have. CHIRP always takes features from the
+    open image, so use the cached one when there is one.
+    """
     if not module_name or not class_name:
-        return {}, ""
+        return None
     try:
         radio_cls = _import_radio_class(module_name, class_name)
-        try:
-            radio = radio_cls(None)
-        except Exception:
-            radio = radio_cls("")
-        rf = radio.get_features()
-        levels = getattr(rf, "valid_power_levels", None) or []
     except Exception:
-        return {}, ""
+        return None
+
+    image = LAST_IMAGE_BY_DRIVER.get(_driver_cache_key(module_name, class_name))
+    factories = [lambda: radio_cls(None), lambda: radio_cls("")]
+    if image:
+        factories.insert(0, lambda: radio_cls(memmap.MemoryMapBytes(bytes(image))))
+    for factory in factories:
+        try:
+            return factory().get_features()
+        except Exception:
+            continue
+    return None
+
+
+def _power_label_map_from_features(rf):
+    """Map radio power labels (e.g., High) to CSV power specs (e.g., 50W)."""
+    levels = (getattr(rf, "valid_power_levels", None) or []) if rf else []
 
     mapped = {}
     default_power = ""
     for level in levels:
         try:
-            watts = chirp_common.dBm_to_watts(int(level))
+            # float(), not int(): PowerLevel.__int__ truncates the dBm, so a 50W
+            # level (46.99 dBm) formats as 39W and a 5W level as 4.0W.
+            watts = chirp_common.dBm_to_watts(float(level))
             formatted = str(chirp_common.AutoNamedPowerLevel(watts))
             mapped[str(level)] = formatted
             mapped[formatted] = formatted
@@ -250,6 +313,11 @@ def _power_label_map_for_radio(module_name: str, class_name: str):
         except Exception:
             continue
     return mapped, default_power
+
+
+def _power_label_map_for_radio(module_name: str, class_name: str):
+    """Map a selected driver's power labels to CSV power specs."""
+    return _power_label_map_from_features(_driver_features(module_name, class_name))
 
 
 def _normalize_power_value(value, power_map, default_power):
@@ -279,31 +347,96 @@ def _coerce_csv_vals_for_chirp(vals):
     return out
 
 
-def normalize_rows(rows, module_name="", class_name=""):
-    """Round-trip rows through CHIRP CSV parser/writer to normalize formatting."""
-    power_map, default_power = _power_label_map_for_radio(module_name, class_name)
-    out = io.StringIO(newline="")
-    writer = csv.writer(out)
-    writer.writerow(CSV_HEADERS)
-    for row in rows:
-        cooked = [row.get(header, "") for header in CSV_HEADERS]
-        cooked = _coerce_csv_vals_for_chirp(cooked)
-        power_idx = CSV_HEADERS.index("Power")
-        cooked[power_idx] = _normalize_power_value(
-            cooked[power_idx], power_map, default_power
-        )
-        writer.writerow(cooked)
+def _csv_export_power_text(value, power_map):
+    """Return the Power text CHIRP's CSV export would write for a row value.
 
-    csv_text = out.getvalue()
-    radio = CSVRadio(None, max_memory=999)
+    CHIRP's CSV driver stores every level in watts, and its parser reads only
+    that form — ``chirp_common.parse_power`` cannot read a driver label like
+    "High", so labels have to be converted before the parser sees them.
+    Anything unusable (blank, or the literal "None" that ``"%s" % None`` yields
+    for a channel carrying no power) becomes the CSV driver's own 50W default,
+    which is what ``import_logic`` assigns to a memory without power.
+    """
+    text = str(value or "").strip()
+    if text in power_map:
+        return power_map[text]
     try:
-        radio.load_from(csv_text)
-    except errors.InvalidDataError as exc:
-        # Preserve export capability when CHIRP parser decides the CSV has no channels.
-        if "No channels found" in str(exc):
-            return csv_text
-        raise
+        chirp_common.parse_power(text)
+    except Exception:
+        return DEFAULT_EXPORT_POWER
+    return text
+
+
+def _csv_text_for_memories(memories, src_features):
+    """Render memories as CSV exactly the way CHIRP's own export does.
+
+    CHIRP exports by pushing each memory through ``import_logic.import_mem()``
+    into a ``generic_csv.CSVRadio`` and saving that (``chirp/wxui/memedit.py``).
+    That step fills in columns the CSV format carries but the source radio may
+    not track separately — it copies rtone into ctone for radios with a single
+    tone, and dtcs into rx_dtcs for radios without separate codes — so skipping
+    it produces CSV that differs from CHIRP's in exactly those columns. A memory
+    the CSV driver rejects is logged and written unconverted, as CHIRP does.
+    """
+    highest = max((int(mem.number) for mem in memories), default=0)
+    radio = _blank_csv_radio(max_memory=highest)
+    for mem in memories:
+        try:
+            mem = import_logic.import_mem(
+                radio, src_features, mem, mem_cls=chirp_common.Memory
+            )
+        except import_logic.ImportError as exc:
+            _log_debug(f"Channel {mem.number} exported unconverted: {exc}")
+        radio.set_memory(mem)
     return radio.as_string()
+
+
+def _memories_from_rows(rows, power_map):
+    """Turn row text into memories with CHIRP's own CSV column converters.
+
+    Calls ``CSVRadio._parse_csv_data_line()`` per row instead of feeding a CSV
+    document to ``load_from()``: ``CSVRadio._load()`` discards every row whose
+    frequency parses to 0, but drivers do report non-empty memories with no
+    frequency (uninitialised locations in ``Icom_IC-W32A``, ``Jetstream_JT220M``)
+    and CHIRP exports those, because its export never round-trips through its own
+    parser. Everything else about the conversion stays CHIRP's, including the
+    ATTR_MAP converters and the 50W default for a channel with no power.
+    """
+    parser = _blank_csv_radio(0)
+    # _clean_tmode() mirrors one tone onto the other when the file carries only
+    # one of the two columns; rows always carry both.
+    parser.file_has_rTone = True
+    parser.file_has_cTone = True
+    power_idx = CSV_HEADERS.index("Power")
+
+    memories = []
+    for index, row in enumerate(rows or []):
+        vals = [str(row.get(header, "") or "") for header in CSV_HEADERS]
+        vals = _coerce_csv_vals_for_chirp(vals)
+        vals[power_idx] = _csv_export_power_text(vals[power_idx], power_map)
+        try:
+            mem = parser._parse_csv_data_line(list(CSV_HEADERS), vals)
+        except Exception as exc:
+            raise RuntimeUnsupportedError(f"Channel row {index + 1}: {exc}") from exc
+        if mem is None or mem.number is None:
+            raise RuntimeUnsupportedError(
+                f"Channel row {index + 1}: Location {vals[0]!r} is not a valid integer"
+            )
+        memories.append(mem)
+    return memories
+
+
+def normalize_rows(rows, module_name="", class_name=""):
+    """Render rows as CSV the way CHIRP's CSV export renders the same channels."""
+    # import_mem() needs the *source* radio's features to decide which columns it
+    # has to fill in, so resolve them once and reuse them for the power labels.
+    src_features = _driver_features(module_name, class_name)
+    power_map, _default_power = _power_label_map_from_features(src_features)
+    memories = _memories_from_rows(rows, power_map)
+    if src_features is None:
+        # No radio selected: rows came from a CSV, so treat CSV as the source.
+        src_features = _blank_csv_radio(0).get_features()
+    return _csv_text_for_memories(memories, src_features)
 
 
 def _infer_csv_error_column(error_text: str):
@@ -580,9 +713,8 @@ def _radio_rows_from_instance(radio):
             continue
         if getattr(mem, "empty", False):
             continue
-        values = mem.to_csv()
         row = {}
-        for header, value in zip(CSV_HEADERS, values):
+        for header, value in zip(CSV_HEADERS, _row_values_for_csv(mem)):
             row[header] = str(value)
         rows.append(row)
     return rows
