@@ -144,11 +144,25 @@
   box-sizing: border-box;
 }
 
+/* Form controls do not inherit font-family from an ancestor — without this
+   they fall back to the user agent's own default, which is Arial on macOS but
+   not everywhere, so the app's buttons, dropdowns and grid cells drifted away
+   from the body font by platform. Only the family is inherited: the `font`
+   shorthand would also pull in the body font-size and grow every control from
+   the UA's ~13px to 16px. #debug-output overrides the family with its
+   monospace stack; nothing else should. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 body {
   margin: 0;
   background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
   color: var(--text);
-  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
