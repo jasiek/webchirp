@@ -294,6 +294,17 @@ def _driver_features(module_name: str, class_name: str):
     return None
 
 
+def _watts_label(level):
+    """Format a power level's wattage the way CHIRP writes power into a CSV.
+
+    ``float()``, not ``int()``: ``PowerLevel.__int__`` truncates the dBm, so a
+    50W level (46.99 dBm) formats as 39W and a 5W level as 4.0W.
+    """
+    return str(
+        chirp_common.AutoNamedPowerLevel(chirp_common.dBm_to_watts(float(level)))
+    )
+
+
 def _power_label_map_from_features(rf):
     """Map radio power labels (e.g., High) to CSV power specs (e.g., 50W)."""
     levels = (getattr(rf, "valid_power_levels", None) or []) if rf else []
@@ -302,10 +313,7 @@ def _power_label_map_from_features(rf):
     default_power = ""
     for level in levels:
         try:
-            # float(), not int(): PowerLevel.__int__ truncates the dBm, so a 50W
-            # level (46.99 dBm) formats as 39W and a 5W level as 4.0W.
-            watts = chirp_common.dBm_to_watts(float(level))
-            formatted = str(chirp_common.AutoNamedPowerLevel(watts))
+            formatted = _watts_label(level)
             mapped[str(level)] = formatted
             mapped[formatted] = formatted
             if not default_power:
@@ -1190,10 +1198,8 @@ def _power_level_watts(levels):
     """Map each advertised power level's label to its wattage.
 
     Driver labels carry no wattage — "L3" and "Mid1" say nothing on their own —
-    so the UI shows this alongside them. The strings are formatted the way CHIRP
-    formats power in an exported CSV (`AutoNamedPowerLevel`), so the grid and the
-    file agree. Uses `float()`, not `int()`: `PowerLevel.__int__` truncates the
-    dBm, which turns a 50W level into 39W.
+    so the UI shows this alongside them, in the same form an exported CSV uses
+    (see `_watts_label`) so the grid and the file agree.
 
     A label maps to one wattage here, which is all `valid_power_levels` can tell
     us; drivers that reuse a label across bands (`vx6.POWER_LEVELS_220`) advertise
@@ -1204,9 +1210,7 @@ def _power_level_watts(levels):
     for level in levels or []:
         label = str(level)
         try:
-            formatted = str(
-                chirp_common.AutoNamedPowerLevel(chirp_common.dBm_to_watts(float(level)))
-            )
+            formatted = _watts_label(level)
         except Exception:
             continue
         if formatted != label:
