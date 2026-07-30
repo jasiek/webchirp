@@ -1186,6 +1186,34 @@ def _mk_enum(values):
     return [str(v) for v in values] if values else []
 
 
+def _power_level_watts(levels):
+    """Map each advertised power level's label to its wattage.
+
+    Driver labels carry no wattage — "L3" and "Mid1" say nothing on their own —
+    so the UI shows this alongside them. The strings are formatted the way CHIRP
+    formats power in an exported CSV (`AutoNamedPowerLevel`), so the grid and the
+    file agree. Uses `float()`, not `int()`: `PowerLevel.__int__` truncates the
+    dBm, which turns a 50W level into 39W.
+
+    A label maps to one wattage here, which is all `valid_power_levels` can tell
+    us; drivers that reuse a label across bands (`vx6.POWER_LEVELS_220`) advertise
+    only one of the two, so treat this as what the driver publishes rather than
+    what a given channel transmits.
+    """
+    watts = {}
+    for level in levels or []:
+        label = str(level)
+        try:
+            formatted = str(
+                chirp_common.AutoNamedPowerLevel(chirp_common.dBm_to_watts(float(level)))
+            )
+        except Exception:
+            continue
+        if formatted != label:
+            watts[label] = formatted
+    return watts
+
+
 def _radio_supports_dv(rf):
     """Detect whether a radio's mode capabilities include D-STAR DV mode."""
     modes = {str(mode) for mode in (rf.valid_modes or [])}
@@ -1284,6 +1312,7 @@ def get_radio_column_metadata(module_name: str, class_name: str):
         "kind": "enum",
         "editable": True,
         "options": _mk_enum(rf.valid_power_levels),
+        "optionWatts": _power_level_watts(rf.valid_power_levels),
     }
     col["Comment"] = {
         "kind": "text",
