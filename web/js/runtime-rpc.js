@@ -24,6 +24,12 @@ let allDriverModulesPromise = null;
 let handleSerialRpc = null;
 let bootstrapFailed = false;
 let debugLog = null;
+let beginProgress = null;
+
+// One debug line per driver would bury every other diagnostic in the panel, and
+// none per driver leaves a stalled sweep looking identical to a working one.
+// Narrate every Nth module instead; the progress strip carries the rest.
+const DRIVER_LOG_INTERVAL = 25;
 
 // All Pyodide-backed methods must run one at a time; see call-queue.mjs.
 const enqueueRuntimeCall = createCallQueue();
@@ -90,21 +96,50 @@ async function ensureAllDriverModules() {
     allDriverModulesPromise = (async () => {
       const modules = await listDriverModules(pythonSource);
       await ensurePyodide();
-      pyodide.globals.set("_all_driver_modules", modules);
-      const result = await runPythonJson(
-        "json.dumps(import_all_driver_modules(_all_driver_modules))",
-      );
+
+      // In the browser each module is a separate CDN fetch, so this is by far
+      // the longest operation the app runs. Report it: an unannounced multi-
+      // second freeze is indistinguishable from a hang.
+      const progress = beginProgress
+        ? beginProgress("Identifying radio: loading CHIRP drivers", modules.length)
+        : null;
       if (debugLog) {
-        const failed = Object.entries(result.failed || {});
         debugLog(
-          `DRIVERS imported ${result.imported}/${modules.length} modules, `
-          + `${result.registered} radio classes registered`,
+          `DRIVERS image identifies no driver; importing all ${modules.length} `
+          + "driver modules so match_model can run",
         );
-        for (const [moduleName, error] of failed) {
-          debugLog(`DRIVERS SKIP ${moduleName}: ${error}`);
-        }
       }
-      return result;
+
+      const reportProgress = (done, total, moduleShort) => {
+        progress?.update(done);
+        if (debugLog && (done % DRIVER_LOG_INTERVAL === 0 || done === total)) {
+          debugLog(`DRIVERS ${done}/${total} imported (latest ${moduleShort})`);
+        }
+      };
+
+      pyodide.globals.set("_all_driver_modules", modules);
+      pyodide.globals.set("_driver_progress_cb", reportProgress);
+      try {
+        const result = await runPythonJson(
+          "json.dumps(import_all_driver_modules(_all_driver_modules, _driver_progress_cb))",
+        );
+        if (debugLog) {
+          const failed = Object.entries(result.failed || {});
+          debugLog(
+            `DRIVERS imported ${result.imported}/${modules.length} modules, `
+            + `${result.registered} radio classes registered`,
+          );
+          for (const [moduleName, error] of failed) {
+            debugLog(`DRIVERS SKIP ${moduleName}: ${error}`);
+          }
+        }
+        return result;
+      } finally {
+        // The strip must come down on the failure path too, or a failed sweep
+        // leaves a frozen bar on screen for the rest of the session.
+        progress?.end();
+        pyodide.globals.set("_driver_progress_cb", null);
+      }
     })().catch((error) => {
       // Let a later load retry rather than caching the failure for the session.
       allDriverModulesPromise = null;
@@ -416,10 +451,12 @@ const UNQUEUED_METHODS = new Set(["getRuntimeInfo"]);
 export function createRuntimeRpcClient({
   handleSerialRpc: nextHandleSerialRpc,
   logDebug,
+  onProgress,
   onRuntimeCrash,
 }) {
   handleSerialRpc = nextHandleSerialRpc;
   debugLog = logDebug || null;
+  beginProgress = onProgress || null;
 
   function wrapRuntimeMethod(name, handler) {
     return async function invokeRuntimeMethod(payload = {}) {

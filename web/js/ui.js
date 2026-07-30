@@ -6,6 +6,7 @@ import {
   requireRuntimeApi,
 } from "./ui/state.js";
 import { createDebugLog } from "./ui/debug-log.js";
+import { createProgress } from "./ui/progress.js";
 import { createIssueReporter } from "./ui/issue-report.js";
 import { createSettingsPanel } from "./ui/settings-panel.js";
 import { createChannelTable } from "./ui/channel-table.js";
@@ -26,6 +27,7 @@ export function createUiController() {
   const dom = queryUiElements();
   const state = createUiState();
   const log = createDebugLog({ dom });
+  const progress = createProgress({ dom });
   const issueReporter = createIssueReporter({ state, log });
 
   // Cross-module calls go through this registry rather than direct imports, so
@@ -41,7 +43,7 @@ export function createUiController() {
   // Modules hang off one context object so siblings can reach each other
   // through it. The forward references above and below are only dereferenced
   // after every module has been constructed.
-  const ctx = { dom, state, log, actions };
+  const ctx = { dom, state, log, progress, actions };
   const settings = createSettingsPanel(ctx);
   const table = createChannelTable(ctx);
   const catalog = createRadioCatalog(ctx);
@@ -179,6 +181,7 @@ export function createUiController() {
     logSerial: log.logSerial,
     logDebug: log.logDebug,
     updateCloneProgress: serial.updateCloneProgress,
+    beginProgress: progress.begin,
     init,
     selectedRowsForOperations: table.selectedRowsForOperations,
     onRuntimeCrash(message) {

@@ -218,25 +218,36 @@ def ensure_radio_module(module_short_name: str) -> None:
 _install_chirp_import_hook()
 
 
-def import_all_driver_modules(module_short_names):
+def import_all_driver_modules(module_short_names, progress_cb=None):
     """Import every driver so CHIRP can detect images that carry no metadata.
 
     Detection walks ``directory.DRV_TO_RADIO`` and calls each driver's
     ``match_model``, so a driver that was never imported can never match. Images
     with a metadata trailer name their own driver, but older ones do not, and for
     those the only way to identify the radio is to have every driver registered.
+
+    ``progress_cb(done, total, module_short)`` is optional and reports after each
+    module. This loop is synchronous, but every import suspends the interpreter
+    on a CDN fetch (``ChirpCdnFinder``), so the browser event loop runs in
+    between and the reported progress actually paints — the same reason CHIRP's
+    synchronous clone loops can drive a progress bar through ``serial_progress``.
     """
+    names = [str(name or "").strip() for name in module_short_names or []]
+    names = [name for name in names if name]
+    total = len(names)
     imported = []
     failed = {}
-    for name in module_short_names or []:
-        module_short = str(name or "").strip()
-        if not module_short:
-            continue
+    for index, module_short in enumerate(names):
         try:
             ensure_radio_module(module_short)
             imported.append(module_short)
         except Exception as exc:
             failed[module_short] = f"{type(exc).__name__}: {exc}"
+        if progress_cb is not None:
+            try:
+                progress_cb(index + 1, total, module_short)
+            except Exception:
+                pass  # Progress reporting must never abort the sweep.
     return {
         "imported": len(imported),
         "failed": failed,
