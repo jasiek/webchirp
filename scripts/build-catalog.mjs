@@ -37,19 +37,13 @@ async function main() {
   );
 
   // list_registered_radios drops unimportable modules silently; surface them
-  // here so a driver missing from the catalog is recorded, not inferred.
-  const importFailures = await harness.runPythonJson(
-    `
-_failures = {}
-for _name in _modules:
-    try:
-        importlib.import_module("chirp.drivers." + str(_name))
-    except Exception as _exc:
-        _failures[str(_name)] = "%s: %s" % (type(_exc).__name__, _exc)
-json.dumps(_failures)
-    `,
-    { _modules: modules },
-  );
+  // here so a driver missing from the catalog is recorded, not inferred. The
+  // same sweep backs the runtime's metadata-less image detection.
+  const importFailures = (
+    await harness.runPythonJson("json.dumps(import_all_driver_modules(_modules))", {
+      _modules: modules,
+    })
+  ).failed;
   for (const name of Object.keys(importFailures).sort()) {
     console.warn(`Driver module not importable, absent from catalog: ${name} (${importFailures[name]})`);
   }

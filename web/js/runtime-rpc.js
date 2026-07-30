@@ -20,6 +20,7 @@ const pythonSource = createBrowserCdnPythonSource({
 let pyodide;
 let bootstrapPromise;
 let radioCatalogCache = null;
+let allDriverModulesPromise = null;
 let handleSerialRpc = null;
 let bootstrapFailed = false;
 let debugLog = null;
@@ -78,6 +79,39 @@ async function ensureSelectedRadioModules(moduleShortName) {
   await ensurePyodide();
   pyodide.globals.set("_sel_module_short", moduleShortName);
   await pyodide.runPythonAsync("ensure_radio_module(_sel_module_short)");
+}
+
+// Import every driver module once per session. Only the metadata-less image
+// path needs this: it is the one case where nothing identifies the driver up
+// front, so detection has to try them all. Each module is fetched individually
+// by the Python import hook, so this is deliberately not done eagerly.
+async function ensureAllDriverModules() {
+  if (!allDriverModulesPromise) {
+    allDriverModulesPromise = (async () => {
+      const modules = await listDriverModules(pythonSource);
+      await ensurePyodide();
+      pyodide.globals.set("_all_driver_modules", modules);
+      const result = await runPythonJson(
+        "json.dumps(import_all_driver_modules(_all_driver_modules))",
+      );
+      if (debugLog) {
+        const failed = Object.entries(result.failed || {});
+        debugLog(
+          `DRIVERS imported ${result.imported}/${modules.length} modules, `
+          + `${result.registered} radio classes registered`,
+        );
+        for (const [moduleName, error] of failed) {
+          debugLog(`DRIVERS SKIP ${moduleName}: ${error}`);
+        }
+      }
+      return result;
+    })().catch((error) => {
+      // Let a later load retry rather than caching the failure for the session.
+      allDriverModulesPromise = null;
+      throw error;
+    });
+  }
+  return allDriverModulesPromise;
 }
 
 function sortRadioCatalog(radios) {
@@ -246,17 +280,43 @@ async function handleLoadImage(payload = {}) {
   const metadata = await runPythonJson(
     "json.dumps(read_image_metadata_base64(_image_b64))",
   );
+  let resolvedDriver = null;
   if (metadata?.hasMetadata) {
     const radios = await loadRadioCatalog();
     const match = findCatalogRadioForImageMetadata(radios, metadata);
-    if (match) {
+    if (match && match.isLiveRadio) {
+      // Image metadata is matched on the stored rclass name first, which can
+      // land on a live-mode driver that shares a class name with the clone-mode
+      // one (Kenwood TS-480). A live radio never owns a clone image, so treat
+      // this as unresolved and let match_model pick the real driver.
+      if (debugLog) {
+        debugLog(
+          `IMAGE METADATA ignoring live-mode driver ${match.module}.${match.className} `
+          + `for clone image ${metadata.vendor} ${metadata.model}`,
+        );
+      }
+    } else if (match) {
       await ensureSelectedRadioModules(match.module);
+      resolvedDriver = match;
     } else if (debugLog) {
       debugLog(
         `IMAGE METADATA no catalog match for ${metadata.vendor} ${metadata.model} `
         + `(class ${metadata.rclass || "unknown"})`,
       );
     }
+  }
+  if (!resolvedDriver) {
+    // Nothing identified the driver: either the image predates the metadata
+    // trailer, or its metadata names a model the catalog does not list. Either
+    // way the only route left is match_model against every driver, which can
+    // only match drivers that have been imported.
+    if (debugLog) {
+      debugLog(
+        `IMAGE ${metadata?.hasMetadata ? "metadata unmatched" : "metadata absent"}; `
+        + "importing all drivers for detection",
+      );
+    }
+    await ensureAllDriverModules();
   }
   return runPythonJson("json.dumps(load_image_base64(_image_b64))");
 }

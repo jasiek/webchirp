@@ -218,6 +218,32 @@ def ensure_radio_module(module_short_name: str) -> None:
 _install_chirp_import_hook()
 
 
+def import_all_driver_modules(module_short_names):
+    """Import every driver so CHIRP can detect images that carry no metadata.
+
+    Detection walks ``directory.DRV_TO_RADIO`` and calls each driver's
+    ``match_model``, so a driver that was never imported can never match. Images
+    with a metadata trailer name their own driver, but older ones do not, and for
+    those the only way to identify the radio is to have every driver registered.
+    """
+    imported = []
+    failed = {}
+    for name in module_short_names or []:
+        module_short = str(name or "").strip()
+        if not module_short:
+            continue
+        try:
+            ensure_radio_module(module_short)
+            imported.append(module_short)
+        except Exception as exc:
+            failed[module_short] = f"{type(exc).__name__}: {exc}"
+    return {
+        "imported": len(imported),
+        "failed": failed,
+        "registered": len(directory.DRV_TO_RADIO),
+    }
+
+
 def list_registered_radios(module_short_names):
     """Import drivers and return radios from CHIRP's registration directory."""
     loaded_modules = set()
