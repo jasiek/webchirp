@@ -504,6 +504,23 @@ export function createChannelTable({ dom, state, log, actions }) {
     insertRowsAtSelectionOrEnd(buildRows(rowBuilderHooks()), label);
   }
 
+  // A driver's power labels ("Hi", "L3", "Mid1") carry no wattage, so spell the
+  // driver's own table out on hover. Column-level, not row-level: valid_power_levels
+  // is all the driver publishes, and a driver that reuses a label across bands
+  // (vx6's 220MHz list) advertises only one of the two wattages — so this describes
+  // the levels the driver offers, not what a given channel transmits.
+  function columnLegend(column) {
+    const meta = state.radioMetadata.columns?.[column] || {};
+    const watts = meta.optionWatts;
+    if (!watts || typeof watts !== "object") {
+      return "";
+    }
+    const entries = (Array.isArray(meta.options) ? meta.options.map(String) : [])
+      .filter((option) => watts[option])
+      .map((option) => `${option} = ${watts[option]}`);
+    return entries.length ? `Driver power levels: ${entries.join(", ")}` : "";
+  }
+
   // Create a table cell editor (input/select) from the CHIRP column metadata.
   // Structure only — kind, options and read-only state depend on the column,
   // never on a row — so the element stays valid for any row until the schema
@@ -539,6 +556,11 @@ export function createChannelTable({ dom, state, log, actions }) {
       // apart from one it had to add for an off-list row value.
       select.dataset.driverOptions = String(select.children.length);
       select.disabled = readOnly;
+      // Before markReadOnly, which has a more urgent tooltip to show.
+      const legend = columnLegend(column);
+      if (legend) {
+        select.title = legend;
+      }
       return markReadOnly(select);
     }
 
@@ -659,6 +681,10 @@ export function createChannelTable({ dom, state, log, actions }) {
       // Mirror the cell treatment: grey + tooltip on headers of columns the
       // selected radio marks read-only (Location stays the selection handle).
       const meta = state.radioMetadata.columns?.[column] || {};
+      const legend = columnLegend(column);
+      if (legend) {
+        th.title = legend;
+      }
       if (meta.editable === false && column !== "Location") {
         th.classList.add("readonly-cell");
         th.title = `${column} is read-only for this radio.`;
