@@ -241,6 +241,7 @@ function createRuntimeApi() {
     api: {
       listRadios: async () => ({ radios: CATALOG }),
       getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+      getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
       getRadioMetadata: async () => ({ headers: ["Location", "Name", "Frequency"], columns: {} }),
       getRadioSettings: async () => ({
         supported: false,
@@ -251,15 +252,9 @@ function createRuntimeApi() {
       }),
       parseCsv: async ({ csvText }) => {
         calls.parseCsv.push(csvText);
-        // The built-in sample that init() loads parses to nothing, so the
-        // editor starts empty and each test decides for itself whether a drop
-        // has real channels to displace.
-        const isBuiltInSample = csvText.includes("Simplex1");
         return {
           headers: ["Location", "Name", "Frequency"],
-          rows: isBuiltInSample
-            ? []
-            : [{ Location: "0", Name: "Dropped", Frequency: "145.500000" }],
+          rows: [{ Location: "0", Name: "Dropped", Frequency: "145.500000" }],
           errors: [],
         };
       },
@@ -296,10 +291,9 @@ async function bootUi() {
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
   ui.setRuntimeApi(api);
-  // init() loads the built-in sample CSV, which routes through parseCsv too;
-  // drop the record of it so assertions only see what the drop caused.
+  // init() leaves the editor empty, so every recorded parseCsv call below is
+  // one a drop caused.
   await ui.init(true);
-  calls.parseCsv.length = 0;
   return { ui, calls };
 }
 

@@ -275,7 +275,6 @@ function installFakeDom() {
     ["#przemienniki-range", "input"],
     ["#przemienniki-geolocate", "button"],
     ["#przemienniki-cancel", "button"],
-    ["#load-sample", "button"],
     ["#import-csv", "button"],
     ["#export-csv", "button"],
     ["#export-binary", "button"],
@@ -347,6 +346,7 @@ test("radio dropdowns show Loading... while CHIRP drivers are loading", async ()
   ui.setRuntimeApi({
     listRadios: () => radioListDeferred.promise,
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({
       headers: ["Location", "Name"],
       columns: {},
@@ -421,6 +421,7 @@ test("search box shows narrowing make+model suggestions without touching dropdow
       ],
     }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
@@ -486,6 +487,7 @@ test("search suggestions disambiguate duplicates, cap results, and close on Esca
   ui.setRuntimeApi({
     listRadios: async () => ({ radios }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
@@ -542,6 +544,7 @@ test("stale metadata response does not overwrite a newer radio selection", async
   ui.setRuntimeApi({
     listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async ({ module }) => {
       if (module === "slow") {
         return slowMetadata.promise;
@@ -583,6 +586,7 @@ test("picking a search suggestion sets make/model and loads the radio once", asy
   ui.setRuntimeApi({
     listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async ({ module }) => {
       metadataCalls.push(module);
       return { headers: ["Location", "Name"], columns: {} };

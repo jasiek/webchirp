@@ -155,6 +155,7 @@ function installFakeDom({ repeaterApiBase } = {}) {
 const RUNTIME_API = {
   listRadios: async () => ({ radios: [] }),
   getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+  getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
   getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
   getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
   parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),

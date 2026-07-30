@@ -232,6 +232,11 @@ async function handleListRadios() {
   return { radios };
 }
 
+async function handleGetDefaultHeaders() {
+  await requirePyodide();
+  return runPythonJson("json.dumps(get_default_headers())");
+}
+
 async function handleParseCsv(payload = {}) {
   await requirePyodide();
   pyodide.globals.set("_csv_input", payload.csvText);
@@ -388,6 +393,7 @@ async function handleValidateRadioSettings(payload = {}) {
 const RUNTIME_METHODS = Object.freeze({
   getRuntimeInfo: handleGetRuntimeInfo,
   listRadios: handleListRadios,
+  getDefaultHeaders: handleGetDefaultHeaders,
   parseCsv: handleParseCsv,
   normalizeRows: handleNormalizeRows,
   validateRowsForUpload: handleValidateRowsForUpload,
