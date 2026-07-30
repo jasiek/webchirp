@@ -1,6 +1,3 @@
-# AGENTS.md
-
-## Purpose
 This repository hosts a browser-based CHIRP interface (`web/`) that executes CHIRP Python code in Pyodide and communicates with radios via Web Serial.
 
 ## Core Architecture
@@ -60,8 +57,6 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - When submitting a PR, in the PR description include any new dependencies which were added.
 
 ## Validation
-Before committing, run relevant checks:
-- `node --check web/app.js`
-- `node --check web/js/runtime-rpc.js`
-- `python -m py_compile web/python/runtime_bridge.py`
-- `npm run test:channels`
+Before committing, run syntax checks and all tests.
+
+
