@@ -9,6 +9,8 @@ export const REQUIRED_ELEMENTS = {
   tableBody: "#mem-table tbody",
   // The channel grid's scroll viewport: what the table virtualizes against.
   tableScrollEl: "#mem-table-scroll",
+  // Centred notice shown in place of the grid while no channels are loaded.
+  channelEmptyStateEl: "#channel-empty-state",
   channelEditorEl: "#channel-editor",
   settingsEditorEl: "#settings-editor",
   viewChannelsEl: "#view-channels",
@@ -38,7 +40,6 @@ export const REQUIRED_ELEMENTS = {
   cloneProgressBarEl: "#clone-progress-bar",
   cloneProgressLabelEl: "#clone-progress-label",
   cloneProgressPercentEl: "#clone-progress-percent",
-  loadSampleEl: "#load-sample",
   importCsvEl: "#import-csv",
   exportCsvEl: "#export-csv",
   importBinaryEl: "#import-binary",

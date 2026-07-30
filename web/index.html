@@ -99,7 +99,6 @@
               hidden
             ></a>
           </div>
-          <button id="load-sample">Load Sample</button>
           <button id="import-csv" title="Load a CHIRP CSV file (or drag one onto the page)">
             Import CSV
           </button>
@@ -230,11 +229,26 @@
                 </div>
               </div>
             </div>
-            <div class="mem-table-scroll" id="mem-table-scroll">
-              <table id="mem-table">
-                <thead></thead>
-                <tbody></tbody>
-              </table>
+            <div class="channel-grid">
+              <div class="mem-table-scroll" id="mem-table-scroll">
+                <table id="mem-table">
+                  <thead></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="channel-empty-state" class="channel-empty-state" hidden>
+                <div class="channel-empty-card">
+                  <span class="channel-empty-icon" aria-hidden="true">📻</span>
+                  <h2>No channels loaded</h2>
+                  <p>
+                    To get started, connect a radio and clone it, load a CSV, or load a binary
+                    codeplug.
+                  </p>
+                  <p class="channel-empty-hint">
+                    Dragging a .csv or .img file onto the page works too.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 

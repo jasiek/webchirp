@@ -139,7 +139,7 @@ export function createUiController() {
     });
   }
 
-  // Bootstrap UI: capability checks, catalog load, metadata load, sample data.
+  // Bootstrap UI: capability checks, catalog load, metadata load, empty grid.
   async function init(serialSupported) {
     bindEvents();
     serial.refreshSerialConnectToggleLabel();
@@ -159,8 +159,10 @@ export function createUiController() {
       catalog.restoreSelectedRadioCookie();
       await catalog.loadSelectedRadioMetadata();
       await settings.load();
+      // Schema only: the grid starts empty and shows its own "load something"
+      // notice, so the status line stays on the catalog result.
+      await codeplugIo.loadEmptySchema();
       log.setStatus(`Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources.`);
-      await codeplugIo.loadSampleCsv();
       settings.render();
       serial.setSidebarControlsEnabled(true);
     } catch (error) {
