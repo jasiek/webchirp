@@ -30,3 +30,9 @@ tmp/
 .env
 .env.*
 !.env.example
+
+# Editor backups
+*~
+
+# Claude Code session state and worktrees
+.claude/
