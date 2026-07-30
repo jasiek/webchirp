@@ -30,7 +30,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Preserve debug visibility: full errors/tracebacks should be logged to the bottom debug panel.
 - Avoid context pollution by spawning sub-agents when appropriate. Use sub-agent sandboxing when a read-only task is to be executed.
   - Use sub-agents to produce a summary for a commit message.
-- When you discover something new, or unexpected, put it in FINDINGS.md
+- When you discover something new, or unexpected, put it in FINDINGS.md.
 - Avoid regressions in clone workflow:
   - Download should cache the image for the selected driver.
   - Upload should use cached image and fail clearly if no cached image exists.
@@ -51,7 +51,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Commit after every change.
 - Keep commits small and scoped to one functional fix/refactor when practical.
 - Include clear commit messages that describe user-visible behavior or architectural impact.
-- Never modify RELEASE_NOTES.md when on a branch. When on master, update RELEASE_NOTES.md based on PRs which were merged in with current date. Each entry is a single line: the user-visible change plus the PR number, no multi-sentence detail. At the same time run `npm run screenshots` to regenerate images/screenshot.png, images/screenshot-for-opengraph.png, and web/images/social-preview.png from the current version of the app.
+- Never modify RELEASE_NOTES.md when on a branch. When on master, update RELEASE_NOTES.md based on PRs which were merged in with current date. Each entry is a single line: the user-visible change plus the PR number, no multi-sentence detail. At the same time run `npm run screenshots` to regenerate images/screenshot.png, images/screenshot-for-opengraph.png, and web/images/social-preview.png from the current version of the app. When you do this, also consolidate/update FINDINGS.md so that it is always up to date.
 
 # PR Behaviour
 - When submitting a PR, in the PR description include any new dependencies which were added.
