@@ -33,11 +33,21 @@ jobs:
           node-version-file: .tool-versions
           cache: npm
       - run: npm ci
+      # Build before testing, not after: three tests read web/radio-catalog.json
+      # and the build regenerates it from the submodule pin, so this order tests
+      # exactly what gets uploaded rather than the committed copy.
       - run: npm run build:dist
+      # Everything except test:hw, which needs a radio on a serial port.
+      # A failure here fails the job, so the deploy job (needs: build) is skipped
+      # and the currently-deployed site stays up.
+      - run: npm test
+      - run: npm run check:python
       # Carry the currently-deployed generation of hashed assets into the new
       # artifact so a Pages-cached index.html (max-age=600, not configurable)
-      # keeps resolving during the ~10 minutes after a deploy.
-      - run: node scripts/retain-deployed-assets.mjs https://webchirp.jasiek.me
+      # keeps resolving during the ~10 minutes after a deploy. The host is read
+      # from ./CNAME rather than repeated here, so a hostname change cannot
+      # leave this step pointing at a dead site.
+      - run: node scripts/retain-deployed-assets.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
