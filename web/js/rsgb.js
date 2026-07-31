@@ -23,34 +23,35 @@ const EARTH_RADIUS_KM = 6371.0088;
 const FIELD_CODES = "ABCDEFGHIJKLMNOPQR";
 const SUBSQUARE_CODES = "ABCDEFGHIJKLMNOPQRSTUVWX";
 
-// Bands the API reports, 10m and up, longest wavelength first. Filtering is
-// client-side (the query goes out by locator, not by band), so these are
-// matched against the record's own `band` field rather than sent upstream.
+// Every band the directory actually holds a repeater on, busiest first, so the
+// two that carry 92% of them lead. Filtering is client-side (the query goes out
+// by locator, not by band), so these are matched against the record's own
+// `band` field rather than sent upstream.
 //
-// The directory's four HF bands are deliberately absent: 40m, 30m, 20m and 15m
-// hold 28 records between them and not one is a repeater — they are packet
-// mailboxes on 7.050/14.10/21.08 MHz, G0MBA's transmit-only beacons, and one
-// APRS gateway. HF has no repeater allocation to begin with, so this is a
-// permanent property of the band rather than a gap in today's data, and a
-// checkbox there could only ever return nothing. 10m is the lowest band with
-// repeaters on it (four, on the 29.5-29.7 MHz FM sub-band).
+// Repeater counts behind the order, measured 2026-07-31 over all 1809 records:
+// 70cm 582, 2m 198, 23cm 37, 6m 21, 10m 4, 9cm 4, 3cm 3.
 //
-// Bands above 10m are listed even where the directory currently holds no
-// repeater (4m, 13cm, 6cm, 24GHz and SHF, as of 2026-07-31) — those are
-// repeater-capable allocations whose population can change under us.
+// The directory's other nine bands are omitted because no record on them is a
+// repeater, so a checkbox could only ever return nothing. Two different reasons,
+// worth keeping apart:
+//   - 40m/30m/20m/15m: HF has no repeater allocation at all. Their 28 records
+//     are packet mailboxes on 7.050/14.10/21.08 MHz, G0MBA's transmit-only
+//     beacons and one APRS gateway. Permanent.
+//   - 4m/13cm/6cm/24GHz/SHF: repeater-capable allocations that simply have none
+//     coordinated today (4m is the notable one — 36 records, all simplex
+//     gateways and nodes). **This half is a snapshot and will go stale**: if
+//     ETCC coordinates a 4m repeater it stops being filterable here. It does
+//     not become invisible — an empty band selection means "any band", so it
+//     still reaches the grid; it just needs adding back to be selected on its
+//     own. Re-measure when the directory moves.
 export const RSGB_BANDS = [
-  "10M",
-  "6M",
-  "4M",
-  "2M",
   "70CM",
+  "2M",
   "23CM",
-  "13CM",
+  "6M",
+  "10M",
   "9CM",
-  "6CM",
   "3CM",
-  "24GHZ",
-  "SHF",
 ];
 
 // Voice and data modes a repeater can carry, from the API's documented flag
