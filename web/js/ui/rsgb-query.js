@@ -2,6 +2,7 @@ import {
   RSGB_BANDS,
   RSGB_DEFAULT_BANDS,
   RSGB_DEFAULT_MODES,
+  RSGB_DEFAULT_RADIUS_KM,
   RSGB_MODES,
   buildRsgbRows,
   dedupeRsgbRecords,
@@ -47,10 +48,12 @@ export function createRsgbQuery(ctx) {
   // table and its observed band values, not from a dictionary endpoint (the
   // API has none), so the modal opens without a network round trip.
   //
-  // Rebuilt on every open, so the defaults are restored each time rather than
-  // carried over from the last query — the modal always opens in the state it
-  // documents.
-  function populateOptions() {
+  // Every filter is restored on each open, so the modal always opens in the
+  // state it documents. Rebuilding the two lists resets band and mode, but the
+  // checkbox and the radius are plain DOM properties that survive a close —
+  // leave them and a user who once included off-air repeaters keeps including
+  // them, silently, in every later query.
+  function resetFilters() {
     replaceCheckboxOptions(
       dom.rsgbBandListEl,
       RSGB_BANDS.map((band) => ({ value: band, label: band })),
@@ -63,6 +66,8 @@ export function createRsgbQuery(ctx) {
       "rsgb-mode",
       RSGB_DEFAULT_MODES,
     );
+    dom.rsgbOnlyOperationalEl.checked = true;
+    dom.rsgbRadiusEl.value = String(RSGB_DEFAULT_RADIUS_KM);
   }
 
   function checkedValues(containerEl, name) {
@@ -114,7 +119,7 @@ export function createRsgbQuery(ctx) {
   }
 
   function openModal() {
-    populateOptions();
+    resetFilters();
     refreshLocator();
     ctx.table.setMenuOpen(false);
     setModalOpen(true);
@@ -180,28 +185,38 @@ export function createRsgbQuery(ctx) {
       onRequest: ({ locator, count }) => log.logDebug(`RSGB SQUARE ${locator} -> ${count}`),
     });
     const deduped = dedupeRsgbRecords(records);
+    const modes = checkedValues(dom.rsgbModeListEl, "rsgb-mode");
     const entries = filterRsgbRecords(deduped, {
       latitude: position.latitude,
       longitude: position.longitude,
       radiusKm,
       bands: checkedValues(dom.rsgbBandListEl, "rsgb-band"),
-      modes: checkedValues(dom.rsgbModeListEl, "rsgb-mode"),
+      modes,
       onlyOperational: dom.rsgbOnlyOperationalEl.checked,
     });
 
     log.logDebug(`RSGB RESULTS ${records.length} fetched, ${deduped.length} unique, ${entries.length} matched`);
 
-    const rows = buildRsgbRows(entries, ctx.table.rowBuilderHooks());
-    // Repeaters the selected radio cannot tune (23 cm and up on a 2m/70cm set)
-    // are dropped by the builder; a shorter list than the match count needs
-    // saying out loud, or it reads as results going missing.
-    const dropped = entries.length - rows.length;
-    if (dropped > 0) {
-      log.logDebug(`RSGB SKIPPED ${dropped} repeater(s) outside the selected radio's frequency range`);
+    // The mode selection goes to the builder as well as the filter, so a
+    // D-STAR query gets the DV side of a mixed-mode repeater, not its FM one.
+    const { rows, skipped } = buildRsgbRows(entries, ctx.table.rowBuilderHooks(), { modes });
+    // Repeaters the radio cannot express are dropped rather than written as
+    // something they are not; a shorter list than the match count needs saying
+    // out loud, or it reads as results going missing.
+    const byReason = {
+      frequency: skipped.filter((entry) => entry.reason === "frequency").length,
+      mode: skipped.filter((entry) => entry.reason === "mode").length,
+    };
+    for (const entry of skipped) {
+      log.logDebug(`RSGB SKIPPED ${entry.repeater} (${entry.reason} not supported by the selected radio)`);
     }
     ctx.table.insertRowsAtSelectionOrEnd(rows, "RSGB ETCC");
-    if (dropped > 0) {
-      log.setStatus(`Inserted ${rows.length} channel(s); skipped ${dropped} outside the radio's range.`);
+    if (skipped.length > 0) {
+      const detail = [
+        byReason.frequency > 0 ? `${byReason.frequency} outside its frequency range` : "",
+        byReason.mode > 0 ? `${byReason.mode} in a mode it cannot use` : "",
+      ].filter((part) => part.length > 0).join(", ");
+      log.setStatus(`Inserted ${rows.length} channel(s); skipped ${detail}.`);
     }
   }
 

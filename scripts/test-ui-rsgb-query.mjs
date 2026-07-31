@@ -105,7 +105,12 @@ const DOM_KEYS = [
   "rsgbGeolocateEl", "rsgbCancelEl",
 ];
 
-function buildHarness({ headers = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Comment"] } = {}) {
+function buildHarness({
+  headers = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Comment"],
+  // What the stand-in radio's Mode column advertises. The default set has DV,
+  // so D-STAR repeaters are buildable; pass ["FM", "NFM"] for an FM-only radio.
+  modeOptions = ["FM", "NFM", "DV"],
+} = {}) {
   Object.defineProperty(globalThis, "document", {
     configurable: true,
     value: { createElement: (tagName) => new FakeElement(tagName) },
@@ -145,7 +150,20 @@ function buildHarness({ headers = ["Name", "Frequency", "Duplex", "Offset", "Ton
           }
           row[column] = String(value ?? "");
         },
-        findEnumOption: (column, choices) => (column === "Mode" ? "NFM" : choices[0] || ""),
+        // Choice order decides, as channel-table.js's findEnumOption does, and
+        // a radio that advertises none of the choices answers with "".
+        findEnumOption: (column, choices) => {
+          if (column !== "Mode") {
+            return choices[0] || "";
+          }
+          for (const choice of choices) {
+            const match = modeOptions.find((option) => option.toLowerCase() === String(choice).toLowerCase());
+            if (match) {
+              return match;
+            }
+          }
+          return "";
+        },
       }),
     },
   };
@@ -391,12 +409,39 @@ test("repeaters the radio cannot tune are reported, not silently missing", async
 
   assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
   assert.ok(
-    log.debug.some((line) => /SKIPPED 1 repeater\(s\) outside the selected radio's frequency range/.test(line)),
-    "the drop must be logged",
+    log.debug.some((line) => /SKIPPED GB3EN \(frequency not supported/.test(line)),
+    "the drop must name the repeater and the reason",
   );
   assert.ok(
-    log.statuses.some((line) => /skipped 1 outside the radio's range/.test(line)),
-    "and said in the status line, not only the debug log",
+    log.statuses.some((line) => /skipped 1 outside its frequency range/.test(line)),
+    "and be said in the status line, not only the debug log",
+  );
+});
+
+test("a repeater in an unusable mode is reported separately from an untunable one", async () => {
+  const { dom, log, table } = buildHarness({ modeOptions: ["FM", "NFM"] });
+  installGeolocation(LONDON);
+  installFetch({
+    IO91: [
+      repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ", modeCodes: ["A"] }),
+      // D-STAR only, on a harness radio whose Mode column answers NFM to
+      // everything: writing NFM here would be a channel that cannot work it.
+      repeaterRecord({ id: 2, repeater: "GB7DS", tx: 145737500, rx: 145137500, locator: "IO91VJ", modeCodes: ["D"] }),
+    ],
+  });
+
+  await dom.channelImportRsgbEl.dispatch("click");
+  await dom.rsgbGeolocateEl.dispatch("click");
+  for (const el of dom.rsgbModeListEl.querySelectorAll('input[name="rsgb-mode"]')) {
+    el.checked = false;
+  }
+  await dom.rsgbFormEl.dispatch("submit");
+
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
+  assert.ok(log.debug.some((line) => /SKIPPED GB7DS \(mode not supported/.test(line)));
+  assert.ok(
+    log.statuses.some((line) => /skipped 1 in a mode it cannot use/.test(line)),
+    `status lines were: ${log.statuses.join(" | ")}`,
   );
 });
 
@@ -406,7 +451,7 @@ test("the band and mode checkboxes filter what is inserted", async () => {
   installFetch({
     IO91: [
       repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ", modeCodes: ["A"] }),
-      repeaterRecord({ id: 2, repeater: "GB7RT", tx: 439412500, rx: 430412500, locator: "IO91VJ", band: "70CM", modeCodes: ["M:1"] }),
+      repeaterRecord({ id: 2, repeater: "GB7DS", tx: 439412500, rx: 430412500, locator: "IO91VJ", band: "70CM", modeCodes: ["D"] }),
     ],
   });
 
@@ -419,10 +464,26 @@ test("the band and mode checkboxes filter what is inserted", async () => {
   await dom.channelImportRsgbEl.dispatch("click");
   await dom.rsgbGeolocateEl.dispatch("click");
   for (const el of dom.rsgbModeListEl.querySelectorAll('input[name="rsgb-mode"]')) {
-    el.checked = el.value === "M";
+    el.checked = el.value === "D";
   }
   await dom.rsgbFormEl.dispatch("submit");
-  assert.deepEqual(table.inserted[1].rows.map((row) => row.Name), ["GB7RT"]);
+  assert.deepEqual(table.inserted[1].rows.map((row) => row.Name), ["GB7DS"]);
+});
+
+test("reopening restores the checkbox and radius, not just the two lists", async () => {
+  // Rebuilding the band and mode lists reset those, but 'only operational' and
+  // the radius are plain DOM properties: a user who once included off-air
+  // repeaters kept including them in every later query.
+  const { query, dom } = buildHarness();
+  await dom.channelImportRsgbEl.dispatch("click");
+
+  dom.rsgbOnlyOperationalEl.checked = false;
+  dom.rsgbRadiusEl.value = "250";
+  query.setModalOpen(false);
+  await dom.channelImportRsgbEl.dispatch("click");
+
+  assert.equal(dom.rsgbOnlyOperationalEl.checked, true);
+  assert.equal(dom.rsgbRadiusEl.value, "30");
 });
 
 test("unticking 'only operational' admits the off-air repeaters", async () => {

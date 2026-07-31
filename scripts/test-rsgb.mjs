@@ -294,7 +294,7 @@ test("filterRsgbRecords sorts nearest first", () => {
 
 test("buildRsgbRows maps the repeater's tx/rx onto a CHIRP channel", () => {
   const entries = filterRsgbRecords([record()], { ...HERNE_BAY, radiusKm: 30 });
-  const [row] = buildRsgbRows(entries, rowHooks());
+  const { rows: [row] } = buildRsgbRows(entries, rowHooks());
   assert.equal(row.Name, "GB3KI");
   // The radio listens on the repeater's tx and transmits on its rx.
   assert.equal(row.Frequency, "145.662500");
@@ -324,7 +324,7 @@ test("only repeaters survive the filter — not gateways, hotspots or beacons", 
 
 test("buildRsgbRows treats ctcss 0 as no tone", () => {
   const toneless = record({ ctcss: 0, modeCodes: ["D", "F"] });
-  const [row] = buildRsgbRows(
+  const { rows: [row] } = buildRsgbRows(
     filterRsgbRecords([toneless], { ...HERNE_BAY, radiusKm: 30 }),
     rowHooks(),
   );
@@ -333,21 +333,54 @@ test("buildRsgbRows treats ctcss 0 as no tone", () => {
   assert.equal(row.Mode, "DV");
 });
 
-test("buildRsgbRows prefers analogue on a mixed-mode repeater and falls back by bandwidth", () => {
+test("with no mode asked for, analogue wins and bandwidth picks the width", () => {
   const hooks = rowHooks();
   const mixed = filterRsgbRecords([record({ modeCodes: ["A", "M:3"] })], { ...HERNE_BAY, radiusKm: 30 });
-  assert.equal(buildRsgbRows(mixed, hooks)[0].Mode, "NFM");
+  assert.equal(buildRsgbRows(mixed, hooks).rows[0].Mode, "NFM");
 
   const wide = filterRsgbRecords([record({ modeCodes: ["A"], txbw: 25 })], { ...HERNE_BAY, radiusKm: 30 });
-  assert.equal(buildRsgbRows(wide, hooks)[0].Mode, "FM");
+  assert.equal(buildRsgbRows(wide, hooks).rows[0].Mode, "FM");
+});
 
-  // A radio whose Mode enum has no digital entries still gets a usable channel.
+test("the mode asked for wins over the analogue-first default", () => {
+  // The bug this closes: a D-STAR search over a mixed A/D repeater handed back
+  // the FM side, so the channel could not work the repeater it named.
+  const mixed = filterRsgbRecords([record({ modeCodes: ["A", "D"] })], { ...HERNE_BAY, radiusKm: 30 });
+  assert.equal(buildRsgbRows(mixed, rowHooks(), { modes: ["D"] }).rows[0].Mode, "DV");
+  assert.equal(buildRsgbRows(mixed, rowHooks(), { modes: ["A"] }).rows[0].Mode, "NFM");
+  assert.equal(buildRsgbRows(mixed, rowHooks()).rows[0].Mode, "NFM", "no selection keeps the old default");
+
+  // Asking for a mode the repeater does not carry falls back rather than
+  // dropping it: the filter, not the builder, decides what is in scope.
+  assert.equal(buildRsgbRows(mixed, rowHooks(), { modes: ["M"] }).rows[0].Mode, "NFM");
+});
+
+test("a repeater in a mode the radio cannot use is skipped, not written as NFM", () => {
+  const fmOnly = rowHooks({ modeOptions: ["FM", "NFM"] });
+
+  // A D-STAR-only repeater on an FM-only radio: NFM here would be a channel
+  // that cannot work the repeater whose callsign it carries.
+  const dstar = filterRsgbRecords([record({ modeCodes: ["D"] })], { ...HERNE_BAY, radiusKm: 30 });
+  const dstarBuilt = buildRsgbRows(dstar, fmOnly, { modes: ["D"] });
+  assert.deepEqual(dstarBuilt.rows, []);
+  assert.deepEqual(dstarBuilt.skipped, [{ repeater: "GB3KI", reason: "mode" }]);
+
+  // Same repeater on a radio that has DV.
+  assert.equal(buildRsgbRows(dstar, rowHooks(), { modes: ["D"] }).rows[0].Mode, "DV");
+
+  // A DMR-only repeater reaches an unfiltered query, and is skipped for the
+  // same reason rather than silently becoming analogue.
   const dmrOnly = filterRsgbRecords([record({ modeCodes: ["M:1"] })], { ...HERNE_BAY, radiusKm: 30 });
-  assert.equal(buildRsgbRows(dmrOnly, rowHooks({ modeOptions: ["FM", "NFM"] }))[0].Mode, "NFM");
+  assert.deepEqual(buildRsgbRows(dmrOnly, fmOnly).skipped, [{ repeater: "GB3KI", reason: "mode" }]);
+
+  // Records with no mode codes at all (two exist) stay analogue rather than
+  // being dropped for a field the directory never filled in.
+  const modeless = filterRsgbRecords([record({ modeCodes: null })], { ...HERNE_BAY, radiusKm: 30 });
+  assert.equal(buildRsgbRows(modeless, fmOnly).rows[0].Mode, "NFM");
 });
 
 test("buildRsgbRows notes a non-operational status and marks an estimated distance", () => {
-  const [row] = buildRsgbRows(
+  const { rows: [row] } = buildRsgbRows(
     filterRsgbRecords([record({ locator: "IO91", status: "REDUCED OUTPUT" })], {
       ...HERNE_BAY,
       radiusKm: 200,
@@ -374,12 +407,13 @@ test("a repeater the radio cannot tune is dropped, not inserted half-built", () 
     }
     row[column] = String(value ?? "");
   };
-  const rows = buildRsgbRows(entries, handheld);
+  const { rows, skipped } = buildRsgbRows(entries, handheld);
   assert.deepEqual(rows.map((row) => row.Name), ["GB3KI"]);
-  assert.equal(entries.length - rows.length, 1, "the caller can count what was left out");
+  // The reason is carried, not just the count, so the caller can say which.
+  assert.deepEqual(skipped, [{ repeater: "GB3EN", reason: "frequency" }]);
 
   // A radio that can tune it keeps it.
-  assert.equal(buildRsgbRows(entries, rowHooks()).length, 2);
+  assert.equal(buildRsgbRows(entries, rowHooks()).rows.length, 2);
 });
 
 test("the option lists cover the bands and every repeater-carrying mode", () => {
@@ -388,16 +422,15 @@ test("the option lists cover the bands and every repeater-carrying mode", () => 
   // list is both complete and free of options that could only return nothing.
   assert.deepEqual(RSGB_BANDS, ["70CM", "2M", "23CM", "6M", "10M", "9CM", "3CM"]);
 
-  const flags = RSGB_MODES.map((mode) => mode.value);
-  for (const mode of ["A", "D", "E", "M", "F", "P", "7", "N"]) {
-    assert.ok(flags.includes(mode), `missing repeater mode ${mode}`);
-  }
-  // Station classes that are never repeaters must not be offerable: selecting
-  // one could only ever return nothing, since isRepeaterRecord drops them all.
+  // Only the modes a channel row can actually be built in: analogue FM, and
+  // D-STAR as the one digital mode of interest. Offering DMR/Fusion/P25/NXDN/
+  // M17/Tetra only invited the builder to write NFM in their place.
+  assert.deepEqual(RSGB_MODES.map((mode) => mode.value), ["A", "D"]);
+  // Station classes that are never repeaters must not be offerable either:
+  // selecting one could only return nothing, since isRepeaterRecord drops them.
   for (const nonRepeater of ["X", "B", "PX"]) {
-    assert.ok(!flags.includes(nonRepeater), `${nonRepeater} is not a repeater mode`);
+    assert.ok(!RSGB_MODES.some((mode) => mode.value === nonRepeater), `${nonRepeater} is not a repeater mode`);
   }
-  assert.equal(new Set(flags).size, flags.length);
 });
 
 test("the defaults are 2m, 70cm and analogue, and are all offerable", () => {
