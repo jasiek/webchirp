@@ -1,0 +1,531 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  RSGB_BANDS,
+  RSGB_DEFAULT_BANDS,
+  RSGB_DEFAULT_MODES,
+  RSGB_MODES,
+  buildRsgbRows,
+  decodeMaidenheadBox,
+  dedupeRsgbRecords,
+  distanceToBoxKm,
+  encodeMaidenhead,
+  fetchRsgbRecords,
+  filterRsgbRecords,
+  haversineKm,
+  isRepeaterRecord,
+  parseRsgbPayload,
+  rsgbLocatorUrl,
+  squaresForRadius,
+} from "../web/js/rsgb.js";
+
+// Herne Bay: the API places GB3KI at JO01NI, 145.6625 out / 145.0625 in.
+const HERNE_BAY = { latitude: 51.3704, longitude: 1.1289 };
+
+function record(overrides = {}) {
+  return {
+    id: 199,
+    status: "OPERATIONAL",
+    keeperCallsign: "G4TKR",
+    town: "HERNE BAY",
+    modeCodes: ["A", "D"],
+    tx: 145662500,
+    rx: 145062500,
+    ctcss: 103.5,
+    txbw: 12.5,
+    band: "2M",
+    repeater: "GB3KI",
+    locator: "JO01NI",
+    ...overrides,
+  };
+}
+
+// Row hooks matching channel-table.js's rowBuilderHooks(), with a column set
+// wide enough to exercise every field the builder writes.
+function rowHooks(options = {}) {
+  const modeOptions = options.modeOptions || ["FM", "NFM", "DV", "DMR", "C4FM", "P25", "NXDN", "M17"];
+  // Low first, as roughly half of CHIRP's drivers order them — so a blank row's
+  // options[0] default would be "Low" and an unset Power column shows it.
+  const powerOptions = options.powerOptions || ["Low", "High"];
+  const columns = [
+    "Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Power", "Comment",
+  ];
+  return {
+    createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
+    setRowValue: (row, column, value) => {
+      if (columns.includes(column)) {
+        row[column] = String(value ?? "");
+      }
+    },
+    // Choice order decides, exactly as channel-table.js's findEnumOption does:
+    // the caller's list is a priority ranking, not a set.
+    findEnumOption: (column, choices) => {
+      const options = column === "Tone"
+        ? ["Tone", "TSQL"]
+        : column === "Mode" ? modeOptions : column === "Power" ? powerOptions : [];
+      for (const choice of choices) {
+        const match = options.find((option) => option.toLowerCase() === String(choice).toLowerCase());
+        if (match) {
+          return match;
+        }
+      }
+      return "";
+    },
+  };
+}
+
+test("encodeMaidenhead round-trips a known repeater square", () => {
+  assert.equal(encodeMaidenhead(HERNE_BAY.latitude, HERNE_BAY.longitude, 6), "JO01NI");
+  assert.equal(encodeMaidenhead(HERNE_BAY.latitude, HERNE_BAY.longitude, 4), "JO01");
+  // A locator's own centre must re-encode to itself.
+  const box = decodeMaidenheadBox("IO91WM");
+  assert.equal(encodeMaidenhead(box.latitude, box.longitude, 6), "IO91WM");
+});
+
+test("decodeMaidenheadBox handles every precision the directory carries", () => {
+  const four = decodeMaidenheadBox("IO92");
+  assert.equal(four.precision, 4);
+  assert.equal(four.north - four.south, 1);
+  assert.ok(Math.abs((four.east - four.west) - 2) < 1e-9);
+
+  const six = decodeMaidenheadBox("JO01NI");
+  assert.equal(six.precision, 6);
+  assert.ok(Math.abs(six.latitude - 51.3542) < 0.001);
+  assert.ok(Math.abs(six.longitude - 1.125) < 0.001);
+
+  // GB3OD is stored at 8 characters; it must land inside its own 6-char parent.
+  const eight = decodeMaidenheadBox("IO83DC20");
+  const parent = decodeMaidenheadBox("IO83DC");
+  assert.equal(eight.precision, 8);
+  assert.ok(eight.latitude >= parent.south && eight.latitude <= parent.north);
+  assert.ok(eight.longitude >= parent.west && eight.longitude <= parent.east);
+
+  // GB3XL's 5-character locator is not valid Maidenhead; keeping its 4-char
+  // prefix is what stops the record from vanishing from every result.
+  const five = decodeMaidenheadBox("IO39X");
+  assert.equal(five.precision, 4);
+  assert.deepEqual(
+    { south: five.south, west: five.west },
+    { south: decodeMaidenheadBox("IO39").south, west: decodeMaidenheadBox("IO39").west },
+  );
+
+  assert.equal(decodeMaidenheadBox(""), null);
+  assert.equal(decodeMaidenheadBox("ZZ99"), null);
+  assert.equal(decodeMaidenheadBox("IO9"), null);
+});
+
+test("a 6-character square measures 4.6 km by 5.2-6.0 km over the UK", () => {
+  for (const [locator, expectedEwKm] of [["IO70AA", 5.98], ["IO91WM", 5.79], ["IO85AA", 5.34]]) {
+    const box = decodeMaidenheadBox(locator);
+    const nsKm = haversineKm(box.south, box.longitude, box.north, box.longitude);
+    const ewKm = haversineKm(box.latitude, box.west, box.latitude, box.east);
+    assert.ok(Math.abs(nsKm - 4.63) < 0.05, `${locator} N-S was ${nsKm}`);
+    assert.ok(Math.abs(ewKm - expectedEwKm) < 0.15, `${locator} E-W was ${ewKm}`);
+  }
+});
+
+test("distanceToBoxKm is zero inside the box and a lower bound outside", () => {
+  const box = decodeMaidenheadBox("JO01NI");
+  assert.equal(distanceToBoxKm(box.latitude, box.longitude, box), 0);
+  const outside = distanceToBoxKm(box.latitude + 1, box.longitude, box);
+  const centre = haversineKm(box.latitude + 1, box.longitude, box.latitude, box.longitude);
+  assert.ok(outside > 0);
+  assert.ok(outside < centre, "nearest-point distance must be shorter than centre distance");
+});
+
+test("squaresForRadius fans out over 4-character squares, nearest first", () => {
+  const small = squaresForRadius(HERNE_BAY.latitude, HERNE_BAY.longitude, 10);
+  assert.deepEqual(small.squares, ["JO01"]);
+  assert.equal(small.truncated, false);
+
+  // London sits on the IO/JO field boundary at longitude 0, so a 30 km radius
+  // there genuinely spans two squares — the case the fan-out exists for.
+  const london = { latitude: 51.5072, longitude: -0.1276 };
+  const wide = squaresForRadius(london.latitude, london.longitude, 30);
+  assert.equal(wide.squares[0], "IO91", "the home square must be queried first");
+  assert.ok(wide.squares.includes("JO01"));
+  assert.ok(wide.squares.every((locator) => locator.length === 4));
+  assert.equal(new Set(wide.squares).size, wide.squares.length, "no square twice");
+
+  // Every square in the plan must actually reach the radius: a square whose
+  // nearest corner is outside it can only contribute rows the filter drops.
+  for (const locator of wide.squares) {
+    const box = decodeMaidenheadBox(locator);
+    assert.ok(distanceToBoxKm(london.latitude, london.longitude, box) <= 30);
+  }
+
+  const capped = squaresForRadius(HERNE_BAY.latitude, HERNE_BAY.longitude, 2000, { maxSquares: 4 });
+  assert.equal(capped.squares.length, 4);
+  assert.equal(capped.truncated, true);
+  assert.ok(capped.considered > 4);
+
+  assert.deepEqual(squaresForRadius(51, 1, 0).squares, []);
+  assert.deepEqual(squaresForRadius(Number.NaN, 1, 30).squares, []);
+});
+
+test("parseRsgbPayload treats a null data field as an empty result", () => {
+  // An unknown locator is HTTP 200 with {"data":null}, not an HTTP error.
+  assert.deepEqual(parseRsgbPayload({ data: null }), []);
+  assert.deepEqual(parseRsgbPayload({}), []);
+  assert.equal(parseRsgbPayload({ data: [record()] }).length, 1);
+  assert.throws(() => parseRsgbPayload({ data: "nope" }), /non-array/);
+});
+
+test("fetchRsgbRecords queries each square without tripping a CORS preflight", async () => {
+  const calls = [];
+  const records = await fetchRsgbRecords({
+    squares: ["JO01", "JO02"],
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return {
+        ok: true,
+        json: async () => (url.endsWith("JO01") ? { data: [record()] } : { data: null }),
+      };
+    },
+  });
+  assert.equal(records.length, 1);
+  assert.deepEqual(calls.map((call) => call.url), [
+    "https://api-beta.rsgb.online/locator/JO01",
+    "https://api-beta.rsgb.online/locator/JO02",
+  ]);
+  // Any custom header would force an OPTIONS preflight, which the API answers
+  // with 405 — so the request must carry no init at all.
+  assert.ok(calls.every((call) => call.init === undefined));
+});
+
+test("fetchRsgbRecords surfaces a transport failure", async () => {
+  await assert.rejects(
+    fetchRsgbRecords({
+      squares: ["JO01"],
+      fetchImpl: async () => ({ ok: false, status: 502, json: async () => ({}) }),
+    }),
+    /HTTP 502/,
+  );
+});
+
+test("rsgbLocatorUrl normalises the locator and base", () => {
+  assert.equal(rsgbLocatorUrl("jo01"), "https://api-beta.rsgb.online/locator/JO01");
+  assert.equal(rsgbLocatorUrl("JO01", "http://localhost:8080/"), "http://localhost:8080/locator/JO01");
+});
+
+test("dedupeRsgbRecords keys on id and keeps distinct ports of one callsign", () => {
+  const deduped = dedupeRsgbRecords([
+    record({ id: 199 }),
+    record({ id: 199 }),
+    record({ id: 5997, repeater: "GB7BSK", band: "4M", tx: 70312500, rx: 70312500 }),
+    record({ id: 6849, repeater: "GB7BSK", band: "2M", tx: 144925000, rx: 144925000 }),
+  ]);
+  assert.equal(deduped.length, 3);
+  assert.equal(deduped.filter((entry) => entry.repeater === "GB7BSK").length, 2);
+
+  // Records with no usable id fall back to a callsign/band/frequency key.
+  const noIds = dedupeRsgbRecords([record({ id: null }), record({ id: null })]);
+  assert.equal(noIds.length, 1);
+});
+
+test("filterRsgbRecords applies distance, band, mode and status", () => {
+  const records = [
+    record({ id: 1, locator: "JO01NI", band: "2M", modeCodes: ["A", "D"] }),
+    record({ id: 2, locator: "JO01NI", band: "70CM", modeCodes: ["M:1"] }),
+    record({ id: 3, locator: "IO70AA", band: "2M", modeCodes: ["A"] }),
+    record({ id: 4, locator: "JO01NI", band: "2M", modeCodes: ["A"], status: "NOT OPERATIONAL" }),
+    record({ id: 5, locator: "", band: "2M", modeCodes: ["A"] }),
+  ];
+  const base = { ...HERNE_BAY, radiusKm: 30 };
+
+  const near = filterRsgbRecords(records, base);
+  assert.deepEqual(near.map((entry) => entry.record.id), [1, 2]);
+
+  assert.deepEqual(
+    filterRsgbRecords(records, { ...base, bands: ["2M"] }).map((entry) => entry.record.id),
+    [1],
+  );
+  // "M:1" is DMR with colour code 1; the filter matches on the flag alone.
+  assert.deepEqual(
+    filterRsgbRecords(records, { ...base, modes: ["M"] }).map((entry) => entry.record.id),
+    [2],
+  );
+  assert.deepEqual(
+    filterRsgbRecords(records, { ...base, onlyOperational: false }).map((entry) => entry.record.id),
+    [1, 2, 4],
+  );
+  // No band or mode selected means no band or mode filter.
+  assert.equal(filterRsgbRecords(records, { ...base, bands: [], modes: [] }).length, 2);
+});
+
+test("every returned record is inside the radius, coarse ones included", () => {
+  // A record pinned only to IO91 could be anywhere in ~111 x 130 km, and its
+  // box reaches within 78 km of Herne Bay — but its centre is ~148 km away, so
+  // a 100 km search must not return it. Judging by the nearest corner instead
+  // produced rows reading 148 km in a 100 km list.
+  const coarse = record({ id: 9, locator: "IO91" });
+  assert.equal(filterRsgbRecords([coarse], { ...HERNE_BAY, radiusKm: 100 }).length, 0);
+
+  const reached = filterRsgbRecords([coarse], { ...HERNE_BAY, radiusKm: 200 });
+  assert.equal(reached.length, 1);
+  assert.equal(reached[0].approximate, true, "a square-only position is an estimate");
+
+  const precise = filterRsgbRecords([record()], { ...HERNE_BAY, radiusKm: 30 });
+  assert.equal(precise[0].approximate, false);
+
+  for (const radiusKm of [10, 30, 100, 200]) {
+    for (const entry of filterRsgbRecords([coarse, record()], { ...HERNE_BAY, radiusKm })) {
+      assert.ok(entry.distanceKm <= radiusKm, `${entry.record.id} exceeded ${radiusKm} km`);
+    }
+  }
+});
+
+test("a station inside the searched square does not outrank a measured one", () => {
+  // The query point sits inside IO91, so the coarse record's nearest-corner
+  // distance is 0 — ranking on that floated an anywhere-in-130 km station above
+  // repeaters measured at 13 km.
+  const london = { latitude: 51.5072, longitude: -0.1276 };
+  const entries = filterRsgbRecords([
+    record({ id: 1, locator: "IO91" }),
+    record({ id: 2, locator: "IO91VJ" }),
+  ], { ...london, radiusKm: 100 });
+  assert.deepEqual(entries.map((entry) => entry.record.id), [2, 1]);
+});
+
+test("filterRsgbRecords sorts nearest first", () => {
+  const entries = filterRsgbRecords([
+    record({ id: 1, locator: "JO01PA" }),
+    record({ id: 2, locator: "JO01NI" }),
+  ], { ...HERNE_BAY, radiusKm: 100 });
+  assert.deepEqual(entries.map((entry) => entry.record.id), [2, 1]);
+  assert.ok(entries[0].distanceKm < entries[1].distanceKm);
+});
+
+test("buildRsgbRows maps the repeater's tx/rx onto a CHIRP channel", () => {
+  const entries = filterRsgbRecords([record()], { ...HERNE_BAY, radiusKm: 30 });
+  const { rows: [row] } = buildRsgbRows(entries, rowHooks());
+  assert.equal(row.Name, "GB3KI");
+  // The radio listens on the repeater's tx and transmits on its rx.
+  assert.equal(row.Frequency, "145.662500");
+  assert.equal(row.Duplex, "-");
+  assert.equal(row.Offset, "0.600000");
+  assert.equal(row.Tone, "Tone");
+  assert.equal(row.rToneFreq, "103.5");
+  assert.equal(row.Mode, "NFM");
+  assert.equal(row.Power, "High");
+  assert.match(row.Comment, /^HERNE BAY \| JO01NI \| \d+\.\d km$/);
+});
+
+test("power is set to the highest tier the driver advertises", () => {
+  const entries = filterRsgbRecords([record()], { ...HERNE_BAY, radiusKm: 30 });
+  // These are repeater channels: reaching a distant machine on Low is close to
+  // the worst available answer, and leaving the column unset takes whatever
+  // the driver happens to list first, which is "Low" for roughly half of them.
+  for (const [powerOptions, expected] of [
+    [["Low", "High"], "High"],
+    [["High", "Low"], "High"],
+    [["L", "M", "H"], "H"],
+    [["Lo", "Hi"], "Hi"],
+    [["0.5W", "5W"], "5W"],
+    [["HIGH", "LOW"], "HIGH"],
+  ]) {
+    const { rows: [row] } = buildRsgbRows(entries, rowHooks({ powerOptions }));
+    assert.equal(row.Power, expected, `options ${powerOptions.join("/")}`);
+  }
+
+  // A driver whose labels match none of the choices keeps the blank row's
+  // value rather than being handed something it does not advertise.
+  const { rows: [odd] } = buildRsgbRows(entries, rowHooks({ powerOptions: ["L1", "L2"] }));
+  assert.equal(odd.Power, "");
+});
+
+test("every row the builder emits carries High, whatever the record looks like", () => {
+  // The test above pins how the level is resolved, on one record. This pins the
+  // invariant: no shape of record may reach the grid on Low. A row built down
+  // some path that skips the Power write would pass that test and fail this one.
+  const corpus = [
+    record({ id: 1, modeCodes: ["A"] }),
+    record({ id: 2, modeCodes: ["D"] }),
+    record({ id: 3, modeCodes: ["A", "D", "M:3", "F"] }),
+    record({ id: 4, modeCodes: null }),
+    record({ id: 5, modeCodes: [] }),
+    record({ id: 6, txbw: 25 }),
+    record({ id: 7, ctcss: 0 }),
+    record({ id: 8, status: "NOT OPERATIONAL" }),
+    record({ id: 9, status: "REDUCED OUTPUT" }),
+    record({ id: 10, status: "" }),
+    record({ id: 11, locator: "JO01" }),
+    record({ id: 12, locator: "JO01NI22" }),
+    record({ id: 13, band: "70CM", tx: 430900000, rx: 438500000 }),
+    record({ id: 14, band: "6M", tx: 51230000, rx: 50730000 }),
+    record({ id: 15, band: "10M", tx: 29640000, rx: 29540000 }),
+    record({ id: 16, town: "", repeater: "" }),
+    record({ id: 17, dbwErp: 0, txbw: 0 }),
+  ];
+
+  for (const modes of [[], ["A"], ["D"], ["A", "D"]]) {
+    const entries = filterRsgbRecords(corpus, {
+      ...HERNE_BAY,
+      radiusKm: 500,
+      onlyOperational: false,
+      modes,
+    });
+    assert.ok(entries.length > 0, `nothing survived the filter for modes ${modes.join("/") || "any"}`);
+    const { rows } = buildRsgbRows(entries, rowHooks(), { modes });
+    assert.ok(rows.length > 0, `nothing was built for modes ${modes.join("/") || "any"}`);
+    for (const row of rows) {
+      assert.equal(row.Power, "High", `row ${row.Name} (modes ${modes.join("/") || "any"}) was not High`);
+    }
+  }
+});
+
+test("only repeaters survive the filter — not gateways, hotspots or beacons", () => {
+  const gateway = record({ id: 233, repeater: "MB6BH", tx: 144825000, rx: 144825000 });
+  // Every beacon in the directory is transmit-only and reports rx as 0, so a
+  // bare tx !== rx test would admit all 36 as duplex repeaters.
+  const beacon = record({ id: 500, repeater: "GB3ANG", tx: 144430000, rx: 0, modeCodes: ["B"] });
+  const repeater = record();
+
+  assert.equal(isRepeaterRecord(repeater), true);
+  assert.equal(isRepeaterRecord(gateway), false);
+  assert.equal(isRepeaterRecord(beacon), false);
+  assert.equal(isRepeaterRecord({ tx: 145000000 }), false);
+
+  const entries = filterRsgbRecords([gateway, beacon, repeater], { ...HERNE_BAY, radiusKm: 30 });
+  assert.deepEqual(entries.map((entry) => entry.record.repeater), ["GB3KI"]);
+});
+
+test("buildRsgbRows treats ctcss 0 as no tone", () => {
+  const toneless = record({ ctcss: 0, modeCodes: ["D", "F"] });
+  const { rows: [row] } = buildRsgbRows(
+    filterRsgbRecords([toneless], { ...HERNE_BAY, radiusKm: 30 }),
+    rowHooks(),
+  );
+  assert.equal(row.Tone, "");
+  assert.equal(row.rToneFreq, "");
+  assert.equal(row.Mode, "DV");
+});
+
+test("with no mode asked for, analogue wins and bandwidth picks the width", () => {
+  const hooks = rowHooks();
+  const mixed = filterRsgbRecords([record({ modeCodes: ["A", "M:3"] })], { ...HERNE_BAY, radiusKm: 30 });
+  assert.equal(buildRsgbRows(mixed, hooks).rows[0].Mode, "NFM");
+
+  const wide = filterRsgbRecords([record({ modeCodes: ["A"], txbw: 25 })], { ...HERNE_BAY, radiusKm: 30 });
+  assert.equal(buildRsgbRows(wide, hooks).rows[0].Mode, "FM");
+});
+
+test("the mode asked for wins over the analogue-first default", () => {
+  // The bug this closes: a D-STAR search over a mixed A/D repeater handed back
+  // the FM side, so the channel could not work the repeater it named.
+  const mixed = filterRsgbRecords([record({ modeCodes: ["A", "D"] })], { ...HERNE_BAY, radiusKm: 30 });
+  assert.equal(buildRsgbRows(mixed, rowHooks(), { modes: ["D"] }).rows[0].Mode, "DV");
+  assert.equal(buildRsgbRows(mixed, rowHooks(), { modes: ["A"] }).rows[0].Mode, "NFM");
+  assert.equal(buildRsgbRows(mixed, rowHooks()).rows[0].Mode, "NFM", "no selection keeps the old default");
+
+  // Asking for a mode the repeater does not carry falls back rather than
+  // dropping it: the filter, not the builder, decides what is in scope.
+  assert.equal(buildRsgbRows(mixed, rowHooks(), { modes: ["M"] }).rows[0].Mode, "NFM");
+});
+
+test("a repeater in a mode the radio cannot use is skipped, not written as NFM", () => {
+  const fmOnly = rowHooks({ modeOptions: ["FM", "NFM"] });
+
+  // A D-STAR-only repeater on an FM-only radio: NFM here would be a channel
+  // that cannot work the repeater whose callsign it carries.
+  const dstar = filterRsgbRecords([record({ modeCodes: ["D"] })], { ...HERNE_BAY, radiusKm: 30 });
+  const dstarBuilt = buildRsgbRows(dstar, fmOnly, { modes: ["D"] });
+  assert.deepEqual(dstarBuilt.rows, []);
+  assert.deepEqual(dstarBuilt.skipped, [{ repeater: "GB3KI", reason: "mode" }]);
+
+  // Same repeater on a radio that has DV.
+  assert.equal(buildRsgbRows(dstar, rowHooks(), { modes: ["D"] }).rows[0].Mode, "DV");
+
+  // A DMR-only repeater reaches an unfiltered query, and is skipped for the
+  // same reason rather than silently becoming analogue.
+  const dmrOnly = filterRsgbRecords([record({ modeCodes: ["M:1"] })], { ...HERNE_BAY, radiusKm: 30 });
+  assert.deepEqual(buildRsgbRows(dmrOnly, fmOnly).skipped, [{ repeater: "GB3KI", reason: "mode" }]);
+
+  // Records with no mode codes at all (two exist) stay analogue rather than
+  // being dropped for a field the directory never filled in.
+  const modeless = filterRsgbRecords([record({ modeCodes: null })], { ...HERNE_BAY, radiusKm: 30 });
+  assert.equal(buildRsgbRows(modeless, fmOnly).rows[0].Mode, "NFM");
+});
+
+test("buildRsgbRows notes a non-operational status and marks an estimated distance", () => {
+  const { rows: [row] } = buildRsgbRows(
+    filterRsgbRecords([record({ locator: "IO91", status: "REDUCED OUTPUT" })], {
+      ...HERNE_BAY,
+      radiusKm: 200,
+      onlyOperational: false,
+    }),
+    rowHooks(),
+  );
+  assert.match(row.Comment, /~\d+\.\d km \| REDUCED OUTPUT$/);
+});
+
+test("a repeater the radio cannot tune is dropped, not inserted half-built", () => {
+  // GB3EN is a 1312 MHz ATV repeater. On a 2m/70cm radio setRowValue refuses
+  // the frequency but accepts the -63 MHz offset, so the row that reaches the
+  // grid has no frequency and a nonsense shift.
+  const atv = record({ id: 779, repeater: "GB3EN", tx: 1312000000, rx: 1249000000, band: "23CM", txbw: 2000 });
+  const entries = filterRsgbRecords([atv, record()], { ...HERNE_BAY, radiusKm: 30 });
+  assert.equal(entries.length, 2, "the filter is not what excludes it");
+
+  const handheld = rowHooks();
+  // A radio whose Frequency column rejects anything above 470 MHz.
+  handheld.setRowValue = (row, column, value) => {
+    if (column === "Frequency" && Number.parseFloat(value) > 470) {
+      return;
+    }
+    row[column] = String(value ?? "");
+  };
+  const { rows, skipped } = buildRsgbRows(entries, handheld);
+  assert.deepEqual(rows.map((row) => row.Name), ["GB3KI"]);
+  // The reason is carried, not just the count, so the caller can say which.
+  assert.deepEqual(skipped, [{ repeater: "GB3EN", reason: "frequency" }]);
+
+  // A radio that can tune it keeps it.
+  assert.equal(buildRsgbRows(entries, rowHooks()).rows.length, 2);
+});
+
+test("the option lists cover the bands and every repeater-carrying mode", () => {
+  assert.equal(new Set(RSGB_BANDS).size, RSGB_BANDS.length);
+  // Exactly the bands the directory holds a repeater on, busiest first, so the
+  // list is both complete and free of options that could only return nothing.
+  assert.deepEqual(RSGB_BANDS, ["70CM", "2M", "23CM", "6M", "10M", "9CM", "3CM"]);
+
+  // Only the modes a channel row can actually be built in: analogue FM, and
+  // D-STAR as the one digital mode of interest. Offering DMR/Fusion/P25/NXDN/
+  // M17/Tetra only invited the builder to write NFM in their place.
+  assert.deepEqual(RSGB_MODES.map((mode) => mode.value), ["A", "D"]);
+  // Station classes that are never repeaters must not be offerable either:
+  // selecting one could only return nothing, since isRepeaterRecord drops them.
+  for (const nonRepeater of ["X", "B", "PX"]) {
+    assert.ok(!RSGB_MODES.some((mode) => mode.value === nonRepeater), `${nonRepeater} is not a repeater mode`);
+  }
+});
+
+test("the defaults are 2m, 70cm and analogue, and are all offerable", () => {
+  assert.deepEqual(RSGB_DEFAULT_BANDS, ["2M", "70CM"]);
+  assert.deepEqual(RSGB_DEFAULT_MODES, ["A"]);
+  // A default that is not in its option list can never be rendered as ticked.
+  for (const band of RSGB_DEFAULT_BANDS) {
+    assert.ok(RSGB_BANDS.includes(band), `default band ${band} is not offered`);
+  }
+  for (const mode of RSGB_DEFAULT_MODES) {
+    assert.ok(RSGB_MODES.some((entry) => entry.value === mode), `default mode ${mode} is not offered`);
+  }
+});
+
+test("the default selection returns the repeaters a handheld can work", () => {
+  const records = [
+    record({ id: 1, band: "2M", modeCodes: ["A"] }),
+    record({ id: 2, band: "70CM", modeCodes: ["A", "D"], tx: 430900000, rx: 438500000 }),
+    record({ id: 3, band: "23CM", modeCodes: ["A"], tx: 1297000000, rx: 1291000000 }),
+    record({ id: 4, band: "2M", modeCodes: ["M:1"] }),
+  ];
+  const entries = filterRsgbRecords(records, {
+    ...HERNE_BAY,
+    radiusKm: 30,
+    bands: RSGB_DEFAULT_BANDS,
+    modes: RSGB_DEFAULT_MODES,
+  });
+  assert.deepEqual(entries.map((entry) => entry.record.id), [1, 2]);
+});
