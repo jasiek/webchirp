@@ -54,6 +54,13 @@ export const RSGB_BANDS = [
   "3CM",
 ];
 
+// Ticked when the modal opens. The two bands that hold 780 of the directory's
+// 849 repeaters, on the mode 531 of them carry — what a handheld can work
+// without the user choosing anything. An unticked modal would default to every
+// band and mode, which on 23cm and up is mostly gear the radio cannot tune.
+export const RSGB_DEFAULT_BANDS = ["2M", "70CM"];
+export const RSGB_DEFAULT_MODES = ["A"];
+
 // Voice and data modes a repeater can carry, from the API's documented flag
 // table (served as HTML at the base URL). The table's remaining flags are all
 // non-repeater station classes and are deliberately absent: "X" (regenerative

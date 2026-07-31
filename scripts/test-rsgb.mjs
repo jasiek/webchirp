@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   RSGB_BANDS,
+  RSGB_DEFAULT_BANDS,
+  RSGB_DEFAULT_MODES,
   RSGB_MODES,
   buildRsgbRows,
   decodeMaidenheadBox,
@@ -396,4 +398,32 @@ test("the option lists cover the bands and every repeater-carrying mode", () => 
     assert.ok(!flags.includes(nonRepeater), `${nonRepeater} is not a repeater mode`);
   }
   assert.equal(new Set(flags).size, flags.length);
+});
+
+test("the defaults are 2m, 70cm and analogue, and are all offerable", () => {
+  assert.deepEqual(RSGB_DEFAULT_BANDS, ["2M", "70CM"]);
+  assert.deepEqual(RSGB_DEFAULT_MODES, ["A"]);
+  // A default that is not in its option list can never be rendered as ticked.
+  for (const band of RSGB_DEFAULT_BANDS) {
+    assert.ok(RSGB_BANDS.includes(band), `default band ${band} is not offered`);
+  }
+  for (const mode of RSGB_DEFAULT_MODES) {
+    assert.ok(RSGB_MODES.some((entry) => entry.value === mode), `default mode ${mode} is not offered`);
+  }
+});
+
+test("the default selection returns the repeaters a handheld can work", () => {
+  const records = [
+    record({ id: 1, band: "2M", modeCodes: ["A"] }),
+    record({ id: 2, band: "70CM", modeCodes: ["A", "D"], tx: 430900000, rx: 438500000 }),
+    record({ id: 3, band: "23CM", modeCodes: ["A"], tx: 1297000000, rx: 1291000000 }),
+    record({ id: 4, band: "2M", modeCodes: ["M:1"] }),
+  ];
+  const entries = filterRsgbRecords(records, {
+    ...HERNE_BAY,
+    radiusKm: 30,
+    bands: RSGB_DEFAULT_BANDS,
+    modes: RSGB_DEFAULT_MODES,
+  });
+  assert.deepEqual(entries.map((entry) => entry.record.id), [1, 2]);
 });

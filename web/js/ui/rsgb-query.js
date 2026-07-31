@@ -1,5 +1,7 @@
 import {
   RSGB_BANDS,
+  RSGB_DEFAULT_BANDS,
+  RSGB_DEFAULT_MODES,
   RSGB_MODES,
   buildRsgbRows,
   dedupeRsgbRecords,
@@ -21,7 +23,8 @@ import {
 export function createRsgbQuery(ctx) {
   const { dom, state, log } = ctx;
 
-  function replaceCheckboxOptions(containerEl, options, name) {
+  function replaceCheckboxOptions(containerEl, options, name, defaults = []) {
+    const preselected = new Set(defaults);
     containerEl.innerHTML = "";
     options.forEach((option) => {
       const label = document.createElement("label");
@@ -31,6 +34,7 @@ export function createRsgbQuery(ctx) {
       checkbox.type = "checkbox";
       checkbox.value = option.value;
       checkbox.name = name;
+      checkbox.checked = preselected.has(option.value);
       const text = document.createElement("span");
       text.textContent = option.label || option.value;
       label.appendChild(checkbox);
@@ -42,16 +46,22 @@ export function createRsgbQuery(ctx) {
   // Both option lists are static: they come from the API's documented flag
   // table and its observed band values, not from a dictionary endpoint (the
   // API has none), so the modal opens without a network round trip.
+  //
+  // Rebuilt on every open, so the defaults are restored each time rather than
+  // carried over from the last query — the modal always opens in the state it
+  // documents.
   function populateOptions() {
     replaceCheckboxOptions(
       dom.rsgbBandListEl,
       RSGB_BANDS.map((band) => ({ value: band, label: band })),
       "rsgb-band",
+      RSGB_DEFAULT_BANDS,
     );
     replaceCheckboxOptions(
       dom.rsgbModeListEl,
       RSGB_MODES.map((mode) => ({ ...mode, title: `${mode.label} (${mode.value})` })),
       "rsgb-mode",
+      RSGB_DEFAULT_MODES,
     );
   }
 
