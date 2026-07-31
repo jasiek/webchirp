@@ -12,6 +12,7 @@ import { createSettingsPanel } from "./ui/settings-panel.js";
 import { createChannelTable } from "./ui/channel-table.js";
 import { createRadioCatalog } from "./ui/radio-catalog.js";
 import { createRepeaterQuery } from "./ui/repeater-query.js";
+import { createRsgbQuery } from "./ui/rsgb-query.js";
 import { createCodeplugIo } from "./ui/codeplug-io.js";
 import { createSerialActions } from "./ui/serial-actions.js";
 
@@ -36,7 +37,7 @@ export function createUiController() {
   const actions = {
     updateSerialActionState: () => ctx.serial.updateSerialActionState(),
     setEditorView: (view) => setEditorView(view),
-    isRepeaterModalOpen: () => ctx.repeaterQuery.isModalOpen(),
+    isRepeaterModalOpen: () => ctx.repeaterQuery.isModalOpen() || ctx.rsgbQuery.isModalOpen(),
     currentViewLabel: () => currentViewLabel(),
   };
 
@@ -48,9 +49,10 @@ export function createUiController() {
   const table = createChannelTable(ctx);
   const catalog = createRadioCatalog(ctx);
   const repeaterQuery = createRepeaterQuery(ctx);
+  const rsgbQuery = createRsgbQuery(ctx);
   const codeplugIo = createCodeplugIo(ctx);
   const serial = createSerialActions(ctx);
-  Object.assign(ctx, { settings, table, catalog, repeaterQuery, codeplugIo, serial });
+  Object.assign(ctx, { settings, table, catalog, repeaterQuery, rsgbQuery, codeplugIo, serial });
 
   exposeCurrentRowsForDebugging(state);
 
@@ -82,6 +84,7 @@ export function createUiController() {
     log.bindEvents();
     table.bindEvents();
     repeaterQuery.bindEvents();
+    rsgbQuery.bindEvents();
     codeplugIo.bindEvents();
     catalog.bindEvents();
     serial.bindEvents();
@@ -96,6 +99,10 @@ export function createUiController() {
         }
         if (repeaterQuery.isModalOpen()) {
           repeaterQuery.setModalOpen(false);
+          return;
+        }
+        if (rsgbQuery.isModalOpen()) {
+          rsgbQuery.setModalOpen(false);
           return;
         }
         table.setMenuOpen(false);
