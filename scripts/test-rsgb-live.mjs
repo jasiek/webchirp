@@ -7,6 +7,7 @@ import {
   RSGB_DEFAULT_BANDS,
   RSGB_DEFAULT_MODES,
   RSGB_MODES,
+  buildRsgbRows,
   isRepeaterRecord,
   parseRsgbPayload,
 } from "../web/js/rsgb.js";
@@ -205,6 +206,62 @@ test("the default filters return a usable set of repeaters", async () => {
   // A modal that opens on filters matching almost nothing would be worse than
   // one that opens on none at all.
   assert.ok(matching.length > 200, `the default filters match only ${matching.length} repeaters nationwide`);
+});
+
+// A stand-in radio that advertises Low first — the ordering roughly half of
+// CHIRP's drivers use, and the one under which an unset Power column shows
+// "Low". Wide open otherwise, so the corpus is judged on Power alone.
+function permissiveRowHooks() {
+  const columns = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Power", "Comment"];
+  const optionsFor = {
+    Tone: ["Tone", "TSQL"],
+    Mode: ["FM", "NFM", "DV", "DN", "DMR", "P25", "NXDN", "M17", "TETRA"],
+    Power: ["Low", "High"],
+  };
+  return {
+    createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
+    setRowValue: (row, column, value) => {
+      if (columns.includes(column)) {
+        row[column] = String(value ?? "");
+      }
+    },
+    findEnumOption: (column, choices) => {
+      const options = optionsFor[column] || [];
+      for (const choice of choices) {
+        const match = options.find((option) => option.toLowerCase() === String(choice).toLowerCase());
+        if (match) {
+          return match;
+        }
+      }
+      return "";
+    },
+  };
+}
+
+test("every repeater the live API serves builds a channel on High", async () => {
+  // The unit suite checks this invariant over a corpus I wrote, which can only
+  // contain record shapes I thought of. This runs it over every repeater the
+  // directory actually holds — ~850 of them, with whatever field combinations
+  // ETCC has in there today.
+  const records = await allRecords();
+  const repeaters = records.filter(isRepeaterRecord);
+  assert.ok(repeaters.length > 500, `only ${repeaters.length} repeaters to check`);
+
+  const { rows, skipped } = buildRsgbRows(repeaters, permissiveRowHooks());
+  assert.ok(rows.length > 500, `only ${rows.length} rows built from ${repeaters.length} repeaters`);
+
+  const notHigh = rows.filter((row) => row.Power !== "High");
+  assert.deepEqual(
+    notHigh.map((row) => `${row.Name}: ${row.Power || "(unset)"}`),
+    [],
+    "these repeaters would be programmed at low power",
+  );
+
+  // Whatever this radio could not build must be a stated reason, not a silent
+  // gap — the same guarantee the grid relies on to report its skips.
+  for (const entry of skipped) {
+    assert.ok(["frequency", "mode"].includes(entry.reason), `unknown skip reason ${entry.reason}`);
+  }
 });
 
 test("a locator query and the full dump agree", async () => {

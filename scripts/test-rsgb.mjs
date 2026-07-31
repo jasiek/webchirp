@@ -335,6 +335,46 @@ test("power is set to the highest tier the driver advertises", () => {
   assert.equal(odd.Power, "");
 });
 
+test("every row the builder emits carries High, whatever the record looks like", () => {
+  // The test above pins how the level is resolved, on one record. This pins the
+  // invariant: no shape of record may reach the grid on Low. A row built down
+  // some path that skips the Power write would pass that test and fail this one.
+  const corpus = [
+    record({ id: 1, modeCodes: ["A"] }),
+    record({ id: 2, modeCodes: ["D"] }),
+    record({ id: 3, modeCodes: ["A", "D", "M:3", "F"] }),
+    record({ id: 4, modeCodes: null }),
+    record({ id: 5, modeCodes: [] }),
+    record({ id: 6, txbw: 25 }),
+    record({ id: 7, ctcss: 0 }),
+    record({ id: 8, status: "NOT OPERATIONAL" }),
+    record({ id: 9, status: "REDUCED OUTPUT" }),
+    record({ id: 10, status: "" }),
+    record({ id: 11, locator: "JO01" }),
+    record({ id: 12, locator: "JO01NI22" }),
+    record({ id: 13, band: "70CM", tx: 430900000, rx: 438500000 }),
+    record({ id: 14, band: "6M", tx: 51230000, rx: 50730000 }),
+    record({ id: 15, band: "10M", tx: 29640000, rx: 29540000 }),
+    record({ id: 16, town: "", repeater: "" }),
+    record({ id: 17, dbwErp: 0, txbw: 0 }),
+  ];
+
+  for (const modes of [[], ["A"], ["D"], ["A", "D"]]) {
+    const entries = filterRsgbRecords(corpus, {
+      ...HERNE_BAY,
+      radiusKm: 500,
+      onlyOperational: false,
+      modes,
+    });
+    assert.ok(entries.length > 0, `nothing survived the filter for modes ${modes.join("/") || "any"}`);
+    const { rows } = buildRsgbRows(entries, rowHooks(), { modes });
+    assert.ok(rows.length > 0, `nothing was built for modes ${modes.join("/") || "any"}`);
+    for (const row of rows) {
+      assert.equal(row.Power, "High", `row ${row.Name} (modes ${modes.join("/") || "any"}) was not High`);
+    }
+  }
+});
+
 test("only repeaters survive the filter — not gateways, hotspots or beacons", () => {
   const gateway = record({ id: 233, repeater: "MB6BH", tx: 144825000, rx: 144825000 });
   // Every beacon in the directory is transmit-only and reports rx as 0, so a
