@@ -45,8 +45,11 @@ function record(overrides = {}) {
 // wide enough to exercise every field the builder writes.
 function rowHooks(options = {}) {
   const modeOptions = options.modeOptions || ["FM", "NFM", "DV", "DMR", "C4FM", "P25", "NXDN", "M17"];
+  // Low first, as roughly half of CHIRP's drivers order them — so a blank row's
+  // options[0] default would be "Low" and an unset Power column shows it.
+  const powerOptions = options.powerOptions || ["Low", "High"];
   const columns = [
-    "Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Comment",
+    "Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Power", "Comment",
   ];
   return {
     createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
@@ -58,7 +61,9 @@ function rowHooks(options = {}) {
     // Choice order decides, exactly as channel-table.js's findEnumOption does:
     // the caller's list is a priority ranking, not a set.
     findEnumOption: (column, choices) => {
-      const options = column === "Tone" ? ["Tone", "TSQL"] : column === "Mode" ? modeOptions : [];
+      const options = column === "Tone"
+        ? ["Tone", "TSQL"]
+        : column === "Mode" ? modeOptions : column === "Power" ? powerOptions : [];
       for (const choice of choices) {
         const match = options.find((option) => option.toLowerCase() === String(choice).toLowerCase());
         if (match) {
@@ -303,7 +308,31 @@ test("buildRsgbRows maps the repeater's tx/rx onto a CHIRP channel", () => {
   assert.equal(row.Tone, "Tone");
   assert.equal(row.rToneFreq, "103.5");
   assert.equal(row.Mode, "NFM");
+  assert.equal(row.Power, "High");
   assert.match(row.Comment, /^HERNE BAY \| JO01NI \| \d+\.\d km$/);
+});
+
+test("power is set to the highest tier the driver advertises", () => {
+  const entries = filterRsgbRecords([record()], { ...HERNE_BAY, radiusKm: 30 });
+  // These are repeater channels: reaching a distant machine on Low is close to
+  // the worst available answer, and leaving the column unset takes whatever
+  // the driver happens to list first, which is "Low" for roughly half of them.
+  for (const [powerOptions, expected] of [
+    [["Low", "High"], "High"],
+    [["High", "Low"], "High"],
+    [["L", "M", "H"], "H"],
+    [["Lo", "Hi"], "Hi"],
+    [["0.5W", "5W"], "5W"],
+    [["HIGH", "LOW"], "HIGH"],
+  ]) {
+    const { rows: [row] } = buildRsgbRows(entries, rowHooks({ powerOptions }));
+    assert.equal(row.Power, expected, `options ${powerOptions.join("/")}`);
+  }
+
+  // A driver whose labels match none of the choices keeps the blank row's
+  // value rather than being handed something it does not advertise.
+  const { rows: [odd] } = buildRsgbRows(entries, rowHooks({ powerOptions: ["L1", "L2"] }));
+  assert.equal(odd.Power, "");
 });
 
 test("only repeaters survive the filter — not gateways, hotspots or beacons", () => {

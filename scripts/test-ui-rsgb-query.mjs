@@ -106,7 +106,7 @@ const DOM_KEYS = [
 ];
 
 function buildHarness({
-  headers = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Comment"],
+  headers = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Power", "Comment"],
   // What the stand-in radio's Mode column advertises. The default set has DV,
   // so D-STAR repeaters are buildable; pass ["FM", "NFM"] for an FM-only radio.
   modeOptions = ["FM", "NFM", "DV"],
@@ -153,11 +153,13 @@ function buildHarness({
         // Choice order decides, as channel-table.js's findEnumOption does, and
         // a radio that advertises none of the choices answers with "".
         findEnumOption: (column, choices) => {
-          if (column !== "Mode") {
+          // Low first, as roughly half of CHIRP's drivers order them.
+          const options = column === "Mode" ? modeOptions : column === "Power" ? ["Low", "High"] : null;
+          if (options === null) {
             return choices[0] || "";
           }
           for (const choice of choices) {
-            const match = modeOptions.find((option) => option.toLowerCase() === String(choice).toLowerCase());
+            const match = options.find((option) => option.toLowerCase() === String(choice).toLowerCase());
             if (match) {
               return match;
             }
@@ -379,6 +381,7 @@ test("a query fans out over the squares and inserts the matching repeaters", asy
   assert.deepEqual(rows.map((row) => row.Name), ["GB3XP", "GB3BK"]);
   assert.equal(rows[0].Frequency, "145.687500");
   assert.equal(rows[0].Duplex, "-");
+  assert.equal(rows[0].Power, "High", "a repeater channel must not default to Low");
   // Three records came back across both squares; the gateway is not a repeater.
   assert.ok(log.debug.some((line) => line.includes("3 fetched, 3 unique, 2 matched")));
   assert.equal(query_isClosed(dom), true, "a successful query closes the modal");
