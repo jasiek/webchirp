@@ -23,14 +23,22 @@ const EARTH_RADIUS_KM = 6371.0088;
 const FIELD_CODES = "ABCDEFGHIJKLMNOPQR";
 const SUBSQUARE_CODES = "ABCDEFGHIJKLMNOPQRSTUVWX";
 
-// Bands the API reports, longest wavelength first. Filtering is client-side
-// (the query goes out by locator, not by band), so these are matched against
-// the record's own `band` field rather than sent upstream.
+// Bands the API reports, 10m and up, longest wavelength first. Filtering is
+// client-side (the query goes out by locator, not by band), so these are
+// matched against the record's own `band` field rather than sent upstream.
+//
+// The directory's four HF bands are deliberately absent: 40m, 30m, 20m and 15m
+// hold 28 records between them and not one is a repeater — they are packet
+// mailboxes on 7.050/14.10/21.08 MHz, G0MBA's transmit-only beacons, and one
+// APRS gateway. HF has no repeater allocation to begin with, so this is a
+// permanent property of the band rather than a gap in today's data, and a
+// checkbox there could only ever return nothing. 10m is the lowest band with
+// repeaters on it (four, on the 29.5-29.7 MHz FM sub-band).
+//
+// Bands above 10m are listed even where the directory currently holds no
+// repeater (4m, 13cm, 6cm, 24GHz and SHF, as of 2026-07-31) — those are
+// repeater-capable allocations whose population can change under us.
 export const RSGB_BANDS = [
-  "40M",
-  "30M",
-  "20M",
-  "15M",
   "10M",
   "6M",
   "4M",

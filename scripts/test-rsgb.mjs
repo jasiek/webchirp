@@ -384,6 +384,18 @@ test("the option lists cover the bands and every repeater-carrying mode", () => 
   assert.ok(RSGB_BANDS.includes("2M") && RSGB_BANDS.includes("70CM") && RSGB_BANDS.includes("24GHZ"));
   assert.equal(new Set(RSGB_BANDS).size, RSGB_BANDS.length);
 
+  // Every band carrying a repeater in the directory must be selectable; 10m is
+  // the lowest, with four on the 29.5-29.7 MHz FM sub-band.
+  for (const band of ["10M", "6M", "2M", "70CM", "23CM", "9CM", "3CM"]) {
+    assert.ok(RSGB_BANDS.includes(band), `missing repeater band ${band}`);
+  }
+  // HF has no repeater allocation: all 28 records across these four bands are
+  // packet mailboxes, transmit-only beacons or a simplex APRS gateway, so
+  // isRepeaterRecord excludes every one and a checkbox could only return zero.
+  for (const hf of ["40M", "30M", "20M", "15M"]) {
+    assert.ok(!RSGB_BANDS.includes(hf), `${hf} has no repeaters and must not be offered`);
+  }
+
   const flags = RSGB_MODES.map((mode) => mode.value);
   for (const mode of ["A", "D", "E", "M", "F", "P", "7", "N"]) {
     assert.ok(flags.includes(mode), `missing repeater mode ${mode}`);
