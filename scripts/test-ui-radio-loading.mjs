@@ -228,65 +228,66 @@ function registerElement(document, selector, tagName) {
   return document.register(selector, new FakeElement(tagName, document, selector.replace(/^#/, "")));
 }
 
+// Elements stubbed with a specific tag name, because the tag is load-bearing
+// somewhere (sidebarControlEls filters on SELECT/BUTTON/INPUT). Anything else
+// the UI queries auto-vivifies as a div. Every entry must still be an element
+// dom.js declares — see the drift check at the bottom of this file.
+const STUBBED_SELECTORS = new Map([
+  ["#mem-table thead", "thead"],
+  ["#mem-table tbody", "tbody"],
+  ["#channel-editor", "div"],
+  ["#settings-editor", "div"],
+  ["#view-channels", "button"],
+  ["#view-settings", "button"],
+  ["#settings-tabs", "div"],
+  ["#settings-summary", "div"],
+  ["#settings-empty", "div"],
+  ["#settings-content", "div"],
+  ["#csv-file", "input"],
+  ["#img-file", "input"],
+  ["#debug-output", "textarea"],
+  ["#report-issue", "button"],
+  ["#webserial-support-warning", "p"],
+  ["#live-radio-support-warning", "p"],
+  ["#radio-search", "input"],
+  ["#radio-search-results", "ul"],
+  ["#radio-make", "select"],
+  ["#radio-model", "select"],
+  ["#serial-connect-toggle", "button"],
+  ["#radio-download", "button"],
+  ["#radio-upload", "button"],
+  ["#channel-insert", "button"],
+  ["#channel-remove", "button"],
+  ["#channel-menu-toggle", "button"],
+  ["#channel-menu-popup", "div"],
+  ["#channel-add-gmrs", "button"],
+  ["#channel-add-frs", "button"],
+  ["#channel-add-pmr446", "button"],
+  ["#channel-import-przemienniki", "button"],
+  ["#channel-import-repeaterbook", "button"],
+  ["#przemienniki-modal", "div"],
+  ["#przemienniki-form", "form"],
+  ["#przemienniki-modal-title", "div"],
+  ["#przemienniki-country", "select"],
+  ["#przemienniki-band-list", "div"],
+  ["#przemienniki-mode-list", "div"],
+  ["#przemienniki-onlyworking", "input"],
+  ["#przemienniki-latitude", "input"],
+  ["#przemienniki-longitude", "input"],
+  ["#przemienniki-range", "input"],
+  ["#przemienniki-geolocate", "button"],
+  ["#przemienniki-cancel", "button"],
+  ["#import-csv", "button"],
+  ["#export-csv", "button"],
+  ["#export-binary", "button"],
+  ["#import-binary", "button"],
+  ["#debug-clear", "button"],
+]);
+
 function installFakeDom() {
   const document = new FakeDocument();
-  const selectors = new Map([
-    ["#mem-table thead", "thead"],
-    ["#mem-table tbody", "tbody"],
-    ["#channel-editor", "div"],
-    ["#settings-editor", "div"],
-    ["#view-channels", "button"],
-    ["#view-settings", "button"],
-    ["#settings-tabs", "div"],
-    ["#settings-summary", "div"],
-    ["#settings-empty", "div"],
-    ["#settings-content", "div"],
-    ["#csv-file", "input"],
-    ["#img-file", "input"],
-    ["#debug-output", "textarea"],
-    ["#report-issue", "button"],
-    ["#webserial-support-warning", "p"],
-    ["#live-radio-support-warning", "p"],
-    ["#radio-search", "input"],
-    ["#radio-search-results", "ul"],
-    ["#radio-make", "select"],
-    ["#radio-model", "select"],
-    ["#serial-connect-toggle", "button"],
-    ["#radio-download", "button"],
-    ["#radio-upload", "button"],
-    ["#channel-insert", "button"],
-    ["#channel-remove", "button"],
-    ["#channel-menu-toggle", "button"],
-    ["#channel-menu-popup", "div"],
-    ["#channel-add-gmrs", "button"],
-    ["#channel-add-frs", "button"],
-    ["#channel-add-pmr446", "button"],
-    ["#channel-import-przemienniki", "button"],
-    ["#channel-import-repeaterbook", "button"],
-    ["#przemienniki-modal", "div"],
-    ["#przemienniki-form", "form"],
-    ["#przemienniki-modal-title", "div"],
-    ["#przemienniki-country", "select"],
-    ["#przemienniki-band-list", "div"],
-    ["#przemienniki-mode-list", "div"],
-    ["#przemienniki-onlyworking", "input"],
-    ["#przemienniki-latitude", "input"],
-    ["#przemienniki-longitude", "input"],
-    ["#przemienniki-range", "input"],
-    ["#przemienniki-geolocate", "button"],
-    ["#przemienniki-cancel", "button"],
-    ["#import-csv", "button"],
-    ["#export-csv", "button"],
-    ["#export-binary", "button"],
-    ["#import-binary", "button"],
-    ["#serial-transaction", "button"],
-    ["#tx-hex", "input"],
-    ["#rx-bytes", "input"],
-    ["#rx-timeout", "input"],
-    ["#debug-clear", "button"],
-  ]);
 
-  for (const [selector, tagName] of selectors) {
+  for (const [selector, tagName] of STUBBED_SELECTORS) {
     registerElement(document, selector, tagName);
   }
 
@@ -633,4 +634,27 @@ test("picking a search suggestion sets make/model and loads the radio once", asy
   assert.equal(radioModelEl.value, "slow:SlowRadio");
   assert.equal(radioSearchEl.value, "SlowCo Slow");
   assert.equal(metadataCalls.at(-1), "slow");
+});
+
+// This file stubs a DOM for the UI to run against, so it can drift from the
+// real page in a way index.html cannot: a stub for a deleted element keeps the
+// test green while production has nothing there. It happened — the four
+// #serial-transaction / #tx-hex / #rx-bytes / #rx-timeout stubs outlived the
+// debug panel ff5607a removed, and nothing noticed. Pin the stub list to the
+// element contract instead, so a removed id fails here as well as in
+// test-dom-selectors.mjs.
+test("every stubbed element is one dom.js actually declares", async () => {
+  const { REQUIRED_ELEMENTS, ELEMENT_COLLECTIONS } = await import("../web/js/ui/dom.js");
+  const declared = new Set([
+    ...Object.values(REQUIRED_ELEMENTS),
+    ...Object.values(ELEMENT_COLLECTIONS),
+  ]);
+
+  const orphaned = [...STUBBED_SELECTORS.keys()].filter((selector) => !declared.has(selector));
+  assert.deepEqual(
+    orphaned,
+    [],
+    "these selectors are stubbed but no longer required by the UI; the test is "
+      + "asserting against a page shape production cannot have",
+  );
 });
