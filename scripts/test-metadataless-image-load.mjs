@@ -4,6 +4,10 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import {
+  findCatalogRadioForImageMetadata,
+  isImageDetectionFailure,
+} from "../web/js/image-metadata.mjs";
 import { listDriverModules } from "../web/js/python-sources.mjs";
 import { createTestRadioHarness } from "./test-radio-harness.mjs";
 
@@ -81,6 +85,33 @@ test("clone image whose metadata resolves to a live-mode driver still loads", as
   assert.ok(loaded.rows.length > 0, "expected channels to be populated");
 });
 
+// The browser retries the ~20 s all-drivers sweep only when detection is what
+// failed, and it decides that by reading the Python class name out of the
+// traceback Pyodide hands it. Nothing else pins the two together: rename the
+// Python class and the backstop goes quietly dead, while widening the predicate
+// makes every unrelated image failure cost a sweep before it surfaces.
+test("the retry gate recognises a real detection failure and nothing else", async () => {
+  const harness = await createTestRadioHarness({ repoRoot });
+  const image = await readImage(METADATA_LESS_IMAGE);
+
+  const detectionError = await harness
+    .loadCodeplugBinary(image)
+    .then(() => null, (error) => error);
+  assert.ok(detectionError, "expected an undetectable image to fail");
+  assert.equal(isImageDetectionFailure(detectionError), true);
+
+  const payloadError = await harness
+    .runPythonJson("json.dumps(load_image_base64(_b))", { _b: "not base64!" })
+    .then(() => null, (error) => error);
+  assert.ok(payloadError, "expected an invalid payload to fail");
+  assert.match(String(payloadError.message), /Invalid image base64 payload/);
+  assert.equal(
+    isImageDetectionFailure(payloadError),
+    false,
+    "a bad payload is not fixable by importing more drivers",
+  );
+});
+
 test("import_all_driver_modules reports unimportable drivers instead of hiding them", async () => {
   const harness = await createTestRadioHarness({ repoRoot });
   const result = await harness.runPythonJson(
@@ -89,4 +120,40 @@ test("import_all_driver_modules reports unimportable drivers instead of hiding t
   );
   assert.equal(result.imported, 1);
   assert.match(result.failed.definitely_not_a_driver, /ModuleNotFoundError/);
+});
+
+// Quansheng_UV-K5_egzumer.img is the case where a resolved-but-WRONG match was
+// worse than no match: vendor/model alone resolved uvk5.OSFWUVK5Radio, a real
+// non-live catalog entry, so the sweep was skipped and detection then raised
+// "Unsupported model Quansheng UV-K5". The right driver lives in a different
+// module and is only reachable when the variant is taken into account.
+test("an image whose driver is distinguished only by variant resolves directly", async () => {
+  const harness = await createTestRadioHarness({ repoRoot });
+  const catalog = JSON.parse(
+    await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8"),
+  ).radios;
+  const image = await readImage("Quansheng_UV-K5_egzumer.img");
+
+  const metadata = await harness.runPythonJson(
+    "json.dumps(read_image_metadata_base64(_b))",
+    { _b: Buffer.from(image).toString("base64") },
+  );
+  assert.equal(metadata.variant, "egzumer");
+  assert.ok(
+    catalog.filter((r) => r.vendor === metadata.vendor && r.model === metadata.model).length > 1,
+    "vendor/model alone must still be ambiguous, or this test proves nothing",
+  );
+
+  const match = findCatalogRadioForImageMetadata(catalog, metadata);
+  assert.equal(match?.module, "uvk5_egzumer");
+  assert.equal(match?.className, "UVK5RadioEgzumer");
+
+  // Importing only the resolved module must be enough — no all-drivers sweep.
+  await harness.runPythonJson("json.dumps({'ok': bool(ensure_radio_module(_m))})", {
+    _m: match.module,
+  });
+  const loaded = await harness.loadCodeplugBinary(image);
+  assert.equal(loaded.module, "uvk5_egzumer");
+  assert.equal(loaded.className, "UVK5RadioEgzumer");
+  assert.ok(loaded.rows.length > 0, "expected channels to be populated");
 });

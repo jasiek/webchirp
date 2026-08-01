@@ -3,7 +3,11 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { findCatalogRadioForImageMetadata } from "../web/js/image-metadata.mjs";
+import {
+  findCatalogRadioForImageMetadata,
+  isImageDetectionFailure,
+  loadImageWithDriverFallback,
+} from "../web/js/image-metadata.mjs";
 import { createTestRadioHarness } from "./test-radio-harness.mjs";
 
 // The registered driver class for a Baofeng UV-5R image; the BaofengUV5R base
@@ -219,4 +223,273 @@ json.dumps({"imported": True})
     assert.equal(loaded.module, TEST_RADIO.module);
     assert.equal(loaded.className, TEST_RADIO.className);
   });
+});
+
+// CHIRP's own detection compares VENDOR/MODEL/VARIANT across
+// `rclass.ALIASES + [rclass]`. The catalog matcher runs before any driver is
+// imported and must be no less precise, because a resolved-but-wrong match
+// suppresses the all-drivers sweep that would have found the right driver.
+const VARIANT_CATALOG = [
+  {
+    module: "uvk5",
+    className: "UVK5Radio",
+    vendor: "Quansheng",
+    model: "UV-K5",
+    variant: "",
+    aliases: [{ vendor: "Quansheng", model: "UV-K5", variant: "" }],
+  },
+  {
+    module: "uvk5",
+    className: "OSFWUVK5Radio",
+    vendor: "Quansheng",
+    model: "UV-K5",
+    variant: "OSFW",
+    aliases: [{ vendor: "Quansheng", model: "UV-K5", variant: "OSFW" }],
+  },
+  {
+    module: "uvk5_egzumer",
+    className: "UVK5RadioEgzumer",
+    vendor: "Quansheng",
+    model: "UV-K5",
+    variant: "egzumer",
+    aliases: [{ vendor: "Quansheng", model: "UV-K5", variant: "egzumer" }],
+  },
+];
+
+test("variant separates drivers that share a vendor and model", () => {
+  // Quansheng_UV-K5_egzumer.img used to resolve to uvk5.OSFWUVK5Radio, which
+  // then failed detection with "Unsupported model Quansheng UV-K5".
+  const match = findCatalogRadioForImageMetadata(VARIANT_CATALOG, {
+    hasMetadata: true,
+    rclass: "DynamicRadioAlias",
+    vendor: "Quansheng",
+    model: "UV-K5",
+    variant: "egzumer",
+  });
+  assert.equal(match?.module, "uvk5_egzumer");
+  assert.equal(match?.className, "UVK5RadioEgzumer");
+});
+
+test("an empty variant means empty, not any", () => {
+  const match = findCatalogRadioForImageMetadata(VARIANT_CATALOG, {
+    hasMetadata: true,
+    rclass: "DynamicRadioAlias",
+    vendor: "Quansheng",
+    model: "UV-K5",
+    variant: "",
+  });
+  assert.equal(match?.className, "UVK5Radio");
+});
+
+test("an unrecorded variant is ambiguous and declines to guess", () => {
+  // No variant recorded: CHIRP would match any of the three. Returning one of
+  // them would suppress the sweep, so this must resolve to nothing.
+  for (const variant of [null, undefined]) {
+    assert.equal(
+      findCatalogRadioForImageMetadata(VARIANT_CATALOG, {
+        hasMetadata: true,
+        rclass: "DynamicRadioAlias",
+        vendor: "Quansheng",
+        model: "UV-K5",
+        variant,
+      }),
+      null,
+    );
+  }
+});
+
+test("a class-name match that contradicts the recorded identity does not win", () => {
+  // Kenwood_TS-480_CloneMode.img stamps rclass TS480Radio, which is the
+  // live-mode driver's class name; the clone-mode driver is TS480_CRadio.
+  const catalog = [
+    {
+      module: "kenwood_live",
+      className: "TS480Radio",
+      vendor: "Kenwood",
+      model: "TS-480_LiveMode",
+      variant: "",
+      isLiveRadio: true,
+      aliases: [{ vendor: "Kenwood", model: "TS-480_LiveMode", variant: "" }],
+    },
+    {
+      module: "ts480",
+      className: "TS480_CRadio",
+      vendor: "Kenwood",
+      model: "TS-480_CloneMode",
+      variant: "",
+      isLiveRadio: false,
+      aliases: [{ vendor: "Kenwood", model: "TS-480_CloneMode", variant: "" }],
+    },
+  ];
+  const match = findCatalogRadioForImageMetadata(catalog, {
+    hasMetadata: true,
+    rclass: "TS480Radio",
+    vendor: "Kenwood",
+    model: "TS-480_CloneMode",
+    variant: "",
+  });
+  assert.equal(match?.module, "ts480", "identity must outrank a stale class name");
+});
+
+test("aliases are matched, as CHIRP matches them", () => {
+  const catalog = [
+    {
+      module: "retevis_rt21",
+      className: "RT21Radio",
+      vendor: "Retevis",
+      model: "RT21",
+      variant: "",
+      aliases: [
+        { vendor: "Retevis", model: "RT21", variant: "" },
+        { vendor: "Retevis", model: "RB17", variant: "" },
+      ],
+    },
+  ];
+  const match = findCatalogRadioForImageMetadata(catalog, {
+    hasMetadata: true,
+    rclass: "DynamicRadioAlias",
+    vendor: "Retevis",
+    model: "RB17",
+    variant: "",
+  });
+  assert.equal(match?.className, "RT21Radio");
+});
+
+test("several drivers claiming one identity resolve to nothing", () => {
+  const catalog = [
+    { module: "a", className: "ARadio", vendor: "V", model: "M", variant: "", aliases: [] },
+    { module: "b", className: "BRadio", vendor: "V", model: "M", variant: "", aliases: [] },
+  ];
+  assert.equal(
+    findCatalogRadioForImageMetadata(catalog, {
+      hasMetadata: true,
+      rclass: "Unknown",
+      vendor: "V",
+      model: "M",
+      variant: "",
+    }),
+    null,
+  );
+});
+
+// Pyodide surfaces a Python exception as its formatted traceback, so the class
+// name is what the retry gate reads. scripts/test-metadataless-image-load.mjs
+// pins this shape against the real runtime.
+function pythonError(className, message) {
+  return new Error(
+    'Traceback (most recent call last):\n  File "<exec>", line 1443, in load_image_base64\n'
+    + `${className}: ${message}\n`,
+  );
+}
+
+test("only a detection failure counts as one", () => {
+  assert.equal(
+    isImageDetectionFailure(
+      pythonError("ImageDetectionError", "Unable to detect radio from image: Unsupported model"),
+    ),
+    true,
+  );
+  assert.equal(
+    isImageDetectionFailure(
+      pythonError("RuntimeUnsupportedError", "Loaded image is not a clone-mode CHIRP image"),
+    ),
+    false,
+  );
+  assert.equal(isImageDetectionFailure(null), false);
+});
+
+// The matcher can still be wrong in ways the catalog cannot see, so detection
+// after a fast-path resolve must fall back to the sweep rather than surfacing
+// the failure. Without it, resolving the wrong driver is worse than resolving
+// none, because it skips the sweep that would have succeeded.
+test("detection failure after a resolved match retries against all drivers", async () => {
+  const calls = [];
+  let attempt = 0;
+  const result = await loadImageWithDriverFallback({
+    resolvedDriver: { module: "uvk5", className: "OSFWUVK5Radio" },
+    loadImage: () => {
+      attempt += 1;
+      calls.push(`load:${attempt}`);
+      if (attempt === 1) {
+        throw pythonError(
+          "ImageDetectionError",
+          "Unable to detect radio from image: Unsupported model Quansheng UV-K5",
+        );
+      }
+      return { module: "uvk5_egzumer" };
+    },
+    importAllDrivers: () => {
+      calls.push("sweep");
+      return Promise.resolve();
+    },
+    log: (line) => calls.push(`log:${line.includes("retrying") ? "retry" : "other"}`),
+  });
+
+  assert.deepEqual(calls, ["load:1", "log:retry", "sweep", "load:2"]);
+  assert.deepEqual(result, { module: "uvk5_egzumer" });
+});
+
+// The sweep is the slowest thing the app does (~20 s in the browser, every
+// driver fetched individually from a CDN). Spending it on a failure it cannot
+// possibly fix just delays the real error by 20 s.
+test("a failure the sweep cannot fix is surfaced without sweeping", async () => {
+  const calls = [];
+  await assert.rejects(
+    () =>
+      loadImageWithDriverFallback({
+        resolvedDriver: { module: "uv5r", className: "BaofengUV5RGeneric" },
+        loadImage: () => {
+          calls.push("load");
+          throw pythonError(
+            "RuntimeUnsupportedError",
+            "Loaded image is not a clone-mode CHIRP image",
+          );
+        },
+        importAllDrivers: () => {
+          calls.push("sweep");
+          return Promise.resolve();
+        },
+      }),
+    /not a clone-mode CHIRP image/,
+  );
+  assert.deepEqual(calls, ["load"]);
+});
+
+test("a successful resolved match never imports every driver", async () => {
+  const calls = [];
+  const result = await loadImageWithDriverFallback({
+    resolvedDriver: { module: "uv5r", className: "BaofengUV5RGeneric" },
+    loadImage: () => {
+      calls.push("load");
+      return { module: "uv5r" };
+    },
+    importAllDrivers: () => {
+      calls.push("sweep");
+      return Promise.resolve();
+    },
+  });
+
+  assert.deepEqual(calls, ["load"], "the sweep is the slowest thing the app does");
+  assert.deepEqual(result, { module: "uv5r" });
+});
+
+test("an unresolved image sweeps first, and a failure there is surfaced", async () => {
+  const calls = [];
+  await assert.rejects(
+    () =>
+      loadImageWithDriverFallback({
+        resolvedDriver: null,
+        loadImage: () => {
+          calls.push("load");
+          throw new Error("Unable to detect radio from image");
+        },
+        importAllDrivers: () => {
+          calls.push("sweep");
+          return Promise.resolve();
+        },
+      }),
+    /Unable to detect radio from image/,
+  );
+  // One sweep, one attempt: there is nothing left to fall back to.
+  assert.deepEqual(calls, ["sweep", "load"]);
 });
