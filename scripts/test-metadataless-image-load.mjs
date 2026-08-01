@@ -4,7 +4,10 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { findCatalogRadioForImageMetadata } from "../web/js/image-metadata.mjs";
+import {
+  findCatalogRadioForImageMetadata,
+  isImageDetectionFailure,
+} from "../web/js/image-metadata.mjs";
 import { listDriverModules } from "../web/js/python-sources.mjs";
 import { createTestRadioHarness } from "./test-radio-harness.mjs";
 
@@ -80,6 +83,33 @@ test("clone image whose metadata resolves to a live-mode driver still loads", as
   const loaded = await harness.loadCodeplugBinary(await readImage("Kenwood_TS-480_CloneMode.img"));
   assert.equal(loaded.className, "TS480_CRadio");
   assert.ok(loaded.rows.length > 0, "expected channels to be populated");
+});
+
+// The browser retries the ~20 s all-drivers sweep only when detection is what
+// failed, and it decides that by reading the Python class name out of the
+// traceback Pyodide hands it. Nothing else pins the two together: rename the
+// Python class and the backstop goes quietly dead, while widening the predicate
+// makes every unrelated image failure cost a sweep before it surfaces.
+test("the retry gate recognises a real detection failure and nothing else", async () => {
+  const harness = await createTestRadioHarness({ repoRoot });
+  const image = await readImage(METADATA_LESS_IMAGE);
+
+  const detectionError = await harness
+    .loadCodeplugBinary(image)
+    .then(() => null, (error) => error);
+  assert.ok(detectionError, "expected an undetectable image to fail");
+  assert.equal(isImageDetectionFailure(detectionError), true);
+
+  const payloadError = await harness
+    .runPythonJson("json.dumps(load_image_base64(_b))", { _b: "not base64!" })
+    .then(() => null, (error) => error);
+  assert.ok(payloadError, "expected an invalid payload to fail");
+  assert.match(String(payloadError.message), /Invalid image base64 payload/);
+  assert.equal(
+    isImageDetectionFailure(payloadError),
+    false,
+    "a bad payload is not fixable by importing more drivers",
+  );
 });
 
 test("import_all_driver_modules reports unimportable drivers instead of hiding them", async () => {

@@ -892,6 +892,17 @@ class RuntimeUnsupportedError(errors.RadioError):
     pass
 
 
+class ImageDetectionError(RuntimeUnsupportedError):
+    """No imported driver claims this image.
+
+    Split out from the generic error because it is the *only* image failure the
+    all-drivers sweep can fix, and the browser gates its retry on this class
+    name (`isImageDetectionFailure`, `web/js/image-metadata.mjs`). Renaming it
+    without updating that predicate silently disables the backstop, so
+    `scripts/test-metadataless-image-load.mjs` pins the two together.
+    """
+
+
 def _import_radio_class(module_name: str, class_name: str):
     """Resolve a radio class object from selected module/class names."""
     module = __import__(f"chirp.drivers.{module_name}", fromlist=[class_name])
@@ -1442,7 +1453,7 @@ def load_image_base64(image_b64: str):
     try:
         radio = directory.get_radio_by_image(image_path)
     except Exception as exc:
-        raise RuntimeUnsupportedError(f"Unable to detect radio from image: {exc}") from exc
+        raise ImageDetectionError(f"Unable to detect radio from image: {exc}") from exc
     finally:
         try:
             os.unlink(image_path)

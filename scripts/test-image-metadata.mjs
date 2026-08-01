@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   findCatalogRadioForImageMetadata,
+  isImageDetectionFailure,
   loadImageWithDriverFallback,
 } from "../web/js/image-metadata.mjs";
 import { createTestRadioHarness } from "./test-radio-harness.mjs";
@@ -371,6 +372,32 @@ test("several drivers claiming one identity resolve to nothing", () => {
   );
 });
 
+// Pyodide surfaces a Python exception as its formatted traceback, so the class
+// name is what the retry gate reads. scripts/test-metadataless-image-load.mjs
+// pins this shape against the real runtime.
+function pythonError(className, message) {
+  return new Error(
+    'Traceback (most recent call last):\n  File "<exec>", line 1443, in load_image_base64\n'
+    + `${className}: ${message}\n`,
+  );
+}
+
+test("only a detection failure counts as one", () => {
+  assert.equal(
+    isImageDetectionFailure(
+      pythonError("ImageDetectionError", "Unable to detect radio from image: Unsupported model"),
+    ),
+    true,
+  );
+  assert.equal(
+    isImageDetectionFailure(
+      pythonError("RuntimeUnsupportedError", "Loaded image is not a clone-mode CHIRP image"),
+    ),
+    false,
+  );
+  assert.equal(isImageDetectionFailure(null), false);
+});
+
 // The matcher can still be wrong in ways the catalog cannot see, so detection
 // after a fast-path resolve must fall back to the sweep rather than surfacing
 // the failure. Without it, resolving the wrong driver is worse than resolving
@@ -384,7 +411,10 @@ test("detection failure after a resolved match retries against all drivers", asy
       attempt += 1;
       calls.push(`load:${attempt}`);
       if (attempt === 1) {
-        throw new Error("Unsupported model Quansheng UV-K5");
+        throw pythonError(
+          "ImageDetectionError",
+          "Unable to detect radio from image: Unsupported model Quansheng UV-K5",
+        );
       }
       return { module: "uvk5_egzumer" };
     },
@@ -397,6 +427,32 @@ test("detection failure after a resolved match retries against all drivers", asy
 
   assert.deepEqual(calls, ["load:1", "log:retry", "sweep", "load:2"]);
   assert.deepEqual(result, { module: "uvk5_egzumer" });
+});
+
+// The sweep is the slowest thing the app does (~20 s in the browser, every
+// driver fetched individually from a CDN). Spending it on a failure it cannot
+// possibly fix just delays the real error by 20 s.
+test("a failure the sweep cannot fix is surfaced without sweeping", async () => {
+  const calls = [];
+  await assert.rejects(
+    () =>
+      loadImageWithDriverFallback({
+        resolvedDriver: { module: "uv5r", className: "BaofengUV5RGeneric" },
+        loadImage: () => {
+          calls.push("load");
+          throw pythonError(
+            "RuntimeUnsupportedError",
+            "Loaded image is not a clone-mode CHIRP image",
+          );
+        },
+        importAllDrivers: () => {
+          calls.push("sweep");
+          return Promise.resolve();
+        },
+      }),
+    /not a clone-mode CHIRP image/,
+  );
+  assert.deepEqual(calls, ["load"]);
 });
 
 test("a successful resolved match never imports every driver", async () => {
