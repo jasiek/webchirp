@@ -1,5 +1,14 @@
 # Release Notes
 
+## 2026-08-02
+- The app can now be installed to an Android or iOS home screen: a web app manifest, a generated 192/512/maskable/apple-touch icon set, and a theme-color status bar, so it launches standalone from the launcher (#52).
+- Added a 🇬🇧 Query RSGB ETCC API action that turns a GPS fix into a list of nearby UK repeaters, nearest first; unlike the przemienniki.net and RepeaterBook imports it needs no CORS proxy, so it works on deployments where those two are disabled (#47).
+- Binary `.img` files whose driver differs only by variant or alias now load: `Quansheng_UV-K5_egzumer.img` previously failed with `Unsupported model` because the matcher ignored `variant`, resolved to the wrong UV-K5 driver, and that wrong-but-resolved match suppressed the all-drivers fallback (#46).
+- Deploys now run the full test suite and the Python syntax check before uploading, so a failing test leaves the live site up; the asset-retention step, which had been silently doing nothing since the move to codeplug.org, points at the right hostname again (#45).
+- Asset retention is covered by tests driving the real script against a fake Pages site, so an unreachable host fails the deploy instead of retaining nothing while reporting success (#42).
+- The channel view now shows its "No channels loaded" notice from first paint instead of only once the Pyodide runtime has finished booting.
+- Dropped test stubs for DOM elements the page no longer has and pinned the remaining stubs to the selectors `web/js/ui/dom.js` declares; no user-visible change (#43).
+
 ## 2026-07-30
 - Binary `.img` files that carry no CHIRP metadata trailer now load: when nothing identifies the driver up front, every driver is imported once per session so CHIRP's own byte-sniffing can detect the model — Yaesu FT-60/FT-817/VX-*, Baofeng UV-3R, Puxing, TYT TH-7800, Wouxun KG-UV8D and the Kenwood TK-* series all previously failed with `Unknown file format` (#28).
 - Added an app-wide progress strip at the top of the Debug Output panel, so the ~20-second all-drivers load reports its progress instead of looking like a hang; the app now uses Arial throughout, keeping the debug log monospace (#41).
