@@ -6,6 +6,7 @@
     "dev": "npm run build:version && node scripts/dev-server.mjs",
     "build:catalog": "node --experimental-wasm-stack-switching scripts/build-catalog.mjs",
     "build:version": "node scripts/build-version.mjs",
+    "build:icons": "node scripts/build-icons.mjs",
     "build:dist": "npm run build:version && npm run build:catalog && node scripts/build-dist.mjs",
     "screenshots": "npm run build:version && node scripts/update-screenshots.mjs",
     "radio:read": "node --experimental-wasm-stack-switching scripts/radio-codeplug.mjs read",
