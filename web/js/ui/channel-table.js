@@ -844,7 +844,8 @@ export function createChannelTable({ dom, state, log, actions }) {
   }
 
   // With no channels there is nothing for the header row to label, so the whole
-  // grid gives way to the centred "how to get channels in here" notice.
+  // grid gives way to the centred "how to get channels in here" notice. index.html
+  // ships in that state already, so the notice is up during runtime boot too.
   function renderEmptyState() {
     const isEmpty = state.currentRows.length === 0;
     dom.channelEmptyStateEl.hidden = !isEmpty;

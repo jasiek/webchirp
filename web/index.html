@@ -243,13 +243,19 @@
               </div>
             </div>
             <div class="channel-grid">
-              <div class="mem-table-scroll" id="mem-table-scroll">
+              <!--
+                The markup starts in the empty state: the first render only runs
+                once the Pyodide runtime is up, so anything else would leave a
+                blank grid area for the whole boot. renderEmptyState() flips the
+                pair as soon as there are channels.
+              -->
+              <div class="mem-table-scroll" id="mem-table-scroll" hidden>
                 <table id="mem-table">
                   <thead></thead>
                   <tbody></tbody>
                 </table>
               </div>
-              <div id="channel-empty-state" class="channel-empty-state" hidden>
+              <div id="channel-empty-state" class="channel-empty-state">
                 <div class="channel-empty-card">
                   <span class="channel-empty-icon" aria-hidden="true">📻</span>
                   <h2>No channels loaded</h2>
