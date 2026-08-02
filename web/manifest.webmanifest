@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "WebCHIRP | Browser-based CHIRP radio programming",
+  "short_name": "WebCHIRP",
+  "description": "Browser-based CHIRP interface for programming compatible radios over Web Serial and WebUSB.",
+  "lang": "en",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#0d5ea8",
+  "background_color": "#f6f8fb",
+  "categories": ["utilities"],
+  "icons": [
+    {
+      "src": "./images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./images/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

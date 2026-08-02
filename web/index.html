@@ -51,6 +51,14 @@
       content="WebCHIRP interface showing radio controls, channel table, and debug output."
     />
     <link rel="icon" href="./favicon.ico" sizes="any" />
+    <!--
+      Home-screen install metadata. The manifest alone is enough for Chrome on
+      Android to mint a WebAPK (the service-worker requirement was dropped in
+      Chrome 108); iOS reads apple-touch-icon rather than the manifest icons.
+    -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./images/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0d5ea8" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
