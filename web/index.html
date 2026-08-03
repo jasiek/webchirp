@@ -1,14 +1,15 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!--
+      Analytics. The loader tag stays here so the vendor script downloads during
+      parse; dataLayer setup, the launch-context parameters and the PWA install
+      events live in the analytics module below, shared with about.html. Do not
+      spell asset paths out in prose here — build-dist rewrites every occurrence
+      of one, comments included.
+    -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-80DP6MQ180"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-
-      gtag('config', 'G-80DP6MQ180');
-    </script>
+    <script type="module" src="./js/analytics.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
@@ -27,6 +28,7 @@
     <link rel="canonical" href="https://codeplug.org/" />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link rel="preconnect" href="https://api.github.com" />
+    <link rel="preconnect" href="https://www.googletagmanager.com" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="WebCHIRP" />
     <meta property="og:title" content="WebCHIRP" />

@@ -43,6 +43,24 @@ test("manifest.webmanifest is valid JSON with the fields Chrome needs to install
   assert.match(manifest.background_color, /^#[0-9a-f]{6}$/i);
 });
 
+test("start_url marks home-screen launches and stays inside scope", () => {
+  const manifest = JSON.parse(manifestText);
+  const [startPath, query] = manifest.start_url.split("?");
+  // Relative, so forks and the dev server resolve it against their own origin.
+  assert.match(startPath, /^\.\//, "start_url must stay relative to scope");
+  assert.ok(fs.existsSync(path.join(WEB_DIR, startPath)), `start_url is not served: ${startPath}`);
+
+  // A WebAPK launch sends no referrer, so without these params its sessions are
+  // indistinguishable from direct browser traffic in analytics.
+  const params = new URLSearchParams(query || "");
+  assert.equal(params.get("utm_source"), "pwa");
+  assert.equal(params.get("utm_medium"), "homescreen");
+
+  // An explicit id is what lets start_url change without the browser treating
+  // this as a different app and orphaning existing installs.
+  assert.ok(manifest.id, "manifest needs an explicit id to keep installs stable");
+});
+
 test("every manifest icon exists at its declared size", () => {
   const manifest = JSON.parse(manifestText);
   for (const icon of manifest.icons) {
