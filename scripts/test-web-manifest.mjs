@@ -43,6 +43,33 @@ test("manifest.webmanifest is valid JSON with the fields Chrome needs to install
   assert.match(manifest.background_color, /^#[0-9a-f]{6}$/i);
 });
 
+test("start_url marks home-screen launches and stays inside scope", () => {
+  const manifest = JSON.parse(manifestText);
+  const [startPath, query] = manifest.start_url.split("?");
+  // Relative, so forks and the dev server resolve it against their own origin.
+  assert.match(startPath, /^\.\//, "start_url must stay relative to scope");
+  // "./../" satisfies the pattern above while resolving outside scope, which
+  // Chrome rejects by falling back to the manifest URL's directory — an install
+  // that launches somewhere other than the app.
+  assert.ok(
+    !startPath.split("/").includes(".."),
+    `start_url must not climb out of scope: ${startPath}`,
+  );
+  assert.ok(fs.existsSync(path.join(WEB_DIR, startPath)), `start_url is not served: ${startPath}`);
+
+  // A WebAPK launch sends no referrer, so without these params its sessions are
+  // indistinguishable from direct browser traffic in analytics.
+  const params = new URLSearchParams(query || "");
+  assert.equal(params.get("utm_source"), "pwa");
+  assert.equal(params.get("utm_medium"), "homescreen");
+
+  // The id, not start_url, is what identifies the app to the browser, which is
+  // what lets start_url change without orphaning existing installs. Pinned to
+  // its exact value rather than merely present: changing it strands every
+  // installed copy, so it has to be a deliberate edit here too.
+  assert.equal(manifest.id, "/", "manifest id must stay stable across start_url changes");
+});
+
 test("every manifest icon exists at its declared size", () => {
   const manifest = JSON.parse(manifestText);
   for (const icon of manifest.icons) {

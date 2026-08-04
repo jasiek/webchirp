@@ -1,5 +1,6 @@
 import { errorSummary, isAndroidPlatform, makeModelLabel } from "./format.js";
 import { requireRuntimeApi } from "./state.js";
+import { trackEvent } from "../analytics.js";
 
 // Everything on the serial path: connect/disconnect over Web Serial or WebUSB,
 // the enabled/visible state of the sidebar's radio actions, the clone progress
@@ -208,10 +209,10 @@ export function createSerialActions(ctx) {
   }
 
   function trackRadioEvent(eventName, radio) {
-    if (!radio || typeof globalThis.gtag !== "function") {
+    if (!radio) {
       return;
     }
-    globalThis.gtag("event", eventName, {
+    trackEvent(eventName, {
       radio_make: String(radio.vendor || ""),
       radio_model: String(radio.model || ""),
       radio_module: String(radio.module || ""),

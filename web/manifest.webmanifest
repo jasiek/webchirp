@@ -4,7 +4,7 @@
   "short_name": "WebCHIRP",
   "description": "Browser-based CHIRP interface for programming compatible radios over Web Serial and WebUSB.",
   "lang": "en",
-  "start_url": "./",
+  "start_url": "./?utm_source=pwa&utm_medium=homescreen",
   "scope": "./",
   "display": "standalone",
   "theme_color": "#0d5ea8",
