@@ -14,6 +14,53 @@
 
 export const MEASUREMENT_ID = "G-80DP6MQ180";
 
+// Every event parameter this app sends, declared once here so the GA property
+// can be brought in line with the code rather than the other way round — see
+// `npm run ga:dimensions`. GA4 drops unregistered parameters from reports
+// silently and never backfills them, so a parameter added in code but not here
+// collects nothing until someone notices.
+//
+// parameterName and scope are immutable in the API: changing either means a new
+// dimension and a new, empty history. displayName and description are patchable.
+export const CUSTOM_DIMENSIONS = Object.freeze([
+  {
+    parameterName: "display_mode",
+    displayName: "Display mode",
+    description: "How the page was launched: browser, standalone, minimal-ui, fullscreen or window-controls-overlay.",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "install_outcome",
+    displayName: "Install outcome",
+    description: "How the user answered the browser's PWA install prompt: accepted, dismissed or unknown.",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "radio_make",
+    displayName: "Radio make",
+    description: "Vendor of the radio a clone operation ran against.",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "radio_model",
+    displayName: "Radio model",
+    description: "Model of the radio a clone operation ran against.",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "radio_module",
+    displayName: "Radio driver module",
+    description: "CHIRP driver module backing the selected radio.",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "radio_class",
+    displayName: "Radio driver class",
+    description: "CHIRP driver class backing the selected radio.",
+    scope: "EVENT",
+  },
+].map(Object.freeze));
+
 // Display modes reported through the display-mode media feature, most app-like
 // first: a window-controls-overlay window also matches standalone, so the first
 // match has to win.
