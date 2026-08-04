@@ -11,10 +11,11 @@
 // pulls in gRPC and a large tree for what is four REST calls, and this repo
 // ships two runtime dependencies.
 //
-// Auth, first match wins:
-//   GA_ACCESS_TOKEN               an OAuth token you already have
+// The Admin API takes no API key — it is OAuth only. Auth, first match wins:
+//   GA_ACCESS_TOKEN                 an OAuth token you already have
 //   GOOGLE_APPLICATION_CREDENTIALS  path to a service-account key JSON
-//   gcloud auth print-access-token   your own credentials
+//   application-default credentials from `gcloud auth application-default
+//     login --scopes=<SCOPE below>`
 // The identity needs Editor (or Administrator) on the GA property, granted in
 // GA Admin > Property access management — Cloud IAM roles do not grant it.
 
@@ -215,7 +216,11 @@ async function accessToken() {
     return tokenFromServiceAccount(process.env.GOOGLE_APPLICATION_CREDENTIALS);
   }
   try {
-    const { stdout } = await execFileAsync("gcloud", ["auth", "print-access-token"]);
+    // Deliberately the application-default token, not `gcloud auth
+    // print-access-token`: the latter is gcloud's own credential and carries
+    // only cloud-platform scope, which the Admin API rejects. ADC honours
+    // whatever --scopes the login asked for.
+    const { stdout } = await execFileAsync("gcloud", ["auth", "application-default", "print-access-token"]);
     return stdout.trim();
   } catch {
     throw new Error(
