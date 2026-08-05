@@ -43,12 +43,15 @@ export function detectDisplayMode(win) {
 
 // Send a GA4 event. Returns false when no analytics is loaded — an ad blocker,
 // a fork with the snippet removed, or a test — so callers never have to guard.
+// display_mode is stamped on here rather than globally because gtag("set") does
+// not carry custom parameters onto events (see FINDINGS); an explicit value in
+// params still wins.
 export function trackEvent(name, params = {}, win = target) {
   const gtag = win?.gtag;
   if (typeof gtag !== "function") {
     return false;
   }
-  gtag("event", name, params);
+  gtag("event", name, { display_mode: detectDisplayMode(win), ...params });
   return true;
 }
 
@@ -62,7 +65,7 @@ export function bindInstallTracking(win = target) {
   win.addEventListener("beforeinstallprompt", (event) => {
     // Deliberately not preventDefault()ed — that suppresses the browser's own
     // install prompt, and this app has no custom install button to replace it.
-    trackEvent("pwa_install_prompt", { display_mode: detectDisplayMode(win) }, win);
+    trackEvent("pwa_install_prompt", {}, win);
     // userChoice settles once the user answers the browser-shown prompt. It can
     // stay pending forever if they never do, which costs nothing.
     const choice = event?.userChoice;
@@ -80,13 +83,17 @@ export function bindInstallTracking(win = target) {
   });
 
   win.addEventListener("appinstalled", () => {
-    trackEvent("pwa_installed", { display_mode: detectDisplayMode(win) }, win);
+    trackEvent("pwa_installed", {}, win);
   });
 }
 
-// Define gtag, stamp the launch context onto every subsequent hit, then config.
-// Order matters: gtag("set") only applies to hits sent after it, and the
-// automatic page_view is sent by config.
+// Define gtag, then config with the launch context attached.
+//
+// display_mode goes in the config call, NOT in a preceding gtag("set"): "set"
+// reads like it sets a global parameter for later hits, but GA4 does not carry
+// custom parameters from it onto events, so the parameter silently never
+// reaches the collect payload. Config parameters do ride along with the
+// automatic page_view.
 export function initAnalytics(win) {
   if (!win) {
     return null;
@@ -102,8 +109,7 @@ export function initAnalytics(win) {
     };
   }
   win.gtag("js", new Date());
-  win.gtag("set", { display_mode: detectDisplayMode(win) });
-  win.gtag("config", MEASUREMENT_ID);
+  win.gtag("config", MEASUREMENT_ID, { display_mode: detectDisplayMode(win) });
   bindInstallTracking(win);
   return win.gtag;
 }

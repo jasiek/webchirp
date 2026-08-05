@@ -67,20 +67,24 @@ test("display mode reports the most app-like match", () => {
   assert.equal(detectDisplayMode({}), "browser");
 });
 
-test("init defines gtag and stamps the launch context before config", () => {
+test("init attaches the launch context to config, never to a bare set", () => {
   const win = makeWindow({ displayModes: ["standalone"] });
   initAnalytics(win);
 
   const commands = calls(win).map((call) => call[0]);
-  assert.deepEqual(commands, ["js", "set", "config"]);
+  assert.deepEqual(commands, ["js", "config"]);
 
-  const [, params] = calls(win).find((call) => call[0] === "set");
-  assert.equal(params.display_mode, "standalone");
-  // The page_view rides on config, so a set() afterwards would never reach it.
-  assert.ok(commands.indexOf("set") < commands.indexOf("config"));
-
-  const [, id] = calls(win).find((call) => call[0] === "config");
+  const [, id, params] = calls(win).find((call) => call[0] === "config");
   assert.equal(id, MEASUREMENT_ID);
+  // The automatic page_view is sent by config and carries its parameters.
+  assert.equal(params.display_mode, "standalone");
+
+  // Regression guard. gtag("set", {...}) reads like it sets a global parameter
+  // for later hits, but GA4 does not carry custom parameters from it onto
+  // events: display_mode set that way never appeared as ep.display_mode in a
+  // real collect payload, verified on-device. Nothing here can observe that,
+  // so the shape is pinned instead.
+  assert.ok(!commands.includes("set"), 'display_mode must not be sent via gtag("set")');
 });
 
 test("init is inert without a window and keeps an existing gtag", () => {
@@ -92,15 +96,23 @@ test("init is inert without a window and keeps an existing gtag", () => {
   initAnalytics(win);
   // A gtag already on the page (a manually pasted snippet, say) must not be
   // replaced, or its dataLayer and ours diverge.
-  assert.equal(seen.length, 3);
-  assert.deepEqual(seen.map((call) => call[0]), ["js", "set", "config"]);
+  assert.deepEqual(seen.map((call) => call[0]), ["js", "config"]);
 });
 
 test("trackEvent forwards params and reports when analytics is absent", () => {
-  const win = makeWindow();
+  const win = makeWindow({ displayModes: ["standalone"] });
   initAnalytics(win);
   assert.equal(trackEvent("radio_download", { radio_make: "Baofeng" }, win), true);
-  assert.deepEqual(eventsNamed(win, "radio_download")[0][2], { radio_make: "Baofeng" });
+  // Every event carries the launch context, since config parameters cannot be
+  // relied on to reach events the way a bare set() cannot.
+  assert.deepEqual(eventsNamed(win, "radio_download")[0][2], {
+    display_mode: "standalone",
+    radio_make: "Baofeng",
+  });
+
+  // An explicit value still wins over the automatic one.
+  trackEvent("radio_upload", { display_mode: "browser" }, win);
+  assert.equal(eventsNamed(win, "radio_upload")[0][2].display_mode, "browser");
 
   // Blocked or stripped analytics: callers must not have to guard.
   assert.equal(trackEvent("radio_download", {}, {}), false);
