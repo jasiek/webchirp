@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import builtins
+import contextlib
 import importlib
 import importlib.abc
 import json
@@ -253,6 +254,132 @@ def import_all_driver_modules(module_short_names, progress_cb=None):
         "failed": failed,
         "registered": len(directory.DRV_TO_RADIO),
     }
+
+
+def _image_class_matches(rclass, filedata, image_path, metadata) -> bool:
+    """Return whether ``get_radio_by_image`` would pick ``rclass`` for this image.
+
+    This mirrors the per-class body of ``directory.get_radio_by_image``,
+    including both branches (``match_model`` for metadata-less images,
+    vendor/model/variant alias comparison for images with a trailer) and the
+    swallowing of driver exceptions during detection. Any divergence here would
+    make an incremental sweep resolve a different driver than the full one.
+
+    The one deliberate difference: upstream falls through into the alias
+    comparison even for metadata-less images, where ``meta_vendor`` and
+    ``meta_model`` are both ``None``. No registered class declares a ``None``
+    VENDOR or MODEL, so that comparison can never match and returning early is
+    equivalent — while keeping the two branches actually distinct.
+    """
+    if not issubclass(rclass, chirp_common.FileBackedRadio):
+        return False
+
+    if not metadata:
+        try:
+            return bool(rclass.match_model(filedata, image_path))
+        except Exception as exc:
+            _log_debug(f"DETECT driver {rclass.__name__} failed during detection: {exc}")
+            return False
+
+    meta_vendor = metadata.get("vendor")
+    meta_model = metadata.get("model")
+    meta_variant = metadata.get("variant")
+    meta_vendor, meta_model = directory.MODEL_COMPAT.get(
+        (meta_vendor, meta_model), (meta_vendor, meta_model)
+    )
+    for alias in list(rclass.ALIASES) + [rclass]:
+        if (
+            alias.VENDOR == meta_vendor
+            and alias.MODEL == meta_model
+            and (meta_variant is None or alias.VARIANT == meta_variant)
+        ):
+            return True
+    return False
+
+
+def _first_matching_new_radio_class(seen_keys, filedata, image_path, metadata):
+    """Check radio classes registered since the last call, in registration order.
+
+    ``DRV_TO_RADIO`` is insertion-ordered and ``get_radio_by_image`` returns the
+    first match in that order, so checking each newly registered batch in order
+    and stopping at the first hit yields the same class the full sweep would.
+    """
+    for key, rclass in list(directory.DRV_TO_RADIO.items()):
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        if _image_class_matches(rclass, filedata, image_path, metadata):
+            return rclass
+    return None
+
+
+def detect_image_driver_incremental(image_b64, module_short_names, progress_cb=None):
+    """Import drivers one at a time, stopping at the first one that claims the image.
+
+    The full ``import_all_driver_modules`` sweep is the slowest thing the app
+    does — in the browser every module is its own CDN round trip — yet detection
+    only ever needs the modules up to the winning driver. Importing in the same
+    order and stopping early therefore costs nothing in correctness: registration
+    order, and so the class ``get_radio_by_image`` picks, is unchanged. Ordering
+    the list any other way would not be safe, because the default ``match_model``
+    is a bare memory-size comparison that several drivers can satisfy at once.
+
+    Classes already registered before this call are checked first, for the same
+    reason: a driver imported earlier in the session (a radio the user selected)
+    sits at the front of ``DRV_TO_RADIO``, and the full sweep would have
+    considered it first too.
+
+    ``progress_cb(done, total, module_short)`` is optional and reports after each
+    module, exactly as in ``import_all_driver_modules``.
+    """
+    raw_image = _decode_image_b64(image_b64)
+    _, metadata = chirp_common.CloneModeRadio._strip_metadata(raw_image)
+
+    names = [str(name or "").strip() for name in module_short_names or []]
+    names = [name for name in names if name]
+    total = len(names)
+    seen_keys = set()
+    failed = {}
+    imported = 0
+    match = None
+
+    with _temp_image_file(raw_image) as image_path:
+        match = _first_matching_new_radio_class(
+            seen_keys, raw_image, image_path, metadata
+        )
+        for module_short in names:
+            if match is not None:
+                break
+            try:
+                ensure_radio_module(module_short)
+            except Exception as exc:
+                failed[module_short] = f"{type(exc).__name__}: {exc}"
+            imported += 1
+            match = _first_matching_new_radio_class(
+                seen_keys, raw_image, image_path, metadata
+            )
+            if progress_cb is not None:
+                try:
+                    progress_cb(imported, total, module_short)
+                except Exception:
+                    pass  # Progress reporting must never abort the sweep.
+
+    result = {
+        "matched": match is not None,
+        "module": "",
+        "className": "",
+        "imported": imported,
+        "total": total,
+        # True only when the loop ran out of modules, i.e. the caller now has
+        # every driver registered and never needs this sweep again.
+        "exhausted": match is None,
+        "failed": failed,
+        "registered": len(directory.DRV_TO_RADIO),
+    }
+    if match is not None:
+        result["module"] = str(match.__module__).rsplit(".", 1)[-1]
+        result["className"] = str(match.__name__)
+    return result
 
 
 def list_registered_radios(module_short_names):
@@ -1409,12 +1536,39 @@ def export_image_base64(module_name: str, class_name: str, rows, settings_groups
     }
 
 
-def read_image_metadata_base64(image_b64: str):
-    """Parse the CHIRP metadata trailer from a .img payload without importing drivers."""
+def _decode_image_b64(image_b64: str) -> bytes:
+    """Decode a base64 .img payload into bytes, with a UI-facing error on failure."""
     try:
-        raw_image = base64.b64decode(str(image_b64 or ""), validate=True)
+        return base64.b64decode(str(image_b64 or ""), validate=True)
     except Exception as exc:
         raise RuntimeUnsupportedError("Invalid image base64 payload") from exc
+
+
+@contextlib.contextmanager
+def _temp_image_file(raw_image: bytes):
+    """Materialize an image on disk for CHIRP APIs that take a filename.
+
+    The suffix matters: drivers receive this path in ``match_model`` and some of
+    them key off the extension, so detection has to see the same ``.img`` name
+    shape the real load does.
+    """
+    with tempfile.NamedTemporaryFile(
+        mode="wb", suffix=".img", prefix="webchirp-", delete=False
+    ) as f:
+        image_path = f.name
+        f.write(raw_image)
+    try:
+        yield image_path
+    finally:
+        try:
+            os.unlink(image_path)
+        except Exception:
+            pass  # A leaked temp file must never fail the load itself.
+
+
+def read_image_metadata_base64(image_b64: str):
+    """Parse the CHIRP metadata trailer from a .img payload without importing drivers."""
+    raw_image = _decode_image_b64(image_b64)
 
     _, metadata = chirp_common.CloneModeRadio._strip_metadata(raw_image)
     if not metadata:
@@ -1439,26 +1593,15 @@ def read_image_metadata_base64(image_b64: str):
 
 def load_image_base64(image_b64: str):
     """Load a CHIRP .img payload, detect driver, and return rows + radio identity."""
-    try:
-        raw_image = base64.b64decode(str(image_b64 or ""), validate=True)
-    except Exception as exc:
-        raise RuntimeUnsupportedError("Invalid image base64 payload") from exc
+    raw_image = _decode_image_b64(image_b64)
 
-    with tempfile.NamedTemporaryFile(
-        mode="wb", suffix=".img", prefix="webchirp-", delete=False
-    ) as f:
-        image_path = f.name
-        f.write(raw_image)
-
-    try:
-        radio = directory.get_radio_by_image(image_path)
-    except Exception as exc:
-        raise ImageDetectionError(f"Unable to detect radio from image: {exc}") from exc
-    finally:
+    with _temp_image_file(raw_image) as image_path:
         try:
-            os.unlink(image_path)
-        except Exception:
-            pass
+            radio = directory.get_radio_by_image(image_path)
+        except Exception as exc:
+            raise ImageDetectionError(
+                f"Unable to detect radio from image: {exc}"
+            ) from exc
 
     if not isinstance(radio, chirp_common.CloneModeRadio):
         raise RuntimeUnsupportedError("Loaded image is not a clone-mode CHIRP image")

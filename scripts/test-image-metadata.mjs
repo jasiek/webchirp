@@ -418,7 +418,7 @@ test("detection failure after a resolved match retries against all drivers", asy
       }
       return { module: "uvk5_egzumer" };
     },
-    importAllDrivers: () => {
+    importDriversForDetection: () => {
       calls.push("sweep");
       return Promise.resolve();
     },
@@ -429,9 +429,9 @@ test("detection failure after a resolved match retries against all drivers", asy
   assert.deepEqual(result, { module: "uvk5_egzumer" });
 });
 
-// The sweep is the slowest thing the app does (~20 s in the browser, every
-// driver fetched individually from a CDN). Spending it on a failure it cannot
-// possibly fix just delays the real error by 20 s.
+// The sweep is the slowest thing the app does (every driver fetched
+// individually from a CDN, seconds even when it stops early). Spending it on a
+// failure it cannot possibly fix just delays the real error.
 test("a failure the sweep cannot fix is surfaced without sweeping", async () => {
   const calls = [];
   await assert.rejects(
@@ -445,7 +445,7 @@ test("a failure the sweep cannot fix is surfaced without sweeping", async () => 
             "Loaded image is not a clone-mode CHIRP image",
           );
         },
-        importAllDrivers: () => {
+        importDriversForDetection: () => {
           calls.push("sweep");
           return Promise.resolve();
         },
@@ -463,7 +463,7 @@ test("a successful resolved match never imports every driver", async () => {
       calls.push("load");
       return { module: "uv5r" };
     },
-    importAllDrivers: () => {
+    importDriversForDetection: () => {
       calls.push("sweep");
       return Promise.resolve();
     },
@@ -483,7 +483,7 @@ test("an unresolved image sweeps first, and a failure there is surfaced", async 
           calls.push("load");
           throw new Error("Unable to detect radio from image");
         },
-        importAllDrivers: () => {
+        importDriversForDetection: () => {
           calls.push("sweep");
           return Promise.resolve();
         },

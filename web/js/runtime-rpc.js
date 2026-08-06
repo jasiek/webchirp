@@ -23,7 +23,11 @@ const pythonSource = createBrowserCdnPythonSource({
 let pyodide;
 let bootstrapPromise;
 let radioCatalogCache = null;
-let allDriverModulesPromise = null;
+// Set once a detection sweep has run out of modules to try. Detection stops at
+// the first driver that claims the image, so "we imported some drivers" is not
+// a reusable fact; only "every driver is registered" lets a later load skip the
+// sweep entirely.
+let allDriverModulesImported = false;
 let handleSerialRpc = null;
 let bootstrapFailed = false;
 let debugLog = null;
@@ -90,66 +94,75 @@ async function ensureSelectedRadioModules(moduleShortName) {
   await pyodide.runPythonAsync("ensure_radio_module(_sel_module_short)");
 }
 
-// Import every driver module once per session. Only the metadata-less image
-// path needs this: it is the one case where nothing identifies the driver up
-// front, so detection has to try them all. Each module is fetched individually
-// by the Python import hook, so this is deliberately not done eagerly.
-async function ensureAllDriverModules() {
-  if (!allDriverModulesPromise) {
-    allDriverModulesPromise = (async () => {
-      const modules = await listDriverModules(pythonSource);
-      await ensurePyodide();
-
-      // In the browser each module is a separate CDN fetch, so this is by far
-      // the longest operation the app runs. Report it: an unannounced multi-
-      // second freeze is indistinguishable from a hang.
-      const progress = beginProgress
-        ? beginProgress("Identifying radio: loading CHIRP drivers", modules.length)
-        : null;
-      if (debugLog) {
-        debugLog(
-          `DRIVERS image identifies no driver; importing all ${modules.length} `
-          + "driver modules so match_model can run",
-        );
-      }
-
-      const reportProgress = (done, total, moduleShort) => {
-        progress?.update(done);
-        if (debugLog && (done % DRIVER_LOG_INTERVAL === 0 || done === total)) {
-          debugLog(`DRIVERS ${done}/${total} imported (latest ${moduleShort})`);
-        }
-      };
-
-      pyodide.globals.set("_all_driver_modules", modules);
-      pyodide.globals.set("_driver_progress_cb", reportProgress);
-      try {
-        const result = await runPythonJson(
-          "json.dumps(import_all_driver_modules(_all_driver_modules, _driver_progress_cb))",
-        );
-        if (debugLog) {
-          const failed = Object.entries(result.failed || {});
-          debugLog(
-            `DRIVERS imported ${result.imported}/${modules.length} modules, `
-            + `${result.registered} radio classes registered`,
-          );
-          for (const [moduleName, error] of failed) {
-            debugLog(`DRIVERS SKIP ${moduleName}: ${error}`);
-          }
-        }
-        return result;
-      } finally {
-        // The strip must come down on the failure path too, or a failed sweep
-        // leaves a frozen bar on screen for the rest of the session.
-        progress?.end();
-        pyodide.globals.set("_driver_progress_cb", null);
-      }
-    })().catch((error) => {
-      // Let a later load retry rather than caching the failure for the session.
-      allDriverModulesPromise = null;
-      throw error;
-    });
+// Import driver modules until one of them claims this image. Only the
+// metadata-less (or metadata-unmatched) image path needs this: it is the one
+// case where nothing identifies the driver up front, so detection has to try
+// drivers until it finds the owner. Each module is fetched individually by the
+// Python import hook, so this is both expensive and deliberately not eager —
+// stopping at the first match typically skips well over half the fetches.
+//
+// Call only from a queued runtime method: two overlapping sweeps would import
+// the same module twice and re-register every radio class in it (see
+// scripts/test-driver-import-race.mjs).
+async function importDriverModulesUntilImageMatches(imageBase64) {
+  if (allDriverModulesImported) {
+    return { matched: false, imported: 0, total: 0, exhausted: true, skipped: true };
   }
-  return allDriverModulesPromise;
+  const modules = await listDriverModules(pythonSource);
+  await ensurePyodide();
+
+  // In the browser each module is a separate CDN fetch, so this is by far the
+  // longest operation the app runs. Report it: an unannounced multi-second
+  // freeze is indistinguishable from a hang. The total is an upper bound —
+  // detection usually ends the strip early.
+  const progress = beginProgress
+    ? beginProgress("Identifying radio: loading CHIRP drivers", modules.length)
+    : null;
+  if (debugLog) {
+    debugLog(
+      `DRIVERS image identifies no driver; importing up to ${modules.length} `
+      + "driver modules until one matches",
+    );
+  }
+
+  const reportProgress = (done, total, moduleShort) => {
+    progress?.update(done);
+    if (debugLog && (done % DRIVER_LOG_INTERVAL === 0 || done === total)) {
+      debugLog(`DRIVERS ${done}/${total} imported (latest ${moduleShort})`);
+    }
+  };
+
+  pyodide.globals.set("_detect_image_b64", imageBase64 || "");
+  pyodide.globals.set("_all_driver_modules", modules);
+  pyodide.globals.set("_driver_progress_cb", reportProgress);
+  try {
+    const result = await runPythonJson(
+      "json.dumps(detect_image_driver_incremental("
+      + "_detect_image_b64, _all_driver_modules, _driver_progress_cb))",
+    );
+    if (result.exhausted) {
+      allDriverModulesImported = true;
+    }
+    if (debugLog) {
+      debugLog(
+        result.matched
+          ? `DRIVERS ${result.module}.${result.className} claims the image after `
+            + `${result.imported}/${result.total} modules `
+            + `(${result.registered} radio classes registered)`
+          : `DRIVERS no driver claimed the image after all ${result.imported} modules `
+            + `(${result.registered} radio classes registered)`,
+      );
+      for (const [moduleName, error] of Object.entries(result.failed || {})) {
+        debugLog(`DRIVERS SKIP ${moduleName}: ${error}`);
+      }
+    }
+    return result;
+  } finally {
+    // The strip must come down on the failure path too, or a failed sweep
+    // leaves a frozen bar on screen for the rest of the session.
+    progress?.end();
+    pyodide.globals.set("_driver_progress_cb", null);
+  }
 }
 
 function sortRadioCatalog(radios) {
@@ -346,17 +359,21 @@ async function handleLoadImage(payload = {}) {
   if (!resolvedDriver && debugLog) {
     // Nothing identified the driver: either the image predates the metadata
     // trailer, or its metadata names a model the catalog does not list. Either
-    // way the only route left is match_model against every driver, which can
-    // only match drivers that have been imported.
+    // way the only route left is CHIRP's own detection, which can only consider
+    // drivers that have been imported — so import until one of them claims it.
     debugLog(
       `IMAGE ${metadata?.hasMetadata ? "metadata unmatched" : "metadata absent"}; `
-      + "importing all drivers for detection",
+      + "importing drivers until one claims the image",
     );
   }
+  // Detection below only decides how many drivers to register; the load itself
+  // still goes through get_radio_by_image, so there is one code path that picks
+  // the driver and one that reads the image.
   return loadImageWithDriverFallback({
     resolvedDriver,
     loadImage: () => runPythonJson("json.dumps(load_image_base64(_image_b64))"),
-    importAllDrivers: () => ensureAllDriverModules(),
+    importDriversForDetection: () =>
+      importDriverModulesUntilImageMatches(payload.imageBase64 || ""),
     log: debugLog,
   });
 }

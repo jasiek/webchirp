@@ -82,30 +82,33 @@ export function findCatalogRadioForImageMetadata(radioCatalog, metadata) {
 }
 
 // Only a detection failure is worth a retry. `runtime_bridge.ImageDetectionError`
-// means no imported driver claimed the image, which importing the rest can fix;
-// every other failure (not a clone-mode image, a bad payload, a driver blowing
-// up while reading memories) is about the image itself and would still fail
-// after the sweep — so retrying would just cost ~20 s in the browser before
-// surfacing the same error. Pyodide surfaces the Python traceback as the error
-// message, so the class name is the contract; see the Python docstring.
+// means no imported driver claimed the image, which importing more drivers can
+// fix; every other failure (not a clone-mode image, a bad payload, a driver
+// blowing up while reading memories) is about the image itself and would still
+// fail after the sweep — so retrying would just cost seconds of CDN fetches in
+// the browser before surfacing the same error. Pyodide surfaces the Python
+// traceback as the error message, so the class name is the contract; see the
+// Python docstring.
 export function isImageDetectionFailure(error) {
   return /\bImageDetectionError\b/.test(String(error?.message || error || ""));
 }
 
-// Detection after a fast-path resolve, with the all-drivers sweep as a
-// backstop. Matching can be wrong in ways the catalog cannot see — a driver
-// whose match_model rejects an image its metadata claims, a future CHIRP that
-// records something new — and without this retry a wrong match is worse than
-// no match at all, because it skips the sweep that would have succeeded.
-// Injectable rather than inlined so it can be tested without a Pyodide runtime.
+// Detection after a fast-path resolve, with the driver sweep as a backstop.
+// Matching can be wrong in ways the catalog cannot see — a driver whose
+// match_model rejects an image its metadata claims, a future CHIRP that records
+// something new — and without this retry a wrong match is worse than no match at
+// all, because it skips the sweep that would have succeeded.
+// `importDriversForDetection` imports driver modules until one claims the image
+// (or the list runs out); it is injectable rather than inlined so this can be
+// tested without a Pyodide runtime.
 export async function loadImageWithDriverFallback({
   resolvedDriver,
   loadImage,
-  importAllDrivers,
+  importDriversForDetection,
   log,
 }) {
   if (!resolvedDriver) {
-    await importAllDrivers();
+    await importDriversForDetection();
     return loadImage();
   }
   try {
@@ -116,9 +119,9 @@ export async function loadImageWithDriverFallback({
     }
     log?.(
       `IMAGE detection failed with ${resolvedDriver.module}.${resolvedDriver.className} `
-      + `(${error?.message || error}); retrying against all drivers`,
+      + `(${error?.message || error}); retrying against the remaining drivers`,
     );
-    await importAllDrivers();
+    await importDriversForDetection();
     return loadImage();
   }
 }
