@@ -11,6 +11,11 @@ import {
   filterRsgbRecords,
   squaresForRadius,
 } from "../rsgb.js";
+import { classifyErrorKind, trackEvent } from "./analytics.js";
+
+// Reported alongside the other repeater directories so one report covers all
+// three. Nothing about the query's position is ever sent.
+const REPEATER_SOURCE = "rsgb";
 
 // RSGB/ETCC repeater import: the filter modal, the locator-square fan-out and
 // inserting the results as channels.
@@ -123,6 +128,9 @@ export function createRsgbQuery(ctx) {
     refreshLocator();
     ctx.table.setMenuOpen(false);
     setModalOpen(true);
+    // Paired with repeater_import, this shows how many people open the filter
+    // modal and never run a query.
+    trackEvent("repeater_modal_opened", { repeater_source: REPEATER_SOURCE });
     log.setStatus("Configure RSGB ETCC query.");
   }
 
@@ -211,6 +219,18 @@ export function createRsgbQuery(ctx) {
       log.logDebug(`RSGB SKIPPED ${entry.repeater} (${entry.reason} not supported by the selected radio)`);
     }
     ctx.table.insertRowsAtSelectionOrEnd(rows, "RSGB ETCC");
+    // result_count is the point of this event: a query that returns nothing
+    // means the filters, the radius or the API are wrong, and that is invisible
+    // otherwise. The band and mode filters are reported only as counts, and the
+    // position never at all.
+    trackEvent("repeater_import", {
+      repeater_source: REPEATER_SOURCE,
+      band_count: checkedValues(dom.rsgbBandListEl, "rsgb-band").length,
+      mode_count: modes.length,
+      only_working: dom.rsgbOnlyOperationalEl.checked ? "yes" : "no",
+      located: "yes",
+      result_count: rows.length,
+    });
     if (skipped.length > 0) {
       const detail = [
         byReason.frequency > 0 ? `${byReason.frequency} outside its frequency range` : "",
@@ -231,7 +251,15 @@ export function createRsgbQuery(ctx) {
     dom.rsgbGeolocateEl.addEventListener("click", async () => {
       try {
         await geolocate();
+        // Only that geolocation was used and whether it worked — the
+        // coordinates it produced stay in the form.
+        trackEvent("repeater_geolocate", { repeater_source: REPEATER_SOURCE, outcome: "ok" });
       } catch (error) {
+        trackEvent("repeater_geolocate", {
+          repeater_source: REPEATER_SOURCE,
+          outcome: "failed",
+          error_kind: classifyErrorKind(error),
+        });
         log.reportActionError("RSGB ETCC geolocation", error);
       }
     });
