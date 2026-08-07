@@ -1,5 +1,15 @@
 # Release Notes
 
+## 2026-08-07
+- Clone attempts now report how they ended, not just that they were made: success carries the duration and channel count, failure carries the stage and a classified cause, which together give a per-driver success rate (#20).
+- Uploads now report when CHIRP's own preflight blocked them and which column it rejected first, so a field users cannot get past shows up as a pattern rather than as scattered bug reports (#20).
+- The boot, the browser's serial capability, radio selection, serial connect, file import/export, repeater queries, band-plan presets and the settings editor all report for the first time; previously only two events existed, both fired before anything ran (#20).
+- Analytics now report only from codeplug.org, so dev servers and forks no longer land in the same property; off the production host nothing is requested from the vendor at all (#20).
+- Added `npm run ga:dimensions`, which syncs the analytics property's custom dimensions from the app's own declarations, so a parameter added in code cannot silently collect nothing.
+- Home-screen launches are now attributable and PWA installs are measured, and every hit carries the display mode the app was launched in (#53).
+- Fixed the display mode never reaching analytics: it rode on a call GA4 does not carry custom parameters from (#54).
+- The About page now reports to analytics; it never carried the tag, so its visits went uncounted (#53).
+
 ## 2026-08-02
 - The app can now be installed to an Android or iOS home screen: a web app manifest, a generated 192/512/maskable/apple-touch icon set, and a theme-color status bar, so it launches standalone from the launcher (#52).
 - Added a 🇬🇧 Query RSGB ETCC API action that turns a GPS fix into a list of nearby UK repeaters, nearest first; unlike the przemienniki.net and RepeaterBook imports it needs no CORS proxy, so it works on deployments where those two are disabled (#47).
