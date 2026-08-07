@@ -1,4 +1,5 @@
 import { errorDetails } from "./format.js";
+import { trackEvent } from "./analytics.js";
 
 // The bottom debug panel is the single sink for status text, serial traffic and
 // full error detail. Keeping every write in one module preserves the rule that
@@ -82,6 +83,10 @@ export function createDebugLog({ dom }) {
       clear();
     });
     dom.debugCopyEl.addEventListener("click", () => {
+      // Copying the log almost always means something went wrong and the user
+      // is taking the evidence somewhere. The log contents are not reported —
+      // only that this happened.
+      trackEvent("debug_log_copied");
       copyToClipboard();
     });
   }

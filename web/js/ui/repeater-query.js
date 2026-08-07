@@ -6,6 +6,7 @@ import {
   parsePrzemiennikiXml,
 } from "../datasources.js";
 import { countryDisplayName, flagEmojiFromCountryCode } from "./format.js";
+import { classifyErrorKind, trackEvent } from "./analytics.js";
 
 const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
 
@@ -200,6 +201,9 @@ export function createRepeaterQuery(ctx) {
     log.setStatus(`Loading ${source.label} query options...`);
     await ensureDictionaryLoaded();
     setModalOpen(true);
+    // Paired with repeater_import, this shows how many people open the filter
+    // modal and never run a query.
+    trackEvent("repeater_modal_opened", { repeater_source: source.key });
     log.setStatus(`Configure ${source.label} query.`);
   }
 
@@ -242,6 +246,19 @@ export function createRepeaterQuery(ctx) {
     const parsed = parsePrzemiennikiXml(xmlText);
     const rowsToInsert = buildPrzemiennikiRows(parsed.repeaters, ctx.table.rowBuilderHooks());
     ctx.table.insertRowsAtSelectionOrEnd(rowsToInsert, source.insertLabel);
+    // result_count is the point of this event: a query that returns nothing
+    // means the filters or the proxy are wrong, and today that is invisible.
+    // The country code is a filter the user picked from a fixed list; the
+    // latitude/longitude fields are never reported.
+    trackEvent("repeater_import", {
+      repeater_source: source.key,
+      country: String(dom.przemiennikiCountryEl.value || "").toLowerCase() || "any",
+      band_count: selectedBands().length,
+      mode_count: selectedModes().length,
+      only_working: dom.przemiennikiOnlyWorkingEl.checked ? "yes" : "no",
+      located: dom.przemiennikiLatitudeEl.value ? "yes" : "no",
+      result_count: parsed.repeaters.length,
+    });
     log.logDebug(`${source.actionLabel.toUpperCase()} QUERY ${url.toString()}`);
     log.logDebug(`${source.actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length}`);
   }
@@ -292,7 +309,15 @@ export function createRepeaterQuery(ctx) {
     dom.przemiennikiGeolocateEl.addEventListener("click", async () => {
       try {
         await geolocate();
+        // Only that geolocation was used and whether it worked — the
+        // coordinates it produced stay in the form.
+        trackEvent("repeater_geolocate", { repeater_source: activeSource, outcome: "ok" });
       } catch (error) {
+        trackEvent("repeater_geolocate", {
+          repeater_source: activeSource,
+          outcome: "failed",
+          error_kind: classifyErrorKind(error),
+        });
         log.reportActionError("Przemienniki geolocation", error);
       }
     });

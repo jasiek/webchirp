@@ -1,6 +1,13 @@
 import { errorSummary, isAndroidPlatform, makeModelLabel } from "./format.js";
+import {
+  classifyErrorKind,
+  codeplugParams,
+  errorTypeName,
+  firstIssueColumn,
+  radioEventParams,
+  trackEvent,
+} from "./analytics.js";
 import { requireRuntimeApi } from "./state.js";
-import { trackEvent } from "../analytics.js";
 
 // Everything on the serial path: connect/disconnect over Web Serial or WebUSB,
 // the enabled/visible state of the sidebar's radio actions, the clone progress
@@ -24,6 +31,22 @@ export function createSerialActions(ctx) {
     transportController = controller || null;
     capability = controller?.capability || capability;
     updateSerialActionState();
+  }
+
+  // The browser's serial story as one reportable value. Sent with app_ready so
+  // the share of visitors whose browser can never reach a radio is measured
+  // against the same denominator as everyone who got that far.
+  function capabilityLabel() {
+    if (capability.native && capability.webusb) {
+      return "native+webusb";
+    }
+    if (capability.native) {
+      return "native";
+    }
+    if (capability.webusb) {
+      return "webusb";
+    }
+    return "none";
   }
 
   function setSerialButtonsBusy(busy) {
@@ -60,7 +83,20 @@ export function createSerialActions(ctx) {
         log.logDebug(`SERIAL USB ID ${state.lastUsbVendorId || "unknown"}:${state.lastUsbProductId || "unknown"}`);
       }
       log.setStatus(result.message || "Serial connected.");
+      trackEvent("serial_connected", {
+        ...radioEventParams(state.selectedRadio),
+        transport: transport || "unknown",
+        requested_transport: preferredTransport,
+      });
     } catch (error) {
+      // A user who closes the browser's port picker lands here too; error_kind
+      // separates that from an adapter the browser could not open.
+      trackEvent("serial_connect_failed", {
+        ...radioEventParams(state.selectedRadio),
+        requested_transport: preferredTransport,
+        error_kind: classifyErrorKind(error),
+        error_type: errorTypeName(error),
+      });
       log.reportActionError("Serial connect", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -208,16 +244,29 @@ export function createSerialActions(ctx) {
       : "";
   }
 
-  function trackRadioEvent(eventName, radio) {
+  function trackRadioEvent(eventName, radio, params = {}) {
     if (!radio) {
       return;
     }
-    trackEvent(eventName, {
-      radio_make: String(radio.vendor || ""),
-      radio_model: String(radio.model || ""),
-      radio_module: String(radio.module || ""),
-      radio_class: String(radio.className || ""),
+    trackEvent(eventName, { ...radioEventParams(radio), ...params });
+  }
+
+  // Report how a clone ended. The attempt events on their own only count who
+  // pressed the button; pairing them with an outcome is what turns the reports
+  // into a per-driver record of which radios actually work in the browser.
+  function trackCloneOutcome(eventName, radio, startedAt, params = {}) {
+    trackRadioEvent(eventName, radio, {
+      duration_ms: Date.now() - startedAt,
+      ...params,
     });
+  }
+
+  function cloneFailureParams(error, stage) {
+    return {
+      stage,
+      error_kind: classifyErrorKind(error),
+      error_type: errorTypeName(error),
+    };
   }
 
   // Validate rows and radio-wide settings before a write, highlighting every
@@ -266,18 +315,24 @@ export function createSerialActions(ctx) {
       log.setStatus("Select a radio make/model first.");
       return;
     }
+    // Captured up front: a clone runs long enough for the user to pick a
+    // different radio while it is in flight, and the outcome belongs to the
+    // radio the transfer actually ran against.
+    const radio = state.selectedRadio;
+    const startedAt = Date.now();
     try {
-      trackRadioEvent("radio_download", state.selectedRadio);
-      log.setStatus(`Downloading from ${makeModelLabel(state.selectedRadio)}...`);
-      beginCloneProgress(`Downloading from ${makeModelLabel(state.selectedRadio)}...`);
+      trackRadioEvent("radio_download", radio);
+      log.setStatus(`Downloading from ${makeModelLabel(radio)}...`);
+      beginCloneProgress(`Downloading from ${makeModelLabel(radio)}...`);
       const result = await requireRuntimeApi(state).downloadSelectedRadio({
-        module: state.selectedRadio.module,
-        className: state.selectedRadio.className,
+        module: radio.module,
+        className: radio.className,
       });
       state.currentHeaders = state.radioMetadata.headers?.length
         ? state.radioMetadata.headers
         : (result.headers || []);
       state.currentRows = result.rows;
+      state.codeplugSource = "radio";
       ctx.settings.replaceState({
         supported: Array.isArray(result.settings) && result.settings.length > 0,
         available: Array.isArray(result.settings) && result.settings.length > 0,
@@ -291,11 +346,13 @@ export function createSerialActions(ctx) {
       ctx.table.render();
       ctx.settings.updateViewButtons();
       ctx.settings.render();
-      log.setStatus(`${makeModelLabel(state.selectedRadio)} download complete (${state.currentRows.length} channels).`);
+      log.setStatus(`${makeModelLabel(radio)} download complete (${state.currentRows.length} channels).`);
+      trackCloneOutcome("radio_download_success", radio, startedAt, codeplugParams(state));
       if (result.ident) {
         log.logSerial(`IDENT ${result.ident}`);
       }
     } catch (error) {
+      trackCloneOutcome("radio_download_failure", radio, startedAt, cloneFailureParams(error, "transfer"));
       log.reportActionError("Download", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -308,12 +365,25 @@ export function createSerialActions(ctx) {
       log.setStatus("Select a radio make/model first.");
       return;
     }
+    // Captured for the same reason as in downloadFromRadio(): the selection can
+    // change while the write is in flight, and every label, payload and event
+    // below has to keep meaning the radio the upload started against.
+    const radio = state.selectedRadio;
+    const startedAt = Date.now();
+    // Distinguishes a codeplug CHIRP itself rejected from a transfer that
+    // reached the radio and failed there.
+    let stage = "preflight";
     try {
-      trackRadioEvent("radio_upload", state.selectedRadio);
+      trackRadioEvent("radio_upload", radio);
       log.setStatus("Running upload preflight validation...");
       const preflight = await runUploadPreflight();
       if (!preflight.valid) {
         const count = Array.isArray(preflight.issues) ? preflight.issues.length : 0;
+        trackRadioEvent("upload_blocked_preflight", radio, {
+          ...codeplugParams(state),
+          issue_count: count,
+          first_column: firstIssueColumn(preflight.issues),
+        });
         log.setStatus(
           count > 0
             ? `Upload blocked: ${count} invalid value(s) highlighted in red in ${actions.currentViewLabel()}.`
@@ -321,19 +391,25 @@ export function createSerialActions(ctx) {
         );
         return;
       }
-      log.setStatus(`Uploading to ${makeModelLabel(state.selectedRadio)}...`);
-      beginCloneProgress(`Uploading to ${makeModelLabel(state.selectedRadio)}...`);
+      stage = "transfer";
+      log.setStatus(`Uploading to ${makeModelLabel(radio)}...`);
+      beginCloneProgress(`Uploading to ${makeModelLabel(radio)}...`);
       const uploadResult = await requireRuntimeApi(state).uploadSelectedRadio({
-        module: state.selectedRadio.module,
-        className: state.selectedRadio.className,
+        module: radio.module,
+        className: radio.className,
         rows: state.currentRows,
         settings: ctx.settings.getGroups(),
       });
       ctx.settings.setGroups(uploadResult.settings);
       ctx.settings.clearInvalid();
       ctx.settings.render();
-      log.setStatus(`${makeModelLabel(state.selectedRadio)} upload complete.`);
+      log.setStatus(`${makeModelLabel(radio)} upload complete.`);
+      // codeplug_source is the question this event exists to answer on the
+      // write path: whether people upload what they just read off the radio,
+      // or a file they brought with them.
+      trackCloneOutcome("radio_upload_success", radio, startedAt, codeplugParams(state));
     } catch (error) {
+      trackCloneOutcome("radio_upload_failure", radio, startedAt, cloneFailureParams(error, stage));
       log.reportActionError("Upload", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -369,6 +445,7 @@ export function createSerialActions(ctx) {
 
   return {
     bindEvents,
+    capabilityLabel,
     setSerialController,
     setSidebarControlsEnabled,
     setSerialSupportWarningVisible,

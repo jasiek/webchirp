@@ -6,7 +6,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - `web/js/ui.js`: Composes the UI modules and exposes `createUiController()`.
 - `web/js/ui/`: One module per UI area — `channel-table`, `settings-panel`,
   `radio-catalog`, `repeater-query`, `codeplug-io`, `serial-actions`, plus the
-  shared `dom`, `state`, `debug-log`, `issue-report`, `format` and
+  shared `dom`, `state`, `debug-log`, `issue-report`, `format`, `analytics` and
   `channel-values` helpers.
 - `web/python/runtime_bridge.py`: Versioned Python runtime logic (no embedded Python in JS files).
 - `chirp/`: Upstream CHIRP source as a git submodule.
@@ -31,6 +31,11 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Avoid context pollution by spawning sub-agents when appropriate. Use sub-agent sandboxing when a read-only task is to be executed.
   - Use sub-agents to produce a summary for a commit message.
 - When you discover something new, or unexpected, put it in FINDINGS.md.
+- Analytics goes through `trackEvent` in `web/js/ui/analytics.js`; never reach
+  `gtag` directly. Every parameter an event sends must be declared in
+  `CUSTOM_DIMENSIONS` (`web/js/analytics.js`) or GA collects it and shows it
+  nowhere, and never send user data — no file names, channel names, frequencies,
+  search terms or coordinates.
 - Avoid regressions in clone workflow:
   - Download should cache the image for the selected driver.
   - Upload should use cached image and fail clearly if no cached image exists.

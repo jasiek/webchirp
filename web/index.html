@@ -1,16 +1,18 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <!--
-      Analytics. The loader tag stays here so the vendor script downloads during
-      parse; dataLayer setup, the launch-context parameters and the PWA install
-      events live in the analytics module below, shared with about.html. Do not
-      spell asset paths out in prose here — build-dist rewrites every occurrence
-      of one, comments included.
-    -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-80DP6MQ180"></script>
-    <script type="module" src="./js/analytics.js"></script>
     <meta charset="UTF-8" />
+    <!--
+      Analytics. Everything with logic in it lives in the module below, shared
+      with about.html: the production-host gate, the vendor loader it injects,
+      the launch-context parameters and the PWA install events. The loader is
+      created there rather than sitting here as a static tag because every copy
+      of this app carries the same measurement ID — dev servers, forks on their
+      own Pages site — and off the production host nothing may be requested from
+      the vendor at all. Do not spell asset paths out in prose here — build-dist
+      rewrites every occurrence of one, comments included.
+    -->
+    <script type="module" src="./js/analytics.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
       Base URL of the proxy that fronts przemienniki.net and repeaterbook.com
@@ -28,7 +30,6 @@
     <link rel="canonical" href="https://codeplug.org/" />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link rel="preconnect" href="https://api.github.com" />
-    <link rel="preconnect" href="https://www.googletagmanager.com" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="WebCHIRP" />
     <meta property="og:title" content="WebCHIRP" />

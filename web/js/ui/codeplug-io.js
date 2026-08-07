@@ -1,4 +1,11 @@
 import { base64ToBytes, buildExportFileName, bytesToBase64 } from "./format.js";
+import {
+  classifyErrorKind,
+  codeplugParams,
+  errorTypeName,
+  radioEventParams,
+  trackEvent,
+} from "./analytics.js";
 import { requireRuntimeApi } from "./state.js";
 
 const LOADABLE_FILE_KINDS = new Map([
@@ -30,6 +37,20 @@ export function createCodeplugIo(ctx) {
   // overlay is driven by the depth of nested enters rather than by any single
   // leave event.
   let dragDepth = 0;
+
+  // File names are never reported: the format, how the file arrived, and what
+  // the user did with the replace-or-merge prompt are the parts that say
+  // anything about the feature. "cancelled" is a mode of its own because an
+  // abandoned import is the interesting outcome of that prompt.
+  function trackCodeplugImport(format, source, mode) {
+    trackEvent("codeplug_import", {
+      ...radioEventParams(state.selectedRadio),
+      ...codeplugParams(state),
+      format,
+      import_source: source,
+      import_mode: mode,
+    });
+  }
 
   function isImportChoiceModalOpen() {
     return !dom.importChoiceModalEl.classList.contains("hidden");
@@ -64,16 +85,18 @@ export function createCodeplugIo(ctx) {
   // Apply a parsed CSV to the editor: "replace" swaps the channel list out
   // wholesale (Locations come from the file); "merge" appends the imported
   // channels below the existing ones and renumbers Locations.
-  function applyParsedCsv(parsed, mode = "replace") {
+  function applyParsedCsv(parsed, mode = "replace", csvSource = "csv") {
     const headersFromMeta = state.radioMetadata.headers || [];
     const parsedHeaders = parsed.headers || [];
     state.currentHeaders = headersFromMeta.length ? headersFromMeta : parsedHeaders;
     const imported = parsed.rows || [];
     if (mode === "merge") {
       state.currentRows = state.currentRows.concat(imported);
+      state.codeplugSource = "mixed";
       ctx.table.reindexLocationColumn();
     } else {
       state.currentRows = imported;
+      state.codeplugSource = csvSource;
     }
     ctx.table.clearInvalidHighlights();
     ctx.table.resetRowSelection();
@@ -105,7 +128,7 @@ export function createCodeplugIo(ctx) {
 
   // Load a CSV file into the editor, asking first when doing so would discard
   // channels the user already has. Shared by the Import CSV button and drops.
-  async function importCsvFile(file) {
+  async function importCsvFile(file, source = "button") {
     const parsed = await parseCsvViaRuntime(await file.text());
     let mode = "replace";
     if (ctx.table.hasRealChannels()) {
@@ -115,12 +138,14 @@ export function createCodeplugIo(ctx) {
         + "Replace the existing channels, or merge by appending the imported channels below them?",
       );
       if (choice === "cancel") {
+        trackCodeplugImport("csv", source, "cancelled");
         log.setStatus("CSV import cancelled.");
         return;
       }
       mode = choice;
     }
     applyParsedCsv(parsed, mode);
+    trackCodeplugImport("csv", source, mode);
   }
 
   // Trigger client-side download of generated text content as a file.
@@ -158,6 +183,11 @@ export function createCodeplugIo(ctx) {
       "csv",
     );
     downloadText(fileName, csvText);
+    trackEvent("codeplug_export", {
+      ...radioEventParams(state.selectedRadio),
+      ...codeplugParams(state),
+      format: "csv",
+    });
     log.setStatus(`Exported ${fileName}`);
   }
 
@@ -182,10 +212,15 @@ export function createCodeplugIo(ctx) {
       "img",
     );
     downloadBytes(fileName, bytes);
+    trackEvent("codeplug_export", {
+      ...radioEventParams(state.selectedRadio),
+      ...codeplugParams(state),
+      format: "img",
+    });
     log.setStatus(`Exported ${fileName}`);
   }
 
-  async function importBinaryCodeplug(file) {
+  async function importBinaryCodeplug(file, source = "button") {
     const raw = new Uint8Array(await file.arrayBuffer());
     const imageBase64 = bytesToBase64(raw);
     log.setStatus("Loading CHIRP binary codeplug...");
@@ -209,11 +244,16 @@ export function createCodeplugIo(ctx) {
       ? state.radioMetadata.headers
       : (loaded.headers || state.currentHeaders);
     state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
+    state.codeplugSource = "img";
     ctx.table.clearInvalidHighlights();
     ctx.table.resetRowSelection();
     ctx.table.render();
     ctx.settings.updateViewButtons();
     ctx.settings.render();
+    // Reported after the image has selected its radio, so the event names the
+    // driver the file turned out to need rather than whatever was selected
+    // before the load.
+    trackCodeplugImport("img", source, "replace");
     log.setStatus(
       `Loaded binary codeplug for ${loaded.vendor || state.selectedRadio.vendor} ${loaded.model || state.selectedRadio.model}.`,
     );
@@ -223,7 +263,7 @@ export function createCodeplugIo(ctx) {
   // prompt is open would overwrite the pending choice and strand the first
   // one's promise forever, and two loads racing to replace the channel list
   // would leave the editor showing whichever finished last.
-  async function runFileLoad(label, work) {
+  async function runFileLoad(label, work, { format = "unknown", source = "button" } = {}) {
     if (fileLoadInFlight) {
       log.setStatus("A file is already loading; wait for it to finish.");
       return;
@@ -232,6 +272,16 @@ export function createCodeplugIo(ctx) {
     try {
       await work();
     } catch (error) {
+      // The counterpart to codeplug_import. Without it a file CHIRP could not
+      // parse — the most interesting import there is — looks exactly like a
+      // file nobody tried to import.
+      trackEvent("codeplug_import_failed", {
+        ...radioEventParams(state.selectedRadio),
+        format,
+        import_source: source,
+        error_kind: classifyErrorKind(error),
+        error_type: errorTypeName(error),
+      });
       log.reportActionError(label, error);
     } finally {
       fileLoadInFlight = false;
@@ -247,10 +297,10 @@ export function createCodeplugIo(ctx) {
       return;
     }
     if (kind === "csv") {
-      await importCsvFile(file);
+      await importCsvFile(file, "drag_drop");
       return;
     }
-    await importBinaryCodeplug(file);
+    await importBinaryCodeplug(file, "drag_drop");
   }
 
   // Only file drags are ours to handle; text dragged within the page (between
@@ -282,7 +332,10 @@ export function createCodeplugIo(ctx) {
     const [file] = files;
     const ignored = files.length > 1 ? `; ignoring ${files.length - 1} other file(s)` : "";
     log.logDebug(`DROP ${file.name}${ignored}`);
-    await runFileLoad("File drop", () => loadCodeplugFile(file));
+    await runFileLoad("File drop", () => loadCodeplugFile(file), {
+      format: classifyLoadableFile(file.name) || "unknown",
+      source: "drag_drop",
+    });
   }
 
   // Files dropped anywhere on the page load into the channel browser, so these
@@ -354,7 +407,7 @@ export function createCodeplugIo(ctx) {
       }
 
       try {
-        await runFileLoad("CSV import", () => importCsvFile(file));
+        await runFileLoad("CSV import", () => importCsvFile(file), { format: "csv" });
       } finally {
         dom.fileInput.value = "";
       }
@@ -386,7 +439,7 @@ export function createCodeplugIo(ctx) {
         return;
       }
       try {
-        await runFileLoad("Binary import", () => importBinaryCodeplug(file));
+        await runFileLoad("Binary import", () => importBinaryCodeplug(file), { format: "img" });
       } finally {
         dom.imgFileInput.value = "";
       }

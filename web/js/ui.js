@@ -15,6 +15,12 @@ import { createRepeaterQuery } from "./ui/repeater-query.js";
 import { createRsgbQuery } from "./ui/rsgb-query.js";
 import { createCodeplugIo } from "./ui/codeplug-io.js";
 import { createSerialActions } from "./ui/serial-actions.js";
+import {
+  classifyErrorKind,
+  errorTypeName,
+  radioEventParams,
+  trackEvent,
+} from "./ui/analytics.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
 export { buildExportFileName };
@@ -125,16 +131,23 @@ export function createUiController() {
     });
 
     dom.viewSettingsEl.addEventListener("click", () => {
+      // Not reported: updateViewButtons() disables this tab on exactly this
+      // condition, so the branch is unreachable defence rather than something
+      // a user can hit, and an event here would always read as zero.
       if (!settings.radioHasSettings()) {
         log.setStatus(settings.settingsUnavailableMessage());
         return;
       }
+      trackEvent("settings_view_opened", radioEventParams(state.selectedRadio));
       setEditorView("settings");
       settings.render();
     });
 
 
     dom.reportIssueEl.addEventListener("click", () => {
+      // A frustration signal, and one that pairs with the clone failure events:
+      // it says how much of what breaks is actually being reported to us.
+      trackEvent("report_issue_clicked", radioEventParams(state.selectedRadio));
       issueReporter.openPrefilledIssue();
     });
 
@@ -150,6 +163,10 @@ export function createUiController() {
 
   // Bootstrap UI: capability checks, catalog load, metadata load, empty grid.
   async function init(serialSupported) {
+    // Covers the whole cold start the user waits through — including the
+    // Pyodide boot the metadata and settings loads below trigger — so this is
+    // the number that decides whether people wait or leave.
+    const startedAt = Date.now();
     bindEvents();
     serial.refreshSerialConnectToggleLabel();
     serial.setSerialSupportWarningVisible(!serialSupported);
@@ -174,8 +191,22 @@ export function createUiController() {
       log.setStatus(`Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources.`);
       settings.render();
       serial.setSidebarControlsEnabled(true);
+      trackEvent("app_ready", {
+        duration_ms: Date.now() - startedAt,
+        // "sources" means the prebuilt catalog was missing or stale and every
+        // driver had to be imported in Pyodide first — a much slower start.
+        catalog_source: catalogResponse.source || "unknown",
+        radio_count: state.radioCatalog.length,
+        serial_capability: serial.capabilityLabel(),
+      });
     } catch (error) {
       catalog.setRadioSelectPlaceholder("Unavailable");
+      trackEvent("app_init_failed", {
+        duration_ms: Date.now() - startedAt,
+        serial_capability: serial.capabilityLabel(),
+        error_kind: classifyErrorKind(error),
+        error_type: errorTypeName(error),
+      });
       log.reportActionError("Initialization", error);
       log.setStatus("Initialization failed; sidebar controls remain disabled.");
     }
