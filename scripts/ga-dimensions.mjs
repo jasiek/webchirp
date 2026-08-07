@@ -67,6 +67,9 @@ export function validateDeclarations(declarations) {
     }
     if (!displayName) {
       errors.push(`${label}: display name is required`);
+    } else if (!/^[A-Za-z0-9_ ]+$/.test(displayName)) {
+      // The API rejects anything else — punctuation, parentheses, dashes.
+      errors.push(`${label}: display name must only contain letters, digits, underscores or spaces`);
     }
     if ((displayName || "").length > 82) {
       errors.push(`${label}: display name exceeds 82 characters`);

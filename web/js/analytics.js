@@ -88,7 +88,7 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
   },
   {
     parameterName: "duration_ms",
-    displayName: "Duration (ms)",
+    displayName: "Duration ms",
     description: "How long the reported operation took, in milliseconds.",
     scope: "EVENT",
   },
