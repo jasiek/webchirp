@@ -6,16 +6,23 @@
 // until the cache expires. Hashed names are immutable (name == content), so
 // carrying the old files forward is always safe.
 //
-// Usage: node scripts/retain-deployed-assets.mjs <deployed-site-base-url>
+// Usage: node scripts/retain-deployed-assets.mjs [deployed-site-base-url]
 // Run in CI after `npm run build:dist`, before uploading the Pages artifact.
-// Exits 0 (with a warning) when the deployed site is unreachable — e.g. the
-// first ever deploy — so it never blocks a release.
+// With no argument the host comes from ./CNAME, which is what Pages actually
+// serves the site as — passing it separately let the two drift for a week when
+// the CNAME changed (see FINDINGS.md, pages-deploy-and-cache-window).
+//
+// A site that serves fine but has no asset-manifest.json is a genuine first
+// deploy: warn and exit 0. A host that does not answer at all is a
+// misconfiguration and exits non-zero, because silently retaining nothing
+// looks identical to a successful run.
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
 const DIST_DIR = path.join(process.cwd(), "dist");
+const CNAME_FILE = path.join(process.cwd(), "CNAME");
 const RETAINED_LIST = "retained-assets.json";
 // Keep prior generations well past the 10-minute Pages cache window; cheap
 // insurance for edge caches and long-lived tabs that lazy-load modules.
@@ -40,17 +47,49 @@ async function fetchJson(url) {
   }
 }
 
-async function main() {
-  const baseUrl = (process.argv[2] || "").replace(/\/+$/, "");
-  if (!baseUrl) {
-    throw new Error("Usage: retain-deployed-assets.mjs <deployed-site-base-url>");
+// Does the host serve anything at all? Separates "first deploy" from "wrong
+// hostname", which produce the same missing manifest.
+async function siteIsReachable(baseUrl) {
+  try {
+    const res = await fetch(`${baseUrl}/`, { redirect: "follow" });
+    return res.ok;
+  } catch {
+    return false;
   }
+}
+
+async function resolveBaseUrl() {
+  const explicit = (process.argv[2] || "").replace(/\/+$/, "");
+  if (explicit) {
+    return explicit;
+  }
+  if (!existsSync(CNAME_FILE)) {
+    throw new Error(
+      "No CNAME file and no base URL argument; pass the deployed site URL explicitly.",
+    );
+  }
+  const host = (await readFile(CNAME_FILE, "utf8")).trim();
+  if (!host) {
+    throw new Error("CNAME is empty; pass the deployed site URL explicitly.");
+  }
+  return `https://${host.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+}
+
+async function main() {
+  const baseUrl = await resolveBaseUrl();
   if (!existsSync(DIST_DIR)) {
     throw new Error("dist/ not found; run `npm run build:dist` first.");
   }
+  console.log(`Retaining assets from ${baseUrl}`);
 
   const manifest = await fetchJson(`${baseUrl}/asset-manifest.json`);
   if (!manifest?.assets) {
+    if (!(await siteIsReachable(baseUrl))) {
+      throw new Error(
+        `${baseUrl} does not serve a site — retention would silently do nothing. ` +
+          "Check that the host matches CNAME and that Pages is serving it.",
+      );
+    }
     console.warn(`No deployed asset manifest at ${baseUrl}; nothing to retain (first deploy?).`);
     return;
   }

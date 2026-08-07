@@ -1,6 +1,9 @@
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs";
 import { createCallQueue } from "./call-queue.mjs";
-import { findCatalogRadioForImageMetadata } from "./image-metadata.mjs";
+import {
+  findCatalogRadioForImageMetadata,
+  loadImageWithDriverFallback,
+} from "./image-metadata.mjs";
 import {
   createBrowserCdnPythonSource,
   DEFAULT_CHIRP_REVISION,
@@ -25,9 +28,16 @@ let radioCatalogCache = null;
 // is otherwise silent, and it costs a user the whole Pyodide boot before the
 // dropdowns can appear.
 let radioCatalogSource = "";
+let allDriverModulesPromise = null;
 let handleSerialRpc = null;
 let bootstrapFailed = false;
 let debugLog = null;
+let beginProgress = null;
+
+// One debug line per driver would bury every other diagnostic in the panel, and
+// none per driver leaves a stalled sweep looking identical to a working one.
+// Narrate every Nth module instead; the progress strip carries the rest.
+const DRIVER_LOG_INTERVAL = 25;
 
 // All Pyodide-backed methods must run one at a time; see call-queue.mjs.
 const enqueueRuntimeCall = createCallQueue();
@@ -83,6 +93,68 @@ async function ensureSelectedRadioModules(moduleShortName) {
   await ensurePyodide();
   pyodide.globals.set("_sel_module_short", moduleShortName);
   await pyodide.runPythonAsync("ensure_radio_module(_sel_module_short)");
+}
+
+// Import every driver module once per session. Only the metadata-less image
+// path needs this: it is the one case where nothing identifies the driver up
+// front, so detection has to try them all. Each module is fetched individually
+// by the Python import hook, so this is deliberately not done eagerly.
+async function ensureAllDriverModules() {
+  if (!allDriverModulesPromise) {
+    allDriverModulesPromise = (async () => {
+      const modules = await listDriverModules(pythonSource);
+      await ensurePyodide();
+
+      // In the browser each module is a separate CDN fetch, so this is by far
+      // the longest operation the app runs. Report it: an unannounced multi-
+      // second freeze is indistinguishable from a hang.
+      const progress = beginProgress
+        ? beginProgress("Identifying radio: loading CHIRP drivers", modules.length)
+        : null;
+      if (debugLog) {
+        debugLog(
+          `DRIVERS image identifies no driver; importing all ${modules.length} `
+          + "driver modules so match_model can run",
+        );
+      }
+
+      const reportProgress = (done, total, moduleShort) => {
+        progress?.update(done);
+        if (debugLog && (done % DRIVER_LOG_INTERVAL === 0 || done === total)) {
+          debugLog(`DRIVERS ${done}/${total} imported (latest ${moduleShort})`);
+        }
+      };
+
+      pyodide.globals.set("_all_driver_modules", modules);
+      pyodide.globals.set("_driver_progress_cb", reportProgress);
+      try {
+        const result = await runPythonJson(
+          "json.dumps(import_all_driver_modules(_all_driver_modules, _driver_progress_cb))",
+        );
+        if (debugLog) {
+          const failed = Object.entries(result.failed || {});
+          debugLog(
+            `DRIVERS imported ${result.imported}/${modules.length} modules, `
+            + `${result.registered} radio classes registered`,
+          );
+          for (const [moduleName, error] of failed) {
+            debugLog(`DRIVERS SKIP ${moduleName}: ${error}`);
+          }
+        }
+        return result;
+      } finally {
+        // The strip must come down on the failure path too, or a failed sweep
+        // leaves a frozen bar on screen for the rest of the session.
+        progress?.end();
+        pyodide.globals.set("_driver_progress_cb", null);
+      }
+    })().catch((error) => {
+      // Let a later load retry rather than caching the failure for the session.
+      allDriverModulesPromise = null;
+      throw error;
+    });
+  }
+  return allDriverModulesPromise;
 }
 
 function sortRadioCatalog(radios) {
@@ -205,6 +277,11 @@ async function handleListRadios() {
   return { radios, source: radioCatalogSource };
 }
 
+async function handleGetDefaultHeaders() {
+  await requirePyodide();
+  return runPythonJson("json.dumps(get_default_headers())");
+}
+
 async function handleParseCsv(payload = {}) {
   await requirePyodide();
   pyodide.globals.set("_csv_input", payload.csvText);
@@ -248,11 +325,24 @@ async function handleLoadImage(payload = {}) {
   const metadata = await runPythonJson(
     "json.dumps(read_image_metadata_base64(_image_b64))",
   );
+  let resolvedDriver = null;
   if (metadata?.hasMetadata) {
     const radios = await loadRadioCatalog();
     const match = findCatalogRadioForImageMetadata(radios, metadata);
-    if (match) {
+    if (match && match.isLiveRadio) {
+      // Image metadata is matched on the stored rclass name first, which can
+      // land on a live-mode driver that shares a class name with the clone-mode
+      // one (Kenwood TS-480). A live radio never owns a clone image, so treat
+      // this as unresolved and let match_model pick the real driver.
+      if (debugLog) {
+        debugLog(
+          `IMAGE METADATA ignoring live-mode driver ${match.module}.${match.className} `
+          + `for clone image ${metadata.vendor} ${metadata.model}`,
+        );
+      }
+    } else if (match) {
       await ensureSelectedRadioModules(match.module);
+      resolvedDriver = match;
     } else if (debugLog) {
       debugLog(
         `IMAGE METADATA no catalog match for ${metadata.vendor} ${metadata.model} `
@@ -260,7 +350,22 @@ async function handleLoadImage(payload = {}) {
       );
     }
   }
-  return runPythonJson("json.dumps(load_image_base64(_image_b64))");
+  if (!resolvedDriver && debugLog) {
+    // Nothing identified the driver: either the image predates the metadata
+    // trailer, or its metadata names a model the catalog does not list. Either
+    // way the only route left is match_model against every driver, which can
+    // only match drivers that have been imported.
+    debugLog(
+      `IMAGE ${metadata?.hasMetadata ? "metadata unmatched" : "metadata absent"}; `
+      + "importing all drivers for detection",
+    );
+  }
+  return loadImageWithDriverFallback({
+    resolvedDriver,
+    loadImage: () => runPythonJson("json.dumps(load_image_base64(_image_b64))"),
+    importAllDrivers: () => ensureAllDriverModules(),
+    log: debugLog,
+  });
 }
 
 async function handleSerialConnect(payload = {}) {
@@ -335,6 +440,7 @@ async function handleValidateRadioSettings(payload = {}) {
 const RUNTIME_METHODS = Object.freeze({
   getRuntimeInfo: handleGetRuntimeInfo,
   listRadios: handleListRadios,
+  getDefaultHeaders: handleGetDefaultHeaders,
   parseCsv: handleParseCsv,
   normalizeRows: handleNormalizeRows,
   validateRowsForUpload: handleValidateRowsForUpload,
@@ -357,10 +463,12 @@ const UNQUEUED_METHODS = new Set(["getRuntimeInfo"]);
 export function createRuntimeRpcClient({
   handleSerialRpc: nextHandleSerialRpc,
   logDebug,
+  onProgress,
   onRuntimeCrash,
 }) {
   handleSerialRpc = nextHandleSerialRpc;
   debugLog = logDebug || null;
+  beginProgress = onProgress || null;
 
   function wrapRuntimeMethod(name, handler) {
     return async function invokeRuntimeMethod(payload = {}) {

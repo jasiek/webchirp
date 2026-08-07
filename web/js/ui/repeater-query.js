@@ -203,7 +203,7 @@ export function createRepeaterQuery(ctx) {
     setModalOpen(true);
     // Paired with repeater_import, this shows how many people open the filter
     // modal and never run a query.
-    trackEvent("repeater_modal_opened", { source: source.key });
+    trackEvent("repeater_modal_opened", { repeater_source: source.key });
     log.setStatus(`Configure ${source.label} query.`);
   }
 
@@ -251,7 +251,7 @@ export function createRepeaterQuery(ctx) {
     // The country code is a filter the user picked from a fixed list; the
     // latitude/longitude fields are never reported.
     trackEvent("repeater_import", {
-      source: source.key,
+      repeater_source: source.key,
       country: String(dom.przemiennikiCountryEl.value || "").toLowerCase() || "any",
       band_count: selectedBands().length,
       mode_count: selectedModes().length,
@@ -311,10 +311,10 @@ export function createRepeaterQuery(ctx) {
         await geolocate();
         // Only that geolocation was used and whether it worked — the
         // coordinates it produced stay in the form.
-        trackEvent("repeater_geolocate", { source: activeSource, outcome: "ok" });
+        trackEvent("repeater_geolocate", { repeater_source: activeSource, outcome: "ok" });
       } catch (error) {
         trackEvent("repeater_geolocate", {
-          source: activeSource,
+          repeater_source: activeSource,
           outcome: "failed",
           error_kind: classifyErrorKind(error),
         });

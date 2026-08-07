@@ -1,10 +1,11 @@
-// Google Analytics event reporting. gtag() itself is loaded by index.html; this
-// module is the only place the rest of the UI is allowed to reach it.
+// The UI's side of analytics: the parameters every event site builds, and the
+// one import path the UI modules reach gtag through.
 //
-// Analytics is best-effort telemetry: gtag is absent in the headless tests,
-// blocked outright for a good share of real users, and must never be able to
-// break the operation it is reporting on. Every send is therefore guarded and a
-// throwing gtag is swallowed.
+// trackEvent lives in web/js/analytics.js, which the two pages load directly —
+// it owns the production-host gate, the vendor tag and the launch context, and
+// is inert wherever gtag is absent (off-domain, behind a blocker, in the
+// headless tests). It is re-exported here so a UI module never has to know
+// which side of that line it is on.
 //
 // Two rules govern what may be sent:
 //   - No user data. Never a file name, a channel name or comment, a frequency,
@@ -12,21 +13,13 @@
 //     identifier, a fixed enum, or a bucketed count.
 //   - Bounded cardinality. GA4 drops high-cardinality parameters, so free-form
 //     text — error messages above all — is mapped onto a small fixed vocabulary
-//     before it is sent, rather than reported verbatim.
+//     before it is sent, rather than reported verbatim. Anything sent also has
+//     to be declared in CUSTOM_DIMENSIONS, or GA collects it and shows it
+//     nowhere; scripts/test-ga-dimensions.mjs fails the build if it is not.
 
 import { errorDetails } from "./format.js";
 
-export function trackEvent(name, params = {}) {
-  const gtag = globalThis.gtag;
-  if (typeof gtag !== "function") {
-    return;
-  }
-  try {
-    gtag("event", String(name), params);
-  } catch {
-    // A blocked or half-initialized gtag must not turn into a failed clone.
-  }
-}
+export { trackEvent } from "../analytics.js";
 
 // The driver identity every radio-scoped event carries. Vendor/model answer
 // "which radios do people own", module/class answer "which CHIRP driver ran",

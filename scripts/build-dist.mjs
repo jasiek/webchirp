@@ -7,7 +7,17 @@ const DIST_DIR = path.join(ROOT, "dist");
 const WEB_DIR = path.join(ROOT, "web");
 const HASHED_EXTS = new Set([".js", ".css", ".py"]);
 const REWRITE_EXTS = new Set([".html", ".js", ".css"]);
-const REQUIRED_WEB_FILES = ["js/datasources.js"];
+// Assets whose absence is invisible at runtime until a user notices something
+// missing: the manifest and its icons only matter when someone tries to install
+// the app to a home screen, which no test page load exercises.
+const REQUIRED_WEB_FILES = [
+  "js/datasources.js",
+  "manifest.webmanifest",
+  "images/icon-192.png",
+  "images/icon-512.png",
+  "images/icon-maskable-512.png",
+  "images/apple-touch-icon.png",
+];
 
 function toPosix(relPath) {
   return relPath.split(path.sep).join("/");

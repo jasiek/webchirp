@@ -2,7 +2,7 @@
 // chirp/ submodule and the committed web/radio-catalog.json must match this
 // revision; scripts/build-catalog.mjs enforces it at catalog build time and
 // the runtime rejects a mismatched static catalog.
-export const DEFAULT_CHIRP_REVISION = "61a03fc242a685335bae2f449d685fc59de30e6d";
+export const DEFAULT_CHIRP_REVISION = "b7ae1b65f950f2a689f3c8a609064d487eee5345";
 
 const CORE_CHIRP_RELATIVE_FILES = [
   "chirp/__init__.py",
@@ -11,6 +11,10 @@ const CORE_CHIRP_RELATIVE_FILES = [
   "chirp/memmap.py",
   "chirp/chirp_common.py",
   "chirp/directory.py",
+  // CSV export runs memories through import_logic the way CHIRP's own export
+  // does, so it has to be seeded before runtime_bridge.py imports it — the
+  // lazy CDN finder is installed further down that same module.
+  "chirp/import_logic.py",
   "chirp/pyPEG.py",
   "chirp/bitwise_grammar.py",
   "chirp/bitwise.py",

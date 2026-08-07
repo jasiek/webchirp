@@ -1,5 +1,27 @@
 # Release Notes
 
+## 2026-08-02
+- The app can now be installed to an Android or iOS home screen: a web app manifest, a generated 192/512/maskable/apple-touch icon set, and a theme-color status bar, so it launches standalone from the launcher (#52).
+- Added a 🇬🇧 Query RSGB ETCC API action that turns a GPS fix into a list of nearby UK repeaters, nearest first; unlike the przemienniki.net and RepeaterBook imports it needs no CORS proxy, so it works on deployments where those two are disabled (#47).
+- Binary `.img` files whose driver differs only by variant or alias now load: `Quansheng_UV-K5_egzumer.img` previously failed with `Unsupported model` because the matcher ignored `variant`, resolved to the wrong UV-K5 driver, and that wrong-but-resolved match suppressed the all-drivers fallback (#46).
+- Deploys now run the full test suite and the Python syntax check before uploading, so a failing test leaves the live site up; the asset-retention step, which had been silently doing nothing since the move to codeplug.org, points at the right hostname again (#45).
+- Asset retention is covered by tests driving the real script against a fake Pages site, so an unreachable host fails the deploy instead of retaining nothing while reporting success (#42).
+- The channel view now shows its "No channels loaded" notice from first paint instead of only once the Pyodide runtime has finished booting.
+- Dropped test stubs for DOM elements the page no longer has and pinned the remaining stubs to the selectors `web/js/ui/dom.js` declares; no user-visible change (#43).
+
+## 2026-07-30
+- Binary `.img` files that carry no CHIRP metadata trailer now load: when nothing identifies the driver up front, every driver is imported once per session so CHIRP's own byte-sniffing can detect the model — Yaesu FT-60/FT-817/VX-*, Baofeng UV-3R, Puxing, TYT TH-7800, Wouxun KG-UV8D and the Kenwood TK-* series all previously failed with `Unknown file format` (#28).
+- Added an app-wide progress strip at the top of the Debug Output panel, so the ~20-second all-drivers load reports its progress instead of looking like a hang; the app now uses Arial throughout, keeping the debug log monospace (#41).
+- Writing edited channels back to a radio or `.img` no longer corrupts power levels, duplex, or frequency precision — 113 of 248 upstream test images previously failed to re-export (#32, fixes #31).
+- CSV export now matches desktop CHIRP's own export: a phantom channel 0 no longer appears on radios whose channels start at location 1, D-STAR channels are no longer dropped, and power is written in watts as CHIRP writes it (#36).
+- Hovering a Power cell or the Power column header now shows what each driver power label is worth in watts, e.g. `Hi = 5.0W, L3 = 2.5W` (#37).
+- The Quansheng TG-UV2+ now appears in the radio list and its images detect correctly; drivers that import pyserial at module scope no longer fail silently in the browser runtime (#38, fixes #29).
+- The app now opens with an empty channel list and a "No channels loaded" notice instead of two example channels; the Load Sample button was removed (#40).
+
+## 2026-07-28
+- Added a native CH340/CH341 WebUSB driver, so the most common cheap programming cables now work on Android Chrome alongside the existing FTDI and PL2303 support (#24).
+- The "Updated `<date>`" line under the title is now generated at build time from the newest heading in these release notes, instead of shipping a stale committed date (#23).
+
 ## 2026-07-27
 - Dragging a CHIRP CSV or binary `.img` file anywhere onto the page now loads it, with the same replace-or-merge prompt as the Import CSV picker (#19).
 - Virtualized the channel grid: insert/remove/move on a 500-channel codeplug now takes 2–9 ms instead of 2.0–3.7 s (#18).

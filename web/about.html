@@ -2,9 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Same analytics wiring as index.html; the module below owns the logic,
+         including the production-host gate and the vendor loader it injects. -->
+    <script type="module" src="./js/analytics.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>About WebCHIRP</title>
     <link rel="icon" href="./favicon.ico" sizes="any" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./images/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0d5ea8" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body class="about-page">

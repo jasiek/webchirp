@@ -1,38 +1,18 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <!--
-      Analytics runs only on the production deployment. Anyone can serve this
-      app — dev servers on localhost, forks on their own Pages site — and every
-      one of those copies carries this measurement ID, so without the host check
-      they all report into the same property. One developer reloading localhost
-      all day is indistinguishable from real traffic there.
-
-      The tag itself is gated rather than just our own events: the snippet sends
-      page_view and session_start on its own, which is exactly the traffic that
-      has to stay out. Off-domain nothing is requested from googletagmanager,
-      gtag stays undefined, and web/js/ui/analytics.js no-ops.
-
-      www is allowed alongside the apex because CNAME points at the apex and a
-      www visitor who is not redirected is real traffic we would otherwise drop.
-      Forks are unaffected by that: they are on github.io or a domain of their
-      own. Keep this list in step with scripts/test-analytics.mjs.
-    -->
-    <script>
-      if (location.hostname === 'codeplug.org' || location.hostname === 'www.codeplug.org') {
-        window.dataLayer = window.dataLayer || [];
-        window.gtag = function gtag(){dataLayer.push(arguments);};
-        gtag('js', new Date());
-
-        gtag('config', 'G-80DP6MQ180');
-
-        var gtagScript = document.createElement('script');
-        gtagScript.async = true;
-        gtagScript.src = 'https://www.googletagmanager.com/gtag/js?id=G-80DP6MQ180';
-        document.head.appendChild(gtagScript);
-      }
-    </script>
     <meta charset="UTF-8" />
+    <!--
+      Analytics. Everything with logic in it lives in the module below, shared
+      with about.html: the production-host gate, the vendor loader it injects,
+      the launch-context parameters and the PWA install events. The loader is
+      created there rather than sitting here as a static tag because every copy
+      of this app carries the same measurement ID — dev servers, forks on their
+      own Pages site — and off the production host nothing may be requested from
+      the vendor at all. Do not spell asset paths out in prose here — build-dist
+      rewrites every occurrence of one, comments included.
+    -->
+    <script type="module" src="./js/analytics.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
       Base URL of the proxy that fronts przemienniki.net and repeaterbook.com
@@ -48,6 +28,8 @@
       content="Browser-based CHIRP interface for programming compatible radios with Web Serial."
     />
     <link rel="canonical" href="https://codeplug.org/" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link rel="preconnect" href="https://api.github.com" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="WebCHIRP" />
     <meta property="og:title" content="WebCHIRP" />
@@ -72,6 +54,14 @@
       content="WebCHIRP interface showing radio controls, channel table, and debug output."
     />
     <link rel="icon" href="./favicon.ico" sizes="any" />
+    <!--
+      Home-screen install metadata. The manifest alone is enough for Chrome on
+      Android to mint a WebAPK (the service-worker requirement was dropped in
+      Chrome 108); iOS reads apple-touch-icon rather than the manifest icons.
+    -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./images/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0d5ea8" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -122,7 +112,6 @@
               hidden
             ></a>
           </div>
-          <button id="load-sample">Load Sample</button>
           <button id="import-csv" title="Load a CHIRP CSV file (or drag one onto the page)">
             Import CSV
           </button>
@@ -250,14 +239,38 @@
                   <button id="channel-import-repeaterbook" type="button" role="menuitem">
                     🌍 Query repeaterbook.com
                   </button>
+                  <button id="channel-import-rsgb" type="button" role="menuitem">
+                    🇬🇧 Query RSGB ETCC API
+                  </button>
                 </div>
               </div>
             </div>
-            <div class="mem-table-scroll" id="mem-table-scroll">
-              <table id="mem-table">
-                <thead></thead>
-                <tbody></tbody>
-              </table>
+            <div class="channel-grid">
+              <!--
+                The markup starts in the empty state: the first render only runs
+                once the Pyodide runtime is up, so anything else would leave a
+                blank grid area for the whole boot. renderEmptyState() flips the
+                pair as soon as there are channels.
+              -->
+              <div class="mem-table-scroll" id="mem-table-scroll" hidden>
+                <table id="mem-table">
+                  <thead></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="channel-empty-state" class="channel-empty-state">
+                <div class="channel-empty-card">
+                  <span class="channel-empty-icon" aria-hidden="true">📻</span>
+                  <h2>No channels loaded</h2>
+                  <p>
+                    To get started, connect a radio and clone it, load a CSV, or load a binary
+                    codeplug.
+                  </p>
+                  <p class="channel-empty-hint">
+                    Dragging a .csv or .img file onto the page works too.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -277,6 +290,27 @@
       </main>
 
       <section class="debug-output-panel">
+        <!--
+          App-wide progress for long runtime work that is not tied to one panel.
+          It lives inside this panel, above the header, so it shares the panel's
+          single top border and background rather than adding a second rule
+          across the page. A bar inside a collapsible sidebar section (see
+          #clone-progress) is invisible exactly when it matters, which is why
+          this one is not there.
+        -->
+        <div id="app-progress" class="app-progress" hidden>
+          <div class="app-progress-text">
+            <!--
+              aria-live sits on the label, not the container: the label changes
+              once per operation, while the count ticks once per driver module —
+              a live region around both would announce ~191 times during one
+              sweep. The <progress> element carries the numbers on request.
+            -->
+            <span id="app-progress-label" class="app-progress-label" aria-live="polite"></span>
+            <span id="app-progress-count"></span>
+          </div>
+          <progress id="app-progress-bar" max="100"></progress>
+        </div>
         <div class="debug-header">
           <h2>Debug Output</h2>
           <div class="debug-actions">
@@ -339,6 +373,62 @@
         <div class="modal-actions">
           <button id="przemienniki-cancel" type="button">Cancel</button>
           <button id="przemienniki-submit" type="submit">Query API</button>
+        </div>
+      </form>
+    </div>
+
+    <!--
+      The RSGB/ETCC directory is UK-only, so the country is fixed rather than
+      chosen: a picker with one entry is a control that cannot do anything.
+    -->
+    <div
+      id="rsgb-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="rsgb-modal-title"
+    >
+      <form id="rsgb-form" class="modal-card">
+        <h2 id="rsgb-modal-title">Query RSGB ETCC API</h2>
+        <div class="modal-grid">
+          <span>Country</span>
+          <span class="modal-fixed-value">🇬🇧 United Kingdom</span>
+
+          <span>Band</span>
+          <div id="rsgb-band-list" class="modal-modes"></div>
+
+          <span>Mode</span>
+          <div id="rsgb-mode-list" class="modal-modes"></div>
+
+          <label for="rsgb-onlyoperational">Only operational</label>
+          <input id="rsgb-onlyoperational" name="onlyoperational" type="checkbox" checked />
+
+          <label for="rsgb-latitude">Latitude</label>
+          <div class="modal-geo-row">
+            <input id="rsgb-latitude" name="latitude" type="number" step="any" />
+            <button
+              id="rsgb-geolocate"
+              class="modal-geo-button"
+              type="button"
+              title="Use current location"
+              aria-label="Use current location"
+            >
+              🛰️
+            </button>
+          </div>
+
+          <label for="rsgb-longitude">Longitude</label>
+          <input id="rsgb-longitude" name="longitude" type="number" step="any" />
+
+          <span>Locator</span>
+          <span id="rsgb-locator" class="modal-fixed-value">--</span>
+
+          <label for="rsgb-radius">Distance (km)</label>
+          <input id="rsgb-radius" name="radius" type="number" min="1" max="500" step="1" value="30" />
+        </div>
+        <div class="modal-actions">
+          <button id="rsgb-cancel" type="button">Cancel</button>
+          <button id="rsgb-submit" type="submit">Query API</button>
         </div>
       </form>
     </div>

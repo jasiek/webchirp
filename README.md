@@ -61,13 +61,19 @@ dispatched to a chip-specific driver:
   detects the chip generation (01/HX/TA/TB and the newer HXN family:
   GC/GB/GT/GL/GE/GS) and applies the matching init and register map. Also
   verified end-to-end on Android Chrome.
+- **WCH CH340/CH341** adapters use a built-in CH340-over-WebUSB driver that
+  reads the chip version to pick the right register map and probes for the
+  clone-silicon prescaler quirk. Enumeration and baud/line configuration are
+  verified against a real adapter; a full clone against a radio has not been
+  exercised yet, so the bulk read path is still untested.
 - **USB CDC-ACM** devices are dispatched to Google's `web-serial-polyfill`.
   This path is wired up but untested — most radio programming cables are not
   CDC-ACM.
-- Other vendor-specific UART bridges (CH340, CP2102) are **not supported**
-  over WebUSB; they need chip-specific drivers that have not been written yet
-  (see `web/js/ftdi-webusb.js` and `web/js/pl2303-webusb.js` for the pattern)
-  and still require native Web Serial on desktop.
+- Other vendor-specific UART bridges (CP2102) are **not supported** over
+  WebUSB; they need chip-specific drivers that have not been written yet (see
+  `web/js/ftdi-webusb.js`, `web/js/pl2303-webusb.js` and
+  `web/js/ch340-webusb.js` for the pattern) and still require native Web
+  Serial on desktop.
 
 `npm run dev` serves with cross-origin isolation headers (`COOP`/`COEP`) so
 Pyodide synchronous JS bridging can use `SharedArrayBuffer` without warnings.

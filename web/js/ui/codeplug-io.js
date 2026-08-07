@@ -2,8 +2,6 @@ import { base64ToBytes, buildExportFileName, bytesToBase64 } from "./format.js";
 import { codeplugParams, radioEventParams, trackEvent } from "./analytics.js";
 import { requireRuntimeApi } from "./state.js";
 
-const DEFAULT_SAMPLE_CSV = `Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment\n0,Simplex1,146.520000,,0.600000,,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,National Calling\n1,RepeaterA,146.940000,-,0.600000,TSQL,88.5,88.5,23,NN,23,Tone->Tone,FM,5.00,,5.0W,Local repeater\n`;
-
 const LOADABLE_FILE_KINDS = new Map([
   [".csv", "csv"],
   [".img", "img"],
@@ -43,8 +41,8 @@ export function createCodeplugIo(ctx) {
       ...radioEventParams(state.selectedRadio),
       ...codeplugParams(state),
       format,
-      source,
-      mode,
+      import_source: source,
+      import_mode: mode,
     });
   }
 
@@ -108,8 +106,18 @@ export function createCodeplugIo(ctx) {
     }
   }
 
-  async function loadCsvText(csvText) {
-    applyParsedCsv(await parseCsvViaRuntime(csvText), "replace", "sample");
+  // Startup state: no channels, but a column schema in place so the grid can
+  // accept a hand-inserted channel before anything has been loaded. A radio
+  // selection replaces these headers with the driver's own.
+  async function loadEmptySchema() {
+    const defaults = await requireRuntimeApi(state).getDefaultHeaders();
+    state.currentHeaders = state.radioMetadata.headers?.length
+      ? state.radioMetadata.headers
+      : (defaults.headers || []);
+    state.currentRows = [];
+    ctx.table.clearInvalidHighlights();
+    ctx.table.resetRowSelection();
+    ctx.table.render();
   }
 
   // Load a CSV file into the editor, asking first when doing so would discard
@@ -369,13 +377,6 @@ export function createCodeplugIo(ctx) {
       }
     });
 
-    dom.loadSampleEl.addEventListener("click", async () => {
-      // Separates people evaluating the app from people working on their own
-      // codeplug; init() loads the same sample without going through here.
-      trackEvent("sample_loaded", radioEventParams(state.selectedRadio));
-      await runFileLoad("Sample load", () => loadCsvText(DEFAULT_SAMPLE_CSV));
-    });
-
     dom.importCsvEl.addEventListener("click", () => {
       dom.fileInput.click();
     });
@@ -428,7 +429,7 @@ export function createCodeplugIo(ctx) {
 
   return {
     bindEvents,
-    loadSampleCsv: () => loadCsvText(DEFAULT_SAMPLE_CSV),
+    loadEmptySchema,
     isImportChoiceModalOpen,
     resolveImportChoice,
   };

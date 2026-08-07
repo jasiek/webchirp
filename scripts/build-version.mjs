@@ -1,17 +1,30 @@
-import { execFileSync } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { DEFAULT_CHIRP_REVISION } from "../web/js/python-sources.mjs";
+
 const ROOT = process.cwd();
+const RELEASE_NOTES = path.join(ROOT, "RELEASE_NOTES.md");
 const OUTPUT = path.join(ROOT, "web", "version.json");
 
-function git(args) {
-  return execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
+// The "Updated <date>" line links to RELEASE_NOTES.md, so the newest release
+// heading there is the date the widget must show.
+async function latestReleaseDate() {
+  const notes = await readFile(RELEASE_NOTES, "utf8");
+  const match = notes.match(/^##\s+(\d{4}-\d{2}-\d{2})\s*$/m);
+  if (!match) {
+    throw new Error(
+      `No "## YYYY-MM-DD" release heading found in ${path.relative(ROOT, RELEASE_NOTES)}`,
+    );
+  }
+  return match[1];
 }
 
 async function main() {
-  const lastUpdated = git(["log", "-1", "--format=%cd", "--date=format:%Y-%m-%d"]);
-  const chirpSha = git(["-C", "chirp", "rev-parse", "HEAD"]);
+  const lastUpdated = await latestReleaseDate();
+  // The runtime fetches CHIRP sources at this revision, so it — not the local
+  // submodule checkout — is what the widget should advertise.
+  const chirpSha = DEFAULT_CHIRP_REVISION;
 
   const version = {
     lastUpdated,
