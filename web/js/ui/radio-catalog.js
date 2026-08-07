@@ -439,6 +439,12 @@ export function createRadioCatalog(ctx) {
 
     dom.radioMakeEl.addEventListener("change", () => {
       refreshModelOptions();
+      // A vendor change reports the model it auto-defaulted to, which the user
+      // then usually replaces — so picking a radio through the dropdowns sends
+      // two radio_selected events. Both are real (the driver for the defaulted
+      // model does get loaded), and method separates them: count method="model"
+      // for radios people chose, method="make" only for what they passed
+      // through on the way.
       trackRadioSelected(state.selectedRadio, "make");
       reloadForSelectedRadio();
     });

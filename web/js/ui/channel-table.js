@@ -255,6 +255,11 @@ export function createChannelTable({ dom, state, log, actions }) {
     const selectedIndexes = sortedSelectedRowIndexes();
     const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
     state.currentRows.splice(insertAt, 0, ...rowsToInsert);
+    // Every bulk insert lands here — repeater queries, RSGB queries, band-plan
+    // presets — and each one makes the codeplug no longer purely whatever it
+    // was read from. Reporting an upload of that as "radio" would answer the
+    // provenance question wrongly on exactly the path it exists for.
+    state.codeplugSource = "mixed";
     reindexLocationColumn();
     clearInvalidHighlights();
 

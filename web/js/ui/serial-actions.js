@@ -322,11 +322,11 @@ export function createSerialActions(ctx) {
     const startedAt = Date.now();
     try {
       trackRadioEvent("radio_download", radio);
-      log.setStatus(`Downloading from ${makeModelLabel(state.selectedRadio)}...`);
-      beginCloneProgress(`Downloading from ${makeModelLabel(state.selectedRadio)}...`);
+      log.setStatus(`Downloading from ${makeModelLabel(radio)}...`);
+      beginCloneProgress(`Downloading from ${makeModelLabel(radio)}...`);
       const result = await requireRuntimeApi(state).downloadSelectedRadio({
-        module: state.selectedRadio.module,
-        className: state.selectedRadio.className,
+        module: radio.module,
+        className: radio.className,
       });
       state.currentHeaders = state.radioMetadata.headers?.length
         ? state.radioMetadata.headers
@@ -346,7 +346,7 @@ export function createSerialActions(ctx) {
       ctx.table.render();
       ctx.settings.updateViewButtons();
       ctx.settings.render();
-      log.setStatus(`${makeModelLabel(state.selectedRadio)} download complete (${state.currentRows.length} channels).`);
+      log.setStatus(`${makeModelLabel(radio)} download complete (${state.currentRows.length} channels).`);
       trackCloneOutcome("radio_download_success", radio, startedAt, codeplugParams(state));
       if (result.ident) {
         log.logSerial(`IDENT ${result.ident}`);
@@ -365,6 +365,9 @@ export function createSerialActions(ctx) {
       log.setStatus("Select a radio make/model first.");
       return;
     }
+    // Captured for the same reason as in downloadFromRadio(): the selection can
+    // change while the write is in flight, and every label, payload and event
+    // below has to keep meaning the radio the upload started against.
     const radio = state.selectedRadio;
     const startedAt = Date.now();
     // Distinguishes a codeplug CHIRP itself rejected from a transfer that
@@ -389,18 +392,18 @@ export function createSerialActions(ctx) {
         return;
       }
       stage = "transfer";
-      log.setStatus(`Uploading to ${makeModelLabel(state.selectedRadio)}...`);
-      beginCloneProgress(`Uploading to ${makeModelLabel(state.selectedRadio)}...`);
+      log.setStatus(`Uploading to ${makeModelLabel(radio)}...`);
+      beginCloneProgress(`Uploading to ${makeModelLabel(radio)}...`);
       const uploadResult = await requireRuntimeApi(state).uploadSelectedRadio({
-        module: state.selectedRadio.module,
-        className: state.selectedRadio.className,
+        module: radio.module,
+        className: radio.className,
         rows: state.currentRows,
         settings: ctx.settings.getGroups(),
       });
       ctx.settings.setGroups(uploadResult.settings);
       ctx.settings.clearInvalid();
       ctx.settings.render();
-      log.setStatus(`${makeModelLabel(state.selectedRadio)} upload complete.`);
+      log.setStatus(`${makeModelLabel(radio)} upload complete.`);
       // codeplug_source is the question this event exists to answer on the
       // write path: whether people upload what they just read off the radio,
       // or a file they brought with them.

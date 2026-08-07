@@ -1,5 +1,11 @@
 import { base64ToBytes, buildExportFileName, bytesToBase64 } from "./format.js";
-import { codeplugParams, radioEventParams, trackEvent } from "./analytics.js";
+import {
+  classifyErrorKind,
+  codeplugParams,
+  errorTypeName,
+  radioEventParams,
+  trackEvent,
+} from "./analytics.js";
 import { requireRuntimeApi } from "./state.js";
 
 const LOADABLE_FILE_KINDS = new Map([
@@ -257,7 +263,7 @@ export function createCodeplugIo(ctx) {
   // prompt is open would overwrite the pending choice and strand the first
   // one's promise forever, and two loads racing to replace the channel list
   // would leave the editor showing whichever finished last.
-  async function runFileLoad(label, work) {
+  async function runFileLoad(label, work, { format = "unknown", source = "button" } = {}) {
     if (fileLoadInFlight) {
       log.setStatus("A file is already loading; wait for it to finish.");
       return;
@@ -266,6 +272,16 @@ export function createCodeplugIo(ctx) {
     try {
       await work();
     } catch (error) {
+      // The counterpart to codeplug_import. Without it a file CHIRP could not
+      // parse — the most interesting import there is — looks exactly like a
+      // file nobody tried to import.
+      trackEvent("codeplug_import_failed", {
+        ...radioEventParams(state.selectedRadio),
+        format,
+        import_source: source,
+        error_kind: classifyErrorKind(error),
+        error_type: errorTypeName(error),
+      });
       log.reportActionError(label, error);
     } finally {
       fileLoadInFlight = false;
@@ -316,7 +332,10 @@ export function createCodeplugIo(ctx) {
     const [file] = files;
     const ignored = files.length > 1 ? `; ignoring ${files.length - 1} other file(s)` : "";
     log.logDebug(`DROP ${file.name}${ignored}`);
-    await runFileLoad("File drop", () => loadCodeplugFile(file));
+    await runFileLoad("File drop", () => loadCodeplugFile(file), {
+      format: classifyLoadableFile(file.name) || "unknown",
+      source: "drag_drop",
+    });
   }
 
   // Files dropped anywhere on the page load into the channel browser, so these
@@ -388,7 +407,7 @@ export function createCodeplugIo(ctx) {
       }
 
       try {
-        await runFileLoad("CSV import", () => importCsvFile(file));
+        await runFileLoad("CSV import", () => importCsvFile(file), { format: "csv" });
       } finally {
         dom.fileInput.value = "";
       }
@@ -420,7 +439,7 @@ export function createCodeplugIo(ctx) {
         return;
       }
       try {
-        await runFileLoad("Binary import", () => importBinaryCodeplug(file));
+        await runFileLoad("Binary import", () => importBinaryCodeplug(file), { format: "img" });
       } finally {
         dom.imgFileInput.value = "";
       }
