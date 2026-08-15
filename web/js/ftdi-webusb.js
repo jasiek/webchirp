@@ -115,6 +115,10 @@ export class FtdiSerialPort {
 
   async open(options = {}) {
     const baudRate = Number(options.baudRate) || 9600;
+    // close() latches _closed, and the read loop below exits the moment it is
+    // set. Reopening the same port object without clearing it yields streams
+    // that never deliver a byte.
+    this._closed = false;
 
     try {
       await this.device.open();

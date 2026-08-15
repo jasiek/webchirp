@@ -250,6 +250,9 @@ export class Pl2303SerialPort {
 
   async open(options = {}) {
     const baudRate = Number(options.baudRate) || 9600;
+    // close() latches _closed and the read loop exits as soon as it is set;
+    // reopening the same port object needs it cleared or no byte ever arrives.
+    this._closed = false;
 
     try {
       await this.device.open();
