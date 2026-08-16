@@ -189,6 +189,109 @@ test("an FTDI device that omits its status header fails the suite", async () => 
   assert.deepEqual(statusOf(summary, "byte-transparency"), ["fail"]);
 });
 
+test("the session leaves both streams unlocked so the port can close", async () => {
+  // Regression: close() on a writer does NOT release its lock, so a session
+  // that closed instead of releasing left the writable locked, SerialPort
+  // .close() rejected with InvalidStateError, and every later pass failed to
+  // open. The echo port models that check; the chip fakes do not, because real
+  // chip drivers do not either.
+  const port = createEchoPort();
+  const summary = await runLoopbackSuite(port, SINGLE_BAUD);
+
+  assert.equal(summary.failed, 0, reportOn(summary));
+  assert.deepEqual(resultsFor(summary, "teardown"), [], "port failed to close after a pass");
+});
+
+test("a port that cannot be closed reports it instead of failing the next pass", async () => {
+  // The failure mode this exists to prevent: a swallowed close error surfaces
+  // one pass later as "could not open port", pointing at the wrong thing.
+  const port = createEchoPort();
+  const realClose = port.close.bind(port);
+  let closes = 0;
+  port.close = async () => {
+    closes += 1;
+    await realClose();
+    if (closes === 1) {
+      throw new Error("device went away");
+    }
+  };
+  const summary = await runLoopbackSuite(port, { ...SINGLE_BAUD, baudRates: [9600, 115200] });
+
+  assert.deepEqual(statusOf(summary, "teardown"), ["fail"]);
+  assert.match(resultsFor(summary, "teardown")[0].detail, /closing the port failed: device went away/);
+});
+
+test("an unsorted baudRates list still runs the slow cases at the highest rate", async () => {
+  // Taking the last element as "the highest" would run the throughput case at
+  // 9600 against a budget computed for 115200 — a guaranteed false failure.
+  const port = createEchoPort();
+  const summary = await runLoopbackSuite(port, { ...FAST_SUITE_OPTIONS, baudRates: [115200, 57600] });
+
+  assert.deepEqual(resultsFor(summary, "sustained-throughput").map((r) => r.baudRate), [115200]);
+  assert.deepEqual(
+    resultsFor(summary, "byte-transparency").map((r) => r.baudRate),
+    [57600, 115200],
+    "per-baud cases should run in ascending order",
+  );
+  assert.equal(summary.failed, 0, reportOn(summary));
+});
+
+test("results from a pass that never opened still reach onCase", async () => {
+  // The diagnostics page builds its table only from onCase events, so a result
+  // that skips them is invisible there even though it counts in the summary.
+  const port = createEchoPort({ faults: { failReopen: true } });
+  const seen = [];
+  const summary = await runLoopbackSuite(port, {
+    ...SINGLE_BAUD,
+    onCase: (event) => {
+      if (event.phase === "finish") {
+        seen.push(event.id);
+      }
+    },
+  });
+
+  assert.ok(summary.failed > 0, reportOn(summary));
+  assert.deepEqual(
+    seen.slice().sort(),
+    summary.results.map((r) => r.id).sort(),
+    "every recorded result should have been announced through onCase",
+  );
+});
+
+test("a pass that never opened still skips the cases it would have skipped", async () => {
+  // control-lines is inapplicable unless the user says they jumpered them.
+  // Reporting it as FAIL sends them checking hardware they were told was
+  // optional, and inflates the failure count.
+  const port = createEchoPort({ faults: { failReopen: true } });
+  const summary = await runLoopbackSuite(port, SINGLE_BAUD);
+
+  assert.deepEqual(statusOf(summary, "control-lines"), ["skip"]);
+  assert.match(resultsFor(summary, "control-lines")[0].detail, /control-line jumpers/);
+});
+
+test("a port that opens but yields no streams is closed again and named accurately", async () => {
+  // Leaving a half-open port claimed breaks every later pass and any second
+  // run in the same page load.
+  const port = createEchoPort();
+  const realOpen = port.open.bind(port);
+  let closed = 0;
+  port.open = async (options) => {
+    await realOpen(options);
+    port.readable = null; // opened, but unusable
+  };
+  const realClose = port.close.bind(port);
+  port.close = async () => {
+    closed += 1;
+    await realClose();
+  };
+  const summary = await runLoopbackSuite(port, { ...SINGLE_BAUD, baudRates: [9600] });
+
+  assert.ok(closed > 0, "a port that opened must be closed even when the session cannot start");
+  const detail = resultsFor(summary, "byte-transparency")[0].detail;
+  assert.match(detail, /could not start reading from the port at 9600 baud/);
+  assert.doesNotMatch(detail, /could not open port/, "the wording must not blame open()");
+});
+
 test("the report names each case, its baud rate and why it failed", async () => {
   const healthy = formatLoopbackReport(await runLoopbackSuite(createEchoPort(), SINGLE_BAUD));
   assert.match(healthy, /PASS {2}All 256 byte values survive the round trip @ 115200/);

@@ -58,6 +58,19 @@ function setStatus(text) {
   dom.status.hidden = !text;
 }
 
+// Lock the whole form for the duration of a run, not just the buttons: the run
+// reads its settings once at the start, so leaving the checkboxes live invites
+// a change that silently does not apply.
+function setControlsDisabled(disabled) {
+  dom.run.disabled = disabled;
+  dom.choose.disabled = disabled;
+  dom.transport.disabled = disabled;
+  dom.controlLines.disabled = disabled;
+  for (const input of dom.bauds) {
+    input.disabled = disabled;
+  }
+}
+
 function selectedBaudRates() {
   return Array.from(dom.bauds)
     .filter((input) => input.checked)
@@ -129,12 +142,15 @@ function appendResultRow(result) {
 
 // A header the report can be read out of context with: what was tested, on
 // what, in which browser.
-function buildReport(summary) {
+// `settings` is snapshotted when the run starts, never re-read from the DOM:
+// a run takes tens of seconds, and a report pasted into an issue must describe
+// the run that happened rather than whatever the controls say afterwards.
+function buildReport(summary, settings) {
   return [
     `Adapter: ${chosenDescription}`,
     `Browser: ${navigator.userAgent}`,
-    `Baud rates: ${selectedBaudRates().join(", ")}`,
-    `Control lines bridged: ${dom.controlLines.checked ? "yes" : "no"}`,
+    `Baud rates: ${settings.baudRates.join(", ")}`,
+    `Control lines bridged: ${settings.controlLines ? "yes" : "no"}`,
     "",
     formatLoopbackReport(summary),
   ].join("\n");
@@ -166,15 +182,14 @@ async function onRun() {
   if (!chosenPort || running) {
     return;
   }
-  const baudRates = selectedBaudRates();
-  if (baudRates.length === 0) {
+  const settings = { baudRates: selectedBaudRates(), controlLines: dom.controlLines.checked };
+  if (settings.baudRates.length === 0) {
     setStatus("Select at least one baud rate.");
     return;
   }
 
   running = true;
-  dom.run.disabled = true;
-  dom.choose.disabled = true;
+  setControlsDisabled(true);
   dom.resultsBody.replaceChildren();
   dom.results.hidden = false;
   dom.reportWrap.hidden = true;
@@ -182,8 +197,8 @@ async function onRun() {
 
   try {
     const summary = await runLoopbackSuite(chosenPort, {
-      baudRates,
-      controlLines: dom.controlLines.checked,
+      baudRates: settings.baudRates,
+      controlLines: settings.controlLines,
       // Reported by the chip drivers; native ports do not expose it, and 64 is
       // the right assumption for a CDC endpoint.
       packetSize: Number(chosenPort.packetSize) || 64,
@@ -195,7 +210,7 @@ async function onRun() {
         appendResultRow(event);
       },
     });
-    dom.report.textContent = buildReport(summary);
+    dom.report.textContent = buildReport(summary, settings);
     dom.reportWrap.hidden = false;
     setStatus(
       `${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped.`
@@ -207,8 +222,7 @@ async function onRun() {
     setStatus(`The run stopped: ${error?.message || error}`);
   } finally {
     running = false;
-    dom.run.disabled = false;
-    dom.choose.disabled = false;
+    setControlsDisabled(false);
   }
 }
 

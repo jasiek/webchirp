@@ -128,6 +128,18 @@ npm run test:hw -- --port /dev/ttyUSB0 --module uv5r --class BaofengUV5R
 Use `radio:read` / `radio:write` for deterministic agent workflows and
 format-specific codeplug files.
 
+## Adapter loopback test (no radio needed)
+
+`web/serial-test.html` checks a USB-serial adapter and the driver behind it —
+FTDI, PL2303, CH340, the CDC polyfill or native Web Serial — by writing bytes
+and requiring them straight back. Bridge **TX to RX** on the adapter, then open
+the page (`npm run dev`, then http://localhost:8000/serial-test.html). It is
+not linked from the app: it is a bench tool, not a user feature.
+
+It cannot verify baud rate — both directions clock off the same divisor, so a
+wrong one still echoes perfectly. The same cases run against fake hardware in
+`npm run test:webusb`, with no adapter attached.
+
 ## Architecture
 
 - Entry point / wiring: `web/app.js` connects the UI controller, runtime RPC

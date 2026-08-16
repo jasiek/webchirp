@@ -196,6 +196,18 @@ export function createEchoPort({ packetSize = 64, faults = {}, idleWedgeMs } = {
     },
 
     async close() {
+      // Web Serial rejects close() while either stream is locked, and that is
+      // the check that catches a caller who closed its writer without releasing
+      // the lock — close() on a writer does not release it. The chip drivers do
+      // not enforce this (real ones do not either), so without modelling it
+      // here a leaked lock is invisible until someone plugs in real hardware.
+      if (port.readable?.locked || port.writable?.locked) {
+        const error = new Error(
+          "Failed to execute 'close' on 'SerialPort': Cannot cancel a locked stream",
+        );
+        error.name = "InvalidStateError";
+        throw error;
+      }
       closedFlag = true;
       wire.close();
       port.readable = null;

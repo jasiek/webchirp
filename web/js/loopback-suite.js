@@ -206,14 +206,17 @@ export function createPortSession(port) {
       } catch {
         // Already released.
       }
+      // Release the lock rather than closing the writer, mirroring
+      // BrowserSerialBridge._teardown(). Two reasons, both load-bearing:
+      // close() does NOT release the lock (only releaseLock() does), and a
+      // still-locked writable makes SerialPort.close() reject with
+      // InvalidStateError — which silently leaves the port open. close() also
+      // waits for pending writes to flush, so on the wedged adapter this page
+      // exists to diagnose it can hang forever.
       try {
-        await writer?.close();
+        writer?.releaseLock();
       } catch {
-        try {
-          writer?.releaseLock();
-        } catch {
-          // Already released.
-        }
+        // Already released.
       }
     },
   };
@@ -422,25 +425,41 @@ function makeResult(entry, status, detail, startedAt, ctx) {
 // Run one case against an open session, converting a throw into a "fail"
 // result. One case failing never aborts the run: on real hardware the later
 // cases are what tell you whether the fault is total or partial.
-async function runCase(entry, session, port, ctx, results) {
-  const startedAt = ctx.now();
-  ctx.onCase?.({ phase: "start", id: entry.id, title: entry.title, baudRate: entry.baudRate });
-  let result;
-  const skipReason = entry.requires ? entry.requires(port, ctx) : "";
-  if (skipReason) {
-    result = makeResult(entry, "skip", skipReason, startedAt, ctx);
-  } else {
-    try {
-      await session.drain(ctx.quietMs);
-      await entry.run(session, ctx, port);
-      result = makeResult(entry, "pass", "", startedAt, ctx);
-    } catch (error) {
-      result = makeResult(entry, "fail", error?.message || String(error), startedAt, ctx);
-    }
-  }
+// Every result reaches the caller the same way, whether it came from a case
+// that ran or from one that never got the chance. A result that skips onCase is
+// invisible to any UI built from those events.
+function recordResult(entry, status, detail, startedAt, ctx, results) {
+  const result = makeResult(entry, status, detail, startedAt, ctx);
   results.push(result);
   ctx.onCase?.({ phase: "finish", ...result });
   return result;
+}
+
+async function runCase(entry, session, port, ctx, results) {
+  const startedAt = ctx.now();
+  ctx.onCase?.({ phase: "start", id: entry.id, title: entry.title, baudRate: entry.baudRate });
+  const skipReason = entry.requires ? entry.requires(port, ctx) : "";
+  if (skipReason) {
+    return recordResult(entry, "skip", skipReason, startedAt, ctx, results);
+  }
+  try {
+    await session.drain(ctx.quietMs);
+    await entry.run(session, ctx, port);
+    return recordResult(entry, "pass", "", startedAt, ctx, results);
+  } catch (error) {
+    return recordResult(entry, "fail", error?.message || String(error), startedAt, ctx, results);
+  }
+}
+
+// Record every entry as failed because the pass never started. Cases that would
+// have skipped still skip: reporting control-lines as FAIL when the user never
+// claimed to have jumpered them sends them checking hardware they were told was
+// optional, and inflates the failure count.
+function failEntries(entries, port, detail, ctx, results) {
+  for (const entry of entries) {
+    const skipReason = entry.requires ? entry.requires(port, ctx) : "";
+    recordResult(entry, skipReason ? "skip" : "fail", skipReason || detail, ctx.now(), ctx, results);
+  }
 }
 
 // Open the port, run `entries` against it, then close. A failure to open is
@@ -449,28 +468,52 @@ async function runCase(entry, session, port, ctx, results) {
 async function runWithOpenPort(port, baudRate, entries, ctx, results) {
   // Cases read the baud in force off the context to size their timeouts.
   const caseCtx = { ...ctx, baudRate };
+  const withBaud = entries.map((entry) => ({ ...entry, baudRate }));
   let session = null;
+  let opened = false;
   try {
     await port.open({ baudRate });
+    opened = true;
     session = createPortSession(port);
     session.start();
   } catch (error) {
-    const detail = `could not open port at ${baudRate} baud: ${error?.message || error}`;
-    for (const entry of entries) {
-      results.push(makeResult({ ...entry, baudRate }, "fail", detail, ctx.now(), ctx));
+    // Opening and starting to read fail for different reasons and want
+    // different wording — "could not open port … is it open?" reads as a
+    // contradiction and points at the wrong thing.
+    const what = opened ? "could not start reading from the port at" : "could not open port at";
+    failEntries(withBaud, port, `${what} ${baudRate} baud: ${error?.message || error}`, caseCtx, results);
+    // The port is open but unusable; leaving it claimed breaks every later pass
+    // and any second run in the same page load.
+    if (opened) {
+      try {
+        await port.close();
+      } catch {
+        // Nothing better to do — the failure above is already reported.
+      }
     }
     return;
   }
   try {
-    for (const entry of entries) {
-      await runCase({ ...entry, baudRate }, session, port, caseCtx, results);
+    for (const entry of withBaud) {
+      await runCase(entry, session, port, caseCtx, results);
     }
   } finally {
     await session.close();
+    const closedAt = ctx.now();
     try {
       await port.close();
-    } catch {
-      // A close failure after the cases have run tells us nothing new.
+    } catch (error) {
+      // Never swallow this. A close that fails leaves the port claimed, so the
+      // next pass fails to open and the report blames the wrong thing — which
+      // is exactly how a leaked writer lock stayed invisible.
+      recordResult(
+        { id: "teardown", title: "Port closed cleanly after the pass", baudRate },
+        "fail",
+        `closing the port failed: ${error?.message || error}`,
+        closedAt,
+        caseCtx,
+        results,
+      );
     }
   }
 }
@@ -483,7 +526,10 @@ async function runWithOpenPort(port, baudRate, entries, ctx, results) {
  */
 export async function runLoopbackSuite(port, options = {}) {
   const ctx = { ...DEFAULTS, ...options };
-  const baudRates = ctx.baudRates.slice();
+  // Sorted, not just copied: the once-per-run cases below pick "the highest
+  // rate" off the end, and an unsorted array would run the 16 KB throughput
+  // case at the slowest rate against a timeout budgeted for the fastest.
+  const baudRates = ctx.baudRates.slice().sort((a, b) => a - b);
   if (baudRates.length === 0) {
     throw new Error("runLoopbackSuite needs at least one baud rate");
   }
