@@ -5,6 +5,7 @@
 // also what the Node tests drive against fake hardware. This file is the
 // hardware harness for the same suite: port selection, progress and reporting.
 
+import { buildLoopbackIssueUrl } from "./loopback-issue.js";
 import { formatLoopbackReport, runLoopbackSuite } from "./loopback-suite.js";
 import { createWebUsbSerial } from "./webusb-serial.js";
 
@@ -32,14 +33,28 @@ export const ELEMENT_IDS = {
   reportWrap: "loopback-report-wrap",
   report: "loopback-report",
   copy: "loopback-copy",
+  issue: "loopback-issue",
 };
 
 export const BAUD_CHECKBOX_SELECTOR = ".loopback-bauds input[type=checkbox]";
+
+// version.json is written by `npm run build:version` and is not in the repo, so
+// a tree served straight out of a checkout has none. Say so rather than leaving
+// the field blank, which reads as "nobody bothered".
+const UNKNOWN_VERSION = "unknown (version.json not served)";
 
 let dom = null;
 let chosenPort = null;
 let chosenDescription = "";
 let running = false;
+// The run currently on screen: its totals, so the issue title can say how many
+// cases failed without re-parsing the report, and the adapter it ran against,
+// because choosing a different adapter afterwards must not relabel it.
+let lastRun = null;
+// Which commit of WebCHIRP is serving this page, from the build-time
+// version.json. A report that does not name the code it came from cannot be
+// checked against a fix, and the site updates under the tester's feet.
+let webchirpVersion = UNKNOWN_VERSION;
 
 function hex4(value) {
   return `0x${Number(value).toString(16).padStart(4, "0")}`;
@@ -147,6 +162,7 @@ function appendResultRow(result) {
 // the run that happened rather than whatever the controls say afterwards.
 function buildReport(summary, settings) {
   return [
+    `WebCHIRP: ${webchirpVersion}`,
     `Adapter: ${chosenDescription}`,
     `Browser: ${navigator.userAgent}`,
     `Baud rates: ${settings.baudRates.join(", ")}`,
@@ -154,6 +170,26 @@ function buildReport(summary, settings) {
     "",
     formatLoopbackReport(summary),
   ].join("\n");
+}
+
+// Fetched once at load, not when a report is built: by then the tester may have
+// walked away from the wifi with a phone and a radio, and a fetch that fails at
+// that moment would quietly strip the version out of the report.
+async function loadVersion() {
+  try {
+    const response = await fetch("./version.json", { cache: "no-cache" });
+    if (!response.ok) {
+      return;
+    }
+    const version = await response.json();
+    if (version?.webchirpShaShort) {
+      webchirpVersion = version.lastUpdated
+        ? `${version.webchirpShaShort} (updated ${version.lastUpdated})`
+        : version.webchirpShaShort;
+    }
+  } catch {
+    // Non-essential; the report says the version is unknown.
+  }
 }
 
 async function onChoose() {
@@ -193,6 +229,7 @@ async function onRun() {
   dom.resultsBody.replaceChildren();
   dom.results.hidden = false;
   dom.reportWrap.hidden = true;
+  lastRun = null;
   setStatus("Starting…");
 
   try {
@@ -211,6 +248,7 @@ async function onRun() {
       },
     });
     dom.report.textContent = buildReport(summary, settings);
+    lastRun = { summary, adapter: chosenDescription };
     dom.reportWrap.hidden = false;
     setStatus(
       `${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped.`
@@ -234,6 +272,26 @@ async function onCopy() {
     // Clipboard permission is commonly denied; selecting the text still works.
     setStatus("Could not copy — select the report text and copy it manually.");
   }
+}
+
+// The point of the button: on a phone, selecting the report out of a <pre>,
+// switching to GitHub and pasting it is what stops a failure being reported at
+// all. Opening the pre-filled form is done straight from the click so the tap
+// still counts as a user gesture and the tab is not blocked as a pop-up.
+function onReportIssue() {
+  const url = buildLoopbackIssueUrl({
+    report: dom.report.textContent,
+    adapter: lastRun?.adapter || chosenDescription,
+    summary: lastRun?.summary,
+    version: webchirpVersion,
+    userAgent: navigator.userAgent,
+  });
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (!opened) {
+    setStatus("The browser blocked the new tab — use Copy report and paste it into an issue.");
+    return;
+  }
+  setStatus("Opened a pre-filled GitHub issue — add what you were doing and submit it.");
 }
 
 function init() {
@@ -260,6 +318,8 @@ function init() {
   dom.choose.addEventListener("click", onChoose);
   dom.run.addEventListener("click", onRun);
   dom.copy.addEventListener("click", onCopy);
+  dom.issue.addEventListener("click", onReportIssue);
+  loadVersion();
 }
 
 if (typeof document !== "undefined") {
