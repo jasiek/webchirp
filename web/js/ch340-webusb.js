@@ -150,6 +150,13 @@ export class Ch340SerialPort {
     };
   }
 
+  // Bulk IN endpoint size, so a caller can size payloads around the boundary
+  // that matters. The constructor default is the family's usual value; open()
+  // replaces it with what the descriptor actually reports.
+  get packetSize() {
+    return this._inPacketSize;
+  }
+
   async _controlOut(request, value, index) {
     const result = await this.device.controlTransferOut({
       requestType: "vendor",
@@ -229,6 +236,9 @@ export class Ch340SerialPort {
 
   async open(options = {}) {
     const baudRate = Number(options.baudRate) || 9600;
+    // close() latches _closed and the read loop exits as soon as it is set;
+    // reopening the same port object needs it cleared or no byte ever arrives.
+    this._closed = false;
 
     try {
       await this.device.open();

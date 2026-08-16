@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Adapter diagnostics. Deliberately carries no analytics tag and no manifest
+      link: this is a hardware-debugging tool, not part of the installable app,
+      and nothing here should mint page_view traffic or offer itself for install.
+      Pyodide is never loaded either — the point is that this page starts
+      instantly when someone is stood at a bench power-cycling a cable.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Adapter loopback test | WebCHIRP</title>
+    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <meta name="theme-color" content="#0d5ea8" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="about-page">
+    <main class="about-shell">
+      <section class="about-card">
+        <div class="about-header">
+          <h1>Adapter loopback test</h1>
+          <a class="toolbar-link" href="./index.html">Back to App</a>
+        </div>
+
+        <p>
+          Checks a USB-serial adapter and the driver behind it by writing bytes and
+          requiring them straight back. Bridge <strong>TX to RX</strong> on the adapter
+          before running. To test the control lines as well, also bridge
+          <strong>RTS to CTS</strong> and <strong>DTR to DSR</strong>.
+        </p>
+        <p class="loopback-caveat">
+          This cannot verify baud rate. Both directions clock off the same divisor, so a
+          wrong one still echoes perfectly — a pass means framing and buffering are sound,
+          not that the line speed is accurate.
+        </p>
+
+        <div class="loopback-unsupported" id="loopback-unsupported" hidden>
+          This browser exposes neither Web Serial nor WebUSB, so no adapter can be opened.
+          Chrome, Edge and Opera on desktop support Web Serial; Chrome on Android supports
+          WebUSB.
+        </div>
+
+        <div class="loopback-controls">
+          <label class="loopback-field">
+            <span>Transport</span>
+            <select id="loopback-transport">
+              <option value="auto" selected>Auto (native Web Serial if available)</option>
+              <option value="webserial">Native Web Serial</option>
+              <option value="webusb">WebUSB chip drivers</option>
+            </select>
+          </label>
+
+          <fieldset class="loopback-field loopback-bauds">
+            <legend>Baud rates</legend>
+            <label><input type="checkbox" value="9600" checked /> 9600</label>
+            <label><input type="checkbox" value="19200" /> 19200</label>
+            <label><input type="checkbox" value="38400" checked /> 38400</label>
+            <label><input type="checkbox" value="57600" checked /> 57600</label>
+            <label><input type="checkbox" value="115200" checked /> 115200</label>
+          </fieldset>
+
+          <label class="loopback-check">
+            <input type="checkbox" id="loopback-control-lines" />
+            RTS/CTS and DTR/DSR are also bridged
+          </label>
+
+          <div class="loopback-buttons">
+            <button type="button" id="loopback-choose">Choose adapter…</button>
+            <button type="button" id="loopback-run" disabled>Run tests</button>
+          </div>
+        </div>
+
+        <p class="loopback-adapter" id="loopback-adapter">No adapter chosen.</p>
+        <p class="loopback-status" id="loopback-status" hidden></p>
+
+        <table class="loopback-results" id="loopback-results" hidden>
+          <thead>
+            <tr>
+              <th scope="col">Result</th>
+              <th scope="col">Case</th>
+              <th scope="col">Baud</th>
+              <th scope="col">Detail</th>
+            </tr>
+          </thead>
+          <tbody id="loopback-results-body"></tbody>
+        </table>
+
+        <div class="loopback-report-wrap" id="loopback-report-wrap" hidden>
+          <div class="loopback-report-header">
+            <h2>Report</h2>
+            <button type="button" id="loopback-copy">Copy report</button>
+          </div>
+          <pre class="loopback-report" id="loopback-report"></pre>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./js/serial-test-page.js"></script>
+  </body>
+</html>
