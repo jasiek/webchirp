@@ -103,6 +103,13 @@ export class Pl2303SerialPort {
     };
   }
 
+  // Bulk IN endpoint size, so a caller can size payloads around the boundary
+  // that matters. The constructor default is the family's usual value; open()
+  // replaces it with what the descriptor actually reports.
+  get packetSize() {
+    return this._inPacketSize;
+  }
+
   _isHxn() {
     return this.chipType === PL2303_TYPE_HXN;
   }

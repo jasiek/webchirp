@@ -64,6 +64,9 @@
   --error-bg-strong: #ffdede;
   --error-text: #982b2b;
 
+  /* Pass (green) */
+  --ok-text: #1c7c3f;
+
   /* Shadows / overlays */
   --shadow-color: rgba(20, 37, 61, 0.12);
   --overlay: rgba(12, 23, 40, 0.45);
@@ -133,6 +136,9 @@
     --error-bg: #2e1719;
     --error-bg-strong: #3a1c1f;
     --error-text: #f0a0a0;
+
+    /* Pass (green) */
+    --ok-text: #7fd6a0;
 
     /* Shadows / overlays */
     --shadow-color: rgba(0, 0, 0, 0.5);
@@ -210,6 +216,176 @@ body {
   font-weight: 600;
 }
 
+/* Adapter loopback diagnostics (serial-test.html), which reuses the about-page
+   shell above for its card and layout. */
+
+.loopback-caveat {
+  color: var(--muted);
+  font-size: 0.87rem;
+}
+
+.loopback-unsupported {
+  border: 1px solid var(--warn-border);
+  background: linear-gradient(180deg, var(--warn-bg-top) 0%, var(--warn-bg-bottom) 100%);
+  border-radius: 6px;
+  padding: 0.6rem 0.7rem;
+  margin-bottom: 0.9rem;
+  font-size: 0.87rem;
+}
+
+.loopback-unsupported[hidden] {
+  display: none;
+}
+
+.loopback-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.9rem;
+  margin: 1.1rem 0 0.6rem;
+  padding: 0.85rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.loopback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.loopback-bauds {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  padding: 0.35rem 0.6rem 0.5rem;
+  margin: 0;
+}
+
+.loopback-bauds legend {
+  padding: 0 0.3rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.loopback-bauds label,
+.loopback-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.loopback-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.loopback-adapter {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.loopback-status {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.loopback-status[hidden] {
+  display: none;
+}
+
+.loopback-results {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.9rem;
+  font-size: 0.8rem;
+}
+
+.loopback-results[hidden] {
+  display: none;
+}
+
+.loopback-results th {
+  background: var(--table-header);
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.loopback-results td {
+  border: 1px solid var(--border-soft);
+  padding: 0.3rem 0.5rem;
+  vertical-align: top;
+}
+
+.loopback-mark {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.loopback-row.is-pass .loopback-mark {
+  color: var(--ok-text);
+}
+
+.loopback-row.is-fail .loopback-mark {
+  color: var(--error-text);
+}
+
+.loopback-row.is-skip .loopback-mark {
+  color: var(--muted);
+}
+
+.loopback-baud {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.loopback-detail {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+  word-break: break-word;
+}
+
+.loopback-report-wrap[hidden] {
+  display: none;
+}
+
+.loopback-report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-top: 1.1rem;
+}
+
+.loopback-report-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.loopback-report {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem;
+  background: var(--debug-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+}
+
 .app-shell {
   height: 100vh;
   height: 100dvh;
@@ -269,6 +445,16 @@ button {
 
 button:not(:disabled):hover {
   border-color: var(--accent);
+}
+
+/* Only scoped disabled styles existed, so a disabled button outside those
+   scopes looked identical to a live one — it read as broken rather than as
+   not-yet-available. */
+button:disabled {
+  background: linear-gradient(180deg, var(--control-disabled-top) 0%, var(--control-disabled-bottom) 100%);
+  border-color: var(--disabled-border);
+  color: var(--disabled-text);
+  cursor: default;
 }
 
 .toolbar-link {

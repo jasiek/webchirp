@@ -100,6 +100,13 @@ export class FtdiSerialPort {
     };
   }
 
+  // Bulk IN endpoint size, so a caller can size payloads around the boundary
+  // that matters. The constructor default is the family's usual value; open()
+  // replaces it with what the descriptor actually reports.
+  get packetSize() {
+    return this._inPacketSize;
+  }
+
   async _controlOut(request, value, index) {
     const result = await this.device.controlTransferOut({
       requestType: "vendor",
