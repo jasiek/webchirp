@@ -1,5 +1,13 @@
 # Release Notes
 
+## 2026-08-17
+- Added an adapter loopback test page (`serial-test.html`) with a transport-agnostic suite that bridges TX to RX and verifies every byte comes straight back, and fixed WebUSB chip ports silently delivering nothing when reopened after close (#56).
+- The loopback test page can now file a pre-filled GitHub issue in one tap, carrying the adapter, platform, browser, app version and a failure-first trimmed report, so mobile testers no longer copy/paste results by hand (#58).
+- The CH340 and PL2303 WebUSB drivers no longer silently drop bytes at 115200: bulk IN transfers are now kept queued so the chip's RX FIFO cannot overrun between reads, a loss that previously reported `status: "ok"` with no error anywhere (#59).
+- The FTDI driver had the same overrun defect and got the same bulk IN transfer pipeline, taking the 16 KB loopback echo from 2 failures in 30 runs to 0 in 60 (#61).
+- All three WebUSB drivers now select only bulk endpoints and fail with a clear diagnostic naming the claimed interface when a bulk pair is missing, instead of silently picking the wrong pipe on unusual layouts (#26, fixes #25).
+- Pruned eight low-value analytics dimensions, merged the make/model pair into a single `radio` dimension, and dropped the `channel_edit` event outright (#62).
+
 ## 2026-08-07
 - Clone attempts now report how they ended, not just that they were made: success carries the duration and channel count, failure carries the stage and a classified cause, which together give a per-driver success rate (#20).
 - Uploads now report when CHIRP's own preflight blocked them and which column it rejected first, so a field users cannot get past shows up as a pattern rather than as scattered bug reports (#20).
