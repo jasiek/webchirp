@@ -6,7 +6,14 @@ import { FtdiSerialPort } from "../web/js/ftdi-webusb.js";
 // answers them, the way real hardware leaves a transfer outstanding until bytes
 // arrive. A driver that keeps a queue is only observable against a fake that
 // models the queue, so this cannot be a list of pre-baked results.
-function makeFakeDevice({ cancelOnClearHalt = false } = {}) {
+function makeFakeDevice({
+  cancelOnClearHalt = false,
+  endpoints = [
+    { type: "bulk", direction: "in", endpointNumber: 1, packetSize: 64 },
+    { type: "bulk", direction: "out", endpointNumber: 2, packetSize: 64 },
+  ],
+  interfaceNumber = 0,
+} = {}) {
   const controlCalls = [];
   const clearHaltCalls = [];
   const transferInCalls = [];
@@ -19,13 +26,8 @@ function makeFakeDevice({ cancelOnClearHalt = false } = {}) {
     configuration: {
       interfaces: [
         {
-          interfaceNumber: 0,
-          alternate: {
-            endpoints: [
-              { direction: "in", endpointNumber: 1, packetSize: 64 },
-              { direction: "out", endpointNumber: 2, packetSize: 64 },
-            ],
-          },
+          interfaceNumber,
+          alternate: { endpoints },
         },
       ],
     },
@@ -102,6 +104,40 @@ test("FtdiSerialPort.open() purges FIFOs and sets the latency timer", async () =
   assert.ok(port.readable, "readable stream must be set up");
   assert.ok(port.writable, "writable stream must be set up");
 });
+
+test("FtdiSerialPort.open() ignores interrupt endpoints when selecting bulk data", async () => {
+  const { device } = makeFakeDevice({
+    endpoints: [
+      { type: "bulk", direction: "in", endpointNumber: 1, packetSize: 64 },
+      { type: "bulk", direction: "out", endpointNumber: 2, packetSize: 64 },
+      // Keep this last: the old direction-only loop overwrote bulk IN with it.
+      { type: "interrupt", direction: "in", endpointNumber: 3, packetSize: 8 },
+    ],
+  });
+  const port = new FtdiSerialPort(device);
+
+  await port.open({ baudRate: 9600 });
+
+  assert.equal(port._inEndpoint, 1);
+  assert.equal(port._outEndpoint, 2);
+  assert.equal(port.packetSize, 64);
+});
+
+for (const [missingDirection, endpoints] of [
+  ["IN", [{ type: "bulk", direction: "out", endpointNumber: 2, packetSize: 64 }]],
+  ["OUT", [{ type: "bulk", direction: "in", endpointNumber: 1, packetSize: 64 }]],
+]) {
+  test(`FtdiSerialPort.open() rejects a missing bulk ${missingDirection} endpoint`, async () => {
+    const { device, controlCalls } = makeFakeDevice({ endpoints, interfaceNumber: 7 });
+    const port = new FtdiSerialPort(device);
+
+    await assert.rejects(
+      port.open({ baudRate: 9600 }),
+      /FTDI: bulk IN\/OUT endpoints not found on interface 7/,
+    );
+    assert.deepEqual(controlCalls, [], "endpoint validation must happen before FTDI initialization");
+  });
+}
 
 test("FtdiSerialPort read path survives status-only packets (the Android wedge)", async () => {
   // Regression for a read-path deadlock observed on Android (exactly two

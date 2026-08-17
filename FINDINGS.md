@@ -72,6 +72,7 @@ CHIRP `b7ae1b6`.
 
 ## WebUSB serial adapters
 
+- **webusb-test-endpoints-must-name-their-type** (2026-08-17): WebUSB's `USBEndpoint` descriptors always identify their transfer `type`, but the original FTDI unit-test fake omitted it because that driver selected endpoints by direction alone. Once FTDI correctly filters for `type === "bulk"`, an untyped fake rejects every otherwise-valid `open()`. Driver fixtures must model descriptor type explicitly; the FTDI regression test also places an interrupt IN endpoint after bulk IN so the old direction-only selection demonstrably chooses the wrong pipe.
 - **ch340-version-not-bcddevice** (2026-07-28): the CH340/CH341 protocol branches on the chip version returned by vendor request `0x5F`, **not** on the USB `bcdDevice` word — an 0x1a86:0x7523 cable reporting `bcdDevice 0xc233` still reports a version of 0x30/0x31 over the wire. Version > 0x27 sets bit 7 of the prescaler value (otherwise the chip withholds data until a full 32-byte packet, which stalls short CHIRP replies); version >= 0x30 configures framing through the LCR register pair, and older parts are left at their 8N1 defaults.
 - **webusb-vendor-filters-are-too-broad-for-wch** (2026-07-28): FTDI and Prolific can be filtered by vendor id alone, but WCH's 0x1a86 also covers CH9102/CH343 parts that enumerate as CDC-ACM (and non-serial chips). The CH340 chooser filters on exact vendor/product pairs so those devices fall through to the CDC polyfill instead of getting the CH340 register map.
 

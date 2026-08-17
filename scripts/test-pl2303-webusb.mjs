@@ -32,7 +32,17 @@ function descriptorBytes({ usbVersion, deviceClass, maxPacketSize0, deviceVersio
 
 // Fake USBDevice for a PL2303: interrupt IN + bulk OUT + bulk IN endpoints,
 // records all control transfers, answers GET_DESCRIPTOR and the HX probe.
-function makeFakeDevice({ descriptor, hxProbeSucceeds = true, cancelOnClearHalt = false }) {
+function makeFakeDevice({
+  descriptor,
+  hxProbeSucceeds = true,
+  cancelOnClearHalt = false,
+  endpoints = [
+    { type: "interrupt", direction: "in", endpointNumber: 1, packetSize: 10 },
+    { type: "bulk", direction: "out", endpointNumber: 2, packetSize: 64 },
+    { type: "bulk", direction: "in", endpointNumber: 3, packetSize: 64 },
+  ],
+  interfaceNumber = 0,
+}) {
   const controlIn = [];
   const controlOut = [];
   const transferInCalls = [];
@@ -45,14 +55,8 @@ function makeFakeDevice({ descriptor, hxProbeSucceeds = true, cancelOnClearHalt 
     configuration: {
       interfaces: [
         {
-          interfaceNumber: 0,
-          alternate: {
-            endpoints: [
-              { type: "interrupt", direction: "in", endpointNumber: 1, packetSize: 10 },
-              { type: "bulk", direction: "out", endpointNumber: 2, packetSize: 64 },
-              { type: "bulk", direction: "in", endpointNumber: 3, packetSize: 64 },
-            ],
-          },
+          interfaceNumber,
+          alternate: { endpoints },
         },
       ],
     },
@@ -168,6 +172,25 @@ test("HX open() runs the legacy startup with kernel-correct request types", asyn
   // Bulk endpoints selected, interrupt endpoint skipped.
   assert.equal(port._inEndpoint, 3);
   assert.equal(port._outEndpoint, 2);
+});
+
+test("Pl2303SerialPort.open() reports the actual interface when a bulk endpoint is missing", async () => {
+  const { device, controlIn, controlOut } = makeFakeDevice({
+    descriptor: HX_DESCRIPTOR,
+    endpoints: [
+      { type: "interrupt", direction: "in", endpointNumber: 1, packetSize: 10 },
+      { type: "bulk", direction: "out", endpointNumber: 2, packetSize: 64 },
+    ],
+    interfaceNumber: 7,
+  });
+  const port = new Pl2303SerialPort(device);
+
+  await assert.rejects(
+    port.open({ baudRate: 9600 }),
+    /PL2303: bulk IN\/OUT endpoints not found on interface 7/,
+  );
+  assert.deepEqual(controlIn, [], "endpoint validation must happen before PL2303 probing");
+  assert.deepEqual(controlOut, [], "endpoint validation must happen before PL2303 initialization");
 });
 
 test("HXN open() skips the legacy startup and uses HXN registers", async () => {

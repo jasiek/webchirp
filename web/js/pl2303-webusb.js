@@ -312,7 +312,9 @@ export class Pl2303SerialPort {
       }
     }
     if (!this._inEndpoint || !this._outEndpoint) {
-      throw new Error("PL2303: bulk IN/OUT endpoints not found on interface 0");
+      throw new Error(
+        `PL2303: bulk IN/OUT endpoints not found on interface ${this._interfaceNumber}`,
+      );
     }
 
     const descriptor = await this._readDeviceDescriptor();

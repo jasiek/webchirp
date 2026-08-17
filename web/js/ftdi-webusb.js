@@ -164,13 +164,24 @@ export class FtdiSerialPort {
       );
     }
 
+    // Current FTDI parts expose a bare bulk pair here, but filter on type
+    // anyway so a variant that adds an interrupt endpoint (as PL2303 and CH340
+    // do for modem status) cannot silently bind the wrong endpoint.
     for (const endpoint of iface.alternate.endpoints) {
+      if (endpoint.type !== "bulk") {
+        continue;
+      }
       if (endpoint.direction === "in") {
         this._inEndpoint = endpoint.endpointNumber;
         this._inPacketSize = endpoint.packetSize || this._inPacketSize;
       } else if (endpoint.direction === "out") {
         this._outEndpoint = endpoint.endpointNumber;
       }
+    }
+    if (!this._inEndpoint || !this._outEndpoint) {
+      throw new Error(
+        `FTDI: bulk IN/OUT endpoints not found on interface ${this._interfaceNumber}`,
+      );
     }
 
     await this._controlOut(SIO_RESET, 0x0000, PORT_INDEX);
