@@ -23,6 +23,7 @@ function makeFakeDevice({
   const controlIn = [];
   const controlOut = [];
   const clearHaltCalls = [];
+  const transferInCalls = [];
   const device = {
     vendorId: 0x1a86,
     productId: 0x7523,
@@ -64,7 +65,8 @@ function makeFakeDevice({
     clearHalt: async (direction, endpoint) => {
       clearHaltCalls.push({ direction, endpoint });
     },
-    transferIn: async () => {
+    transferIn: async (endpointNumber, length) => {
+      transferInCalls.push({ endpointNumber, length });
       const next = transferResults.shift();
       if (next) {
         return next;
@@ -73,7 +75,7 @@ function makeFakeDevice({
     },
     transferOut: async () => ({ status: "ok" }),
   };
-  return { device, controlIn, controlOut, clearHaltCalls };
+  return { device, controlIn, controlOut, clearHaltCalls, transferInCalls };
 }
 
 test("ch340GetDivisor matches known CH341 prescaler/divisor encodings", () => {
@@ -237,4 +239,42 @@ test("Ch340SerialPort read path clears a stalled IN endpoint and passes raw byte
 
   assert.deepEqual(clearHaltCalls, [{ direction: "in", endpoint: 2 }]);
   assert.deepEqual(Array.from(value), [0xaa, 0xbb, 0xcc]);
+});
+
+test("Ch340SerialPort keeps several bulk IN transfers queued at once", async () => {
+  // With a single transfer outstanding the host has no IN request queued
+  // between one completing and the next being issued. The chip's 32-byte
+  // endpoint needs one every 2.8 ms at 115200 — shorter than a USB round trip
+  // on Android — so its RX FIFO overruns in the gap and drops bytes silently.
+  // Measured on a Pixel 10: one transfer in flight lost bytes on every 16 KB
+  // echo at 115200; a pipeline lost none.
+  const { device, transferInCalls } = makeFakeDevice();
+  const port = new Ch340SerialPort(device);
+  await port.open({ baudRate: 115200 });
+  // The stream pulls as soon as it is constructed, which primes the queue.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.ok(
+    transferInCalls.length > 1,
+    `expected several transfers queued at once, saw ${transferInCalls.length}`,
+  );
+});
+
+test("Ch340SerialPort asks for exactly one packet per bulk IN transfer", async () => {
+  // A bulk IN transfer ends on a short packet or on the full requested length,
+  // and this chip sends nothing to terminate one. Requesting more than a packet
+  // therefore strands any reply whose length is an exact multiple of the packet
+  // size — measured against a 512-byte request, 32-, 64- and 96-byte replies
+  // never arrived at all. Throughput must come from queue depth, not from
+  // asking for more bytes per transfer.
+  const { device, transferInCalls } = makeFakeDevice();
+  const port = new Ch340SerialPort(device);
+  await port.open({ baudRate: 115200 });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.ok(transferInCalls.length > 0, "expected the read path to queue a transfer");
+  for (const call of transferInCalls) {
+    assert.equal(call.endpointNumber, 2);
+    assert.equal(call.length, 32, "bulk IN transfers must request exactly one packet");
+  }
 });
