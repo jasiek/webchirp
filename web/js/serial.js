@@ -57,6 +57,11 @@ export class BrowserSerialBridge {
     // loop MUST report why it ended: a silently-dead read loop is
     // indistinguishable from "no data" and cost us a debugging session.
     this.onDebug = null;
+    // Optional PTT-guard hooks (see web/js/ptt-guard.js). onBeforeOpen must
+    // release any ports the guard holds open before the picker shows, or the
+    // chosen port fails to open; onAfterTeardown lets it re-park them.
+    this.onBeforeOpen = null;
+    this.onAfterTeardown = null;
     // The resolved Web Serial provider (native navigator.serial or the WebUSB
     // chip-aware provider) and which transport it represents, set on connect.
     this.serial = null;
@@ -143,6 +148,11 @@ export class BrowserSerialBridge {
 
     const serial = await this._ensureSerial();
     try {
+      try {
+        await this.onBeforeOpen?.();
+      } catch {
+        // A guard failure must never block connecting.
+      }
       this.port = await serial.requestPort({});
       await this.port.open({
         baudRate,
@@ -209,6 +219,13 @@ export class BrowserSerialBridge {
     this.writer = null;
     this.readBuffer = new Uint8Array(0);
     this._resolveReadWaiters(false);
+    try {
+      // Fire-and-forget: the guard chains internally, and a guard failure
+      // must never affect teardown.
+      this.onAfterTeardown?.();
+    } catch {
+      // Ignore guard errors.
+    }
   }
 
   getPortInfo() {

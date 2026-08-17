@@ -1,4 +1,5 @@
 import { BrowserSerialBridge, createSerialRpcHandler } from "./js/serial.js";
+import { createPttGuard } from "./js/ptt-guard.js";
 import { createRuntimeRpcClient } from "./js/runtime-rpc.js";
 import { createUiController } from "./js/ui.js";
 import { installTooltips } from "./js/tooltip.js";
@@ -24,6 +25,14 @@ ui.setRuntimeApi(rpcClient);
 
 // Read-path diagnostics (loop death, USB stats) go to the serial log.
 serialBridge.onDebug = (message) => ui.logSerial(message);
+
+// Some cables key the radio's PTT until something configures their UART
+// (issue #60); open already-granted ports as soon as they appear so an
+// affected radio stops transmitting without waiting for a Connect click.
+const pttGuard = createPttGuard({ onLog: ui.logSerial });
+serialBridge.onBeforeOpen = () => pttGuard.suspend();
+serialBridge.onAfterTeardown = () => pttGuard.resume();
+pttGuard.start();
 
 const serialCapability = serialBridge.getCapability();
 ui.setSerialController({
