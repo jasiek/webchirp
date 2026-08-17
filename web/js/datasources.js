@@ -1,3 +1,5 @@
+import { setRowGeo } from "./row-geo.js";
+
 const PMR446_FREQUENCIES_MHZ = Array.from(
   { length: 16 },
   (_, index) => (446.00625 + (index * 0.0125)).toFixed(5),
@@ -162,6 +164,8 @@ export function parsePrzemiennikiXml(xmlText) {
         link: firstText(repeaterEl, "link"),
         ctcssRx: firstText(repeaterEl, 'ctcss[type="rx"]'),
         ctcssTx: firstText(repeaterEl, 'ctcss[type="tx"]'),
+        latitude: Number(firstText(repeaterEl, "location > latitude") || NaN),
+        longitude: Number(firstText(repeaterEl, "location > longitude") || NaN),
       };
     });
 
@@ -333,6 +337,7 @@ export function buildPrzemiennikiRows(repeaters, { createBlankRow, setRowValue, 
     if (mappedMode) {
       setRowValue(row, "Mode", mappedMode);
     }
+    setRowGeo(row, repeater.latitude, repeater.longitude);
     return row;
   });
 }
