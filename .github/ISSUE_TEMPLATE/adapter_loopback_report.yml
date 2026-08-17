@@ -1,0 +1,67 @@
+name: Adapter Loopback Report
+description: Report the result of the adapter loopback test (serial-test.html)
+labels:
+  - bug
+  - adapter
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Filed from the adapter loopback test page. The environment fields and the
+        report below are filled in for you — describe what you were doing in
+        "Additional context" and submit.
+
+  - type: input
+    id: webchirp_version
+    attributes:
+      label: WebCHIRP version
+      description: Commit the page was served from, as shown in the report
+      placeholder: 7749974 (updated 2026-08-07)
+    validations:
+      required: true
+
+  - type: input
+    id: adapter
+    attributes:
+      label: Adapter and driver
+      description: Driver the adapter resolved to, plus its USB ids
+      placeholder: WCH CH340/CH341 (WebUSB driver) — USB 0x1a86:0x7523
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: Operating system the test ran on
+      placeholder: Android
+    validations:
+      required: true
+
+  - type: input
+    id: browser_and_version
+    attributes:
+      label: Browser and version
+      description: Include full browser name and version
+      placeholder: Chrome 128.0.6613.99
+    validations:
+      required: true
+
+  - type: textarea
+    id: loopback_report
+    attributes:
+      label: Loopback report
+      description: Output of the loopback test run
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+      description: >-
+        How the adapter was wired, which radio it is used with, and anything
+        else that might explain the result.
+    validations:
+      required: false

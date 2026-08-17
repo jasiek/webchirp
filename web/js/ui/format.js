@@ -85,8 +85,11 @@ export function detectOperatingSystem() {
   return "Other";
 }
 
-export function detectBrowserVersion() {
-  const ua = navigator.userAgent || "";
+// `userAgent` is passed explicitly by callers outside the app shell (the
+// diagnostics page builds its report where there is no navigator to read in
+// tests); everything in the app keeps calling it with no argument.
+export function detectBrowserVersion(userAgent) {
+  const ua = userAgent ?? navigator.userAgent ?? "";
   const matchers = [
     [/Edg\/([\d.]+)/, "Microsoft Edge"],
     [/OPR\/([\d.]+)/, "Opera"],
@@ -100,7 +103,7 @@ export function detectBrowserVersion() {
       return `${name} ${match[1]}`;
     }
   }
-  return navigator.appVersion || "Unknown browser";
+  return ua || "Unknown browser";
 }
 
 // Android's native Web Serial only reaches Bluetooth RFCOMM serial ports, so

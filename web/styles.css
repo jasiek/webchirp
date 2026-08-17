@@ -372,6 +372,12 @@ body {
   font-size: 1rem;
 }
 
+.loopback-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .loopback-report {
   margin: 0.5rem 0 0;
   padding: 0.6rem;

@@ -98,3 +98,22 @@ test("describePort survives a port that reports no USB identity", () => {
   }
   assert.equal(describePort(new ThrowingPort(), "webserial"), "Native Web Serial (OS driver)");
 });
+
+test("the report names the commit it ran on, from keys the build actually writes", () => {
+  // The version reaches the page through a generated version.json, so a rename
+  // on the build side is invisible until a report says "unknown" — which is
+  // exactly when the commit is needed and no longer recoverable.
+  const controller = fs.readFileSync(
+    path.join(process.cwd(), "web", "js", "serial-test-page.js"),
+    "utf8",
+  );
+  const builder = fs.readFileSync(
+    path.join(process.cwd(), "scripts", "build-version.mjs"),
+    "utf8",
+  );
+  for (const key of ["webchirpShaShort", "lastUpdated"]) {
+    assert.ok(controller.includes(key), `the page no longer reads version.${key}`);
+    assert.ok(builder.includes(key), `build-version.mjs no longer writes version.${key}`);
+  }
+  assert.match(controller, /WebCHIRP: \$\{webchirpVersion\}/, "the report must carry the version");
+});
