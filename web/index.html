@@ -433,6 +433,39 @@
       </form>
     </div>
 
+    <!--
+      Static OSM context map for repeater channels that carry coordinates
+      (issue #57). The tooltip is the desktop hover surface; the modal is the
+      touch-device tap surface. Both are populated by ui/repeater-map.js.
+    -->
+    <div id="repeater-map-tooltip" class="repeater-map-tooltip hidden" aria-hidden="true">
+      <div id="repeater-map-tooltip-coords" class="repeater-map-coords"></div>
+      <div id="repeater-map-tooltip-canvas" class="repeater-map-canvas"></div>
+    </div>
+
+    <div
+      id="repeater-map-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Repeater location map"
+    >
+      <div class="repeater-map-card">
+        <div class="repeater-map-header">
+          <span id="repeater-map-modal-coords" class="repeater-map-coords"></span>
+          <button
+            id="repeater-map-close"
+            class="repeater-map-close"
+            type="button"
+            aria-label="Close map"
+          >
+            ✕
+          </button>
+        </div>
+        <div id="repeater-map-modal-canvas" class="repeater-map-canvas"></div>
+      </div>
+    </div>
+
     <div
       id="import-choice-modal"
       class="modal-overlay hidden"
