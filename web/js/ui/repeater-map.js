@@ -1,5 +1,6 @@
 import {
   OSM_ATTRIBUTION,
+  OSM_COPYRIGHT_URL,
   formatCoordinates,
   osmTileUrl,
   planStaticMap,
@@ -55,9 +56,24 @@ export function createRepeaterMap(ctx) {
     }
   }
 
-  // Fill a map viewport element with positioned tile images, the centered
-  // marker and the OSM attribution. Tiles that fail to load just stay blank —
-  // the coordinates header still identifies the spot.
+  // The OSM tile policy wants the credit to reach the licence, so the
+  // attribution strip under each map carries a link to the copyright page
+  // rather than plain text. Built once per surface: it never changes.
+  function fillAttribution(el) {
+    if (!el || el.children?.length) {
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = OSM_COPYRIGHT_URL;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = OSM_ATTRIBUTION;
+    el.appendChild(link);
+  }
+
+  // Fill a map viewport element with positioned tile images and the centered
+  // marker. Tiles that fail to load just stay blank — the coordinates header
+  // still identifies the spot.
   function renderMap(canvasEl, geo, width, height) {
     canvasEl.innerHTML = "";
     canvasEl.style.width = `${width}px`;
@@ -72,7 +88,7 @@ export function createRepeaterMap(ctx) {
       img.className = "repeater-map-tile";
       img.alt = "";
       img.draggable = false;
-      // The app is served with COEP: require-corp (Pyodide needs the
+      // The dev server sends COEP: require-corp (Pyodide needs the
       // cross-origin isolation), which blocks plain cross-origin images.
       // tile.openstreetmap.org sends Access-Control-Allow-Origin: *, so a
       // CORS-mode load satisfies COEP where a no-cors one is blocked.
@@ -85,10 +101,6 @@ export function createRepeaterMap(ctx) {
     const marker = document.createElement("div");
     marker.className = "repeater-map-marker";
     canvasEl.appendChild(marker);
-    const attribution = document.createElement("div");
-    attribution.className = "repeater-map-attribution";
-    attribution.textContent = OSM_ATTRIBUTION;
-    canvasEl.appendChild(attribution);
   }
 
   function geoForEventTarget(target) {
@@ -105,7 +117,29 @@ export function createRepeaterMap(ctx) {
 
   // --- Desktop tooltip ------------------------------------------------------
 
+  // Leaving the Location cell does not hide the map immediately: the tooltip
+  // sits 10px to the right, and the pointer has to cross that gap to reach the
+  // attribution link. Entering the tooltip cancels the pending hide.
+  const TOOLTIP_HIDE_DELAY_MS = 250;
+  let hideTimer = 0;
+
+  function cancelPendingHide() {
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+      hideTimer = 0;
+    }
+  }
+
+  function scheduleHideTooltip() {
+    cancelPendingHide();
+    hideTimer = setTimeout(() => {
+      hideTimer = 0;
+      hideTooltip();
+    }, TOOLTIP_HIDE_DELAY_MS);
+  }
+
   function showTooltip(geo, anchorEl) {
+    cancelPendingHide();
     dom.repeaterMapTooltipCoordsEl.textContent = formatCoordinates(geo.latitude, geo.longitude);
     renderMap(dom.repeaterMapTooltipCanvasEl, geo, TOOLTIP_MAP_WIDTH, TOOLTIP_MAP_HEIGHT);
     const tooltip = dom.repeaterMapTooltipEl;
@@ -124,6 +158,7 @@ export function createRepeaterMap(ctx) {
   }
 
   function hideTooltip() {
+    cancelPendingHide();
     cancelDwell("tooltip");
     dom.repeaterMapTooltipEl.classList.add("hidden");
     dom.repeaterMapTooltipCanvasEl.innerHTML = "";
@@ -131,7 +166,12 @@ export function createRepeaterMap(ctx) {
 
   // --- Mobile modal ---------------------------------------------------------
 
-  function openModal(geo) {
+  // The Location button the modal was opened from, so dismissing it puts the
+  // caret back where it started instead of at the top of the document.
+  let modalTrigger = null;
+
+  function openModal(geo, triggerEl) {
+    modalTrigger = triggerEl || null;
     dom.repeaterMapModalCoordsEl.textContent = formatCoordinates(geo.latitude, geo.longitude);
     // Show first: the canvas has no layout width while the overlay is hidden.
     // The map is square, sized to the modal card's width (issue #57), which
@@ -140,6 +180,9 @@ export function createRepeaterMap(ctx) {
     const size = dom.repeaterMapModalCanvasEl.clientWidth
       || Math.min(Math.round(window.innerWidth * 0.8), 320);
     renderMap(dom.repeaterMapModalCanvasEl, geo, size, size);
+    // Focus the one control the dialog has, so a keyboard or switch user can
+    // dismiss it without tabbing through the table behind it.
+    dom.repeaterMapCloseEl.focus?.();
     beginDwell("modal");
   }
 
@@ -151,6 +194,9 @@ export function createRepeaterMap(ctx) {
     // CSS width (the viewport may have rotated or resized in between).
     dom.repeaterMapModalCanvasEl.style.width = "";
     dom.repeaterMapModalCanvasEl.style.height = "";
+    const trigger = modalTrigger;
+    modalTrigger = null;
+    trigger?.focus?.();
   }
 
   function isModalOpen() {
@@ -158,6 +204,9 @@ export function createRepeaterMap(ctx) {
   }
 
   function bindEvents() {
+    fillAttribution(dom.repeaterMapTooltipAttributionEl);
+    fillAttribution(dom.repeaterMapModalAttributionEl);
+
     dom.tableBody.addEventListener("mouseover", (event) => {
       if (!hoverCapable()) {
         return;
@@ -170,7 +219,16 @@ export function createRepeaterMap(ctx) {
     dom.tableBody.addEventListener("mouseout", (event) => {
       const button = event.target?.closest?.(".channel-location-button");
       if (button && !button.contains(event.relatedTarget)) {
-        hideTooltip();
+        scheduleHideTooltip();
+      }
+    });
+    // The tooltip is hoverable so its attribution link can be clicked; keep it
+    // up while the pointer is inside it, and drop it as soon as the pointer
+    // leaves for anything that is not the tooltip itself.
+    dom.repeaterMapTooltipEl.addEventListener("mouseover", cancelPendingHide);
+    dom.repeaterMapTooltipEl.addEventListener("mouseout", (event) => {
+      if (!dom.repeaterMapTooltipEl.contains(event.relatedTarget)) {
+        scheduleHideTooltip();
       }
     });
     // Scrolling recycles row elements under the cursor; the anchor cell may
@@ -183,7 +241,7 @@ export function createRepeaterMap(ctx) {
       }
       const geo = geoForEventTarget(event.target);
       if (geo) {
-        openModal(geo);
+        openModal(geo, event.target.closest(".channel-location-button"));
       }
     });
     dom.repeaterMapCloseEl.addEventListener("click", closeModal);

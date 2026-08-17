@@ -1412,8 +1412,9 @@ button:disabled {
   background: var(--surface);
   box-shadow: 0 16px 36px var(--shadow-color);
   overflow: hidden;
-  /* Display-only: the tooltip must never steal the hover from the cell. */
-  pointer-events: none;
+  /* Hoverable on purpose: the attribution link at its foot has to be
+     clickable, so repeater-map.js keeps the tooltip up while the pointer is
+     inside it rather than hiding on the cell's mouseout. */
 }
 
 .repeater-map-tooltip.hidden {
@@ -1456,16 +1457,20 @@ button:disabled {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
-/* OSM tiles are light in both themes, so the attribution chip keeps its own
-   light background instead of the theme variables. */
+/* Attribution strip along the bottom of the widget, below the map: the OSM
+   tile policy wants the credit visible on every map and reachable through to
+   the licence, which the link inside it provides. */
 .repeater-map-attribution {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  padding: 1px 4px;
-  font-size: 0.6rem;
-  background: rgba(255, 255, 255, 0.75);
-  color: #333;
+  padding: 3px 6px;
+  border-top: 1px solid var(--border);
+  text-align: right;
+  font-size: 0.65rem;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.repeater-map-attribution a {
+  color: inherit;
 }
 
 .repeater-map-card {

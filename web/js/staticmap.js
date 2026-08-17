@@ -5,8 +5,12 @@
 
 export const OSM_TILE_SIZE = 256;
 export const OSM_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-// Required by the OSM tile usage policy on every rendered map.
+// Required by the OSM tile usage policy on every rendered map. The policy
+// points at the OSMF attribution guidelines, which ask that the credit reach
+// the origin and licence information — so the text is a link to the copyright
+// page, not bare characters.
 export const OSM_ATTRIBUTION = "© OpenStreetMap contributors";
+export const OSM_COPYRIGHT_URL = "https://www.openstreetmap.org/copyright";
 
 // Web Mercator: coordinate -> absolute pixel position on the world map at a
 // zoom level (the map is 2^zoom * 256 pixels square).
