@@ -607,6 +607,13 @@ button:disabled {
   display: none;
 }
 
+.serial-hint {
+  margin: 0.35rem 0 0.55rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 #radio-search,
 #radio-make,
 #radio-model {
