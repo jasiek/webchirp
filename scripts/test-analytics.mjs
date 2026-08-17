@@ -159,12 +159,12 @@ test("init is inert without a window and keeps an existing gtag", () => {
 test("trackEvent forwards params and reports when analytics is absent", () => {
   const win = makeWindow({ displayModes: ["standalone"] });
   initAnalytics(win);
-  assert.equal(trackEvent("radio_download", { radio_make: "Baofeng" }, win), true);
+  assert.equal(trackEvent("radio_download", { radio: "Baofeng UV-5R" }, win), true);
   // Every event carries the launch context, since config parameters cannot be
   // relied on to reach events the way a bare set() cannot.
   assert.deepEqual(eventsNamed(win, "radio_download")[0][2], {
     display_mode: "standalone",
-    radio_make: "Baofeng",
+    radio: "Baofeng UV-5R",
   });
 
   // An explicit value still wins over the automatic one.

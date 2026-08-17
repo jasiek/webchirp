@@ -21,17 +21,16 @@ import { errorDetails } from "./format.js";
 
 export { trackEvent } from "../analytics.js";
 
-// The driver identity every radio-scoped event carries. Vendor/model answer
-// "which radios do people own", module/class answer "which CHIRP driver ran",
-// and the two differ often enough (one driver serves many models) to be worth
-// sending both.
+// The driver identity every radio-scoped event carries. radio answers "which
+// radios do people own", module/class answer "which CHIRP driver ran", and the
+// two differ often enough (one driver serves many models) to be worth sending
+// both.
 export function radioEventParams(radio) {
   if (!radio) {
     return {};
   }
   return {
-    radio_make: String(radio.vendor || ""),
-    radio_model: String(radio.model || ""),
+    radio: [radio.vendor, radio.model].filter(Boolean).map(String).join(" "),
     radio_module: String(radio.module || ""),
     radio_class: String(radio.className || ""),
   };

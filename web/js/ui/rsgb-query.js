@@ -221,13 +221,9 @@ export function createRsgbQuery(ctx) {
     ctx.table.insertRowsAtSelectionOrEnd(rows, "RSGB ETCC");
     // result_count is the point of this event: a query that returns nothing
     // means the filters, the radius or the API are wrong, and that is invisible
-    // otherwise. The band and mode filters are reported only as counts, and the
-    // position never at all.
+    // otherwise. The band and mode filters and the position are never reported.
     trackEvent("repeater_import", {
       repeater_source: REPEATER_SOURCE,
-      band_count: checkedValues(dom.rsgbBandListEl, "rsgb-band").length,
-      mode_count: modes.length,
-      only_working: dom.rsgbOnlyOperationalEl.checked ? "yes" : "no",
       located: "yes",
       result_count: rows.length,
     });
