@@ -28,11 +28,11 @@ export function createRepeaterMap(ctx) {
 
   // Paired with repeater_import, this says whether the map earns its keep: a
   // map dismissed inside a second is a pointer passing through, not a look, so
-  // only dwells past the threshold count. One timer serves both surfaces —
-  // they cannot be visible at once — but cancellation is surface-scoped,
-  // because the grid can scroll while the modal is open (the tap that opened
-  // it often scrolls the table a little) and that scroll's hideTooltip must
-  // not kill the modal's pending dwell. The coordinates are never sent.
+  // only dwells past the threshold count. The surface argument scopes
+  // cancellation, not the event: the grid can scroll while the modal is open
+  // (the tap that opened it often scrolls the table a little) and that
+  // scroll's hideTooltip must not kill the modal's pending dwell. Which
+  // surface it was is not reported, and the coordinates are never sent.
   const MAP_DWELL_MS = 1000;
   let dwellTimer = 0;
   let dwellSurface = "";
@@ -44,7 +44,7 @@ export function createRepeaterMap(ctx) {
     dwellSurface = surface;
     dwellTimer = setTimeout(() => {
       dwellTimer = 0;
-      trackEvent("repeater_map_shown", { surface });
+      trackEvent("repeater_map_shown");
     }, MAP_DWELL_MS);
   }
 
