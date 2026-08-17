@@ -200,6 +200,12 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
     description: "CHIRP settings group opened in the radio settings editor.",
     scope: "EVENT",
   },
+  {
+    parameterName: "surface",
+    displayName: "Map surface",
+    description: "Which surface showed the repeater map: the desktop hover tooltip or the touch-device modal.",
+    scope: "EVENT",
+  },
 ].map(Object.freeze));
 
 // Display modes reported through the display-mode media feature, most app-like

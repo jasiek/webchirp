@@ -5,6 +5,7 @@ import {
   planStaticMap,
 } from "../staticmap.js";
 import { rowGeo } from "../row-geo.js";
+import { trackEvent } from "./analytics.js";
 
 // Static OSM context map for imported repeater channels (issue #57). Rows that
 // arrived from a repeater directory carry coordinates (web/js/row-geo.js);
@@ -23,6 +24,35 @@ export function createRepeaterMap(ctx) {
 
   function hoverCapable() {
     return window.matchMedia?.("(hover: hover)")?.matches ?? true;
+  }
+
+  // Paired with repeater_import, this says whether the map earns its keep: a
+  // map dismissed inside a second is a pointer passing through, not a look, so
+  // only dwells past the threshold count. One timer serves both surfaces —
+  // they cannot be visible at once — but cancellation is surface-scoped,
+  // because the grid can scroll while the modal is open (the tap that opened
+  // it often scrolls the table a little) and that scroll's hideTooltip must
+  // not kill the modal's pending dwell. The coordinates are never sent.
+  const MAP_DWELL_MS = 1000;
+  let dwellTimer = 0;
+  let dwellSurface = "";
+
+  function beginDwell(surface) {
+    if (dwellTimer) {
+      clearTimeout(dwellTimer);
+    }
+    dwellSurface = surface;
+    dwellTimer = setTimeout(() => {
+      dwellTimer = 0;
+      trackEvent("repeater_map_shown", { surface });
+    }, MAP_DWELL_MS);
+  }
+
+  function cancelDwell(surface) {
+    if (dwellTimer && dwellSurface === surface) {
+      clearTimeout(dwellTimer);
+      dwellTimer = 0;
+    }
   }
 
   // Fill a map viewport element with positioned tile images, the centered
@@ -90,9 +120,11 @@ export function createRepeaterMap(ctx) {
     );
     tooltip.style.left = `${Math.round(rect.right + 10)}px`;
     tooltip.style.top = `${Math.round(top)}px`;
+    beginDwell("tooltip");
   }
 
   function hideTooltip() {
+    cancelDwell("tooltip");
     dom.repeaterMapTooltipEl.classList.add("hidden");
     dom.repeaterMapTooltipCanvasEl.innerHTML = "";
   }
@@ -108,9 +140,11 @@ export function createRepeaterMap(ctx) {
     const size = dom.repeaterMapModalCanvasEl.clientWidth
       || Math.min(Math.round(window.innerWidth * 0.8), 320);
     renderMap(dom.repeaterMapModalCanvasEl, geo, size, size);
+    beginDwell("modal");
   }
 
   function closeModal() {
+    cancelDwell("modal");
     dom.repeaterMapModalEl.classList.add("hidden");
     dom.repeaterMapModalCanvasEl.innerHTML = "";
     // Drop the explicit size renderMap set, so the next open re-measures the
