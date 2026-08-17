@@ -26,6 +26,21 @@ const SIO_RESET_PURGE_TX = 0x0002;
 // every short read; 4 ms keeps byte-oriented clone handshakes snappy.
 const LATENCY_TIMER_MS = 4;
 
+// How many single-packet bulk IN transfers to keep queued at once.
+//
+// With one transfer in flight the host has no IN request outstanding between
+// one completing and the next being issued, and the chip's RX FIFO overruns in
+// that gap — silently, with status "ok" and no error at any layer. The CH340
+// and PL2303 drivers were fixed for this first; this chip is the last one that
+// still read a transfer at a time.
+//
+// Linux never had the problem: ftdi_sio sets no read callback and inherits
+// read_urbs[2] (include/linux/usb/serial.h) — both submitted at open and each
+// resubmitted from its own completion callback. Depth 2 suffices when the
+// resubmit runs in interrupt context; a JS resubmit crosses Chrome's IPC
+// boundary and the event loop, hence the deeper queue.
+const READ_PIPELINE_DEPTH = 16;
+
 // 8 data bits, no parity, 1 stop bit.
 const DATA_8N1 = 0x0008;
 
@@ -72,8 +87,10 @@ export function ftdiConvertBaudrate(baudrate) {
 }
 
 // FTDI prepends two modem/line status bytes to every bulk-IN packet; strip them
-// to recover the actual serial payload. Reads are issued one packet at a time,
-// so each transfer carries a single status header.
+// to recover the actual serial payload. Every transfer requests exactly one
+// packet, so each carries a single status header — a longer request would
+// return several packets concatenated, headers and all, and this would strip
+// only the first pair and pass the rest off as data.
 export function stripFtdiStatusBytes(bytes) {
   if (!bytes || bytes.length <= 2) {
     return new Uint8Array(0);
@@ -198,6 +215,23 @@ export class FtdiSerialPort {
     const packetSize = this._inPacketSize;
     const isClosed = () => this._closed;
 
+    // Bulk IN transfers queued on the endpoint, oldest first. Transfers on one
+    // endpoint complete in the order they were issued, so draining this as a
+    // FIFO keeps the byte order intact — and each one carries its own status
+    // header, so they stay independently strippable. See READ_PIPELINE_DEPTH
+    // for why more than one has to be outstanding.
+    let inFlight = [];
+    const topUp = () => {
+      while (inFlight.length < READ_PIPELINE_DEPTH && !isClosed()) {
+        const transfer = device.transferIn(inEndpoint, packetSize);
+        // close() aborts whatever is still queued. The pull path below awaits
+        // `transfer` itself and reports the failure properly; this handler
+        // exists only so a transfer nobody got to await cannot surface as an
+        // unhandled rejection during teardown.
+        transfer.catch(() => {});
+        inFlight.push(transfer);
+      }
+    };
     this.readable = new ReadableStream({
       // CRITICAL: pull must not resolve until it has enqueued payload. The
       // FTDI chip completes a bulk IN transfer with a 2-byte status header
@@ -206,13 +240,38 @@ export class FtdiSerialPort {
       // until a new read request or enqueue occurs — so returning early on a
       // status-only packet wedged the read path permanently after the first
       // idle packet. Loop over status-only packets and stalls instead.
+      //
+      // Each transfer asks for exactly one packet, which on this chip is not
+      // just a throughput choice: the status header repeats per packet, so a
+      // multi-packet reply would arrive with headers buried mid-buffer.
+      // Throughput comes from queue depth instead.
       pull: async (controller) => {
         try {
           while (!isClosed()) {
-            const result = await device.transferIn(inEndpoint, packetSize);
+            // Topping up here, before every shift, is what guarantees the queue
+            // is non-empty unless the port is closing — a pull that returns
+            // without enqueuing is never called again.
+            topUp();
+            const transfer = inFlight.shift();
+            if (!transfer) {
+              return;
+            }
+            const result = await transfer;
             if (result.status === "stall") {
               // A stalled IN endpoint returns "stall" forever until the halt
               // is cleared; without this the read path goes permanently silent.
+              //
+              // Retire the pre-stall queue first. clearHalt() cancels every
+              // transfer outstanding on the interface, and Chromium surfaces a
+              // cancellation as a *rejected* promise (AbortError), not as a
+              // result carrying a status — so leaving those queued means the
+              // next shift awaits a cancelled transfer, whose rejection reaches
+              // the catch below and errors the stream permanently. The dropped
+              // promises already carry a no-op catch, so their rejections stay
+              // handled, and the loop refills only once the endpoint is healthy.
+              // Nothing is awaited here: a device that never retires its queued
+              // transfers must not be able to wedge the read path.
+              inFlight = [];
               await device.clearHalt("in", inEndpoint);
               continue;
             }
@@ -240,8 +299,13 @@ export class FtdiSerialPort {
       },
       cancel: () => {
         this._closed = true;
+        inFlight = [];
       },
-    });
+    // A stream that queues only one chunk puts the consumer's own work on the
+    // critical path: nothing is re-queued on the endpoint until it has taken
+    // the previous packet. Buffering a pipeline's worth lets pull keep cycling
+    // transfers while the consumer is busy.
+    }, new CountQueuingStrategy({ highWaterMark: READ_PIPELINE_DEPTH }));
 
     this.writable = new WritableStream({
       write: async (chunk) => {
