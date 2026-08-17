@@ -9,6 +9,8 @@
 // always over 4-character squares, never the 6-character square the user is
 // standing in.
 
+import { setRowGeo } from "./row-geo.js";
+
 // No CORS proxy is involved: the API sends Access-Control-Allow-Origin: * on
 // every response, unlike przemienniki.net and repeaterbook.com. The request
 // must stay a *simple* one though (plain GET, no custom headers) — OPTIONS
@@ -374,6 +376,10 @@ export function filterRsgbRecords(records, {
       // A 4-character locator places a station within ~111 x 130 km, so its
       // distance is an estimate the row must not present as measured.
       approximate: box.precision < 6,
+      // The box centre doubles as the station's position for the map sidecar
+      // (buildRsgbRows below); it is the only position the payload offers.
+      latitude: box.latitude,
+      longitude: box.longitude,
     });
   }
   return entries.sort((a, b) => a.distanceKm - b.distanceKm);
@@ -541,6 +547,16 @@ export function buildRsgbRows(entries, { createBlankRow, setRowValue, findEnumOp
         : String(record?.status || "").trim(),
     ].filter((part) => part.length > 0);
     setRowValue(row, "Comment", commentParts.join(" | "));
+
+    // The map sidecar, from the locator's box centre — this directory carries
+    // no coordinates of its own (FINDINGS **rsgb-has-no-lat-lon**). A
+    // 6-character box is 4.6 x 5.2 km, close enough for a context map at the
+    // zoom repeater-map.js uses; a 4-character one is 111 x 130 km, so its
+    // centre can be 70 km from the station and gets no map rather than a
+    // confidently wrong one.
+    if (!entry?.approximate) {
+      setRowGeo(row, entry?.latitude, entry?.longitude);
+    }
 
     rows.push(row);
   }

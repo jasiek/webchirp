@@ -11,6 +11,7 @@ import {
   serializeRowsToTsv,
 } from "../clipboard.js";
 import { normalizeValue } from "./channel-values.js";
+import { rowGeo } from "../row-geo.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
 
 // The editable channel grid: rendering, row selection, the row operations
@@ -649,6 +650,9 @@ export function createChannelTable({ dom, state, log, actions }) {
     const locationButton = locationButtonIn(tr);
     if (locationButton) {
       locationButton.setAttribute("aria-pressed", isSelected ? "true" : "false");
+      // Rows imported from a repeater directory carry coordinates; mark their
+      // Location cell so the map affordance (ui/repeater-map.js) is visible.
+      locationButton.classList.toggle("has-geo", Boolean(rowGeo(row)));
     }
   }
 

@@ -1394,6 +1394,125 @@ button:disabled {
   background: var(--focus-bg);
 }
 
+/* Static OSM context map for imported repeater channels (issue #57): rows
+   with coordinates mark their Location cell, hover shows the tooltip map on
+   desktop, tap opens the modal map on touch devices (ui/repeater-map.js). */
+#mem-table .channel-location-button.has-geo {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.repeater-map-tooltip {
+  position: fixed;
+  z-index: 70;
+  /* Matches the sidebar's 280px column (issue #57: "no bigger than"). */
+  width: 280px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 16px 36px var(--shadow-color);
+  overflow: hidden;
+  /* Hoverable on purpose: the attribution link at its foot has to be
+     clickable, so repeater-map.js keeps the tooltip up while the pointer is
+     inside it rather than hiding on the cell's mouseout. */
+}
+
+.repeater-map-tooltip.hidden {
+  display: none;
+}
+
+.repeater-map-coords {
+  display: block;
+  padding: 0.4rem 0.5rem;
+  text-align: center;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.repeater-map-canvas {
+  position: relative;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.repeater-map-tile {
+  position: absolute;
+  width: 256px;
+  height: 256px;
+  max-width: none;
+  user-select: none;
+}
+
+.repeater-map-marker {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #e01b24;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* Attribution strip along the bottom of the widget, below the map: the OSM
+   tile policy wants the credit visible on every map and reachable through to
+   the licence, which the link inside it provides. */
+.repeater-map-attribution {
+  padding: 3px 6px;
+  border-top: 1px solid var(--border);
+  text-align: right;
+  font-size: 0.65rem;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.repeater-map-attribution a {
+  color: inherit;
+}
+
+.repeater-map-card {
+  width: min(90vw, 340px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 16px 36px var(--shadow-color);
+  overflow: hidden;
+}
+
+.repeater-map-header {
+  position: relative;
+}
+
+.repeater-map-header .repeater-map-coords {
+  /* Keep the coordinates centered on the card, clear of the close button. */
+  padding-left: 2rem;
+  padding-right: 2rem;
+}
+
+.repeater-map-close {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.3rem 0.45rem;
+  cursor: pointer;
+}
+
+/* Square map before the script sizes it in pixels, so the first open can
+   measure a laid-out width. */
+.repeater-map-card .repeater-map-canvas {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
 /* Stand-ins for the rows the grid keeps out of the DOM (see channel-table.js):
    pure height, no box of their own. */
 #mem-table tbody tr.mem-row-spacer td {

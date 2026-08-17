@@ -19,6 +19,7 @@ import {
   rsgbLocatorUrl,
   squaresForRadius,
 } from "../web/js/rsgb.js";
+import { rowGeo } from "../web/js/row-geo.js";
 
 // Herne Bay: the API places GB3KI at JO01NI, 145.6625 out / 145.0625 in.
 const HERNE_BAY = { latitude: 51.3704, longitude: 1.1289 };
@@ -310,6 +311,30 @@ test("buildRsgbRows maps the repeater's tx/rx onto a CHIRP channel", () => {
   assert.equal(row.Mode, "NFM");
   assert.equal(row.Power, "High");
   assert.match(row.Comment, /^HERNE BAY \| JO01NI \| \d+\.\d km$/);
+});
+
+test("an RSGB row carries the locator's position for the map", () => {
+  // This directory sends no coordinates, so the map sidecar comes from the
+  // locator's box centre — which is only worth showing at 6 characters.
+  const [entry] = filterRsgbRecords([record()], { ...HERNE_BAY, radiusKm: 30 });
+  const { rows: [row] } = buildRsgbRows([entry], rowHooks());
+  const geo = rowGeo(row);
+  assert.ok(geo, "a 6-character locator must give the row a map");
+  const box = decodeMaidenheadBox("JO01NI");
+  assert.equal(geo.latitude, box.latitude);
+  assert.equal(geo.longitude, box.longitude);
+  // Within a few km of the real GB3KI site, which is what the map claims.
+  assert.ok(haversineKm(geo.latitude, geo.longitude, HERNE_BAY.latitude, HERNE_BAY.longitude) < 5);
+
+  // A square-only locator can be 70 km out; no map beats a wrong one.
+  const [coarse] = filterRsgbRecords([record({ locator: "JO01" })], { ...HERNE_BAY, radiusKm: 200 });
+  const { rows: [coarseRow] } = buildRsgbRows([coarse], rowHooks());
+  assert.equal(rowGeo(coarseRow), null);
+
+  // buildRsgbRows also accepts bare records (no filter entry); those carry no
+  // position and must not fabricate one.
+  const { rows: [bare] } = buildRsgbRows([record()], rowHooks());
+  assert.equal(rowGeo(bare), null);
 });
 
 test("power is set to the highest tier the driver advertises", () => {
