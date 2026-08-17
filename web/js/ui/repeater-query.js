@@ -253,9 +253,6 @@ export function createRepeaterQuery(ctx) {
     trackEvent("repeater_import", {
       repeater_source: source.key,
       country: String(dom.przemiennikiCountryEl.value || "").toLowerCase() || "any",
-      band_count: selectedBands().length,
-      mode_count: selectedModes().length,
-      only_working: dom.przemiennikiOnlyWorkingEl.checked ? "yes" : "no",
       located: dom.przemiennikiLatitudeEl.value ? "yes" : "no",
       result_count: parsed.repeaters.length,
     });

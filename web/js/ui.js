@@ -196,14 +196,11 @@ export function createUiController() {
         // "sources" means the prebuilt catalog was missing or stale and every
         // driver had to be imported in Pyodide first — a much slower start.
         catalog_source: catalogResponse.source || "unknown",
-        radio_count: state.radioCatalog.length,
-        serial_capability: serial.capabilityLabel(),
       });
     } catch (error) {
       catalog.setRadioSelectPlaceholder("Unavailable");
       trackEvent("app_init_failed", {
         duration_ms: Date.now() - startedAt,
-        serial_capability: serial.capabilityLabel(),
         error_kind: classifyErrorKind(error),
         error_type: errorTypeName(error),
       });

@@ -82,8 +82,7 @@ export function createRadioCatalog(ctx) {
   // Report which radio a user landed on and how they got there. Deliberately
   // not fired from refreshModelOptions(), which also runs at boot and when a
   // vendor change defaults the model: only the paths below are a user choosing
-  // a radio. The live-mode flag rides along because picking one of those is a
-  // dead end in this UI, and the size of that group is worth knowing.
+  // a radio.
   function trackRadioSelected(radio, method) {
     if (!radio) {
       return;
@@ -91,7 +90,6 @@ export function createRadioCatalog(ctx) {
     trackEvent("radio_selected", {
       ...radioEventParams(radio),
       method,
-      radio_support: radio.isLiveRadio ? "live_unsupported" : "clone",
     });
   }
 

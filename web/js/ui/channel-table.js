@@ -22,10 +22,6 @@ export function createChannelTable({ dom, state, log, actions }) {
   let selectedRowIndexes = new Set();
   let selectionAnchorIndex = null;
   const invalidCellKeys = new Set();
-  // Columns already reported this session. Editing is per-keystroke, and the
-  // question is which fields people use at all, so each column reports once
-  // rather than once per edit.
-  const trackedEditColumns = new Set();
 
   // --- Grid rendering -----------------------------------------------------
   // This grid is the heaviest DOM in the app: every enum cell carries a full
@@ -931,15 +927,6 @@ export function createChannelTable({ dom, state, log, actions }) {
     const row = state.currentRows[rowIdx];
     const meta = state.radioMetadata.columns?.[column] || {};
     const next = normalizeValue(column, editor.value, meta, row[column]);
-    // Reported before the write, so focusout on a cell nobody touched does not
-    // count as an edit. Only the column name travels — never the value.
-    if (next !== row[column] && !trackedEditColumns.has(column)) {
-      trackedEditColumns.add(column);
-      trackEvent("channel_edit", {
-        ...radioEventParams(state.selectedRadio),
-        column,
-      });
-    }
     row[column] = next;
     editor.value = next;
   }

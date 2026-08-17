@@ -78,8 +78,7 @@ test("radioEventParams sends driver identity and nothing else", () => {
       baudRate: 9600,
     }),
     {
-      radio_make: "Baofeng",
-      radio_model: "UV-5R",
+      radio: "Baofeng UV-5R",
       radio_module: "chirp.drivers.uv5r",
       radio_class: "BaofengUV5R",
     },

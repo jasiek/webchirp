@@ -51,15 +51,9 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
     scope: "EVENT",
   },
   {
-    parameterName: "radio_make",
-    displayName: "Radio make",
-    description: "Vendor of the radio a clone operation ran against.",
-    scope: "EVENT",
-  },
-  {
-    parameterName: "radio_model",
-    displayName: "Radio model",
-    description: "Model of the radio a clone operation ran against.",
+    parameterName: "radio",
+    displayName: "Radio",
+    description: "Make and model of the radio an operation ran against, e.g. Baofeng UV-5R.",
     scope: "EVENT",
   },
   {
@@ -72,12 +66,6 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
     parameterName: "radio_class",
     displayName: "Radio driver class",
     description: "CHIRP driver class backing the selected radio.",
-    scope: "EVENT",
-  },
-  {
-    parameterName: "radio_support",
-    displayName: "Radio support",
-    description: "Whether the selected radio is a clone-mode radio or a live-mode one this UI cannot program.",
     scope: "EVENT",
   },
   {
@@ -117,27 +105,9 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
     scope: "EVENT",
   },
   {
-    parameterName: "radio_count",
-    displayName: "Radio count",
-    description: "Number of radios the catalog offered once the app was ready.",
-    scope: "EVENT",
-  },
-  {
-    parameterName: "serial_capability",
-    displayName: "Serial capability",
-    description: "What the browser can reach a radio with: Web Serial, WebUSB, both, or neither.",
-    scope: "EVENT",
-  },
-  {
     parameterName: "transport",
     displayName: "Serial transport",
     description: "Transport a serial connection actually opened over.",
-    scope: "EVENT",
-  },
-  {
-    parameterName: "requested_transport",
-    displayName: "Requested transport",
-    description: "Transport the user asked for, which the one that won can differ from.",
     scope: "EVENT",
   },
   {
@@ -201,24 +171,6 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
     scope: "EVENT",
   },
   {
-    parameterName: "band_count",
-    displayName: "Band filter count",
-    description: "How many bands a repeater query was filtered to.",
-    scope: "EVENT",
-  },
-  {
-    parameterName: "mode_count",
-    displayName: "Mode filter count",
-    description: "How many modes a repeater query was filtered to.",
-    scope: "EVENT",
-  },
-  {
-    parameterName: "only_working",
-    displayName: "Working repeaters only",
-    description: "Whether a repeater query excluded repeaters that are not reported as working.",
-    scope: "EVENT",
-  },
-  {
     parameterName: "located",
     displayName: "Query located",
     description: "Whether a repeater query carried a position rather than searching blind.",
@@ -228,12 +180,6 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
     parameterName: "preset",
     displayName: "Preset",
     description: "Which band-plan preset a block of channels was inserted from.",
-    scope: "EVENT",
-  },
-  {
-    parameterName: "column",
-    displayName: "Channel column",
-    description: "CHIRP channel column that was edited, reported once per column per session.",
     scope: "EVENT",
   },
   {
