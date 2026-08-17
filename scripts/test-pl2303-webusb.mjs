@@ -32,10 +32,13 @@ function descriptorBytes({ usbVersion, deviceClass, maxPacketSize0, deviceVersio
 
 // Fake USBDevice for a PL2303: interrupt IN + bulk OUT + bulk IN endpoints,
 // records all control transfers, answers GET_DESCRIPTOR and the HX probe.
-function makeFakeDevice({ descriptor, hxProbeSucceeds = true }) {
+function makeFakeDevice({ descriptor, hxProbeSucceeds = true, cancelOnClearHalt = false }) {
   const controlIn = [];
   const controlOut = [];
   const transferInCalls = [];
+  const clearHaltCalls = [];
+  // Transfers the driver has queued that the fake has not answered yet.
+  const outstanding = [];
   const device = {
     vendorId: 0x067b,
     productId: 0x2303,
@@ -72,13 +75,41 @@ function makeFakeDevice({ descriptor, hxProbeSucceeds = true }) {
       controlOut.push({ ...setup, data: data ? new Uint8Array(data.slice ? data.slice(0) : data) : null });
       return { status: "ok" };
     },
+    clearHalt: async (direction, endpoint) => {
+      clearHaltCalls.push({ direction, endpoint });
+      if (cancelOnClearHalt) {
+        // Chromium cancels every transfer outstanding on the interface before
+        // it clears the endpoint, and Blink rejects a cancelled transfer with
+        // AbortError rather than completing it with a status.
+        for (const transfer of outstanding.splice(0)) {
+          transfer.reject(Object.assign(
+            new Error("The transfer was cancelled."),
+            { name: "AbortError" },
+          ));
+        }
+      }
+    },
     transferIn: async (endpointNumber, length) => {
       transferInCalls.push({ endpointNumber, length });
-      return new Promise(() => {});
+      // Left unanswered until the test delivers a result, the way real hardware
+      // leaves a transfer pending until bytes arrive.
+      return new Promise((resolve, reject) => {
+        outstanding.push({ resolve, reject });
+      });
     },
     transferOut: async () => ({ status: "ok" }),
   };
-  return { device, controlIn, controlOut, transferInCalls };
+  // Answer the oldest unanswered transfer — bulk transfers on one endpoint
+  // complete in the order they were issued.
+  const deliver = (result) => {
+    outstanding.shift()?.resolve(result);
+  };
+  return { device, controlIn, controlOut, transferInCalls, clearHaltCalls, deliver };
+}
+
+// Let the stream's pull run: it is invoked off a microtask and awaits transfers.
+function tick() {
+  return new Promise((resolve) => { setTimeout(resolve, 0); });
 }
 
 const HX_DESCRIPTOR = { usbVersion: 0x110, deviceClass: 0, maxPacketSize0: 64, deviceVersion: 0x400 };
@@ -217,23 +248,66 @@ test("WebUSB provider dispatches Prolific devices to the PL2303 driver", async (
   );
 });
 
-test("Pl2303SerialPort keeps several bulk IN transfers queued at once", async () => {
+test("Pl2303SerialPort keeps a full pipeline of bulk IN transfers queued", async () => {
   // With a single transfer outstanding the host has no IN request queued
   // between one completing and the next being issued, and the chip's RX FIFO
   // overruns in that gap. The 64-byte endpoint gives twice the CH340's slack,
   // so it only shows on sustained transfers — measured on a Pixel 10, the
   // loopback suite's 16 KB echo at 115200 lost bytes on 3 of 10 runs with one
   // transfer in flight, and none of 12 once queued.
-  const { device, transferInCalls } = makeFakeDevice({ descriptor: HX_DESCRIPTOR });
+  //
+  // Both halves of that fix are pinned by the call count. No reader is
+  // attached, so the only thing driving further pulls is the stream's own
+  // high-water mark: 16 transfers are queued up front, and each of the 15 pulls
+  // after the first replenishes exactly one. A shallower depth, or the default
+  // queue of one, yields a smaller number.
+  const { device, deliver, transferInCalls } = makeFakeDevice({ descriptor: HX_DESCRIPTOR });
   const port = new Pl2303SerialPort(device);
   await port.open({ baudRate: 115200 });
   // The stream pulls as soon as it is constructed, which primes the queue.
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await tick();
 
-  assert.ok(
-    transferInCalls.length > 1,
-    `expected several transfers queued at once, saw ${transferInCalls.length}`,
+  assert.equal(transferInCalls.length, 16, "the queue must be primed to full depth");
+
+  for (let i = 0; i < 16; i += 1) {
+    deliver({ status: "ok", data: new DataView(new Uint8Array([i]).buffer) });
+    await tick();
+  }
+
+  assert.equal(
+    transferInCalls.length,
+    31,
+    "16 queued up front plus one replenished per pull, with no reader attached",
   );
+});
+
+test("Pl2303SerialPort read path recovers when clearHalt cancels the queue", async () => {
+  // The halt is cleared with a queue of transfers still outstanding, and
+  // clearHalt() cancels every one of them. Chromium reports a cancellation as a
+  // rejected promise (AbortError), not as a result carrying a status, so a read
+  // path that keeps the pre-stall queue awaits a cancelled transfer on its next
+  // turn and errors the stream for good.
+  const { device, clearHaltCalls, deliver } = makeFakeDevice({
+    descriptor: HX_DESCRIPTOR,
+    cancelOnClearHalt: true,
+  });
+  const port = new Pl2303SerialPort(device);
+  await port.open({ baudRate: 9600 });
+  const reader = port.readable.getReader();
+  const read = reader.read();
+  await tick();
+
+  deliver({ status: "stall" });
+  await tick();
+
+  // Empty packets must not resolve the pull either (that wedges reads).
+  deliver({ status: "ok", data: new DataView(new Uint8Array([]).buffer) });
+  await tick();
+  deliver({ status: "ok", data: new DataView(new Uint8Array([0x50, 0xbb, 0xff]).buffer) });
+
+  const { value } = await read;
+  assert.deepEqual(clearHaltCalls, [{ direction: "in", endpoint: 3 }]);
+  assert.deepEqual(Array.from(value), [0x50, 0xbb, 0xff]);
 });
 
 test("Pl2303SerialPort asks for exactly one packet per bulk IN transfer", async () => {
@@ -243,7 +317,7 @@ test("Pl2303SerialPort asks for exactly one packet per bulk IN transfer", async 
   const { device, transferInCalls } = makeFakeDevice({ descriptor: HX_DESCRIPTOR });
   const port = new Pl2303SerialPort(device);
   await port.open({ baudRate: 115200 });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await tick();
 
   assert.ok(transferInCalls.length > 0, "expected the read path to queue a transfer");
   for (const call of transferInCalls) {

@@ -373,10 +373,17 @@ export class Ch340SerialPort {
             }
             const result = await transfer;
             if (result.status === "stall") {
-              // Never wait for the rest of the queue here: a device that does
-              // not retire its queued transfers would wedge the read path for
-              // good. Clearing the halt retires them anyway, and each comes
-              // back stalled and is skipped on its own turn round this loop.
+              // Retire the pre-stall queue before clearing the halt. clearHalt()
+              // cancels every transfer outstanding on the interface, and Chromium
+              // surfaces a cancellation as a *rejected* promise (AbortError), not
+              // as a result carrying a status — so leaving those queued means the
+              // next shift awaits a cancelled transfer, whose rejection reaches
+              // the catch below and errors the stream permanently. The dropped
+              // promises already carry a no-op catch, so their rejections stay
+              // handled, and the loop refills only once the endpoint is healthy.
+              // Nothing is awaited here: a device that never retires its queued
+              // transfers must not be able to wedge the read path.
+              inFlight = [];
               await device.clearHalt("in", inEndpoint);
               continue;
             }
