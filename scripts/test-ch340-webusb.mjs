@@ -18,11 +18,14 @@ function setNavigator(value) {
 function makeFakeDevice({
   version = 0x31,
   readRegStatus = "ok",
-  transferResults = [],
+  cancelOnClearHalt = false,
 } = {}) {
   const controlIn = [];
   const controlOut = [];
   const clearHaltCalls = [];
+  const transferInCalls = [];
+  // Transfers the driver has queued that the fake has not answered yet.
+  const outstanding = [];
   const device = {
     vendorId: 0x1a86,
     productId: 0x7523,
@@ -63,17 +66,39 @@ function makeFakeDevice({
     },
     clearHalt: async (direction, endpoint) => {
       clearHaltCalls.push({ direction, endpoint });
-    },
-    transferIn: async () => {
-      const next = transferResults.shift();
-      if (next) {
-        return next;
+      if (cancelOnClearHalt) {
+        // Chromium cancels every transfer outstanding on the interface before
+        // it clears the endpoint, and Blink rejects a cancelled transfer with
+        // AbortError rather than completing it with a status.
+        for (const transfer of outstanding.splice(0)) {
+          transfer.reject(Object.assign(
+            new Error("The transfer was cancelled."),
+            { name: "AbortError" },
+          ));
+        }
       }
-      return new Promise(() => {}); // no further data; hang like real hardware
+    },
+    transferIn: async (endpointNumber, length) => {
+      transferInCalls.push({ endpointNumber, length });
+      // Left unanswered until the test delivers a result, the way real hardware
+      // leaves a transfer pending until bytes arrive.
+      return new Promise((resolve, reject) => {
+        outstanding.push({ resolve, reject });
+      });
     },
     transferOut: async () => ({ status: "ok" }),
   };
-  return { device, controlIn, controlOut, clearHaltCalls };
+  // Answer the oldest unanswered transfer — bulk transfers on one endpoint
+  // complete in the order they were issued.
+  const deliver = (result) => {
+    outstanding.shift()?.resolve(result);
+  };
+  return { device, controlIn, controlOut, clearHaltCalls, transferInCalls, deliver };
+}
+
+// Let the stream's pull run: it is invoked off a microtask and awaits transfers.
+function tick() {
+  return new Promise((resolve) => { setTimeout(resolve, 0); });
 }
 
 test("ch340GetDivisor matches known CH341 prescaler/divisor encodings", () => {
@@ -223,18 +248,80 @@ test("Ch340SerialPort.setSignals writes the inverted modem control byte", async 
 test("Ch340SerialPort read path clears a stalled IN endpoint and passes raw bytes", async () => {
   // Unlike FTDI, CH340 bulk IN carries no status header — every byte is
   // payload, and empty packets must not resolve the pull (that wedges reads).
-  const { device, clearHaltCalls } = makeFakeDevice({
-    transferResults: [
-      { status: "stall" },
-      { status: "ok", data: new DataView(new Uint8Array([]).buffer) },
-      { status: "ok", data: new DataView(new Uint8Array([0xaa, 0xbb, 0xcc]).buffer) },
-    ],
-  });
+  //
+  // The halt is cleared with a queue of transfers still outstanding, and
+  // clearHalt() cancels every one of them. Chromium reports a cancellation as a
+  // rejected promise (AbortError), not as a result carrying a status, so a read
+  // path that keeps the pre-stall queue awaits a cancelled transfer on its next
+  // turn and errors the stream for good. This test fails that way if the queue
+  // is not retired before the halt is cleared.
+  const { device, clearHaltCalls, deliver } = makeFakeDevice({ cancelOnClearHalt: true });
   const port = new Ch340SerialPort(device);
   await port.open({ baudRate: 9600 });
   const reader = port.readable.getReader();
-  const { value } = await reader.read();
+  const read = reader.read();
+  await tick();
 
+  deliver({ status: "stall" });
+  await tick();
+
+  deliver({ status: "ok", data: new DataView(new Uint8Array([]).buffer) });
+  await tick();
+  deliver({ status: "ok", data: new DataView(new Uint8Array([0xaa, 0xbb, 0xcc]).buffer) });
+
+  const { value } = await read;
   assert.deepEqual(clearHaltCalls, [{ direction: "in", endpoint: 2 }]);
   assert.deepEqual(Array.from(value), [0xaa, 0xbb, 0xcc]);
+});
+
+test("Ch340SerialPort keeps a full pipeline of bulk IN transfers queued", async () => {
+  // With a single transfer outstanding the host has no IN request queued
+  // between one completing and the next being issued. The chip's 32-byte
+  // endpoint needs one every 2.8 ms at 115200 — shorter than a USB round trip
+  // on Android — so its RX FIFO overruns in the gap and drops bytes silently.
+  // Measured on a Pixel 10: one transfer in flight lost bytes on every 16 KB
+  // echo at 115200; a pipeline lost none.
+  //
+  // Both halves of that fix are load-bearing and both are pinned here by the
+  // call count. No reader is attached, so the only thing driving further pulls
+  // is the stream's own high-water mark: 16 transfers are queued up front, and
+  // each of the 15 pulls after the first replenishes exactly one. A shallower
+  // depth, or the default queue of one, yields a smaller number.
+  const { device, deliver, transferInCalls } = makeFakeDevice();
+  const port = new Ch340SerialPort(device);
+  await port.open({ baudRate: 115200 });
+  // The stream pulls as soon as it is constructed, which primes the queue.
+  await tick();
+
+  assert.equal(transferInCalls.length, 16, "the queue must be primed to full depth");
+
+  for (let i = 0; i < 16; i += 1) {
+    deliver({ status: "ok", data: new DataView(new Uint8Array([i]).buffer) });
+    await tick();
+  }
+
+  assert.equal(
+    transferInCalls.length,
+    31,
+    "16 queued up front plus one replenished per pull, with no reader attached",
+  );
+});
+
+test("Ch340SerialPort asks for exactly one packet per bulk IN transfer", async () => {
+  // A bulk IN transfer ends on a short packet or on the full requested length,
+  // and this chip sends nothing to terminate one. Requesting more than a packet
+  // therefore strands any reply whose length is an exact multiple of the packet
+  // size — measured against a 512-byte request, 32-, 64- and 96-byte replies
+  // never arrived at all. Throughput must come from queue depth, not from
+  // asking for more bytes per transfer.
+  const { device, transferInCalls } = makeFakeDevice();
+  const port = new Ch340SerialPort(device);
+  await port.open({ baudRate: 115200 });
+  await tick();
+
+  assert.ok(transferInCalls.length > 0, "expected the read path to queue a transfer");
+  for (const call of transferInCalls) {
+    assert.equal(call.endpointNumber, 2);
+    assert.equal(call.length, 32, "bulk IN transfers must request exactly one packet");
+  }
 });

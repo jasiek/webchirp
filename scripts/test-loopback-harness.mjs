@@ -29,6 +29,13 @@ const FTDI_STATUS_BYTES = [0x01, 0x60];
  *   swallow          — byte values the line eats (models software flow control)
  *   wedgeAfterIdle   — stop delivering data once the line has gone quiet once
  */
+// Blink surfaces a cancelled transfer as a rejected promise carrying
+// AbortError, not as a result with a status — see CheckFatalTransferStatus in
+// third_party/blink/renderer/modules/webusb/usb_device.cc.
+function cancelledTransfer() {
+  return Object.assign(new Error("The transfer was cancelled."), { name: "AbortError" });
+}
+
 function createWire({ faults = {}, idleWedgeMs = 150 } = {}) {
   let queue = [];
   let closed = false;
@@ -103,6 +110,19 @@ function createWire({ faults = {}, idleWedgeMs = 150 } = {}) {
         }
         waiters.push(waiter);
       });
+    },
+
+    // Drop every transfer currently waiting for bytes, without consuming any.
+    // Chromium's clearHalt() cancels the transfers outstanding on the interface,
+    // and a cancelled transfer takes no data with it — the bytes stay in the
+    // device's FIFO for whatever transfer is queued next. Resolving `null` is
+    // the signal the endpoint uses to reject that transfer as cancelled.
+    cancelWaiters() {
+      while (waiters.length > 0) {
+        const waiter = waiters.shift();
+        clearTimeout(waiter.timer);
+        waiter.resolve(null);
+      }
     },
 
     close() {
@@ -331,6 +351,11 @@ export function createChipLoopbackPort(chip, { faults = {}, latencyMs = 4 } = {}
     },
     clearHalt: async () => {
       stalled = false;
+      // Chromium cancels every transfer outstanding on the interface before it
+      // clears the endpoint. A driver that keeps its queued transfers across a
+      // halt therefore ends up awaiting a cancelled one, so the fake has to
+      // cancel them here or that defect goes unmodelled.
+      wire.cancelWaiters();
     },
 
     controlTransferOut: async (setup) => {
@@ -357,6 +382,9 @@ export function createChipLoopbackPort(chip, { faults = {}, latencyMs = 4 } = {}
         // there is payload, carrying the status header either way.
         const headerLength = faults.noStatusHeader ? 0 : FTDI_STATUS_BYTES.length;
         const payload = await wire.take(packetLength - FTDI_STATUS_BYTES.length, latencyMs);
+        if (payload === null) {
+          throw cancelledTransfer();
+        }
         const packet = new Uint8Array(headerLength + payload.length);
         if (headerLength) {
           packet.set(FTDI_STATUS_BYTES, 0);
@@ -367,6 +395,9 @@ export function createChipLoopbackPort(chip, { faults = {}, latencyMs = 4 } = {}
       // CH340 and PL2303 carry raw payload and complete only when there is
       // data (or when the device goes away).
       const payload = await wire.take(packetLength);
+      if (payload === null) {
+        throw cancelledTransfer();
+      }
       if (payload.length === 0 && deviceClosed) {
         return { status: "ok", data: new DataView(new ArrayBuffer(0)) };
       }

@@ -45,6 +45,26 @@ const LCR_8N1 = LCR_ENABLE_RX | LCR_ENABLE_TX | LCR_CS8;
 const MCR_DTR = 0x20;
 const MCR_RTS = 0x40;
 
+// How many single-packet bulk IN transfers to keep queued at once.
+//
+// With one transfer in flight the host has no IN request outstanding between a
+// transfer completing and the next being issued. This chip's bulk IN endpoint
+// is 32 bytes, so at 115200 a transfer has to complete every 2.8 ms — shorter
+// than the round trip through Chrome's USB IPC on Android — and the chip's RX
+// FIFO overruns in the gap, dropping bytes with no error anywhere. Queueing
+// several transfers means one is always outstanding.
+//
+// Measured on a Pixel 10 (Chrome 151) against a CH340G at 115200, echoing 16 KB
+// through a TX-RX bridge, six runs each: depth 1 lost bytes on all six, depth 4
+// on two, depth 8 on none. 9600 and 57600 never lost a byte at any depth — this
+// is a latency problem, and it only bites at the top of the range.
+//
+// The depth is also the cushion for a main-thread stall: at 115200 each queued
+// packet is 2.8 ms of slack, so 16 absorbs a ~45 ms hiccup. Depth 8 survived the
+// isolated benchmark but still dropped a packet during a full suite run, where
+// the consumer is doing real work between reads.
+const READ_PIPELINE_DEPTH = 16;
+
 // Baud generator: baud = 48 MHz / (2^(12 - 3*ps - fact) * div).
 const CLOCK_RATE = 48000000;
 const MIN_BAUD_RATE = 46;
@@ -313,16 +333,57 @@ export class Ch340SerialPort {
     const packetSize = this._inPacketSize;
     const isClosed = () => this._closed;
 
+    // Bulk IN transfers queued on the endpoint, oldest first. Transfers on one
+    // endpoint complete in the order they were issued, so draining this as a
+    // FIFO keeps the byte order intact.
+    let inFlight = [];
+    const topUp = () => {
+      while (inFlight.length < READ_PIPELINE_DEPTH && !isClosed()) {
+        const transfer = device.transferIn(inEndpoint, packetSize);
+        // close() aborts whatever is still queued. The pull path below awaits
+        // `transfer` itself and reports the failure properly; this handler
+        // exists only so a transfer nobody got to await cannot surface as an
+        // unhandled rejection during teardown.
+        transfer.catch(() => {});
+        inFlight.push(transfer);
+      }
+    };
     this.readable = new ReadableStream({
       // pull must not resolve until it has enqueued data (a pull that resolves
       // without enqueuing is never re-invoked — the deadlock hit in the FTDI
       // driver). CH340 bulk IN carries raw payload with no status header, so
       // any non-empty packet is data.
+      //
+      // Every transfer asks for exactly one packet, never more. A bulk IN
+      // transfer ends on a short packet or on the full requested length, and
+      // this chip sends nothing to terminate one, so a multi-packet request
+      // strands any reply whose length is an exact multiple of the packet size:
+      // measured against a 512-byte request, 32-, 64- and 96-byte replies never
+      // arrived at all. Throughput has to come from depth, not transfer size.
       pull: async (controller) => {
         try {
           while (!isClosed()) {
-            const result = await device.transferIn(inEndpoint, packetSize);
+            // Topping up here, before every shift, is what guarantees the queue
+            // is non-empty unless the port is closing — a pull that returns
+            // without enqueuing is never called again.
+            topUp();
+            const transfer = inFlight.shift();
+            if (!transfer) {
+              return;
+            }
+            const result = await transfer;
             if (result.status === "stall") {
+              // Retire the pre-stall queue before clearing the halt. clearHalt()
+              // cancels every transfer outstanding on the interface, and Chromium
+              // surfaces a cancellation as a *rejected* promise (AbortError), not
+              // as a result carrying a status — so leaving those queued means the
+              // next shift awaits a cancelled transfer, whose rejection reaches
+              // the catch below and errors the stream permanently. The dropped
+              // promises already carry a no-op catch, so their rejections stay
+              // handled, and the loop refills only once the endpoint is healthy.
+              // Nothing is awaited here: a device that never retires its queued
+              // transfers must not be able to wedge the read path.
+              inFlight = [];
               await device.clearHalt("in", inEndpoint);
               continue;
             }
@@ -346,8 +407,14 @@ export class Ch340SerialPort {
       },
       cancel: () => {
         this._closed = true;
+        inFlight = [];
       },
-    });
+    // A stream that queues only one chunk puts the consumer's own work on the
+    // critical path: nothing is re-queued on the endpoint until it has taken
+    // the previous 32 bytes. Buffering a pipeline's worth lets pull keep
+    // cycling transfers while the consumer is busy, which is what stopped the
+    // suite dropping a packet mid-run on a 16 KB transfer.
+    }, new CountQueuingStrategy({ highWaterMark: READ_PIPELINE_DEPTH }));
 
     this.writable = new WritableStream({
       write: async (chunk) => {
