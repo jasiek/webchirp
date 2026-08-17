@@ -21,6 +21,23 @@ export const PL2303_TYPE_HX = "HX"; // HX/HXA/HXD/EA/RA/SA/TA-era classic
 export const PL2303_TYPE_T = "T"; // TA/TB
 export const PL2303_TYPE_HXN = "HXN"; // GC/GB/GT/GL/GE/GS
 
+// How many single-packet bulk IN transfers to keep queued at once.
+//
+// With one transfer in flight the host has no IN request outstanding between
+// one completing and the next being issued, and the chip's RX FIFO overruns in
+// that gap — silently, with status "ok" and no error at any layer. This chip's
+// 64-byte endpoint gives twice the slack of the CH340's 32-byte one, so it only
+// shows up on sustained transfers: measured on a Pixel 10 (Chrome 151) against
+// a PL2303HX, the loopback suite's 16 KB echo at 115200 lost bytes on 3 of 10
+// runs with a single transfer outstanding, and on none once queued.
+//
+// Linux never had the problem: pl2303 sets no bulk_in_size and no read
+// callback, so it inherits read_urbs[2] (include/linux/usb/serial.h) — both
+// submitted at open and each resubmitted from its own completion callback.
+// Depth 2 suffices when the resubmit runs in interrupt context; a JS resubmit
+// crosses Chrome's IPC boundary and the event loop, hence the deeper queue.
+const READ_PIPELINE_DEPTH = 16;
+
 // Legacy (non-HXN) vendor requests.
 const VENDOR_READ_REQUEST = 0x01;
 const VENDOR_WRITE_REQUEST = 0x01;
@@ -343,16 +360,49 @@ export class Pl2303SerialPort {
     const packetSize = this._inPacketSize;
     const isClosed = () => this._closed;
 
+    // Bulk IN transfers queued on the endpoint, oldest first. Transfers on one
+    // endpoint complete in the order they were issued, so draining this as a
+    // FIFO keeps the byte order intact. See READ_PIPELINE_DEPTH for why more
+    // than one has to be outstanding.
+    let inFlight = [];
+    const topUp = () => {
+      while (inFlight.length < READ_PIPELINE_DEPTH && !isClosed()) {
+        const transfer = device.transferIn(inEndpoint, packetSize);
+        // close() aborts whatever is still queued. The pull path below awaits
+        // `transfer` itself and reports the failure properly; this handler
+        // exists only so a transfer nobody got to await cannot surface as an
+        // unhandled rejection during teardown.
+        transfer.catch(() => {});
+        inFlight.push(transfer);
+      }
+    };
     this.readable = new ReadableStream({
       // pull must not resolve until it has enqueued data (a pull that
       // resolves without enqueuing is never re-invoked — the deadlock we hit
       // in the FTDI driver). PL2303 bulk IN carries raw payload with no
       // status header, so any non-empty packet is data.
+      //
+      // Each transfer asks for exactly one packet. This chip does terminate a
+      // multi-packet transfer properly, unlike the CH340 — but a request that
+      // spans packets can only ever end on a short packet or an exact fill, and
+      // there is nothing to gain from it once the queue is deep enough.
       pull: async (controller) => {
         try {
           while (!isClosed()) {
-            const result = await device.transferIn(inEndpoint, packetSize);
+            // Topping up here, before every shift, is what guarantees the queue
+            // is non-empty unless the port is closing — a pull that returns
+            // without enqueuing is never called again.
+            topUp();
+            const transfer = inFlight.shift();
+            if (!transfer) {
+              return;
+            }
+            const result = await transfer;
             if (result.status === "stall") {
+              // Never wait for the rest of the queue here: a device that does
+              // not retire its queued transfers would wedge the read path for
+              // good. Clearing the halt retires them anyway, and each comes
+              // back stalled and is skipped on its own turn round this loop.
               await device.clearHalt("in", inEndpoint);
               continue;
             }
@@ -376,8 +426,13 @@ export class Pl2303SerialPort {
       },
       cancel: () => {
         this._closed = true;
+        inFlight = [];
       },
-    });
+    // A stream that queues only one chunk puts the consumer's own work on the
+    // critical path: nothing is re-queued on the endpoint until it has taken
+    // the previous packet. Buffering a pipeline's worth lets pull keep cycling
+    // transfers while the consumer is busy.
+    }, new CountQueuingStrategy({ highWaterMark: READ_PIPELINE_DEPTH }));
 
     this.writable = new WritableStream({
       write: async (chunk) => {

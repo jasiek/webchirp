@@ -35,6 +35,7 @@ function descriptorBytes({ usbVersion, deviceClass, maxPacketSize0, deviceVersio
 function makeFakeDevice({ descriptor, hxProbeSucceeds = true }) {
   const controlIn = [];
   const controlOut = [];
+  const transferInCalls = [];
   const device = {
     vendorId: 0x067b,
     productId: 0x2303,
@@ -71,10 +72,13 @@ function makeFakeDevice({ descriptor, hxProbeSucceeds = true }) {
       controlOut.push({ ...setup, data: data ? new Uint8Array(data.slice ? data.slice(0) : data) : null });
       return { status: "ok" };
     },
-    transferIn: async () => new Promise(() => {}),
+    transferIn: async (endpointNumber, length) => {
+      transferInCalls.push({ endpointNumber, length });
+      return new Promise(() => {});
+    },
     transferOut: async () => ({ status: "ok" }),
   };
-  return { device, controlIn, controlOut };
+  return { device, controlIn, controlOut, transferInCalls };
 }
 
 const HX_DESCRIPTOR = { usbVersion: 0x110, deviceClass: 0, maxPacketSize0: 64, deviceVersion: 0x400 };
@@ -211,4 +215,39 @@ test("WebUSB provider dispatches Prolific devices to the PL2303 driver", async (
     requestedOptions?.filters?.some((f) => f.vendorId === PROLIFIC_VENDOR_ID),
     "requestDevice must be called with a Prolific vendor filter",
   );
+});
+
+test("Pl2303SerialPort keeps several bulk IN transfers queued at once", async () => {
+  // With a single transfer outstanding the host has no IN request queued
+  // between one completing and the next being issued, and the chip's RX FIFO
+  // overruns in that gap. The 64-byte endpoint gives twice the CH340's slack,
+  // so it only shows on sustained transfers — measured on a Pixel 10, the
+  // loopback suite's 16 KB echo at 115200 lost bytes on 3 of 10 runs with one
+  // transfer in flight, and none of 12 once queued.
+  const { device, transferInCalls } = makeFakeDevice({ descriptor: HX_DESCRIPTOR });
+  const port = new Pl2303SerialPort(device);
+  await port.open({ baudRate: 115200 });
+  // The stream pulls as soon as it is constructed, which primes the queue.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.ok(
+    transferInCalls.length > 1,
+    `expected several transfers queued at once, saw ${transferInCalls.length}`,
+  );
+});
+
+test("Pl2303SerialPort asks for exactly one packet per bulk IN transfer", async () => {
+  // Throughput comes from queue depth, not from asking for more bytes per
+  // transfer: a request spanning packets can only end on a short packet or an
+  // exact fill, which is what strands replies outright on the CH340.
+  const { device, transferInCalls } = makeFakeDevice({ descriptor: HX_DESCRIPTOR });
+  const port = new Pl2303SerialPort(device);
+  await port.open({ baudRate: 115200 });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.ok(transferInCalls.length > 0, "expected the read path to queue a transfer");
+  for (const call of transferInCalls) {
+    assert.equal(call.endpointNumber, 3);
+    assert.equal(call.length, 64, "bulk IN transfers must request exactly one packet");
+  }
 });
