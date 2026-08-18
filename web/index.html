@@ -29,7 +29,6 @@
     />
     <link rel="canonical" href="https://codeplug.org/" />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-    <link rel="preconnect" href="https://api.github.com" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="WebCHIRP" />
     <meta property="og:title" content="WebCHIRP" />
@@ -90,28 +89,26 @@
             >View on GitHub</a
           >
           <a class="toolbar-link" href="./about.html">About</a>
-          <div class="github-star-widget">
-            <a
-              id="github-star-button"
-              class="github-star-button"
-              href="https://github.com/jasiek/webchirp"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Star jasiek/webchirp on GitHub"
+          <a
+            class="toolbar-link facebook-link"
+            href="https://www.facebook.com/groups/1373495940888652"
+            target="_blank"
+            rel="noreferrer"
             >
-              <span class="github-star-icon" aria-hidden="true">★</span>
-              <span>Star</span>
-            </a>
-            <a
-              id="github-star-count"
-              class="github-star-count"
-              href="https://github.com/jasiek/webchirp/stargazers"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="View stargazers for jasiek/webchirp on GitHub"
-              hidden
-            ></a>
-          </div>
+            <svg
+              class="facebook-logo"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="12" cy="12" r="12" fill="#1877f2" />
+              <path
+                fill="#fff"
+                d="M13.7 23v-9h3l.5-3.5h-3.5V8.3c0-1 .3-1.7 1.8-1.7h1.9V3.5c-.3 0-1.5-.1-2.8-.1-2.8 0-4.7 1.7-4.7 4.8v2.3H6.8V14h3.1v9h3.8z"
+              />
+            </svg>
+            <span>Facebook Group</span></a
+          >
           <button id="import-csv" title="Load a CHIRP CSV file (or drag one onto the page)">
             Import CSV
           </button>
@@ -503,7 +500,6 @@
 
     <input id="csv-file" type="file" accept=".csv,text/csv" hidden />
     <input id="img-file" type="file" accept=".img,application/octet-stream" hidden />
-    <script type="module" src="./js/github-button.js"></script>
     <script type="module" src="./js/version-info.js"></script>
     <script type="module" src="./app.js"></script>
   </body>

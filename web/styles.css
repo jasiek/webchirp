@@ -24,7 +24,6 @@
   /* Accent */
   --accent: #0d5ea8;
   --accent-strong: #20598d;
-  --star: #c28b00;
 
   /* Controls (buttons / links) */
   --control-top: #f9fcff;
@@ -97,7 +96,6 @@
     /* Accent */
     --accent: #4c9be8;
     --accent-strong: #74b2ef;
-    --star: #e0a93a;
 
     /* Controls (buttons / links) */
     --control-top: #2a3543;
@@ -479,47 +477,14 @@ button:disabled {
   border-color: var(--accent);
 }
 
-.github-star-widget {
-  display: inline-flex;
-  align-items: stretch;
-  align-self: center;
-}
-
-.github-star-button,
-.github-star-count {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  border: 1px solid var(--control-border);
-  background: linear-gradient(180deg, var(--control-top) 0%, var(--control-bottom) 100%);
-  color: var(--text);
-  padding: 0.45rem 0.75rem;
-  text-decoration: none;
-  font-size: 0.85rem;
-  line-height: 1;
-}
-
-.github-star-button {
+.facebook-link {
   gap: 0.4rem;
-  border-radius: 4px 0 0 4px;
 }
 
-.github-star-count {
-  justify-content: center;
-  min-width: 3.2rem;
-  border-left: 0;
-  border-radius: 0 4px 4px 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.github-star-button:hover,
-.github-star-count:hover {
-  border-color: var(--accent);
-}
-
-.github-star-icon {
-  color: var(--star);
-  font-size: 0.95rem;
+.facebook-logo {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
 }
 
 .main-layout {
