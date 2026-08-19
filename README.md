@@ -66,11 +66,14 @@ dispatched to a chip-specific driver:
   clone-silicon prescaler quirk. Enumeration and baud/line configuration are
   verified against a real adapter; a full clone against a radio has not been
   exercised yet, so the bulk read path is still untested.
-- **Silicon Labs CP2102** adapters (and the rest of the CP210x family) use a
-  built-in CP2102-over-WebUSB driver that reads the part number to pick the
-  right baud generator, disables every hardware and software handshake the chip
-  can do on its own, and is the one WebUSB driver that can also *read* the input
-  control lines. Not yet exercised against real hardware.
+- **Silicon Labs CP2102** adapters use a built-in CP2102-over-WebUSB driver
+  that reads the part number to pick the right baud generator, disables every
+  handshake and byte transformation the chip can do on its own, and is the one
+  WebUSB driver that can also *read* the input control lines. Verified on
+  Android Chrome against a real CP2102 cable. Its scope is the **single-UART**
+  parts that speak the vendor protocol — CP2101/2/3/4/9 and CP2102N; the
+  multi-UART CP2105/CP2108 are turned away, and the **CP2102C** enumerates as
+  USB CDC-ACM so it is handled by the polyfill path below instead.
 - **USB CDC-ACM** devices are dispatched to Google's `web-serial-polyfill`.
   This path is wired up but untested — most radio programming cables are not
   CDC-ACM.

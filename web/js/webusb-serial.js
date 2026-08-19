@@ -5,8 +5,11 @@
 //   - FTDI adapters (FT231X, FT232R, ...) -> native FTDI-over-WebUSB driver.
 //   - Prolific PL2303 adapters (HX/TA/TB/HXN) -> native PL2303-over-WebUSB driver.
 //   - WCH CH340/CH341 adapters -> native CH340-over-WebUSB driver.
-//   - Silicon Labs CP2102 (CP210x family) adapters -> native CP2102-over-WebUSB
-//     driver.
+//   - Silicon Labs single-UART CP210x adapters (CP2101/2/3/4/9, CP2102N) ->
+//     native CP2102-over-WebUSB driver. Its predicate declines the multi-UART
+//     and non-UART parts, and declines anything enumerating as CDC (the
+//     CP2102C), so those fall through to the polyfill below rather than being
+//     configured with the vendor register map.
 //   - Everything else -> Google's web-serial-polyfill, which handles USB
 //     CDC-ACM devices and reports a clear error for anything it cannot drive.
 import { CH340_DEVICE_IDS, Ch340SerialPort, isCh340Device } from "./ch340-webusb.js";
@@ -21,7 +24,8 @@ const WEB_SERIAL_POLYFILL_URL =
 // alongside USB_DEVICE_FILTERS / the dispatch below when adding chip drivers.
 export const WEBUSB_SUPPORTED_ADAPTERS =
   "FTDI (FT231X/FT232R, etc.), Prolific PL2303 (HX/TA/TB/HXN), "
-  + "WCH CH340/CH341, Silicon Labs CP2102 (CP210x), and USB CDC-ACM devices";
+  + "WCH CH340/CH341, Silicon Labs CP2102 (single-UART CP210x), "
+  + "and USB CDC-ACM devices";
 
 // WebUSB only lists devices that match a filter — an empty filter list shows an
 // EMPTY chooser. So we filter to the adapters we can actually drive: FTDI,

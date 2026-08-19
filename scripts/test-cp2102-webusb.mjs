@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CP210X_PARTNUM,
+  CP210X_UNSUPPORTED_PRODUCT_IDS,
   CP210X_VENDOR_ID,
   Cp2102SerialPort,
   cp2102QuantizeBaudRate,
+  cp2102RejectionReason,
   cp2102SpeedLimits,
+  hasCdcInterface,
   isCp2102Device,
 } from "../web/js/cp2102-webusb.js";
 import { createWebUsbSerial } from "../web/js/webusb-serial.js";
@@ -36,6 +39,10 @@ function makeFakeDevice({
   const controlOut = [];
   const clearHaltCalls = [];
   const transferInCalls = [];
+  const transferOutCalls = [];
+  // Results the fake hands back for the next bulk OUT transfers, oldest first;
+  // anything past the end of the list is a full, successful write.
+  const outResults = [];
   // Transfers the driver has queued that the fake has not answered yet.
   const outstanding = [];
   const device = {
@@ -108,14 +115,28 @@ function makeFakeDevice({
         outstanding.push({ resolve, reject });
       });
     },
-    transferOut: async () => ({ status: "ok" }),
+    transferOut: async (endpointNumber, data) => {
+      transferOutCalls.push({ endpointNumber, bytes: Array.from(new Uint8Array(
+        data.buffer || data,
+        data.byteOffset || 0,
+        data.byteLength ?? data.length,
+      )) });
+      const next = outResults.shift();
+      if (next) {
+        return next;
+      }
+      return { status: "ok", bytesWritten: data.byteLength ?? data.length };
+    },
   };
   // Answer the oldest unanswered transfer — bulk transfers on one endpoint
   // complete in the order they were issued.
   const deliver = (result) => {
     outstanding.shift()?.resolve(result);
   };
-  return { device, controlIn, controlOut, clearHaltCalls, transferInCalls, deliver };
+  return {
+    device, controlIn, controlOut, clearHaltCalls, transferInCalls,
+    transferOutCalls, outResults, deliver,
+  };
 }
 
 // Let the stream's pull run: it is invoked off a microtask and awaits transfers.
@@ -177,15 +198,64 @@ test("cp2102QuantizeBaudRate uses the divisor maths on parts that need it", () =
   );
 });
 
-test("isCp2102Device recognizes the Silicon Labs vendor id", () => {
+test("isCp2102Device accepts single-UART Silicon Labs bridges", () => {
   assert.equal(CP210X_VENDOR_ID, 0x10c4);
   assert.ok(isCp2102Device({ vendorId: 0x10c4, productId: 0xea60 }));
-  // OEM cables ship with custom product ids under the same vendor and are all
-  // CP210x parts, so the match is vendor-wide.
+  // OEM cables ship a CP210x under a custom product id, and there are ~150 of
+  // them in the kernel's table — an exact-pair allowlist would make those
+  // invisible in the chooser, so the vendor-wide match is deliberate.
   assert.ok(isCp2102Device({ vendorId: 0x10c4, productId: 0x814b }));
   assert.ok(!isCp2102Device({ vendorId: 0x1a86, productId: 0x7523 })); // CH340
   assert.ok(!isCp2102Device({ vendorId: 0x0403, productId: 0x6015 })); // FTDI
   assert.ok(!isCp2102Device(null));
+});
+
+test("isCp2102Device turns away the parts this driver must not configure", () => {
+  // Vendor-wide breadth in the chooser is only safe because the products that
+  // are not single-UART vendor-protocol bridges are rejected here. Each of
+  // these would otherwise be handed the CP210x register map on the strength of
+  // its vendor id: the multi-UART parts address a second port this driver does
+  // not know about, and the HID/SPI parts are not UARTs at all.
+  for (const [productId, description] of CP210X_UNSUPPORTED_PRODUCT_IDS) {
+    const device = { vendorId: 0x10c4, productId };
+    assert.ok(!isCp2102Device(device), `${description} must be rejected`);
+    assert.match(cp2102RejectionReason(device), /not a single-UART CP210x bridge/);
+  }
+  // The set covers both reasons a product is excluded.
+  assert.ok(CP210X_UNSUPPORTED_PRODUCT_IDS.has(0xea70), "CP2105 (dual UART)");
+  assert.ok(CP210X_UNSUPPORTED_PRODUCT_IDS.has(0x87a0), "CP2130 (USB-SPI)");
+});
+
+test("a Silicon Labs device that enumerates as CDC belongs to the polyfill", () => {
+  // The CP2102C speaks standard CDC-ACM rather than the vendor register map,
+  // and it carries a Silicon Labs vendor id like everything else here — so the
+  // product id cannot separate it and the interface class has to. Sending it
+  // CP210x configuration writes would be wrong even though the vendor matches.
+  const cp2102c = {
+    vendorId: 0x10c4,
+    productId: 0xea60,
+    configurations: [{
+      interfaces: [
+        { alternates: [{ interfaceClass: 0x02 }] },
+        { alternates: [{ interfaceClass: 0x0a }] },
+      ],
+    }],
+  };
+  assert.ok(hasCdcInterface(cp2102c));
+  assert.ok(!isCp2102Device(cp2102c));
+  assert.match(cp2102RejectionReason(cp2102c), /CDC polyfill/);
+
+  // A genuine CP2102 declares a vendor-specific interface class and is kept.
+  const cp2102 = {
+    vendorId: 0x10c4,
+    productId: 0xea60,
+    configurations: [{ interfaces: [{ alternates: [{ interfaceClass: 0xff }] }] }],
+  };
+  assert.ok(!hasCdcInterface(cp2102));
+  assert.ok(isCp2102Device(cp2102));
+
+  // A device that declares CDC at the device level counts too.
+  assert.ok(hasCdcInterface({ vendorId: 0x10c4, deviceClass: 0x02 }));
 });
 
 test("WebUSB provider dispatches CP2102 devices to the CP2102 driver", async () => {
@@ -215,6 +285,24 @@ test("WebUSB provider dispatches CP2102 devices to the CP2102 driver", async () 
   );
 });
 
+test("WebUSB provider sends a CDC Silicon Labs device to the polyfill", async () => {
+  setNavigator({
+    usb: {
+      requestDevice: async () => ({
+        vendorId: 0x10c4,
+        productId: 0xea60,
+        configurations: [{ interfaces: [{ alternates: [{ interfaceClass: 0x02 }] }] }],
+      }),
+    },
+  });
+  class FakeCdcSerialPort {}
+  const serial = createWebUsbSerial({ loadCdcSerialPort: async () => FakeCdcSerialPort });
+  const port = await serial.requestPort();
+
+  assert.ok(port instanceof FakeCdcSerialPort, "CP2102C must reach the CDC polyfill");
+  assert.ok(!(port instanceof Cp2102SerialPort));
+});
+
 test("Cp2102SerialPort.open() runs the init sequence", async () => {
   const { device, controlIn, controlOut } = makeFakeDevice();
   const port = new Cp2102SerialPort(device);
@@ -233,7 +321,12 @@ test("Cp2102SerialPort.open() runs the init sequence", async () => {
     },
   ]);
   assert.deepEqual(controlOut, [
-    // IFC_ENABLE, which also takes the chip out of event-insertion mode.
+    // IFC_ENABLE(UART_DISABLE) before IFC_ENABLE(UART_ENABLE). Enabling the
+    // interface does NOT clear event-insertion mode (AN571) — only a disable or
+    // a USB reset does — so without the down-then-up an event mode inherited
+    // from a previous session escapes 0xEC and splices status bytes into the
+    // clone data. Dropping the disable is invisible until it corrupts an image.
+    { recipient: "interface", request: 0x00, value: 0x0000, index: 0, data: null },
     { recipient: "interface", request: 0x00, value: 0x0001, index: 0, data: null },
     // SET_BAUDRATE carries the rate as a little-endian u32: 9600 = 0x2580.
     { recipient: "interface", request: 0x1e, value: 0, index: 0, data: [0x80, 0x25, 0x00, 0x00] },
@@ -245,12 +338,12 @@ test("Cp2102SerialPort.open() runs the init sequence", async () => {
       request: 0x13,
       value: 0,
       index: 0,
-      data: controlOut[3].data,
+      data: controlOut[4].data,
     },
     // SET_MHS: both write-mask bits set, both lines low.
     { recipient: "interface", request: 0x07, value: 0x0300, index: 0, data: null },
   ]);
-  assert.equal(controlOut[3].data.length, 16);
+  assert.equal(controlOut[4].data.length, 16);
   assert.ok(port.readable, "readable stream must be set up");
   assert.ok(port.writable, "writable stream must be set up");
 });
@@ -293,9 +386,12 @@ test("Cp2102SerialPort.open() turns off every handshake the chip can do itself",
   const current = new Uint8Array(16);
   const view = new DataView(current.buffer);
   view.setUint32(0, 0x7b, true); // DTR flow control + CTS/DSR/DCD handshake + sensitivity
-  view.setUint32(4, 0x83, true); // RTS flow control + auto transmit + auto receive
-  view.setUint32(8, 0x40, true); // Xon limit, untouched
-  view.setUint32(12, 0x40, true); // Xoff limit, untouched
+  // RTS flow control + auto transmit + auto receive + error char + NUL
+  // stripping + break char: the last three rewrite the received byte stream
+  // rather than failing, and NUL stripping alone silently shortens an image.
+  view.setUint32(4, 0x9f, true);
+  view.setUint32(8, 0x80, true); // Xon limit
+  view.setUint32(12, 0x80, true); // Xoff limit
   const { device, controlOut } = makeFakeDevice({ flowBlock: current });
   const port = new Cp2102SerialPort(device);
   await port.open({ baudRate: 9600 });
@@ -303,11 +399,17 @@ test("Cp2102SerialPort.open() turns off every handshake the chip can do itself",
   const written = controlOut.find((c) => c.request === 0x13);
   const [controlHandshake, flowReplace, xonLimit, xoffLimit] = flowWords(written.data);
   assert.equal(controlHandshake, 0, "no DTR flow control, no CTS/DSR/DCD handshake");
-  assert.equal(flowReplace, 0, "no RTS flow control, no XON/XOFF");
-  // Read-modify-write: fields the driver has no opinion on stay as the chip
-  // had them.
-  assert.equal(xonLimit, 0x40);
-  assert.equal(xoffLimit, 0x40);
+  assert.equal(
+    flowReplace,
+    0,
+    "no RTS flow control, no XON/XOFF, no error/NUL/break byte transformation",
+  );
+  // Both thresholds go out as zero even though the chip reported 0x80. CP2102N
+  // A01 erratum E104 reads the first byte of ulXonLimit as ulFlowReplace, so
+  // 0x80 there selects RTS flow control on an affected part — gating TX while
+  // the real flow word looks innocent. They are unused with XON/XOFF off.
+  assert.equal(xonLimit, 0);
+  assert.equal(xoffLimit, 0);
 });
 
 test("Cp2102SerialPort.open() builds a flow block when the chip will not report one", async () => {
@@ -328,8 +430,8 @@ test("Cp2102SerialPort.open() builds a flow block when the chip will not report 
   const [controlHandshake, flowReplace, xonLimit, xoffLimit] = flowWords(written.data);
   assert.equal(controlHandshake, 0);
   assert.equal(flowReplace, 0);
-  assert.equal(xonLimit, 0x80);
-  assert.equal(xoffLimit, 0x80);
+  assert.equal(xonLimit, 0);
+  assert.equal(xoffLimit, 0);
 });
 
 test("Cp2102SerialPort.open() reports a missing bulk pair by interface", async () => {
@@ -479,9 +581,13 @@ test("Cp2102SerialPort.close() purges the FIFOs and disables the UART", async ()
   await port.close();
 
   assert.deepEqual(controlOut, [
-    // PURGE both queues first — the CP2108 occasionally hangs without it.
+    // Both control lines low first, unconditionally: disabling the UART does
+    // not reset these outputs (CP2102N A01 erratum E106), so skipping this can
+    // leave DTR or RTS asserted into a radio until the cable is unplugged.
+    { recipient: "interface", request: 0x07, value: 0x0300, index: 0, data: null },
+    // PURGE both queues — the CP2108 occasionally hangs without it.
     { recipient: "interface", request: 0x12, value: 0x000f, index: 0, data: null },
-    // Then disable the UART, which also clears event-insertion mode.
+    // Then disable the UART, which is also what clears event-insertion mode.
     { recipient: "interface", request: 0x00, value: 0x0000, index: 0, data: null },
   ]);
 });
@@ -502,4 +608,98 @@ test("Cp2102SerialPort.close() still releases the device when the chip is gone",
 
   assert.ok(released, "interface must be released");
   assert.ok(closed, "device must be closed");
+});
+
+test("Cp2102SerialPort.setSignals keeps its shadow honest when a request fails", async () => {
+  // The shadow is what setSignals consults to skip a no-op write. Committing it
+  // before the request succeeds turns the caller's retry into a no-op against a
+  // line that never moved — the radio stays unasserted and nothing reports it.
+  const { device, controlOut } = makeFakeDevice();
+  const port = new Cp2102SerialPort(device);
+  await port.open({ baudRate: 9600 });
+  controlOut.length = 0;
+
+  const working = device.controlTransferOut;
+  device.controlTransferOut = async () => ({ status: "stall" });
+  await assert.rejects(
+    port.setSignals({ dataTerminalReady: true }),
+    /control request 0x7 failed: stall/,
+  );
+
+  device.controlTransferOut = working;
+  await port.setSignals({ dataTerminalReady: true });
+  assert.deepEqual(controlOut.at(-1), {
+    recipient: "interface", request: 0x07, value: 0x0101, index: 0, data: null,
+  });
+});
+
+test("Cp2102SerialPort write path reports a stalled bulk OUT instead of losing bytes", async () => {
+  // WebUSB resolves a failed bulk OUT with a status rather than rejecting, so a
+  // write path that ignores the result reports success on a protocol block that
+  // went nowhere. An upload has to fail visibly instead.
+  const { device, outResults, clearHaltCalls } = makeFakeDevice();
+  const port = new Cp2102SerialPort(device);
+  await port.open({ baudRate: 9600 });
+  const writer = port.writable.getWriter();
+
+  outResults.push({ status: "stall", bytesWritten: 0 });
+  await assert.rejects(
+    writer.write(new Uint8Array([1, 2, 3, 4])),
+    /bulk OUT endpoint stalled after 0 of 4 bytes/,
+  );
+  // The endpoint is left usable for whatever the caller does next.
+  assert.deepEqual(clearHaltCalls, [{ direction: "out", endpoint: 1 }]);
+});
+
+test("Cp2102SerialPort write path resumes a short bulk OUT transfer", async () => {
+  // `bytesWritten` can be less than the chunk. Assuming a partial write was a
+  // whole one drops the tail of a frame silently.
+  const { device, outResults, transferOutCalls } = makeFakeDevice();
+  const port = new Cp2102SerialPort(device);
+  await port.open({ baudRate: 9600 });
+  const writer = port.writable.getWriter();
+
+  outResults.push({ status: "ok", bytesWritten: 2 });
+  await writer.write(new Uint8Array([1, 2, 3, 4, 5]));
+
+  assert.deepEqual(transferOutCalls.map((c) => c.bytes), [
+    [1, 2, 3, 4, 5],
+    [3, 4, 5],
+  ], "the remainder must be written from where the short transfer stopped");
+});
+
+test("Cp2102SerialPort write path gives up on a transfer that never progresses", async () => {
+  const { device, outResults } = makeFakeDevice();
+  const port = new Cp2102SerialPort(device);
+  await port.open({ baudRate: 9600 });
+  const writer = port.writable.getWriter();
+
+  outResults.push({ status: "ok", bytesWritten: 0 });
+  await assert.rejects(
+    writer.write(new Uint8Array([1, 2, 3])),
+    /wrote no bytes at offset 0 of 3/,
+  );
+});
+
+test("Cp2102SerialPort.open() hands the device back when initialization fails", async () => {
+  // A failure after claimInterface that leaves the interface claimed poisons
+  // every retry: the next open fails at claimInterface with "another driver may
+  // already control it", pointing at the wrong problem entirely.
+  const { device } = makeFakeDevice();
+  let released = 0;
+  let closed = 0;
+  const releaseInterface = device.releaseInterface;
+  device.releaseInterface = async (...args) => { released += 1; return releaseInterface(...args); };
+  device.close = async () => { closed += 1; };
+  device.controlTransferOut = async () => ({ status: "stall" });
+
+  const port = new Cp2102SerialPort(device);
+  await assert.rejects(port.open({ baudRate: 9600 }), /control request 0x0 failed: stall/);
+  assert.equal(released, 1, "the claimed interface must be released");
+  assert.equal(closed, 1, "the device must be closed");
+
+  // And a retry against a healthy chip now works.
+  device.controlTransferOut = async () => ({ status: "ok" });
+  await port.open({ baudRate: 9600 });
+  assert.ok(port.readable);
 });

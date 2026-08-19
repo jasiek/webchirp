@@ -1,23 +1,54 @@
-// Silicon Labs CP2102 (CP210x family) USB-UART driver implemented over WebUSB,
-// exposing the same subset of the Web Serial `SerialPort` interface as the
-// FTDI, PL2303 and CH340 drivers (open, readable, writable, setSignals,
-// getInfo, close) so BrowserSerialBridge can use any of them interchangeably.
+// Silicon Labs CP2102 USB-UART driver implemented over WebUSB, exposing the
+// same subset of the Web Serial `SerialPort` interface as the FTDI, PL2303 and
+// CH340 drivers (open, readable, writable, setSignals, getSignals, getInfo,
+// close) so BrowserSerialBridge can use any of them interchangeably.
+//
+// Scope is the single-UART CP210x parts that speak the vendor protocol —
+// CP2101/2/3/4/9 and CP2102N. The multi-UART CP2105/CP2108 are out of scope,
+// and the CP2102C enumerates as USB CDC-ACM and belongs to the polyfill; both
+// are turned away at dispatch rather than handed this register map.
 //
 // Protocol reference: the Linux kernel driver (drivers/usb/serial/cp210x.c),
-// itself derived from AN978 (CP210x USB-to-UART API specification). The chip
-// speaks vendor control requests addressed to the *interface* — unlike the
-// CH340's device-recipient requests — and the bulk IN endpoint carries raw
-// UART payload with no status header, provided event-insertion mode is off.
-// This driver never enables event mode, so 0xEC is an ordinary data byte.
+// itself derived from AN978 (CP210x USB-to-UART API specification) and AN571
+// (the interface specification). The chip speaks vendor control requests
+// addressed to the *interface* — unlike the CH340's device-recipient requests —
+// and the bulk IN endpoint carries raw UART payload with no status header,
+// provided event-insertion mode is off. This driver never turns event mode on
+// and clears any it inherited at open, so 0xEC is an ordinary data byte.
 
-// Silicon Labs' vendor id. Unlike WCH's 0x1a86 — which also covers CH9102/CH343
-// parts that enumerate as CDC-ACM and must fall through to the polyfill — every
-// serial device under 0x10c4 in the kernel's id_table is a CP210x bridge, so a
-// vendor-wide filter is accurate here and catches the OEM cables that ship with
-// custom product ids (the kernel lists ~150 of them). The exception is the
-// CP2110, an HID-UART part Chrome will not let WebUSB claim at all; picking one
-// fails at claimInterface with a clear message rather than misbehaving.
+// Silicon Labs' vendor id. The chooser filters on it vendor-wide, because ~150
+// of the kernel id_table's entries are OEM cables that ship a CP210x under a
+// custom product id — an exact-pair allowlist would leave those *invisible in
+// the chooser*, which is worse than a mis-dispatch: a device that never appears
+// produces no diagnostic at all.
+//
+// Breadth in the chooser is paid for by two checks at dispatch, because this
+// driver's scope is the single-UART parts that speak the vendor protocol
+// (CP2101/2/3/4/9/2N):
+//   - products known not to be one of those are rejected outright, below;
+//   - devices that enumerate as USB CDC — the CP2102C, whichever product id it
+//     carries — are declined so they reach the polyfill instead.
+// Anything that gets past both is configured with the vendor register map.
 export const CP210X_VENDOR_ID = 0x10c4;
+
+// Products under 0x10c4 this driver must not claim: the multi-UART parts, which
+// are out of scope, and the parts that are not UART bridges at all. Everything
+// here would otherwise be handed the CP210x register map on the strength of its
+// vendor id alone.
+export const CP210X_UNSUPPORTED_PRODUCT_IDS = new Map([
+  [0xea70, "CP2105 (dual UART)"],
+  [0xea71, "CP2108 (quad UART)"],
+  [0xea7a, "CP2105 (dual UART)"],
+  [0xea7b, "CP2108 (quad UART)"],
+  [0xea80, "CP2110 (HID-UART)"],
+  [0xea90, "CP2112 (HID-SMBus)"],
+  [0x87a0, "CP2130 (USB-SPI)"],
+]);
+
+// USB class codes that mean "the CDC polyfill can drive this": Communications
+// on the control interface, CDC-Data on the data interface.
+const USB_CLASS_CDC_CONTROL = 0x02;
+const USB_CLASS_CDC_DATA = 0x0a;
 
 // Vendor requests, addressed to the interface (bmRequestType 0x41 / 0xc1).
 const REQ_IFC_ENABLE = 0x00;
@@ -66,6 +97,13 @@ const SERIAL_DCD_HANDSHAKE = 1 << 5;
 const SERIAL_DSR_SENSITIVITY = 1 << 6;
 const SERIAL_AUTO_TRANSMIT = 1 << 0;
 const SERIAL_AUTO_RECEIVE = 1 << 1;
+// Bits 2-4 transform the received byte stream: substitute a character on a
+// parity/framing error, discard every NUL, substitute a character on a break.
+// All three rewrite binary clone data rather than failing, so all three are
+// cleared — NUL stripping alone would silently shorten an image.
+const SERIAL_ERROR_CHAR = 1 << 2;
+const SERIAL_NULL_STRIPPING = 1 << 3;
+const SERIAL_BREAK_CHAR = 1 << 4;
 const SERIAL_RTS_MASK = 0xc0;
 const SERIAL_RTS_ACTIVE = 1 << 6;
 
@@ -92,11 +130,49 @@ export const CP210X_PARTNUM = {
 // slack of the CH340's 32-byte one, which changes the margin, not the defect.
 const READ_PIPELINE_DEPTH = 16;
 
-export function isCp2102Device(device) {
-  if (!device) {
-    return false;
+// True when the device enumerates as USB CDC — checked across every
+// configuration, since the descriptors are readable before open() and a
+// composite part may not have the CDC pair in configuration 1.
+export function hasCdcInterface(device) {
+  if (Number(device?.deviceClass) === USB_CLASS_CDC_CONTROL) {
+    return true;
   }
-  return Number(device.vendorId) === CP210X_VENDOR_ID;
+  const configurations = device?.configurations
+    || (device?.configuration ? [device.configuration] : []);
+  for (const configuration of configurations) {
+    for (const iface of configuration?.interfaces || []) {
+      for (const alternate of iface?.alternates || [iface?.alternate]) {
+        const classCode = Number(alternate?.interfaceClass);
+        if (classCode === USB_CLASS_CDC_CONTROL || classCode === USB_CLASS_CDC_DATA) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// Why a device is not this driver's to drive, or "" when it is. Returning the
+// reason rather than a boolean keeps it usable in a diagnostic.
+export function cp2102RejectionReason(device) {
+  if (!device || Number(device.vendorId) !== CP210X_VENDOR_ID) {
+    return "not a Silicon Labs device";
+  }
+  const unsupported = CP210X_UNSUPPORTED_PRODUCT_IDS.get(Number(device.productId));
+  if (unsupported) {
+    return `${unsupported} is not a single-UART CP210x bridge`;
+  }
+  if (hasCdcInterface(device)) {
+    // The CP2102C speaks standard CDC-ACM, not the vendor register map, so the
+    // polyfill is its correct driver — issuing CP210x configuration writes to
+    // it would be wrong even though its vendor id matches.
+    return "device enumerates as USB CDC and belongs to the CDC polyfill";
+  }
+  return "";
+}
+
+export function isCp2102Device(device) {
+  return cp2102RejectionReason(device) === "";
 }
 
 // Rates the CP2101/2/3 baud generator actually produces, from AN205 Table 1:
@@ -189,6 +265,7 @@ export class Cp2102SerialPort {
     this._inPacketSize = 64;
     this._dtr = false;
     this._rts = false;
+    this._claimed = false;
     this._closed = false;
   }
 
@@ -270,13 +347,17 @@ export class Cp2102SerialPort {
     this.baudRate = rate;
   }
 
-  // Disable every handshake the chip can do on its own: hardware flow control
-  // would let the radio's control lines gate our transmit, and XON/XOFF would
-  // eat 0x11/0x13 out of a clone image. DTR and RTS stay under setSignals().
+  // Put the chip in the only mode a clone can survive: no handshaking it drives
+  // itself, and no transformation of the byte stream. Hardware flow control
+  // would let the radio's control lines gate our transmit, XON/XOFF would eat
+  // 0x11/0x13 out of a clone image, and the byte-transform bits would rewrite
+  // it. No CHIRP driver asks for any of them — `xonxoff` appears nowhere in the
+  // CHIRP tree, and every driver that sets HARDWARE_FLOW is a live-mode radio
+  // this app does not support. DTR and RTS stay under setSignals().
   //
-  // Read-modify-write, as the kernel does, so the reserved bits and the chip's
-  // own Xon/Xoff limits survive; a chip that will not answer GET_FLOW gets a
-  // block built from scratch instead.
+  // Read-modify-write, as the kernel does, so bits neither the kernel nor this
+  // driver has an opinion on survive; a chip that will not answer GET_FLOW gets
+  // a block built from scratch instead.
   async _setFlowControl() {
     let block;
     try {
@@ -292,10 +373,6 @@ export class Cp2102SerialPort {
     }
     if (!block) {
       block = new DataView(new ArrayBuffer(FLOW_CTL_SIZE));
-      // The SiLabs defaults for the FIFO thresholds the chip only uses when
-      // XON/XOFF is on; written so a constructed block is not all zeroes.
-      block.setUint32(8, 0x80, true);
-      block.setUint32(12, 0x80, true);
     }
 
     let controlHandshake = block.getUint32(0, true);
@@ -308,17 +385,33 @@ export class Cp2102SerialPort {
     if (this._dtr) {
       controlHandshake |= SERIAL_DTR_ACTIVE;
     }
-    flowReplace &= ~(SERIAL_RTS_MASK | SERIAL_AUTO_TRANSMIT | SERIAL_AUTO_RECEIVE);
+    flowReplace &= ~(
+      SERIAL_RTS_MASK | SERIAL_AUTO_TRANSMIT | SERIAL_AUTO_RECEIVE
+      | SERIAL_ERROR_CHAR | SERIAL_NULL_STRIPPING | SERIAL_BREAK_CHAR
+    );
     if (this._rts) {
       flowReplace |= SERIAL_RTS_ACTIVE;
     }
 
     block.setUint32(0, controlHandshake >>> 0, true);
     block.setUint32(4, flowReplace >>> 0, true);
+    // Both XON/XOFF thresholds go out as zero, never as the chip's own values.
+    // CP2102N A01 erratum E104 has the firmware read the first byte of
+    // ulXonLimit as ulFlowReplace, so a threshold of 0x80 there selects RTS
+    // flow control on an affected part — which gates TX and can fail SET_MHS,
+    // with the real flow word looking perfectly innocent. They are unused with
+    // software flow control off, so zero costs nothing.
+    block.setUint32(8, 0, true);
+    block.setUint32(12, 0, true);
     await this._controlOut(REQ_SET_FLOW, 0, block);
   }
 
   // SET_MHS carries a write mask, so only the lines named here change.
+  //
+  // The shadow is committed after the request succeeds, never before: it is
+  // what setSignals() consults to skip a no-op write, so a shadow updated on a
+  // request that failed would make the caller's identical retry a no-op against
+  // hardware whose line never moved.
   async _writeModemControl({ dtr, rts }) {
     let control = 0;
     if (dtr !== undefined) {
@@ -326,16 +419,20 @@ export class Cp2102SerialPort {
       if (dtr) {
         control |= CONTROL_DTR;
       }
-      this._dtr = Boolean(dtr);
     }
     if (rts !== undefined) {
       control |= CONTROL_WRITE_RTS;
       if (rts) {
         control |= CONTROL_RTS;
       }
-      this._rts = Boolean(rts);
     }
     await this._controlOut(REQ_SET_MHS, control);
+    if (dtr !== undefined) {
+      this._dtr = Boolean(dtr);
+    }
+    if (rts !== undefined) {
+      this._rts = Boolean(rts);
+    }
   }
 
   async open(options = {}) {
@@ -349,6 +446,22 @@ export class Cp2102SerialPort {
     } catch (error) {
       throw new Error(`CP2102: could not open USB device: ${error?.message || error}`);
     }
+
+    // Past this point the device is owned, so every failure has to give it back
+    // before it propagates. Otherwise a rejected open leaves the interface
+    // claimed and every retry fails at claimInterface with a misleading
+    // "another driver may already control it" — the first failure poisons all
+    // the later ones. The app's bridge happens to tear down after a failed
+    // open, but the loopback page only closes a port that opened.
+    try {
+      await this._initialize(Number(options.baudRate) || 9600);
+    } catch (error) {
+      await this._releaseDevice();
+      throw error;
+    }
+  }
+
+  async _initialize(baudRate) {
     if (!this.device.configuration) {
       await this.device.selectConfiguration(1);
     }
@@ -357,6 +470,7 @@ export class Cp2102SerialPort {
     this._interfaceNumber = iface.interfaceNumber;
     try {
       await this.device.claimInterface(this._interfaceNumber);
+      this._claimed = true;
     } catch (error) {
       throw new Error(
         `CP2102: could not claim USB interface ${this._interfaceNumber} `
@@ -365,8 +479,7 @@ export class Cp2102SerialPort {
     }
 
     // Select the bulk pair explicitly rather than by direction: parts in this
-    // family that expose GPIO or a second UART carry other endpoint types on
-    // the same interface.
+    // family that expose GPIO carry other endpoint types on the same interface.
     for (const endpoint of iface.alternate.endpoints) {
       if (endpoint.type !== "bulk") {
         continue;
@@ -385,8 +498,14 @@ export class Cp2102SerialPort {
     }
 
     this.partNumber = await this._readPartNumber();
-    // Enabling the interface also clears event-insertion mode, so whatever a
-    // previous driver left the chip in, the bulk IN stream is raw payload.
+    // Take the UART down before bringing it up. Event-insertion mode — which
+    // escapes 0xEC and splices line/modem status into the data stream — is
+    // cleared by a USB reset or by IFC_ENABLE(UART_DISABLE), and *not* by
+    // enabling the interface (AN571). This driver never turns event mode on,
+    // but it inherits whatever the last driver to hold the chip left behind,
+    // and an inherited event mode corrupts a clone silently: the escapes look
+    // like data. One control transfer buys immunity from that.
+    await this._controlOut(REQ_IFC_ENABLE, UART_DISABLE);
     await this._controlOut(REQ_IFC_ENABLE, UART_ENABLE);
     await this._setBaudRate(baudRate);
     await this._controlOut(REQ_SET_LINE_CTL, LINE_CTL_8N1);
@@ -400,6 +519,24 @@ export class Cp2102SerialPort {
     await this._writeModemControl({ dtr: false, rts: false });
 
     this._setupStreams();
+  }
+
+  // Hand the device back, best effort. Used by both the failed-open rollback
+  // and close().
+  async _releaseDevice() {
+    if (this._claimed) {
+      try {
+        await this.device.releaseInterface(this._interfaceNumber);
+      } catch {
+        // Interface may already be released or the device gone.
+      }
+      this._claimed = false;
+    }
+    try {
+      await this.device.close();
+    } catch {
+      // Ignore close errors.
+    }
   }
 
   // Web Serial-style signal control: only the provided keys change.
@@ -525,17 +662,70 @@ export class Cp2102SerialPort {
     }, new CountQueuingStrategy({ highWaterMark: READ_PIPELINE_DEPTH }));
 
     this.writable = new WritableStream({
+      // A bulk OUT transfer that fails does *not* reject: WebUSB resolves it
+      // with a USBOutTransferResult carrying `status` and `bytesWritten`.
+      // Ignoring both makes writer.write() report success while a protocol
+      // block went nowhere — an upload that silently loses a frame instead of
+      // failing. So every transfer's status is checked, and a short write is
+      // resumed from where it stopped rather than assumed complete.
       write: async (chunk) => {
-        await device.transferOut(outEndpoint, chunk);
+        const bytes = chunk instanceof Uint8Array
+          ? chunk
+          : new Uint8Array(chunk.buffer || chunk, chunk.byteOffset || 0, chunk.byteLength);
+        let offset = 0;
+        while (offset < bytes.length) {
+          const remaining = bytes.subarray(offset);
+          const result = await device.transferOut(outEndpoint, remaining);
+          const status = result?.status || "ok";
+          if (status === "stall") {
+            // Leave the endpoint usable for whatever the caller does next; the
+            // write itself still fails, because the bytes are gone.
+            try {
+              await device.clearHalt("out", outEndpoint);
+            } catch {
+              // The halt may already be cleared, or the device gone.
+            }
+            throw new Error(
+              `CP2102: bulk OUT endpoint stalled after ${offset} of ${bytes.length} bytes`,
+            );
+          }
+          if (status !== "ok") {
+            throw new Error(
+              `CP2102: bulk OUT transfer failed (${status}) after ${offset} of ${bytes.length} bytes`,
+            );
+          }
+          // An implementation that reports no count is taken at its word that
+          // an "ok" transfer wrote everything it was given; Chrome always
+          // reports one.
+          const written = result?.bytesWritten === undefined
+            ? remaining.length
+            : Number(result.bytesWritten);
+          if (!(written > 0)) {
+            throw new Error(
+              `CP2102: bulk OUT wrote no bytes at offset ${offset} of ${bytes.length}`,
+            );
+          }
+          offset += written;
+        }
       },
     });
   }
 
   async close() {
     this._closed = true;
+    // Drive both control lines low first, unconditionally. Disabling the UART
+    // does not reset these outputs (CP2102N A01 erratum E106 makes the host
+    // responsible for deactivating them), so without this a disconnect can
+    // leave DTR or RTS asserted into a radio until the cable is unplugged —
+    // which for a programming cable means holding the radio in clone mode.
+    try {
+      await this._writeModemControl({ dtr: false, rts: false });
+    } catch {
+      // Device may already be gone.
+    }
     // Clear both FIFOs before disabling the UART — the CP2108 occasionally
-    // hangs without it — then disable the interface, which also takes the chip
-    // out of event-insertion mode if anything ever turned it on.
+    // hangs without it — then disable the interface, which is also what clears
+    // event-insertion mode if anything ever turned it on.
     try {
       await this._controlOut(REQ_PURGE, PURGE_ALL);
     } catch {
@@ -546,15 +736,6 @@ export class Cp2102SerialPort {
     } catch {
       // Device may already be gone.
     }
-    try {
-      await this.device.releaseInterface(this._interfaceNumber);
-    } catch {
-      // Interface may already be released or the device gone.
-    }
-    try {
-      await this.device.close();
-    } catch {
-      // Ignore close errors.
-    }
+    await this._releaseDevice();
   }
 }
