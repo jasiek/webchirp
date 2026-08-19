@@ -1,5 +1,8 @@
 # Release Notes
 
+## 2026-08-19
+- Browsers that cannot run WebCHIRP fully now grey out the app behind an explanation panel instead of a small sidebar note: it says when no serial transport exists (radio programming needs Web Serial — Chrome, Edge or recent Firefox) and when WebAssembly stack switching is missing so radio drivers cannot load at all (old Firefox — update), shows both on Safari, and offers "Continue anyway" for file-based editing.
+
 ## 2026-08-17
 - Added an adapter loopback test page (`serial-test.html`) with a transport-agnostic suite that bridges TX to RX and verifies every byte comes straight back, and fixed WebUSB chip ports silently delivering nothing when reopened after close (#56).
 - The loopback test page can now file a pre-filled GitHub issue in one tap, carrying the adapter, platform, browser, app version and a failure-first trimmed report, so mobile testers no longer copy/paste results by hand (#58).
