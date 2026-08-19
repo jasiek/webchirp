@@ -21,15 +21,20 @@
           <a class="toolbar-link" href="./index.html">Back to App</a>
         </div>
         <p>
-          WebCHIRP is a browser-based CHIRP interface for programming compatible radios over
-          Web Serial. You can connect a radio, download/upload codeplugs, and edit channels
-          directly in the browser.
+          WebCHIRP is a browser-based customer programming software (CPS) which uses drivers
+          developed by the excellent <a href="https://chirp.danplanet.com/">CHIRP</a> project,
+          made to run in a web browser. This has more or less the same functionality as CHIRP
+          for the desktop.
         </p>
         <p>
+          Description for geeks follows.
           The core idea is running CHIRP's Python driver logic inside the browser through
           Pyodide (Python compiled to WebAssembly). A JavaScript bridge provides serial I/O
           to that Python runtime, so existing CHIRP radio protocol implementations can be
           reused instead of rewritten in JavaScript.
+          Serial adapters on the desktop are handled by WebSerial, and on mobile we supply
+          drivers for popular adapters via WebUSB (directly connecting to the USB device,
+          without a kernel driver).
         </p>
         <p>
           This project is still evolving, so expect rough edges and verify writes carefully,
