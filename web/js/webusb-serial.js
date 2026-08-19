@@ -5,9 +5,15 @@
 //   - FTDI adapters (FT231X, FT232R, ...) -> native FTDI-over-WebUSB driver.
 //   - Prolific PL2303 adapters (HX/TA/TB/HXN) -> native PL2303-over-WebUSB driver.
 //   - WCH CH340/CH341 adapters -> native CH340-over-WebUSB driver.
+//   - Silicon Labs single-UART CP210x adapters (CP2101/2/3/4/9, CP2102N) ->
+//     native CP2102-over-WebUSB driver. Its predicate declines the multi-UART
+//     and non-UART parts, and declines anything enumerating as CDC (the
+//     CP2102C), so those fall through to the polyfill below rather than being
+//     configured with the vendor register map.
 //   - Everything else -> Google's web-serial-polyfill, which handles USB
 //     CDC-ACM devices and reports a clear error for anything it cannot drive.
 import { CH340_DEVICE_IDS, Ch340SerialPort, isCh340Device } from "./ch340-webusb.js";
+import { CP210X_VENDOR_ID, Cp2102SerialPort, isCp2102Device } from "./cp2102-webusb.js";
 import { FTDI_VENDOR_ID, FtdiSerialPort, isFtdiDevice } from "./ftdi-webusb.js";
 import { PROLIFIC_VENDOR_ID, Pl2303SerialPort, isProlificDevice } from "./pl2303-webusb.js";
 
@@ -18,17 +24,18 @@ const WEB_SERIAL_POLYFILL_URL =
 // alongside USB_DEVICE_FILTERS / the dispatch below when adding chip drivers.
 export const WEBUSB_SUPPORTED_ADAPTERS =
   "FTDI (FT231X/FT232R, etc.), Prolific PL2303 (HX/TA/TB/HXN), "
-  + "WCH CH340/CH341, and USB CDC-ACM devices";
-export const WEBUSB_UNSUPPORTED_ADAPTERS = "CP2102";
+  + "WCH CH340/CH341, Silicon Labs CP2102 (single-UART CP210x), "
+  + "and USB CDC-ACM devices";
 
 // WebUSB only lists devices that match a filter — an empty filter list shows an
-// EMPTY chooser. So we filter to the adapters we can actually drive: FTDI and
-// Prolific by vendor id, CH340/CH341 by exact vendor/product pair (WCH's vendor
-// id also covers CDC parts and non-serial chips), and USB CDC by interface
-// class (control class 0x02 / data 0x0a).
+// EMPTY chooser. So we filter to the adapters we can actually drive: FTDI,
+// Prolific and Silicon Labs by vendor id, CH340/CH341 by exact vendor/product
+// pair (WCH's vendor id also covers CDC parts and non-serial chips), and USB
+// CDC by interface class (control class 0x02 / data 0x0a).
 const USB_DEVICE_FILTERS = [
   { vendorId: FTDI_VENDOR_ID },
   { vendorId: PROLIFIC_VENDOR_ID },
+  { vendorId: CP210X_VENDOR_ID },
   ...CH340_DEVICE_IDS,
   { classCode: 0x02 },
   { classCode: 0x0a },
@@ -55,6 +62,9 @@ export function createWebUsbSerial({ loadCdcSerialPort } = {}) {
       }
       if (isCh340Device(device)) {
         return new Ch340SerialPort(device);
+      }
+      if (isCp2102Device(device)) {
+        return new Cp2102SerialPort(device);
       }
       const CdcSerialPort = await loadCdc();
       return new CdcSerialPort(device);

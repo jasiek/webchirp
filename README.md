@@ -25,8 +25,8 @@ Prototype for running parts of [CHIRP](https://github.com/kk7ds/chirp) in the br
 - CSV import/export and CHIRP `.img` clone-file import/export, all round-tripped
   through CHIRP Python code.
 - Web Serial bridge (browser serial in JS, called from Python in Pyodide) with a
-  WebUSB fallback path (FTDI / PL2303 chip drivers) for browsers without native
-  Web Serial.
+  WebUSB fallback path (FTDI / PL2303 / CH340 / CP2102 chip drivers) for
+  browsers without native Web Serial.
 - Upload preflight that validates edited rows before any bytes are written.
 
 ## Run the prototype
@@ -66,13 +66,21 @@ dispatched to a chip-specific driver:
   clone-silicon prescaler quirk. Enumeration and baud/line configuration are
   verified against a real adapter; a full clone against a radio has not been
   exercised yet, so the bulk read path is still untested.
+- **Silicon Labs CP2102** adapters use a built-in CP2102-over-WebUSB driver
+  that reads the part number to pick the right baud generator, disables every
+  handshake and byte transformation the chip can do on its own, and is the one
+  WebUSB driver that can also *read* the input control lines. Verified on
+  Android Chrome against a real CP2102 cable. Its scope is the **single-UART**
+  parts that speak the vendor protocol — CP2101/2/3/4/9 and CP2102N; the
+  multi-UART CP2105/CP2108 are turned away, and the **CP2102C** enumerates as
+  USB CDC-ACM so it is handled by the polyfill path below instead.
 - **USB CDC-ACM** devices are dispatched to Google's `web-serial-polyfill`.
   This path is wired up but untested — most radio programming cables are not
   CDC-ACM.
-- Other vendor-specific UART bridges (CP2102) are **not supported** over
-  WebUSB; they need chip-specific drivers that have not been written yet (see
-  `web/js/ftdi-webusb.js`, `web/js/pl2303-webusb.js` and
-  `web/js/ch340-webusb.js` for the pattern) and still require native Web
+- Other vendor-specific UART bridges are **not supported** over WebUSB; they
+  need chip-specific drivers that have not been written yet (see
+  `web/js/ftdi-webusb.js`, `web/js/pl2303-webusb.js`, `web/js/ch340-webusb.js`
+  and `web/js/cp2102-webusb.js` for the pattern) and still require native Web
   Serial on desktop.
 
 `npm run dev` serves with cross-origin isolation headers (`COOP`/`COEP`) so
@@ -147,7 +155,8 @@ wrong one still echoes perfectly. The same cases run against fake hardware in
 - UI controller: `web/js/ui.js` (channel table, settings editor, clipboard,
   status/debug panels).
 - Serial bridge: `web/js/serial.js` (native Web Serial) with WebUSB chip drivers
-  in `web/js/ftdi-webusb.js` and `web/js/pl2303-webusb.js`.
+  in `web/js/ftdi-webusb.js`, `web/js/pl2303-webusb.js`,
+  `web/js/ch340-webusb.js` and `web/js/cp2102-webusb.js`.
 - Main-thread runtime RPC client + Pyodide bootstrap: `web/js/runtime-rpc.js`
   (runs on the main thread — there is no Web Worker).
 - Python source providers: `web/js/python-sources.mjs`.

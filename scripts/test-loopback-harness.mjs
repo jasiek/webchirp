@@ -4,9 +4,9 @@
 //   - createEchoPort(): a Web Serial-shaped port that echoes. Used to test the
 //     suite itself — that it passes on good hardware and fails on each defect
 //     it claims to detect.
-//   - createChipLoopbackPort(): a real chip driver (FTDI/PL2303/CH340) from
-//     web/js, driven against a fake USBDevice whose bulk OUT endpoint feeds its
-//     bulk IN endpoint. This runs the drivers' actual read/write paths,
+//   - createChipLoopbackPort(): a real chip driver (FTDI/PL2303/CH340/CP2102)
+//     from web/js, driven against a fake USBDevice whose bulk OUT endpoint
+//     feeds its bulk IN endpoint. This runs the drivers' actual read/write paths,
 //     including FTDI's status-byte header and the packet chunking, with no
 //     hardware attached.
 //
@@ -14,6 +14,7 @@
 // prove each case has teeth rather than assuming it does.
 
 import { Ch340SerialPort } from "../web/js/ch340-webusb.js";
+import { Cp2102SerialPort } from "../web/js/cp2102-webusb.js";
 import { FtdiSerialPort } from "../web/js/ftdi-webusb.js";
 import { Pl2303SerialPort } from "../web/js/pl2303-webusb.js";
 
@@ -272,6 +273,16 @@ const CHIP_PROFILES = {
       { type: "interrupt", direction: "in", endpointNumber: 3, packetSize: 8 },
     ],
   },
+  cp2102: {
+    vendorId: 0x10c4,
+    productId: 0xea60,
+    packetSize: 64,
+    Driver: Cp2102SerialPort,
+    endpoints: [
+      { type: "bulk", direction: "out", endpointNumber: 1, packetSize: 64 },
+      { type: "bulk", direction: "in", endpointNumber: 1, packetSize: 64 },
+    ],
+  },
 };
 
 function pl2303DeviceDescriptor() {
@@ -297,6 +308,13 @@ function answerControlIn(chip, setup, length) {
     if (setup.request === 0x95) { // read register (limited-prescaler probe)
       return new DataView(new Uint8Array([0x00, 0x00]).buffer);
     }
+  }
+  if (chip === "cp2102") {
+    if (setup.request === 0xff) { // vendor-specific: part number
+      return new DataView(new Uint8Array([0x02]).buffer); // CP2102
+    }
+    // GET_FLOW: the 16-byte block the driver reads, edits and writes back.
+    // Everything else falls through to a zero-filled reply.
   }
   if (chip === "pl2303") {
     if (setup.requestType === "standard" && setup.request === 0x06) {
