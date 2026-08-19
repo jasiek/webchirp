@@ -209,7 +209,8 @@ export function createSerialActions(ctx) {
     dom.webusbConnectToggleEl.disabled = !actionsAllowed;
     dom.webusbConnectToggleEl.title = liveRadioUnsupported
       ? "Live-mode radios are not supported in this UI yet"
-      : "Connect over WebUSB, for use with FTDI FT231X/FT232R or Prolific PL2303";
+      : "Connect over WebUSB, for use with FTDI, Prolific PL2303, "
+        + "WCH CH340/CH341 or Silicon Labs CP2102 adapters";
 
     dom.radioDownloadEl.disabled = !actionsAllowed;
     dom.radioDownloadEl.title = liveRadioUnsupported
