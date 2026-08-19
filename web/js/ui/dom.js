@@ -26,7 +26,13 @@ export const REQUIRED_ELEMENTS = {
   debugClearEl: "#debug-clear",
   debugCopyEl: "#debug-copy",
   reportIssueEl: "#report-issue",
-  serialSupportWarningEl: "#webserial-support-warning",
+  // The shell is greyed out (class toggle) while the unsupported-browser
+  // overlay explains why serial cannot work here.
+  appShellEl: "#app-shell",
+  unsupportedBrowserOverlayEl: "#unsupported-browser-overlay",
+  unsupportedBrowserSerialInfoEl: "#unsupported-browser-serial-info",
+  unsupportedBrowserJspiInfoEl: "#unsupported-browser-jspi-info",
+  unsupportedBrowserContinueEl: "#unsupported-browser-continue",
   liveRadioSupportWarningEl: "#live-radio-support-warning",
   radioSearchEl: "#radio-search",
   radioSearchResultsEl: "#radio-search-results",

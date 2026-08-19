@@ -64,7 +64,7 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <div id="app-shell" class="app-shell">
       <header class="toolbar">
         <div class="toolbar-title">
           <h1>WebCHIRP</h1>
@@ -124,13 +124,6 @@
         <aside class="left-panel">
           <details class="left-panel-main serial-bridge" open>
             <summary class="left-panel-summary">Serial Bridge</summary>
-            <p id="webserial-support-warning" class="serial-support-warning" hidden>
-              Web Serial is unavailable in this browser, so radio download/upload will not work
-              correctly. Use a supported browser:
-              <a href="https://caniuse.com/web-serial" target="_blank" rel="noopener noreferrer"
-                >Web Serial browser support</a
-              >.
-            </p>
             <p id="live-radio-support-warning" class="serial-support-warning" hidden>
               Live-mode radios are not supported in this UI at the moment. Select a clone-mode
               radio to use Connect, Download Radio, and Upload Radio.
@@ -479,6 +472,62 @@
           <button id="import-choice-cancel" type="button">Cancel</button>
           <button id="import-choice-merge" type="button">Merge (append)</button>
           <button id="import-choice-replace" type="button">Replace</button>
+        </div>
+      </div>
+    </div>
+
+    <!--
+      Shown when the browser lacks a capability WebCHIRP needs, replacing the
+      old sidebar note: the app greys out behind it (#app-shell gets
+      .browser-unsupported alongside this overlay) and this panel explains why
+      things cannot work here. The two blocks are independent, toggled by
+      setBrowserUnsupportedOverlayVisible: no serial transport (radio
+      programming impossible, file editing fine) and no WASM stack switching
+      (drivers cannot load at all — old Firefox). Safari lacks both, so both
+      blocks show there at once. "Continue anyway" dismisses the overlay so
+      whatever still works stays reachable.
+    -->
+    <div
+      id="unsupported-browser-overlay"
+      class="modal-overlay unsupported-browser-overlay hidden"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="unsupported-browser-serial-title"
+    >
+      <div class="modal-card unsupported-browser-card">
+        <div id="unsupported-browser-serial-info" class="unsupported-browser-info" hidden>
+          <h2 id="unsupported-browser-serial-title">This browser cannot program radios</h2>
+          <p>
+            WebCHIRP talks to radios through Web Serial, or WebUSB as a fallback,
+            and this browser provides neither — so Connect, Download Radio and
+            Upload Radio will not work here.
+          </p>
+          <p>
+            To program a radio, open this page in a browser with
+            <a href="https://caniuse.com/web-serial" target="_blank" rel="noopener noreferrer"
+              >Web Serial support</a
+            >, such as Chrome, Edge, or a recent version of Firefox.
+          </p>
+          <p>
+            Everything file-based still works: you can browse the radio catalog
+            and edit channels from an imported CSV or binary codeplug.
+          </p>
+        </div>
+        <div id="unsupported-browser-jspi-info" class="unsupported-browser-info" hidden>
+          <h2 id="unsupported-browser-jspi-title">This browser cannot load radio drivers</h2>
+          <p>
+            WebCHIRP runs CHIRP's radio drivers in your browser, which requires
+            WebAssembly stack switching (JSPI). This browser does not support
+            it, so drivers will fail to load and most of the app will not work.
+          </p>
+          <p>
+            Recent versions of Firefox, Chrome and Edge all support it — if you
+            are on an older Firefox, updating it also adds the Web Serial
+            support needed to program radios.
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button id="unsupported-browser-continue" type="button">Continue anyway</button>
         </div>
       </div>
     </div>

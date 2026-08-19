@@ -247,7 +247,6 @@ const STUBBED_SELECTORS = new Map([
   ["#img-file", "input"],
   ["#debug-output", "textarea"],
   ["#report-issue", "button"],
-  ["#webserial-support-warning", "p"],
   ["#live-radio-support-warning", "p"],
   ["#radio-search", "input"],
   ["#radio-search-results", "ul"],

@@ -116,8 +116,25 @@ export function createSerialActions(ctx) {
     updateSerialActionState();
   }
 
-  function setSerialSupportWarningVisible(visible) {
-    dom.serialSupportWarningEl.hidden = !visible;
+  // The unsupported-browser treatment is two synchronized pieces: the
+  // explanation overlay and the greyscale on the app shell behind it. Toggle
+  // them together so the page never ends up grey with no explanation (or the
+  // reverse). `problems` picks which explanations the card shows — they are
+  // independent, not variants: Safari lacks both serial transports AND WASM
+  // stack switching, so both blocks appear there at once.
+  function setBrowserUnsupportedOverlayVisible(visible, problems = { serial: true }) {
+    const show = Boolean(visible);
+    const serialShown = Boolean(problems.serial);
+    const jspiShown = Boolean(problems.jspi);
+    dom.unsupportedBrowserSerialInfoEl.hidden = !serialShown;
+    dom.unsupportedBrowserJspiInfoEl.hidden = !jspiShown;
+    // Label the dialog by the more fundamental problem when both apply.
+    dom.unsupportedBrowserOverlayEl.setAttribute(
+      "aria-labelledby",
+      jspiShown ? "unsupported-browser-jspi-title" : "unsupported-browser-serial-title",
+    );
+    dom.unsupportedBrowserOverlayEl.classList.toggle("hidden", !show);
+    dom.appShellEl.classList.toggle("browser-unsupported", show);
   }
 
   function setLiveRadioSupportWarningVisible(visible) {
@@ -424,13 +441,18 @@ export function createSerialActions(ctx) {
     dom.radioUploadEl.addEventListener("click", () => {
       uploadToRadio();
     });
+
+    dom.unsupportedBrowserContinueEl.addEventListener("click", () => {
+      setBrowserUnsupportedOverlayVisible(false);
+      log.logSerial("Continuing without serial support; radio download/upload stays unavailable.");
+    });
   }
 
   return {
     bindEvents,
     setSerialController,
     setSidebarControlsEnabled,
-    setSerialSupportWarningVisible,
+    setBrowserUnsupportedOverlayVisible,
     refreshSerialConnectToggleLabel,
     updateSerialActionState,
     updateCloneProgress,

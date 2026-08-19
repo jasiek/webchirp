@@ -170,14 +170,20 @@ export function createUiController() {
   }
 
   // Bootstrap UI: capability checks, catalog load, metadata load, empty grid.
-  async function init(serialSupported) {
+  // The two capability gaps are independent (Safari has both): missing serial
+  // only disables radio programming, while missing JSPI means driver imports
+  // fail and init itself will land in the catch below.
+  async function init(serialSupported, jspiSupported = true) {
     // Covers the whole cold start the user waits through — including the
     // Pyodide boot the metadata and settings loads below trigger — so this is
     // the number that decides whether people wait or leave.
     const startedAt = Date.now();
     bindEvents();
     serial.refreshSerialConnectToggleLabel();
-    serial.setSerialSupportWarningVisible(!serialSupported);
+    serial.setBrowserUnsupportedOverlayVisible(!serialSupported || !jspiSupported, {
+      serial: !serialSupported,
+      jspi: !jspiSupported,
+    });
     serial.setSidebarControlsEnabled(false);
     catalog.setRadioSelectPlaceholder("Loading...");
     try {
@@ -185,6 +191,11 @@ export function createUiController() {
         log.logSerial("Web Serial unsupported in this browser.");
       } else {
         log.logSerial("Web Serial available.");
+      }
+      if (!jspiSupported) {
+        log.logDebug(
+          "WASM stack switching (JSPI) unsupported; CHIRP driver imports will fail in this browser.",
+        );
       }
       const catalogResponse = await requireRuntimeApi(state).listRadios();
       state.radioCatalog = catalogResponse.radios || [];

@@ -1132,6 +1132,46 @@ button:disabled {
   font-size: 1rem;
 }
 
+/*
+  Browser-capability overlay. The grayscale lives on #app-shell (toggled
+  together with the overlay) rather than on a backdrop-filter so it works in
+  exactly the older browsers the overlay exists for. The filter creates a
+  containing block, which is safe only because every fixed-position overlay is
+  a sibling of #app-shell, not a descendant — keep it that way.
+*/
+.app-shell.browser-unsupported {
+  filter: grayscale(1);
+}
+
+.unsupported-browser-overlay {
+  /* Above the regular modals (60); below the drag-feedback overlay (80). */
+  z-index: 70;
+}
+
+.unsupported-browser-card {
+  /* A third of the screen, with floors so it stays readable on phones. */
+  width: max(33vw, 340px);
+  max-width: 92vw;
+  min-height: 33vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.unsupported-browser-card p {
+  margin: 0 0 0.9rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.unsupported-browser-card a {
+  color: var(--warn-link);
+  font-weight: 600;
+}
+
+.unsupported-browser-card .modal-actions {
+  margin-top: auto;
+}
+
 .import-choice-message {
   margin: 0 0 0.9rem;
   font-size: 0.9rem;

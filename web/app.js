@@ -30,7 +30,13 @@ ui.setSerialController({
   capability: serialCapability,
   setPreferredTransport: (transport) => serialBridge.setPreferredTransport(transport),
 });
-ui.init(serialCapability.supported);
+// Pyodide's run_sync — how CHIRP driver imports wait on their CDN fetches —
+// needs WebAssembly JSPI (stack switching). Detect it up front so old browsers
+// (Firefox before it shipped JSPI, Safari) get an explanation instead of a
+// bare traceback when the first driver import dies.
+const jspiSupported =
+  typeof WebAssembly.Suspending === "function" && typeof WebAssembly.promising === "function";
+ui.init(serialCapability.supported, jspiSupported);
 if (serialCapability.webusb && !serialCapability.native) {
   ui.logSerial(
     "This browser has no native Web Serial, so serial connections use WebUSB. "
