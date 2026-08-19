@@ -52,6 +52,9 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Session status should be concise; detailed diagnostics belong in Debug Output.
 - Keep controls and labels task-oriented and explicit.
 
+## Other considerations
+- This is currently hosted on GitHub Pages = we can't set custom http headers on files, and can't control cache time.
+
 ## Change Process
 - Commit after every change.
 - Keep commits small and scoped to one functional fix/refactor when practical.
