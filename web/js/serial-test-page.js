@@ -16,6 +16,7 @@ const DRIVER_LABELS = {
   FtdiSerialPort: "FTDI (WebUSB driver)",
   Pl2303SerialPort: "Prolific PL2303 (WebUSB driver)",
   Ch340SerialPort: "WCH CH340/CH341 (WebUSB driver)",
+  Cp2102SerialPort: "Silicon Labs CP2102/CP210x (WebUSB driver)",
 };
 
 // Every element id this page owns, resolved in init() rather than at import so

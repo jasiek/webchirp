@@ -2,7 +2,7 @@ import { BrowserSerialBridge, createSerialRpcHandler } from "./js/serial.js";
 import { createRuntimeRpcClient } from "./js/runtime-rpc.js";
 import { createUiController } from "./js/ui.js";
 import { installTooltips } from "./js/tooltip.js";
-import { WEBUSB_SUPPORTED_ADAPTERS, WEBUSB_UNSUPPORTED_ADAPTERS } from "./js/webusb-serial.js";
+import { WEBUSB_SUPPORTED_ADAPTERS } from "./js/webusb-serial.js";
 
 installTooltips();
 const ui = createUiController();
@@ -35,7 +35,7 @@ if (serialCapability.webusb && !serialCapability.native) {
   ui.logSerial(
     "This browser has no native Web Serial, so serial connections use WebUSB. "
     + `WebUSB supports ${WEBUSB_SUPPORTED_ADAPTERS}; `
-    + `other vendor chips (${WEBUSB_UNSUPPORTED_ADAPTERS}) are not supported yet.`,
+    + "other vendor-specific UART chips are not supported yet.",
   );
 } else if (serialCapability.webusb && serialCapability.native
   && /\bAndroid\b/i.test(navigator.userAgent || "")) {
