@@ -1202,10 +1202,10 @@ button:disabled {
   margin: 0;
 }
 
-/* The RSGB modal stacks two multi-row checkbox lists, which the shared 0.45rem
-   row gap runs together into one block — Band and Mode need to read as separate
-   groups. Its options also sit at the modal's own 1rem, not the 0.85rem the
-   przemienniki modal uses, so every control in the dialog is one size. */
+/* The query modals stack two multi-row checkbox lists, which the shared
+   0.45rem row gap runs together into one block — Band and Mode need to read as
+   separate groups. */
+#repeater-query-modal .modal-grid,
 #rsgb-modal .modal-grid {
   row-gap: 1.1rem;
 }

@@ -318,6 +318,28 @@
       </section>
     </div>
 
+    <!--
+      Single query modal shared by every repeater directory (przemienniki.net,
+      RepeaterBook, RSGB ETCC). The grid is empty on purpose: each field is
+      built per source by web/js/ui/query-fields.js when the modal opens.
+    -->
+    <div
+      id="repeater-query-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="repeater-query-title"
+    >
+      <form id="repeater-query-form" class="modal-card">
+        <h2 id="repeater-query-title">Query repeater source</h2>
+        <div id="repeater-query-grid" class="modal-grid"></div>
+        <div class="modal-actions">
+          <button id="repeater-query-cancel" type="button">Cancel</button>
+          <button id="repeater-query-submit" type="submit">Query API</button>
+        </div>
+      </form>
+    </div>
+
     <div
       id="przemienniki-modal"
       class="modal-overlay hidden"
