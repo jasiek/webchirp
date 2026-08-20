@@ -195,23 +195,37 @@ function buildPositionField(config = {}) {
     onChange: (lat, lon) => changes.push([lat, lon]),
     ...config,
   });
-  const [, geoRow, , longitude, , locator] = field.nodes;
-  const latitude = geoRow.children[0];
+  const [, latitude, , longitude, , geoRow] = field.nodes;
+  const locator = geoRow.children[0];
   return { field, latitude, longitude, locator, geoRow, changes };
 }
 
-test("position field renders the geo row with the geolocate button", () => {
+test("position field renders the locator row with the geolocate and clear buttons", () => {
   const { field, latitude, geoRow, locator } = buildPositionField();
   assert.equal(latitude.type, "number");
   assert.equal(latitude.step, "any");
-  const button = geoRow.children[1];
-  assert.equal(button, field.geolocateButton);
-  assert.equal(button.type, "button");
-  assert.equal(button.className, "modal-geo-button");
-  assert.equal(button.getAttribute("aria-label"), "Use current location");
+  const [, geolocate, clear] = geoRow.children;
+  assert.equal(geolocate, field.geolocateButton);
+  assert.equal(geolocate.type, "button");
+  assert.equal(geolocate.className, "modal-geo-button");
+  assert.equal(geolocate.getAttribute("aria-label"), "Use current location");
+  assert.equal(clear.type, "button");
+  assert.equal(clear.textContent, "🗑️");
+  assert.equal(clear.getAttribute("aria-label"), "Clear location");
   assert.equal(locator.placeholder, "e.g. JO91GG");
   assert.equal(locator.maxLength, 8);
   assert.equal(field.focusTarget, latitude);
+});
+
+test("the clear button wipes all three fields and notifies onChange", async () => {
+  const { field, latitude, longitude, locator, geoRow, changes } = buildPositionField();
+  field.setPosition(51.520833, -0.125);
+  await geoRow.children[2].dispatch("click");
+  assert.equal(latitude.value, "");
+  assert.equal(longitude.value, "");
+  assert.equal(locator.value, "");
+  assert.equal(field.value(), null);
+  assert.deepEqual(changes.at(-1), ["", ""]);
 });
 
 test("coordinate edits fill the locator field once both halves are present", async () => {

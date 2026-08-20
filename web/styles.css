@@ -1219,7 +1219,7 @@ button:disabled {
 
 .modal-geo-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 0.4rem;
   align-items: center;
 }

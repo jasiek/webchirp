@@ -182,18 +182,6 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   latitude.step = "any";
   latitude.value = String(initial.latitudeText ?? "");
 
-  const geolocateButton = document.createElement("button");
-  geolocateButton.className = "modal-geo-button";
-  geolocateButton.type = "button";
-  geolocateButton.title = "Use current location";
-  geolocateButton.setAttribute("aria-label", "Use current location");
-  geolocateButton.textContent = "🛰️";
-
-  const geoRow = document.createElement("div");
-  geoRow.className = "modal-geo-row";
-  geoRow.appendChild(latitude);
-  geoRow.appendChild(geolocateButton);
-
   const longitude = document.createElement("input");
   longitude.id = fieldId(key, "longitude");
   longitude.name = "longitude";
@@ -210,6 +198,28 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   locator.autocapitalize = "characters";
   locator.spellcheck = false;
   locator.placeholder = locatorPlaceholder || "e.g. JO91GG";
+
+  const geolocateButton = document.createElement("button");
+  geolocateButton.className = "modal-geo-button";
+  geolocateButton.type = "button";
+  geolocateButton.title = "Use current location";
+  geolocateButton.setAttribute("aria-label", "Use current location");
+  geolocateButton.textContent = "🛰️";
+
+  const clearButton = document.createElement("button");
+  clearButton.className = "modal-geo-button";
+  clearButton.type = "button";
+  clearButton.title = "Clear location";
+  clearButton.setAttribute("aria-label", "Clear location");
+  clearButton.textContent = "🗑️";
+
+  // The locator shares its row with the two position actions: fill from the
+  // browser's geolocation, and wipe all three fields.
+  const geoRow = document.createElement("div");
+  geoRow.className = "modal-geo-row";
+  geoRow.appendChild(locator);
+  geoRow.appendChild(geolocateButton);
+  geoRow.appendChild(clearButton);
 
   function currentPosition() {
     const lat = numericFieldValue(latitude);
@@ -255,6 +265,14 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     longitude.value = box.longitude.toFixed(6);
     notifyChange();
   });
+  // Clearing is field-internal: it needs no source-specific behaviour, so the
+  // modal shell never sees this button.
+  clearButton.addEventListener("click", () => {
+    latitude.value = "";
+    longitude.value = "";
+    locator.value = "";
+    notifyChange();
+  });
 
   // Seed the locator from whatever coordinates the field opened with.
   refreshLocatorFromCoords();
@@ -263,11 +281,11 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     key,
     nodes: [
       labelledBy("Latitude", latitude.id),
-      geoRow,
+      latitude,
       labelledBy("Longitude", longitude.id),
       longitude,
       labelledBy("Locator", locator.id),
-      locator,
+      geoRow,
     ],
     focusTarget: latitude,
     value: () => currentPosition(),

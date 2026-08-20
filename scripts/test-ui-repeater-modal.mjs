@@ -289,8 +289,14 @@ function countrySelect(dom) {
 }
 
 function geolocateButton(dom) {
-  const button = descendants(grid(dom)).find((el) => el.className === "modal-geo-button");
+  const button = descendants(grid(dom)).find((el) => el.textContent === "🛰️");
   assert.ok(button, "geolocate button is in the grid");
+  return button;
+}
+
+function clearLocationButton(dom) {
+  const button = descendants(grid(dom)).find((el) => el.textContent === "🗑️");
+  assert.ok(button, "clear-location button is in the grid");
   return button;
 }
 
@@ -476,6 +482,25 @@ test("the position carries over when switching sources", async () => {
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query repeaterbook.com");
   assert.equal(fieldByName(dom, "latitude").value, "51.5");
   assert.equal(fieldByName(dom, "longitude").value, "-0.12");
+});
+
+test("clearing the location empties the persisted position too", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }]);
+  installGeolocation({ coords: { latitude: 51.520833, longitude: -0.125 } });
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await geolocateButton(dom).dispatch("click");
+  await clearLocationButton(dom).dispatch("click");
+  assert.equal(fieldByName(dom, "latitude").value, "");
+  assert.equal(fieldByName(dom, "longitude").value, "");
+  assert.equal(fieldByName(dom, "locator").value, "");
+
+  // The cleared position is what persists into the next open.
+  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.equal(fieldByName(dom, "latitude").value, "");
+  assert.equal(fieldByName(dom, "locator").value, "");
 });
 
 test("geolocate fills the position fields and reports the locator", async () => {
