@@ -401,8 +401,10 @@
       setBrowserUnsupportedOverlayVisible: no serial transport (radio
       programming impossible, file editing fine) and no WASM stack switching
       (drivers cannot load at all — old Firefox). Safari lacks both, so both
-      blocks show there at once. "Continue anyway" dismisses the overlay so
-      whatever still works stays reachable.
+      blocks show there at once. On iOS/iPadOS a third block replaces both:
+      every browser there is WebKit, so switching browsers cannot help and the
+      other two blocks would give advice that does not apply. "Continue anyway"
+      dismisses the overlay so whatever still works stays reachable.
     -->
     <div
       id="unsupported-browser-overlay"
@@ -412,6 +414,27 @@
       aria-labelledby="unsupported-browser-serial-title"
     >
       <div class="modal-card unsupported-browser-card">
+        <div id="unsupported-browser-ios-info" class="unsupported-browser-info" hidden>
+          <h2 id="unsupported-browser-ios-title">iPhone and iPad are not supported yet</h2>
+          <p>
+            Every browser on iOS and iPadOS is built on Apple's WebKit engine,
+            which offers neither Web Serial nor WebUSB — so installing Chrome,
+            Edge or Firefox here will not help. Connect, Download Radio and
+            Upload Radio cannot work on this device today.
+          </p>
+          <p>
+            We are working on a workaround so that iOS devices can talk to
+            radios; until then, program your radio from a desktop or Android
+            browser with
+            <a href="https://caniuse.com/web-serial" target="_blank" rel="noopener noreferrer"
+              >Web Serial support</a
+            >.
+          </p>
+          <p>
+            Everything file-based still works here: you can browse the radio
+            catalog and edit channels from an imported CSV or binary codeplug.
+          </p>
+        </div>
         <div id="unsupported-browser-serial-info" class="unsupported-browser-info" hidden>
           <h2 id="unsupported-browser-serial-title">This browser cannot program radios</h2>
           <p>

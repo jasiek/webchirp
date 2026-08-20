@@ -30,6 +30,7 @@ export const REQUIRED_ELEMENTS = {
   // overlay explains why serial cannot work here.
   appShellEl: "#app-shell",
   unsupportedBrowserOverlayEl: "#unsupported-browser-overlay",
+  unsupportedBrowserIosInfoEl: "#unsupported-browser-ios-info",
   unsupportedBrowserSerialInfoEl: "#unsupported-browser-serial-info",
   unsupportedBrowserJspiInfoEl: "#unsupported-browser-jspi-info",
   unsupportedBrowserContinueEl: "#unsupported-browser-continue",
