@@ -6,6 +6,7 @@ import {
   parsePrzemiennikiXml,
 } from "../datasources.js";
 import { countryDisplayName, flagEmojiFromCountryCode } from "./format.js";
+import { decodeMaidenheadBox, encodeMaidenhead } from "../rsgb.js";
 import { classifyErrorKind, trackEvent } from "./analytics.js";
 
 const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
@@ -180,6 +181,51 @@ export function createRepeaterQuery(ctx) {
     }
   }
 
+  // Number("") is 0, not NaN, so a blank coordinate field would otherwise
+  // read as a position on the equator — and encode as a locator.
+  function numericFieldValue(el) {
+    const text = String(el.value ?? "").trim();
+    if (text === "") {
+      return Number.NaN;
+    }
+    return Number(text);
+  }
+
+  function currentPosition() {
+    const latitude = numericFieldValue(dom.przemiennikiLatitudeEl);
+    const longitude = numericFieldValue(dom.przemiennikiLongitudeEl);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+    if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+      return null;
+    }
+    return { latitude, longitude };
+  }
+
+  // The locator field is a two-way alternative way to enter the position, not
+  // a filter of its own: runQuery only ever sends latitude/longitude, which is
+  // all either API understands. Editing one side rewrites the other; the
+  // rewrites are programmatic value assignments, which fire no input events,
+  // so the two handlers cannot feed back into each other.
+  function refreshLocatorFromCoords() {
+    const position = currentPosition();
+    dom.przemiennikiLocatorEl.value = position
+      ? encodeMaidenhead(position.latitude, position.longitude, 6)
+      : "";
+  }
+
+  function applyLocatorToCoords() {
+    const box = decodeMaidenheadBox(dom.przemiennikiLocatorEl.value);
+    if (!box) {
+      // Partial or invalid text (no valid 4-character prefix yet): keep the
+      // coordinates the user already has instead of wiping them mid-keystroke.
+      return;
+    }
+    dom.przemiennikiLatitudeEl.value = box.latitude.toFixed(6);
+    dom.przemiennikiLongitudeEl.value = box.longitude.toFixed(6);
+  }
+
   function setModalOpen(open) {
     dom.przemiennikiModalEl.classList.toggle("hidden", !open);
     if (open) {
@@ -200,6 +246,9 @@ export function createRepeaterQuery(ctx) {
     ctx.table.setMenuOpen(false);
     log.setStatus(`Loading ${source.label} query options...`);
     await ensureDictionaryLoaded();
+    // The coordinate fields are plain DOM properties that survive a close, so
+    // bring the locator back in step with whatever they still hold.
+    refreshLocatorFromCoords();
     setModalOpen(true);
     // Paired with repeater_import, this shows how many people open the filter
     // modal and never run a query.
@@ -279,6 +328,7 @@ export function createRepeaterQuery(ctx) {
     }
     dom.przemiennikiLatitudeEl.value = latitude.toFixed(6);
     dom.przemiennikiLongitudeEl.value = longitude.toFixed(6);
+    refreshLocatorFromCoords();
     log.setStatus("Geolocation loaded into latitude/longitude fields.");
     log.logDebug(`PRZEMIENNIKI GEO ${latitude.toFixed(6)},${longitude.toFixed(6)}`);
   }
@@ -318,6 +368,9 @@ export function createRepeaterQuery(ctx) {
         log.reportActionError("Przemienniki geolocation", error);
       }
     });
+    dom.przemiennikiLatitudeEl.addEventListener("input", refreshLocatorFromCoords);
+    dom.przemiennikiLongitudeEl.addEventListener("input", refreshLocatorFromCoords);
+    dom.przemiennikiLocatorEl.addEventListener("input", applyLocatorToCoords);
     dom.przemiennikiModalEl.addEventListener("click", (event) => {
       if (event.target === dom.przemiennikiModalEl) {
         setModalOpen(false);

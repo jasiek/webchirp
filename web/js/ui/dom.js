@@ -77,6 +77,7 @@ export const REQUIRED_ELEMENTS = {
   przemiennikiOnlyWorkingEl: "#przemienniki-onlyworking",
   przemiennikiLatitudeEl: "#przemienniki-latitude",
   przemiennikiLongitudeEl: "#przemienniki-longitude",
+  przemiennikiLocatorEl: "#przemienniki-locator",
   przemiennikiRangeEl: "#przemienniki-range",
   przemiennikiGeolocateEl: "#przemienniki-geolocate",
   przemiennikiCancelEl: "#przemienniki-cancel",

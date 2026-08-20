@@ -189,3 +189,61 @@ test("online repeater-query buttons default to visible when no meta tag is prese
   assert.equal(przemiennikiBtn.hidden, false);
   assert.equal(repeaterbookBtn.hidden, false);
 });
+
+test("coordinate edits fill the locator field once both halves are present", async () => {
+  installFakeDom({ repeaterApiBase: "https://proxy.example.com" });
+  await bootUi();
+  const latEl = document.querySelector("#przemienniki-latitude");
+  const lonEl = document.querySelector("#przemienniki-longitude");
+  const locatorEl = document.querySelector("#przemienniki-locator");
+
+  latEl.value = "52.2297";
+  latEl.dispatchEvent({ type: "input" });
+  // A lone latitude is not a position; Number("") would otherwise read the
+  // blank longitude as 0 and encode a locator on the prime meridian.
+  assert.equal(locatorEl.value, "");
+
+  lonEl.value = "21.0122";
+  lonEl.dispatchEvent({ type: "input" });
+  assert.equal(locatorEl.value, "KO02MF");
+
+  latEl.value = "";
+  latEl.dispatchEvent({ type: "input" });
+  assert.equal(locatorEl.value, "");
+});
+
+test("locator edits move the coordinates to the square's centre", async () => {
+  installFakeDom({ repeaterApiBase: "https://proxy.example.com" });
+  await bootUi();
+  const latEl = document.querySelector("#przemienniki-latitude");
+  const lonEl = document.querySelector("#przemienniki-longitude");
+  const locatorEl = document.querySelector("#przemienniki-locator");
+
+  locatorEl.value = "IO91WM";
+  locatorEl.dispatchEvent({ type: "input" });
+  assert.equal(latEl.value, "51.520833");
+  assert.equal(lonEl.value, "-0.125000");
+
+  // Lower case and 4-character precision both decode.
+  locatorEl.value = "ko02";
+  locatorEl.dispatchEvent({ type: "input" });
+  assert.equal(latEl.value, "52.500000");
+  assert.equal(lonEl.value, "21.000000");
+});
+
+test("partial or invalid locator text leaves the coordinates alone", async () => {
+  installFakeDom({ repeaterApiBase: "https://proxy.example.com" });
+  await bootUi();
+  const latEl = document.querySelector("#przemienniki-latitude");
+  const lonEl = document.querySelector("#przemienniki-longitude");
+  const locatorEl = document.querySelector("#przemienniki-locator");
+
+  latEl.value = "52.2297";
+  lonEl.value = "21.0122";
+  for (const text of ["", "I", "IO9", "99AB", "ZZ11"]) {
+    locatorEl.value = text;
+    locatorEl.dispatchEvent({ type: "input" });
+    assert.equal(latEl.value, "52.2297", `coords survived "${text}"`);
+    assert.equal(lonEl.value, "21.0122", `coords survived "${text}"`);
+  }
+});

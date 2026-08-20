@@ -357,6 +357,23 @@
           <label for="przemienniki-longitude">Longitude</label>
           <input id="przemienniki-longitude" name="longitude" type="number" step="any" />
 
+          <!--
+            Two-way alternative to the coordinate pair: edits here move the
+            coordinates to the square's centre and vice versa. Never submitted —
+            both APIs take latitude/longitude only.
+          -->
+          <label for="przemienniki-locator">Locator</label>
+          <input
+            id="przemienniki-locator"
+            name="locator"
+            type="text"
+            maxlength="8"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            placeholder="e.g. JO91GG"
+          />
+
           <label for="przemienniki-range">Range (km)</label>
           <input id="przemienniki-range" name="range" type="number" min="1" step="1" value="30" />
         </div>
