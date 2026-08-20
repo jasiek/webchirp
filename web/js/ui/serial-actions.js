@@ -1,4 +1,4 @@
-import { errorSummary, isAndroidPlatform, makeModelLabel } from "./format.js";
+import { errorSummary, isAndroidPlatform, isIosPlatform, makeModelLabel } from "./format.js";
 import {
   classifyErrorKind,
   codeplugParams,
@@ -121,18 +121,26 @@ export function createSerialActions(ctx) {
   // them together so the page never ends up grey with no explanation (or the
   // reverse). `problems` picks which explanations the card shows — they are
   // independent, not variants: Safari lacks both serial transports AND WASM
-  // stack switching, so both blocks appear there at once.
+  // stack switching, so both blocks appear there at once. iOS/iPadOS is the
+  // exception: whatever the capability gap is there, it is the platform rather
+  // than the browser choice, so its block replaces both generic ones instead
+  // of telling people to install a browser that would be the same WebKit.
   function setBrowserUnsupportedOverlayVisible(visible, problems = { serial: true }) {
     const show = Boolean(visible);
-    const serialShown = Boolean(problems.serial);
-    const jspiShown = Boolean(problems.jspi);
+    const iosShown = isIosPlatform();
+    const serialShown = !iosShown && Boolean(problems.serial);
+    const jspiShown = !iosShown && Boolean(problems.jspi);
+    dom.unsupportedBrowserIosInfoEl.hidden = !iosShown;
     dom.unsupportedBrowserSerialInfoEl.hidden = !serialShown;
     dom.unsupportedBrowserJspiInfoEl.hidden = !jspiShown;
     // Label the dialog by the more fundamental problem when both apply.
-    dom.unsupportedBrowserOverlayEl.setAttribute(
-      "aria-labelledby",
-      jspiShown ? "unsupported-browser-jspi-title" : "unsupported-browser-serial-title",
-    );
+    let labelledBy = "unsupported-browser-serial-title";
+    if (iosShown) {
+      labelledBy = "unsupported-browser-ios-title";
+    } else if (jspiShown) {
+      labelledBy = "unsupported-browser-jspi-title";
+    }
+    dom.unsupportedBrowserOverlayEl.setAttribute("aria-labelledby", labelledBy);
     dom.unsupportedBrowserOverlayEl.classList.toggle("hidden", !show);
     dom.appShellEl.classList.toggle("browser-unsupported", show);
   }

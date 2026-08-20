@@ -112,6 +112,18 @@ export function isAndroidPlatform() {
   return /\bAndroid\b/i.test(navigator.userAgent || "");
 }
 
+// Every iOS/iPadOS browser is WebKit under the hood, so neither Web Serial nor
+// WebUSB is reachable there whatever browser the user installs — the generic
+// "try another browser" advice would be wrong. iPadOS reports a desktop
+// Macintosh user agent, so touch points are what separate it from a real Mac.
+export function isIosPlatform() {
+  const ua = navigator.userAgent || "";
+  if (/iPhone|iPad|iPod/i.test(ua)) {
+    return true;
+  }
+  return /Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1;
+}
+
 export function flagEmojiFromCountryCode(countryCode) {
   const code = String(countryCode || "").trim().toUpperCase();
   const emojiCode = code === "UK" ? "GB" : code;
