@@ -1202,16 +1202,11 @@ button:disabled {
   margin: 0;
 }
 
-/* The query modals stack two multi-row checkbox lists, which the shared
+/* The query modal stacks two multi-row checkbox lists, which the shared
    0.45rem row gap runs together into one block — Band and Mode need to read as
    separate groups. */
-#repeater-query-modal .modal-grid,
-#rsgb-modal .modal-grid {
+#repeater-query-modal .modal-grid {
   row-gap: 1.1rem;
-}
-
-#rsgb-modal .modal-mode-option {
-  font-size: 1rem;
 }
 
 /* A value the modal reports rather than asks for: the fixed RSGB country.

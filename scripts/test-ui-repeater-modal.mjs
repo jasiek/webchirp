@@ -135,7 +135,7 @@ class FakeXmlDocument {
 }
 
 const DOM_KEYS = [
-  "channelImportPrzemiennikiEl", "channelImportRepeaterbookEl",
+  "channelImportPrzemiennikiEl", "channelImportRepeaterbookEl", "channelImportRsgbEl",
   "repeaterQueryModalEl", "repeaterQueryFormEl", "repeaterQueryTitleEl",
   "repeaterQueryGridEl", "repeaterQueryCancelEl", "repeaterQuerySubmitEl",
 ];
@@ -170,7 +170,13 @@ function installFetch(routes) {
   return calls;
 }
 
-function buildHarness({ repeaterApiBase = "https://proxy.example.com", headers = ["Name", "Frequency"] } = {}) {
+function buildHarness({
+  repeaterApiBase = "https://proxy.example.com",
+  headers = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Power", "Comment"],
+  // What the stand-in radio's Mode column advertises. The default set has DV,
+  // so D-STAR repeaters are buildable; pass ["FM", "NFM"] for an FM-only radio.
+  modeOptions = ["FM", "NFM", "DV"],
+} = {}) {
   const metas = new Map();
   if (repeaterApiBase !== undefined) {
     const meta = new FakeElement("meta");
@@ -214,9 +220,32 @@ function buildHarness({ repeaterApiBase = "https://proxy.example.com", headers =
       rowBuilderHooks: () => ({
         createBlankRow: () => Object.fromEntries(headers.map((column) => [column, ""])),
         setRowValue: (row, column, value) => {
+          if (!headers.includes(column)) {
+            return;
+          }
+          // Stands in for a 2m/70cm radio: the grid refuses a frequency the
+          // driver cannot tune and leaves the previous value in place.
+          if (column === "Frequency" && Number.parseFloat(value) > 470) {
+            return;
+          }
           row[column] = String(value ?? "");
         },
-        findEnumOption: (column, choices) => choices[0] || "",
+        // Choice order decides, as channel-table.js's findEnumOption does, and
+        // a radio that advertises none of the choices answers with "".
+        findEnumOption: (column, choices) => {
+          // Low first, as roughly half of CHIRP's drivers order them.
+          const options = column === "Mode" ? modeOptions : column === "Power" ? ["Low", "High"] : null;
+          if (options === null) {
+            return choices[0] || "";
+          }
+          for (const choice of choices) {
+            const match = options.find((option) => option.toLowerCase() === String(choice).toLowerCase());
+            if (match) {
+              return match;
+            }
+          }
+          return "";
+        },
       }),
     },
   };
@@ -230,7 +259,7 @@ function installGeolocation(result) {
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
     value: {
-      geolocation: {
+      geolocation: result === null ? undefined : {
         getCurrentPosition(resolve, reject) {
           if (result instanceof Error) {
             reject(result);
@@ -508,4 +537,304 @@ test("a blank API base hides the remote source buttons and refuses to open", asy
   await dom.channelImportPrzemiennikiEl.dispatch("click");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
   assert.equal(calls.length, 0);
+
+  // RSGB needs no CORS proxy, so it stays available on such deployments.
+  assert.equal(dom.channelImportRsgbEl.hidden, false);
+  await dom.channelImportRsgbEl.dispatch("click");
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false);
+});
+
+// --- RSGB/ETCC ---------------------------------------------------------------
+
+// Two locator squares' worth of canned responses, keyed by the square in the
+// URL. Anything not listed answers the way the real API answers a miss.
+function installRsgbFetch(bySquare) {
+  const calls = [];
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: async (url, init) => {
+      calls.push({ url: String(url), init });
+      const square = String(url).split("/").pop();
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: bySquare[square] ?? null }),
+      };
+    },
+  });
+  return calls;
+}
+
+function repeaterRecord(overrides = {}) {
+  return {
+    id: 199,
+    status: "OPERATIONAL",
+    town: "HERNE BAY",
+    modeCodes: ["A"],
+    tx: 145662500,
+    rx: 145062500,
+    ctcss: 103.5,
+    txbw: 12.5,
+    band: "2M",
+    repeater: "GB3KI",
+    locator: "JO01NI",
+    ...overrides,
+  };
+}
+
+const LONDON = { coords: { latitude: 51.5072, longitude: -0.1276 } };
+
+async function openRsgb(dom) {
+  await dom.channelImportRsgbEl.dispatch("click");
+}
+
+test("the RSGB modal opens without a network round trip and closes the actions menu", async () => {
+  const { query, dom, table } = buildHarness();
+  const calls = installRsgbFetch({});
+  assert.equal(query.isModalOpen(), false);
+
+  await openRsgb(dom);
+  assert.equal(query.isModalOpen(), true);
+  assert.equal(dom.repeaterQueryTitleEl.textContent, "Query RSGB ETCC API");
+  assert.deepEqual(table.menuOpenCalls, [false], "the actions menu must close behind the modal");
+  assert.deepEqual(calls, [], "the static filter options need no dictionary fetch");
+  // The first focusable control is the first band checkbox — the fixed
+  // country row offers nothing to focus.
+  assert.equal(grid(dom).querySelectorAll('input[name="band"]')[0].focused, true);
+
+  query.setModalOpen(false);
+  assert.equal(query.isModalOpen(), false);
+});
+
+test("opening the RSGB modal preselects 2m, 70cm and analogue", async () => {
+  const { dom } = buildHarness();
+  await openRsgb(dom);
+
+  const checkedBands = grid(dom).querySelectorAll('input[name="band"]:checked');
+  const checkedModes = grid(dom).querySelectorAll('input[name="mode"]:checked');
+  assert.deepEqual(checkedBands.map((el) => el.value), ["70CM", "2M"]);
+  assert.deepEqual(checkedModes.map((el) => el.value), ["A"]);
+});
+
+test("reopening the RSGB modal restores every default, not the last selection", async () => {
+  const { query, dom } = buildHarness();
+  await openRsgb(dom);
+
+  for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
+    el.checked = el.value === "23CM";
+  }
+  fieldByName(dom, "only").checked = false;
+  fieldByName(dom, "radius").value = "250";
+  query.setModalOpen(false);
+  await openRsgb(dom);
+
+  assert.deepEqual(
+    grid(dom).querySelectorAll('input[name="band"]:checked').map((el) => el.value),
+    ["70CM", "2M"],
+  );
+  assert.equal(fieldByName(dom, "only").checked, true);
+  assert.equal(fieldByName(dom, "radius").value, "30");
+});
+
+test("an unavailable geolocation API is reported, not swallowed", async () => {
+  const { dom, log } = buildHarness();
+  installGeolocation(null);
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  assert.equal(fieldByName(dom, "latitude").value, "");
+  assert.match(log.errors.join("\n"), /^RSGB ETCC geolocation: .*not available in this browser/);
+});
+
+test("a coordinate-free or ill-formed RSGB query never reaches the network", async () => {
+  const { dom, log } = buildHarness();
+  const calls = installRsgbFetch({});
+  await openRsgb(dom);
+
+  await dom.repeaterQueryFormEl.dispatch("submit");
+  assert.match(log.errors.join("\n"), /Set a location first/);
+
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = "51.5072";
+  await latitude.dispatch("input");
+  const longitude = fieldByName(dom, "longitude");
+  longitude.value = "-0.1276";
+  await longitude.dispatch("input");
+  for (const radius of ["", "0", "-5"]) {
+    fieldByName(dom, "radius").value = radius;
+    await dom.repeaterQueryFormEl.dispatch("submit");
+  }
+  assert.equal(log.errors.filter((line) => /positive number of kilometres/.test(line)).length, 3);
+
+  assert.deepEqual(calls, [], "nothing should have been fetched");
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false, "the modal stays open on an error");
+});
+
+test("an RSGB query fans out over the squares and inserts the matching repeaters", async () => {
+  const { dom, log, table } = buildHarness();
+  installGeolocation(LONDON);
+  const calls = installRsgbFetch({
+    // London's 30 km radius spans the IO/JO field boundary.
+    IO91: [repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ" })],
+    JO01: [
+      repeaterRecord({ id: 2, repeater: "GB3BK", tx: 430900000, rx: 438500000, locator: "JO01AK", band: "70CM" }),
+      // Filtered out: a simplex gateway is not a repeater.
+      repeaterRecord({ id: 3, repeater: "MB7IBR", tx: 144962500, rx: 144962500, locator: "JO01AK" }),
+    ],
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  assert.deepEqual(calls.map((call) => call.url).sort(), [
+    "https://api-beta.rsgb.online/locator/IO91",
+    "https://api-beta.rsgb.online/locator/JO01",
+  ]);
+  // A custom header would force the CORS preflight the API answers with 405.
+  assert.ok(calls.every((call) => call.init === undefined));
+
+  assert.deepEqual(log.errors, []);
+  assert.equal(table.inserted.length, 1);
+  const { rows, label } = table.inserted[0];
+  assert.equal(label, "RSGB ETCC");
+  assert.deepEqual(rows.map((row) => row.Name), ["GB3XP", "GB3BK"]);
+  assert.equal(rows[0].Frequency, "145.687500");
+  assert.equal(rows[0].Duplex, "-");
+  assert.equal(rows[0].Power, "High", "a repeater channel must not default to Low");
+  // Three records came back across both squares; the gateway is not a repeater.
+  assert.ok(log.debug.some((line) => line.includes("3 fetched, 3 unique, 2 matched")));
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true, "a successful query closes the modal");
+});
+
+test("repeaters the radio cannot tune are reported, not silently missing", async () => {
+  const { dom, log, table } = buildHarness();
+  installGeolocation(LONDON);
+  installRsgbFetch({
+    IO91: [
+      repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ" }),
+      // A 1312 MHz ATV repeater: the harness radio refuses anything over 470.
+      repeaterRecord({ id: 2, repeater: "GB3EN", tx: 1312000000, rx: 1249000000, locator: "IO91XP", band: "23CM" }),
+    ],
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  // Clear the band filter so the 23cm record is not excluded before the builder.
+  for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
+    el.checked = false;
+  }
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
+  assert.ok(
+    log.debug.some((line) => /SKIPPED GB3EN \(frequency not supported/.test(line)),
+    "the drop must name the repeater and the reason",
+  );
+  assert.ok(
+    log.statuses.some((line) => /skipped 1 outside its frequency range/.test(line)),
+    "and be said in the status line, not only the debug log",
+  );
+});
+
+test("a repeater in an unusable mode is reported separately from an untunable one", async () => {
+  const { dom, log, table } = buildHarness({ modeOptions: ["FM", "NFM"] });
+  installGeolocation(LONDON);
+  installRsgbFetch({
+    IO91: [
+      repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ", modeCodes: ["A"] }),
+      // D-STAR only, on a harness radio whose Mode column answers NFM to
+      // everything: writing NFM here would be a channel that cannot work it.
+      repeaterRecord({ id: 2, repeater: "GB7DS", tx: 145737500, rx: 145137500, locator: "IO91VJ", modeCodes: ["D"] }),
+    ],
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+    el.checked = false;
+  }
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
+  assert.ok(log.debug.some((line) => /SKIPPED GB7DS \(mode not supported/.test(line)));
+  assert.ok(
+    log.statuses.some((line) => /skipped 1 in a mode it cannot use/.test(line)),
+    `status lines were: ${log.statuses.join(" | ")}`,
+  );
+});
+
+test("the RSGB band and mode checkboxes filter what is inserted", async () => {
+  const { dom, table } = buildHarness();
+  installGeolocation(LONDON);
+  installRsgbFetch({
+    IO91: [
+      repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ", modeCodes: ["A"] }),
+      repeaterRecord({ id: 2, repeater: "GB7DS", tx: 439412500, rx: 430412500, locator: "IO91VJ", band: "70CM", modeCodes: ["D"] }),
+    ],
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  // Defaults (2m + 70cm, analogue) keep only the analogue one.
+  await dom.repeaterQueryFormEl.dispatch("submit");
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
+
+  await openRsgb(dom);
+  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+    el.checked = el.value === "D";
+  }
+  await dom.repeaterQueryFormEl.dispatch("submit");
+  assert.deepEqual(table.inserted[1].rows.map((row) => row.Name), ["GB7DS"]);
+});
+
+test("unticking 'only operational' admits the off-air repeaters", async () => {
+  const { dom, table } = buildHarness();
+  installGeolocation(LONDON);
+  installRsgbFetch({
+    IO91: [repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ", status: "NOT OPERATIONAL" })],
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  await dom.repeaterQueryFormEl.dispatch("submit");
+  // The grid is handed the empty set rather than being skipped: it owns the
+  // "no entries to insert" message.
+  assert.deepEqual(table.inserted[0].rows, []);
+
+  await openRsgb(dom);
+  fieldByName(dom, "only").checked = false;
+  await dom.repeaterQueryFormEl.dispatch("submit");
+  assert.deepEqual(table.inserted[1].rows.map((row) => row.Name), ["GB3XP"]);
+  assert.match(table.inserted[1].rows[0].Comment, /NOT OPERATIONAL$/);
+});
+
+test("an RSGB transport failure is reported and leaves the modal open", async () => {
+  const { dom, log, table } = buildHarness();
+  installGeolocation(LONDON);
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: async () => ({ ok: false, status: 503, json: async () => ({}) }),
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  assert.match(log.errors.join("\n"), /^RSGB ETCC query: .*HTTP 503/m);
+  assert.deepEqual(table.inserted, []);
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false, "the user keeps their filters to retry with");
+});
+
+test("an RSGB query with no channel schema loaded does nothing", async () => {
+  const { dom, log, table } = buildHarness({ headers: [] });
+  installGeolocation(LONDON);
+  const calls = installRsgbFetch({});
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  assert.deepEqual(calls, []);
+  assert.deepEqual(table.inserted, []);
+  assert.ok(log.statuses.includes("No channel schema loaded yet."));
 });

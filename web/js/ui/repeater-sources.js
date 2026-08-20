@@ -3,6 +3,20 @@ import {
   parsePrzemiennikiMetaJson,
   parsePrzemiennikiXml,
 } from "../datasources.js";
+import {
+  RSGB_BANDS,
+  RSGB_COUNTRY_CODE,
+  RSGB_COUNTRY_LABEL,
+  RSGB_DEFAULT_BANDS,
+  RSGB_DEFAULT_MODES,
+  RSGB_DEFAULT_RADIUS_KM,
+  RSGB_MODES,
+  buildRsgbRows,
+  dedupeRsgbRecords,
+  fetchRsgbRecords,
+  filterRsgbRecords,
+  squaresForRadius,
+} from "../rsgb.js";
 import { countryDisplayName, flagEmojiFromCountryCode } from "./format.js";
 import { trackEvent } from "./analytics.js";
 
@@ -146,6 +160,138 @@ export function createRepeaterSources(ctx, { endpoints }) {
     };
   }
 
+  // RSGB/ETCC: the API only knows how to return a locator square, so distance,
+  // band and mode are all applied client-side after a square fan-out. It also
+  // needs no CORS proxy, so it stays available on deployments where the other
+  // two are disabled. Filter options are static — the API's documented flag
+  // table and its observed band values, not a dictionary endpoint (the API has
+  // none) — so the modal opens without a network round trip.
+  function rsgbSource() {
+    const actionLabel = "RSGB ETCC";
+    return {
+      key: "rsgb",
+      menuButton: "channelImportRsgbEl",
+      available: true,
+      title: "Query RSGB ETCC API",
+      label: "RSGB ETCC",
+      actionLabel,
+      insertLabel: "RSGB ETCC",
+      fields: [
+        // The directory is UK-only, so the country is fixed rather than
+        // chosen: a picker with one entry is a control that cannot do
+        // anything.
+        {
+          kind: "fixed",
+          key: "country",
+          label: "Country",
+          text: `${flagEmojiFromCountryCode(RSGB_COUNTRY_CODE)} ${RSGB_COUNTRY_LABEL}`,
+        },
+        {
+          kind: "checkboxGroup",
+          key: "bands",
+          label: "Band",
+          name: "band",
+          options: RSGB_BANDS.map((band) => ({ value: band, label: band })),
+          defaults: RSGB_DEFAULT_BANDS,
+        },
+        {
+          kind: "checkboxGroup",
+          key: "modes",
+          label: "Mode",
+          name: "mode",
+          options: RSGB_MODES.map((mode) => ({ ...mode, title: `${mode.label} (${mode.value})` })),
+          defaults: RSGB_DEFAULT_MODES,
+        },
+        { kind: "checkbox", key: "only", label: "Only operational", checked: true },
+        { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
+        {
+          kind: "number",
+          key: "radius",
+          label: "Distance (km)",
+          min: 1,
+          max: 500,
+          step: 1,
+          value: RSGB_DEFAULT_RADIUS_KM,
+        },
+      ],
+      loadOptions: null,
+      runQuery: async (values) => {
+        const position = values.position;
+        if (!position) {
+          throw new Error("Set a location first: use the 🛰️ button or type a latitude and longitude.");
+        }
+        const radiusKm = values.radius;
+        if (!Number.isFinite(radiusKm) || radiusKm <= 0) {
+          throw new Error("Distance must be a positive number of kilometres.");
+        }
+
+        const plan = squaresForRadius(position.latitude, position.longitude, radiusKm);
+        if (plan.squares.length === 0) {
+          log.setStatus("No locator squares fall within that distance.");
+          return;
+        }
+        if (plan.truncated) {
+          // A clipped plan queries a subset of the area, so say so rather than
+          // letting a short result read as "that is everything nearby".
+          log.logDebug(`RSGB PLAN truncated to ${plan.squares.length} of ${plan.considered} squares`);
+          log.setStatus(`Distance spans ${plan.considered} squares; querying the ${plan.squares.length} nearest.`);
+        }
+
+        log.setStatus(`Querying RSGB ETCC for ${plan.squares.length} locator square(s)...`);
+        log.logDebug(`RSGB QUERY ${plan.squares.join(", ")} r=${radiusKm}km`);
+
+        const records = await fetchRsgbRecords({
+          squares: plan.squares,
+          onRequest: ({ locator, count }) => log.logDebug(`RSGB SQUARE ${locator} -> ${count}`),
+        });
+        const deduped = dedupeRsgbRecords(records);
+        const modes = values.modes;
+        const entries = filterRsgbRecords(deduped, {
+          latitude: position.latitude,
+          longitude: position.longitude,
+          radiusKm,
+          bands: values.bands,
+          modes,
+          onlyOperational: values.only,
+        });
+
+        log.logDebug(`RSGB RESULTS ${records.length} fetched, ${deduped.length} unique, ${entries.length} matched`);
+
+        // The mode selection goes to the builder as well as the filter, so a
+        // D-STAR query gets the DV side of a mixed-mode repeater, not its FM
+        // one.
+        const { rows, skipped } = buildRsgbRows(entries, ctx.table.rowBuilderHooks(), { modes });
+        // Repeaters the radio cannot express are dropped rather than written
+        // as something they are not; a shorter list than the match count needs
+        // saying out loud, or it reads as results going missing.
+        const byReason = {
+          frequency: skipped.filter((entry) => entry.reason === "frequency").length,
+          mode: skipped.filter((entry) => entry.reason === "mode").length,
+        };
+        for (const entry of skipped) {
+          log.logDebug(`RSGB SKIPPED ${entry.repeater} (${entry.reason} not supported by the selected radio)`);
+        }
+        ctx.table.insertRowsAtSelectionOrEnd(rows, "RSGB ETCC");
+        // result_count is the point of this event: a query that returns
+        // nothing means the filters, the radius or the API are wrong, and that
+        // is invisible otherwise. The band and mode filters and the position
+        // are never reported.
+        trackEvent("repeater_import", {
+          repeater_source: "rsgb",
+          located: "yes",
+          result_count: rows.length,
+        });
+        if (skipped.length > 0) {
+          const detail = [
+            byReason.frequency > 0 ? `${byReason.frequency} outside its frequency range` : "",
+            byReason.mode > 0 ? `${byReason.mode} in a mode it cannot use` : "",
+          ].filter((part) => part.length > 0).join(", ");
+          log.setStatus(`Inserted ${rows.length} channel(s); skipped ${detail}.`);
+        }
+      },
+    };
+  }
+
   return [
     remoteDirectorySource({
       key: "przemienniki",
@@ -163,5 +309,6 @@ export function createRepeaterSources(ctx, { endpoints }) {
       menuButton: "channelImportRepeaterbookEl",
       sourceEndpoints: endpoints?.repeaterbook,
     }),
+    rsgbSource(),
   ];
 }
