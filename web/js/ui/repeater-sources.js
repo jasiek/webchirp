@@ -83,8 +83,11 @@ export function createRepeaterSources(ctx, { endpoints }) {
       insertLabel,
       fields: [
         { kind: "select", key: "country", label: "Country", placeholder: "Any country", optionsKey: "country" },
-        { kind: "checkboxGroup", key: "bands", label: "Band", name: "band", optionsKey: "bands" },
-        { kind: "checkboxGroup", key: "modes", label: "Mode", name: "mode", optionsKey: "modes" },
+        // The same starting selection as RSGB: the two bands a handheld can
+        // work, on FM. The values are the dictionary's own (lowercase); a
+        // dictionary that lacks one simply leaves it unticked.
+        { kind: "checkboxGroup", key: "bands", label: "Band", name: "band", optionsKey: "bands", defaults: ["2m", "70cm"] },
+        { kind: "checkboxGroup", key: "modes", label: "Mode", name: "mode", optionsKey: "modes", defaults: ["fm"] },
         { kind: "checkbox", key: "only", label: "Only working", checked: true },
         { kind: "position", locatorPlaceholder: "e.g. JO91GG" },
         { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30 },

@@ -325,7 +325,10 @@ test("opening przemienniki builds the form from the dictionary, once", async () 
 
   const bands = grid(dom).querySelectorAll('input[name="band"]');
   assert.deepEqual(bands.map((el) => el.value), ["2m", "70cm"]);
-  assert.deepEqual(bands.map((el) => el.checked), [false, false]);
+  // 2m + 70cm on FM start ticked, the same defaults as RSGB.
+  assert.deepEqual(bands.map((el) => el.checked), [true, true]);
+  const modes = grid(dom).querySelectorAll('input[name="mode"]');
+  assert.deepEqual(modes.map((el) => `${el.value}${el.checked ? "*" : ""}`), ["dstar", "fm*"]);
   assert.equal(fieldByName(dom, "only").checked, true);
   assert.equal(fieldByName(dom, "radius").value, "30");
 
@@ -371,6 +374,14 @@ test("submitting sends the selected filters as URL parameters", async () => {
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
   countrySelect(dom).value = "PL";
+  // Start from a clean slate so the URL reflects exactly this test's picks,
+  // not the 2m/70cm/fm defaults.
+  for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
+    el.checked = false;
+  }
+  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+    el.checked = false;
+  }
   const band = grid(dom).querySelectorAll('input[name="band"]')[0];
   band.checked = true;
   // Mode options come back label-sorted from the dictionary: dstar, fm.
@@ -411,6 +422,13 @@ test("blank optional filters are omitted from the query", async () => {
   await dom.channelImportRepeaterbookEl.dispatch("click");
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query repeaterbook.com");
   fieldByName(dom, "only").checked = false;
+  // Untick the default band/mode selection to make every optional filter blank.
+  for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
+    el.checked = false;
+  }
+  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+    el.checked = false;
+  }
 
   await dom.repeaterQueryFormEl.dispatch("submit");
 
@@ -443,7 +461,13 @@ test("filters reset to source defaults on reopen while the position persists", a
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
   countrySelect(dom).value = "PL";
-  grid(dom).querySelectorAll('input[name="band"]')[0].checked = true;
+  // Invert the default selection: bands off, dstar on instead of fm.
+  for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
+    el.checked = false;
+  }
+  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+    el.checked = el.value === "dstar";
+  }
   fieldByName(dom, "only").checked = false;
   fieldByName(dom, "radius").value = "120";
   const latitude = fieldByName(dom, "latitude");
@@ -457,7 +481,14 @@ test("filters reset to source defaults on reopen while the position persists", a
   await dom.channelImportPrzemiennikiEl.dispatch("click");
 
   assert.equal(countrySelect(dom).value, "");
-  assert.deepEqual(grid(dom).querySelectorAll('input[name="band"]:checked'), []);
+  assert.deepEqual(
+    grid(dom).querySelectorAll('input[name="band"]:checked').map((el) => el.value),
+    ["2m", "70cm"],
+  );
+  assert.deepEqual(
+    grid(dom).querySelectorAll('input[name="mode"]:checked').map((el) => el.value),
+    ["fm"],
+  );
   assert.equal(fieldByName(dom, "only").checked, true);
   assert.equal(fieldByName(dom, "radius").value, "30");
   assert.equal(fieldByName(dom, "latitude").value, "52.2297");
