@@ -1,13 +1,15 @@
-import {
-  DEFAULT_REPEATER_API_BASE,
-  buildPrzemiennikiRows,
-  buildRepeaterEndpoints,
-  parsePrzemiennikiMetaJson,
-  parsePrzemiennikiXml,
-} from "../datasources.js";
-import { countryDisplayName, flagEmojiFromCountryCode } from "./format.js";
-import { decodeMaidenheadBox, encodeMaidenhead } from "../rsgb.js";
+import { DEFAULT_REPEATER_API_BASE, buildRepeaterEndpoints } from "../datasources.js";
+import { encodeMaidenhead } from "../rsgb.js";
 import { classifyErrorKind, trackEvent } from "./analytics.js";
+import { createRepeaterSources } from "./repeater-sources.js";
+import {
+  createCheckboxField,
+  createCheckboxGroupField,
+  createFixedField,
+  createNumberField,
+  createPositionField,
+  createSelectField,
+} from "./query-fields.js";
 
 const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
 
@@ -23,290 +25,114 @@ function resolveRepeaterApiBase() {
   return DEFAULT_REPEATER_API_BASE;
 }
 
-// Online repeater directory imports (przemienniki.net, RepeaterBook): the
-// filter modal, its dictionary fetch, the query itself, and inserting the
-// results as channels. Both sources share one modal, so the active source is
-// tracked here.
+const FIELD_FACTORIES = {
+  select: createSelectField,
+  fixed: createFixedField,
+  checkboxGroup: createCheckboxGroupField,
+  checkbox: createCheckboxField,
+  number: createNumberField,
+};
+
+// Online repeater directory imports. One modal serves every source: each
+// source config (ui/repeater-sources.js) declares its fields, and the grid is
+// rebuilt from them on every open — which is also the reset policy: filters
+// always come back at their per-source defaults, so the modal always opens in
+// the state it documents (a once-ticked "include off-air" cannot silently
+// stick forever). The position is the deliberate exception: it survives
+// closes and source switches alike, because where the user is does not change
+// with the directory they ask.
 export function createRepeaterQuery(ctx) {
   const { dom, state, log } = ctx;
 
-  let przemiennikiDictionaryPromise = null;
-  let repeaterbookDictionaryPromise = null;
-  let activeSource = "przemienniki";
-
-  // Online repeater queries depend on a CORS proxy; when none is configured
-  // (blank base) the endpoints are null and these features are disabled: the
-  // menu items are hidden so they can't fire requests that will fail.
+  // Online repeater queries against przemienniki.net/RepeaterBook depend on a
+  // CORS proxy; when none is configured (blank base) the endpoints are null
+  // and those sources are disabled: their menu items are hidden so they can't
+  // fire requests that will fail.
   const endpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
-  const enabled = endpoints !== null;
-  if (!enabled) {
-    dom.channelImportPrzemiennikiEl.hidden = true;
-    dom.channelImportRepeaterbookEl.hidden = true;
+  const sources = createRepeaterSources(ctx, { endpoints });
+  for (const source of sources) {
+    if (!source.available) {
+      dom[source.menuButton].hidden = true;
+    }
   }
 
-  const sources = {
-    przemienniki: {
-      key: "przemienniki",
-      label: "przemienniki.net",
-      actionLabel: "Przemienniki",
-      insertLabel: "przemienniki",
-      apiUrl: endpoints?.przemienniki.apiUrl || "",
-      metaUrl: endpoints?.przemienniki.metaUrl || "",
-      getDictionaryPromise: () => przemiennikiDictionaryPromise,
-      setDictionaryPromise: (value) => {
-        przemiennikiDictionaryPromise = value;
-      },
-    },
-    repeaterbook: {
-      key: "repeaterbook",
-      label: "repeaterbook.com",
-      actionLabel: "RepeaterBook",
-      insertLabel: "repeaterbook",
-      apiUrl: endpoints?.repeaterbook.apiUrl || "",
-      metaUrl: endpoints?.repeaterbook.metaUrl || "",
-      getDictionaryPromise: () => repeaterbookDictionaryPromise,
-      setDictionaryPromise: (value) => {
-        repeaterbookDictionaryPromise = value;
-      },
-    },
-  };
+  let activeSource = sources[0];
+  let fieldInstances = [];
+  let positionField = null;
+  const positionState = { latitudeText: "", longitudeText: "" };
 
-  function activeSourceConfig() {
-    return sources[activeSource] || sources.przemienniki;
-  }
-
-  function setActiveSource(sourceKey) {
-    activeSource = sources[sourceKey] ? sourceKey : "przemienniki";
-    dom.przemiennikiModalTitleEl.textContent = `Query ${activeSourceConfig().label}`;
-  }
-
-  function replaceOptions(selectEl, options, placeholderLabel) {
-    selectEl.innerHTML = "";
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = placeholderLabel;
-    selectEl.appendChild(placeholder);
-    for (const option of options) {
-      const opt = document.createElement("option");
-      opt.value = option.value;
-      opt.textContent = option.label;
-      if (option.title) {
-        opt.title = option.title;
+  function buildFields(source, loadedOptions) {
+    dom.repeaterQueryGridEl.innerHTML = "";
+    fieldInstances = [];
+    positionField = null;
+    for (const config of source.fields) {
+      let instance;
+      if (config.kind === "position") {
+        instance = createPositionField({
+          locatorPlaceholder: config.locatorPlaceholder,
+          initial: positionState,
+          onChange: (latitudeText, longitudeText) => {
+            positionState.latitudeText = latitudeText;
+            positionState.longitudeText = longitudeText;
+          },
+        });
+        positionField = instance;
+        // The button is recreated with the field on every open, so the
+        // listener attaches here rather than in bindEvents.
+        instance.geolocateButton.addEventListener("click", onGeolocateClick);
+      } else {
+        const factory = FIELD_FACTORIES[config.kind];
+        const options = config.optionsKey
+          ? loadedOptions?.[config.optionsKey] || []
+          : config.options;
+        instance = factory({ ...config, options });
       }
-      selectEl.appendChild(opt);
-    }
-  }
-
-  function replaceCheckboxOptions(containerEl, options, name) {
-    containerEl.innerHTML = "";
-    options.forEach((option) => {
-      const label = document.createElement("label");
-      label.className = "modal-mode-option";
-      label.title = option.title || option.label || option.value;
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.value = option.value;
-      checkbox.name = name;
-      const text = document.createElement("span");
-      text.textContent = option.label || option.value;
-      label.appendChild(checkbox);
-      label.appendChild(text);
-      containerEl.appendChild(label);
-    });
-  }
-
-  function populateCountryOptions(codes) {
-    const countries = Array.from(codes || [])
-      .map((code) => {
-        const name = countryDisplayName(code);
-        const flag = flagEmojiFromCountryCode(code);
-        return {
-          value: code,
-          label: `${flag} ${name}`.trim(),
-          title: name,
-        };
-      })
-      .sort((a, b) => a.title.localeCompare(b.title));
-    replaceOptions(dom.przemiennikiCountryEl, countries, "Any country");
-  }
-
-  function populateBandOptions(bands) {
-    const options = Array.from(bands || [])
-      .map((band) => ({ value: band, label: band, title: band }))
-      .sort((a, b) => a.value.localeCompare(b.value));
-    replaceCheckboxOptions(dom.przemiennikiBandListEl, options, "band");
-  }
-
-  function populateModeOptions(modes) {
-    replaceCheckboxOptions(dom.przemiennikiModeListEl, Array.from(modes || []), "mode");
-  }
-
-  function selectedModes() {
-    return Array.from(dom.przemiennikiModeListEl.querySelectorAll('input[name="mode"]:checked'))
-      .map((el) => String(el.value || "").trim().toLowerCase())
-      .filter((value) => value.length > 0);
-  }
-
-  function selectedBands() {
-    return Array.from(dom.przemiennikiBandListEl.querySelectorAll('input[name="band"]:checked'))
-      .map((el) => String(el.value || "").trim().toLowerCase())
-      .filter((value) => value.length > 0);
-  }
-
-  async function ensureDictionaryLoaded() {
-    const source = activeSourceConfig();
-    const existingPromise = source.getDictionaryPromise();
-    if (existingPromise) {
-      return existingPromise;
-    }
-    const dictionaryPromise = (async () => {
-      const response = await fetch(source.metaUrl);
-      if (!response.ok) {
-        throw new Error(`Dictionary request failed: HTTP ${response.status}`);
+      for (const node of instance.nodes) {
+        dom.repeaterQueryGridEl.appendChild(node);
       }
-      const jsonText = await response.text();
-      const parsed = parsePrzemiennikiMetaJson(jsonText);
-      populateCountryOptions(parsed.countries);
-      populateBandOptions(parsed.bands);
-      populateModeOptions(parsed.modes);
-      log.logDebug(`Loaded ${source.label} filter options from /meta.`);
-      return parsed;
-    })();
-    source.setDictionaryPromise(dictionaryPromise);
-    try {
-      return await dictionaryPromise;
-    } catch (error) {
-      source.setDictionaryPromise(null);
-      throw error;
+      fieldInstances.push(instance);
     }
   }
 
-  // Number("") is 0, not NaN, so a blank coordinate field would otherwise
-  // read as a position on the equator — and encode as a locator.
-  function numericFieldValue(el) {
-    const text = String(el.value ?? "").trim();
-    if (text === "") {
-      return Number.NaN;
+  function collectValues() {
+    const values = {};
+    for (const instance of fieldInstances) {
+      values[instance.key] = instance.value();
     }
-    return Number(text);
-  }
-
-  function currentPosition() {
-    const latitude = numericFieldValue(dom.przemiennikiLatitudeEl);
-    const longitude = numericFieldValue(dom.przemiennikiLongitudeEl);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      return null;
-    }
-    if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
-      return null;
-    }
-    return { latitude, longitude };
-  }
-
-  // The locator field is a two-way alternative way to enter the position, not
-  // a filter of its own: runQuery only ever sends latitude/longitude, which is
-  // all either API understands. Editing one side rewrites the other; the
-  // rewrites are programmatic value assignments, which fire no input events,
-  // so the two handlers cannot feed back into each other.
-  function refreshLocatorFromCoords() {
-    const position = currentPosition();
-    dom.przemiennikiLocatorEl.value = position
-      ? encodeMaidenhead(position.latitude, position.longitude, 6)
-      : "";
-  }
-
-  function applyLocatorToCoords() {
-    const box = decodeMaidenheadBox(dom.przemiennikiLocatorEl.value);
-    if (!box) {
-      // Partial or invalid text (no valid 4-character prefix yet): keep the
-      // coordinates the user already has instead of wiping them mid-keystroke.
-      return;
-    }
-    dom.przemiennikiLatitudeEl.value = box.latitude.toFixed(6);
-    dom.przemiennikiLongitudeEl.value = box.longitude.toFixed(6);
+    return values;
   }
 
   function setModalOpen(open) {
-    dom.przemiennikiModalEl.classList.toggle("hidden", !open);
+    dom.repeaterQueryModalEl.classList.toggle("hidden", !open);
     if (open) {
-      dom.przemiennikiCountryEl.focus();
+      const focusable = fieldInstances.find((instance) => instance.focusTarget);
+      focusable?.focusTarget.focus();
     }
   }
 
   function isModalOpen() {
-    return !dom.przemiennikiModalEl.classList.contains("hidden");
+    return !dom.repeaterQueryModalEl.classList.contains("hidden");
   }
 
   async function openModal(sourceKey) {
-    if (!enabled) {
+    const source = sources.find((entry) => entry.key === sourceKey);
+    if (!source || !source.available) {
       return;
     }
-    setActiveSource(sourceKey);
-    const source = activeSourceConfig();
     ctx.table.setMenuOpen(false);
-    log.setStatus(`Loading ${source.label} query options...`);
-    await ensureDictionaryLoaded();
-    // The coordinate fields are plain DOM properties that survive a close, so
-    // bring the locator back in step with whatever they still hold.
-    refreshLocatorFromCoords();
+    let loadedOptions = null;
+    if (source.loadOptions) {
+      log.setStatus(`Loading ${source.label} query options...`);
+      loadedOptions = await source.loadOptions();
+    }
+    activeSource = source;
+    buildFields(source, loadedOptions);
+    dom.repeaterQueryTitleEl.textContent = source.title;
     setModalOpen(true);
     // Paired with repeater_import, this shows how many people open the filter
     // modal and never run a query.
     trackEvent("repeater_modal_opened", { repeater_source: source.key });
     log.setStatus(`Configure ${source.label} query.`);
-  }
-
-  function appendQueryParam(url, key, value) {
-    const text = String(value ?? "").trim();
-    if (!text) {
-      return;
-    }
-    url.searchParams.set(key, text);
-  }
-
-  async function runQuery() {
-    if (!state.currentHeaders.length) {
-      log.setStatus("No channel schema loaded yet.");
-      return;
-    }
-    const source = activeSourceConfig();
-    const url = new URL(source.apiUrl);
-    appendQueryParam(url, "country", String(dom.przemiennikiCountryEl.value || "").toLowerCase());
-    const bands = selectedBands();
-    if (bands.length > 0) {
-      url.searchParams.set("band", bands.join(","));
-    }
-    selectedModes().forEach((mode) => {
-      url.searchParams.append("mode", mode);
-    });
-    if (dom.przemiennikiOnlyWorkingEl.checked) {
-      url.searchParams.set("onlyworking", "true");
-    }
-    appendQueryParam(url, "latitude", dom.przemiennikiLatitudeEl.value || "");
-    appendQueryParam(url, "longitude", dom.przemiennikiLongitudeEl.value || "");
-    appendQueryParam(url, "range", dom.przemiennikiRangeEl.value || "");
-    log.setStatus(`Querying ${source.label}...`);
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`${source.actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
-    }
-    const xmlText = await response.text();
-    const parsed = parsePrzemiennikiXml(xmlText);
-    const rowsToInsert = buildPrzemiennikiRows(parsed.repeaters, ctx.table.rowBuilderHooks());
-    ctx.table.insertRowsAtSelectionOrEnd(rowsToInsert, source.insertLabel);
-    // result_count is the point of this event: a query that returns nothing
-    // means the filters or the proxy are wrong, and today that is invisible.
-    // The country code is a filter the user picked from a fixed list; the
-    // latitude/longitude fields are never reported.
-    trackEvent("repeater_import", {
-      repeater_source: source.key,
-      country: String(dom.przemiennikiCountryEl.value || "").toLowerCase() || "any",
-      located: dom.przemiennikiLatitudeEl.value ? "yes" : "no",
-      result_count: parsed.repeaters.length,
-    });
-    log.logDebug(`${source.actionLabel.toUpperCase()} QUERY ${url.toString()}`);
-    log.logDebug(`${source.actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length}`);
   }
 
   async function geolocate() {
@@ -326,63 +152,59 @@ export function createRepeaterQuery(ctx) {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       throw new Error("Geolocation did not return valid coordinates.");
     }
-    dom.przemiennikiLatitudeEl.value = latitude.toFixed(6);
-    dom.przemiennikiLongitudeEl.value = longitude.toFixed(6);
-    refreshLocatorFromCoords();
-    log.setStatus("Geolocation loaded into latitude/longitude fields.");
-    log.logDebug(`PRZEMIENNIKI GEO ${latitude.toFixed(6)},${longitude.toFixed(6)}`);
+    positionField.setPosition(latitude, longitude);
+    const locator = encodeMaidenhead(latitude, longitude, 6);
+    log.setStatus(`Location set to ${locator}.`);
+    log.logDebug(`${activeSource.actionLabel.toUpperCase()} GEO ${latitude.toFixed(6)},${longitude.toFixed(6)} ${locator}`);
+  }
+
+  async function onGeolocateClick() {
+    try {
+      await geolocate();
+      // Only that geolocation was used and whether it worked — the
+      // coordinates it produced stay in the form.
+      trackEvent("repeater_geolocate", { repeater_source: activeSource.key, outcome: "ok" });
+    } catch (error) {
+      trackEvent("repeater_geolocate", {
+        repeater_source: activeSource.key,
+        outcome: "failed",
+        error_kind: classifyErrorKind(error),
+      });
+      log.reportActionError(`${activeSource.actionLabel} geolocation`, error);
+    }
   }
 
   function bindEvents() {
-    dom.channelImportPrzemiennikiEl.addEventListener("click", async () => {
-      try {
-        await openModal("przemienniki");
-      } catch (error) {
-        log.reportActionError("Przemienniki modal", error);
-      }
-    });
-    dom.channelImportRepeaterbookEl.addEventListener("click", async () => {
-      try {
-        await openModal("repeaterbook");
-      } catch (error) {
-        log.reportActionError("RepeaterBook modal", error);
-      }
-    });
-    dom.przemiennikiCancelEl.addEventListener("click", () => {
-      const source = activeSourceConfig();
+    for (const source of sources) {
+      dom[source.menuButton].addEventListener("click", async () => {
+        try {
+          await openModal(source.key);
+        } catch (error) {
+          log.reportActionError(`${source.actionLabel} modal`, error);
+        }
+      });
+    }
+    dom.repeaterQueryCancelEl.addEventListener("click", () => {
       setModalOpen(false);
-      log.setStatus(`Cancelled ${source.label} query.`);
+      log.setStatus(`Cancelled ${activeSource.label} query.`);
     });
-    dom.przemiennikiGeolocateEl.addEventListener("click", async () => {
-      try {
-        await geolocate();
-        // Only that geolocation was used and whether it worked — the
-        // coordinates it produced stay in the form.
-        trackEvent("repeater_geolocate", { repeater_source: activeSource, outcome: "ok" });
-      } catch (error) {
-        trackEvent("repeater_geolocate", {
-          repeater_source: activeSource,
-          outcome: "failed",
-          error_kind: classifyErrorKind(error),
-        });
-        log.reportActionError("Przemienniki geolocation", error);
-      }
-    });
-    dom.przemiennikiLatitudeEl.addEventListener("input", refreshLocatorFromCoords);
-    dom.przemiennikiLongitudeEl.addEventListener("input", refreshLocatorFromCoords);
-    dom.przemiennikiLocatorEl.addEventListener("input", applyLocatorToCoords);
-    dom.przemiennikiModalEl.addEventListener("click", (event) => {
-      if (event.target === dom.przemiennikiModalEl) {
+    dom.repeaterQueryModalEl.addEventListener("click", (event) => {
+      if (event.target === dom.repeaterQueryModalEl) {
         setModalOpen(false);
       }
     });
-    dom.przemiennikiFormEl.addEventListener("submit", async (event) => {
+    dom.repeaterQueryFormEl.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
-        await runQuery();
+        if (!state.currentHeaders.length) {
+          log.setStatus("No channel schema loaded yet.");
+          setModalOpen(false);
+          return;
+        }
+        await activeSource.runQuery(collectValues());
         setModalOpen(false);
       } catch (error) {
-        log.reportActionError(`${activeSourceConfig().actionLabel} query`, error);
+        log.reportActionError(`${activeSource.actionLabel} query`, error);
       }
     });
   }

@@ -1255,18 +1255,6 @@ button:disabled {
   gap: 0.5rem;
 }
 
-#przemienniki-country {
-  margin-bottom: 2em;
-}
-
-#przemienniki-band-list {
-  margin-bottom: 2em;
-}
-
-#przemienniki-mode-list {
-  margin-bottom: 2em;
-}
-
 .debug-output-panel {
   border-top: 1px solid var(--border);
   background: var(--debug-bg);
