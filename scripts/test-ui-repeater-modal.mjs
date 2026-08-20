@@ -641,6 +641,33 @@ test("opening the RSGB modal preselects 2m, 70cm and analogue", async () => {
   assert.deepEqual(checkedModes.map((el) => el.value), ["A"]);
 });
 
+test("RSGB band and mode labels match the other sources' casing, with unsupported modes disabled", async () => {
+  const { dom } = buildHarness();
+  await openRsgb(dom);
+
+  const [bandBox, modeBox] = descendants(grid(dom)).filter((el) => el.className === "modal-modes");
+  // Labels are display-only lowercase; the values behind them stay the API's
+  // own band codes and mode flags.
+  assert.deepEqual(
+    bandBox.children.map((option) => option.children[1].textContent),
+    ["70cm", "2m", "23cm", "6m", "10m", "9cm", "3cm"],
+  );
+  assert.deepEqual(
+    modeBox.children.map((option) => option.children[1].textContent),
+    ["fm", "dstar", "dmr", "p25", "nxdn", "m17"],
+  );
+
+  const modeInputs = grid(dom).querySelectorAll('input[name="mode"]');
+  assert.deepEqual(modeInputs.map((el) => el.value), ["A", "D", "M", "P", "N", "7"]);
+  assert.deepEqual(modeInputs.filter((el) => el.disabled).map((el) => el.value), ["M", "P", "N", "7"]);
+  assert.deepEqual(
+    modeBox.children
+      .filter((option) => option.title === "Only analogue modes and dstar are supported fully")
+      .map((option) => option.children[1].textContent),
+    ["dmr", "p25", "nxdn", "m17"],
+  );
+});
+
 test("reopening the RSGB modal restores every default, not the last selection", async () => {
   const { query, dom } = buildHarness();
   await openRsgb(dom);

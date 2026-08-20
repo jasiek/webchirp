@@ -89,7 +89,9 @@ export function createFixedField({ key, label, text, value = "" }) {
 }
 
 // Multi-choice checkbox list. `value()` returns the checked values verbatim —
-// case normalization is a per-source concern, not a component one.
+// case normalization is a per-source concern, not a component one. An option
+// with `disabled: true` is shown but not selectable (its title says why) and
+// can never reach `value()`.
 export function createCheckboxGroupField({ key, label, name, options = [], defaults = [] }) {
   const preselected = new Set(defaults);
   const container = document.createElement("div");
@@ -103,7 +105,8 @@ export function createCheckboxGroupField({ key, label, name, options = [], defau
     checkbox.type = "checkbox";
     checkbox.value = option.value;
     checkbox.name = name;
-    checkbox.checked = preselected.has(option.value);
+    checkbox.disabled = option.disabled === true;
+    checkbox.checked = !checkbox.disabled && preselected.has(option.value);
     const text = document.createElement("span");
     text.textContent = option.label || option.value;
     optionLabel.appendChild(checkbox);
@@ -114,9 +117,9 @@ export function createCheckboxGroupField({ key, label, name, options = [], defau
   return {
     key,
     nodes: [plainLabel(label), container],
-    focusTarget: checkboxes[0] || null,
+    focusTarget: checkboxes.find((checkbox) => !checkbox.disabled) || null,
     value: () => checkboxes
-      .filter((checkbox) => checkbox.checked)
+      .filter((checkbox) => checkbox.checked && !checkbox.disabled)
       .map((checkbox) => String(checkbox.value || "").trim())
       .filter((value) => value.length > 0),
   };

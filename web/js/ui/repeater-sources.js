@@ -160,6 +160,23 @@ export function createRepeaterSources(ctx, { endpoints }) {
     };
   }
 
+  // Display names follow the other sources' dictionary casing ("2m", "fm",
+  // "dstar"), so band and mode lists read the same in every modal; the values
+  // behind them stay the API's own flags and band codes.
+  const RSGB_MODE_LABELS = { A: "fm", D: "dstar" };
+
+  // Modes the directory carries but the import does not offer, because a
+  // channel row cannot express them usefully (see RSGB_MODES in web/js/rsgb.js).
+  // Shown disabled rather than hidden, so their absence reads as a decision
+  // and not a gap; the values are the API's mode flags.
+  const RSGB_UNSUPPORTED_MODES = [
+    { value: "M", label: "dmr" },
+    { value: "P", label: "p25" },
+    { value: "N", label: "nxdn" },
+    { value: "7", label: "m17" },
+  ];
+  const RSGB_UNSUPPORTED_TOOLTIP = "Only analogue modes and dstar are supported fully";
+
   // RSGB/ETCC: the API only knows how to return a locator square, so distance,
   // band and mode are all applied client-side after a square fan-out. It also
   // needs no CORS proxy, so it stays available on deployments where the other
@@ -191,7 +208,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
           key: "bands",
           label: "Band",
           name: "band",
-          options: RSGB_BANDS.map((band) => ({ value: band, label: band })),
+          options: RSGB_BANDS.map((band) => ({ value: band, label: band.toLowerCase(), title: band.toLowerCase() })),
           defaults: RSGB_DEFAULT_BANDS,
         },
         {
@@ -199,7 +216,18 @@ export function createRepeaterSources(ctx, { endpoints }) {
           key: "modes",
           label: "Mode",
           name: "mode",
-          options: RSGB_MODES.map((mode) => ({ ...mode, title: `${mode.label} (${mode.value})` })),
+          options: [
+            ...RSGB_MODES.map((mode) => ({
+              value: mode.value,
+              label: RSGB_MODE_LABELS[mode.value] || mode.label,
+              title: `${mode.label} (${mode.value})`,
+            })),
+            ...RSGB_UNSUPPORTED_MODES.map((mode) => ({
+              ...mode,
+              disabled: true,
+              title: RSGB_UNSUPPORTED_TOOLTIP,
+            })),
+          ],
           defaults: RSGB_DEFAULT_MODES,
         },
         { kind: "checkbox", key: "only", label: "Only operational", checked: true },

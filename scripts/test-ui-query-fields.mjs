@@ -145,6 +145,33 @@ test("checkbox group ticks its defaults and reports checked values verbatim", ()
   assert.equal(field.focusTarget, checkboxes[0]);
 });
 
+test("disabled checkbox-group options are unselectable and never reach value()", () => {
+  const field = createCheckboxGroupField({
+    key: "modes",
+    label: "Mode",
+    name: "mode",
+    options: [
+      { value: "M", label: "dmr", disabled: true, title: "Only analogue modes and dstar are supported fully" },
+      { value: "A", label: "fm" },
+    ],
+    // A disabled option in the defaults must still not come up ticked.
+    defaults: ["A", "M"],
+  });
+  const [, container] = field.nodes;
+  const [disabledOption, enabledOption] = container.children;
+  const disabledBox = disabledOption.children[0];
+  assert.equal(disabledBox.disabled, true);
+  assert.equal(disabledBox.checked, false);
+  assert.equal(disabledOption.title, "Only analogue modes and dstar are supported fully");
+  assert.deepEqual(field.value(), ["A"]);
+
+  // Even a programmatically forced tick on a disabled box stays out.
+  disabledBox.checked = true;
+  assert.deepEqual(field.value(), ["A"]);
+  // Focus lands on the first *enabled* checkbox.
+  assert.equal(field.focusTarget, enabledOption.children[0]);
+});
+
 test("checkbox group with no defaults starts empty", () => {
   const field = createCheckboxGroupField({
     key: "modes",
