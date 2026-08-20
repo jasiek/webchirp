@@ -1202,16 +1202,11 @@ button:disabled {
   margin: 0;
 }
 
-/* The RSGB modal stacks two multi-row checkbox lists, which the shared 0.45rem
-   row gap runs together into one block — Band and Mode need to read as separate
-   groups. Its options also sit at the modal's own 1rem, not the 0.85rem the
-   przemienniki modal uses, so every control in the dialog is one size. */
-#rsgb-modal .modal-grid {
+/* The query modal stacks two multi-row checkbox lists, which the shared
+   0.45rem row gap runs together into one block — Band and Mode need to read as
+   separate groups. */
+#repeater-query-modal .modal-grid {
   row-gap: 1.1rem;
-}
-
-#rsgb-modal .modal-mode-option {
-  font-size: 1rem;
 }
 
 /* A value the modal reports rather than asks for: the fixed RSGB country.
@@ -1224,7 +1219,7 @@ button:disabled {
 
 .modal-geo-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 0.4rem;
   align-items: center;
 }
@@ -1253,18 +1248,6 @@ button:disabled {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
-}
-
-#przemienniki-country {
-  margin-bottom: 2em;
-}
-
-#przemienniki-band-list {
-  margin-bottom: 2em;
-}
-
-#przemienniki-mode-list {
-  margin-bottom: 2em;
 }
 
 .debug-output-panel {

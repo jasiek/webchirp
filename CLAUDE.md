@@ -7,7 +7,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - `web/js/ui/`: One module per UI area — `channel-table`, `settings-panel`,
   `radio-catalog`, `repeater-query`, `codeplug-io`, `serial-actions`, plus the
   shared `dom`, `state`, `debug-log`, `issue-report`, `format`, `analytics` and
-  `channel-values` helpers.
+  `channel-values` helpers. `repeater-query` is one modal shell for every
+  repeater directory: its form is assembled per source from the field
+  components in `query-fields.js` (which build their own DOM), driven by the
+  per-source configs in `repeater-sources.js`.
 - `web/python/runtime_bridge.py`: Versioned Python runtime logic (no embedded Python in JS files).
 - `chirp/`: Upstream CHIRP source as a git submodule.
 

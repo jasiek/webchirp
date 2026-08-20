@@ -318,139 +318,24 @@
       </section>
     </div>
 
-    <div
-      id="przemienniki-modal"
-      class="modal-overlay hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="przemienniki-modal-title"
-    >
-      <form id="przemienniki-form" class="modal-card">
-        <h2 id="przemienniki-modal-title">Query repeater source</h2>
-        <div class="modal-grid">
-          <label for="przemienniki-country">Country</label>
-          <select id="przemienniki-country" name="country" autocomplete="off"></select>
-
-          <span>Band</span>
-          <div id="przemienniki-band-list" class="modal-modes"></div>
-
-          <span>Mode</span>
-          <div id="przemienniki-mode-list" class="modal-modes"></div>
-
-          <label for="przemienniki-onlyworking">Only working</label>
-          <input id="przemienniki-onlyworking" name="onlyworking" type="checkbox" checked />
-
-          <label for="przemienniki-latitude">Latitude</label>
-          <div class="modal-geo-row">
-            <input id="przemienniki-latitude" name="latitude" type="number" step="any" />
-            <button
-              id="przemienniki-geolocate"
-              class="modal-geo-button"
-              type="button"
-              title="Use current location"
-              aria-label="Use current location"
-            >
-              🛰️
-            </button>
-          </div>
-
-          <label for="przemienniki-longitude">Longitude</label>
-          <input id="przemienniki-longitude" name="longitude" type="number" step="any" />
-
-          <!--
-            Two-way alternative to the coordinate pair: edits here move the
-            coordinates to the square's centre and vice versa. Never submitted —
-            both APIs take latitude/longitude only.
-          -->
-          <label for="przemienniki-locator">Locator</label>
-          <input
-            id="przemienniki-locator"
-            name="locator"
-            type="text"
-            maxlength="8"
-            autocomplete="off"
-            autocapitalize="characters"
-            spellcheck="false"
-            placeholder="e.g. JO91GG"
-          />
-
-          <label for="przemienniki-range">Range (km)</label>
-          <input id="przemienniki-range" name="range" type="number" min="1" step="1" value="30" />
-        </div>
-        <div class="modal-actions">
-          <button id="przemienniki-cancel" type="button">Cancel</button>
-          <button id="przemienniki-submit" type="submit">Query API</button>
-        </div>
-      </form>
-    </div>
-
     <!--
-      The RSGB/ETCC directory is UK-only, so the country is fixed rather than
-      chosen: a picker with one entry is a control that cannot do anything.
+      Single query modal shared by every repeater directory (przemienniki.net,
+      RepeaterBook, RSGB ETCC). The grid is empty on purpose: each field is
+      built per source by web/js/ui/query-fields.js when the modal opens.
     -->
     <div
-      id="rsgb-modal"
+      id="repeater-query-modal"
       class="modal-overlay hidden"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="rsgb-modal-title"
+      aria-labelledby="repeater-query-title"
     >
-      <form id="rsgb-form" class="modal-card">
-        <h2 id="rsgb-modal-title">Query RSGB ETCC API</h2>
-        <div class="modal-grid">
-          <span>Country</span>
-          <span class="modal-fixed-value">🇬🇧 United Kingdom</span>
-
-          <span>Band</span>
-          <div id="rsgb-band-list" class="modal-modes"></div>
-
-          <span>Mode</span>
-          <div id="rsgb-mode-list" class="modal-modes"></div>
-
-          <label for="rsgb-onlyoperational">Only operational</label>
-          <input id="rsgb-onlyoperational" name="onlyoperational" type="checkbox" checked />
-
-          <label for="rsgb-latitude">Latitude</label>
-          <div class="modal-geo-row">
-            <input id="rsgb-latitude" name="latitude" type="number" step="any" />
-            <button
-              id="rsgb-geolocate"
-              class="modal-geo-button"
-              type="button"
-              title="Use current location"
-              aria-label="Use current location"
-            >
-              🛰️
-            </button>
-          </div>
-
-          <label for="rsgb-longitude">Longitude</label>
-          <input id="rsgb-longitude" name="longitude" type="number" step="any" />
-
-          <!--
-            Two-way alternative to the coordinate pair, as in the przemienniki
-            modal: edits here move the coordinates to the square's centre and
-            vice versa. The query itself still fans out from the coordinates
-            (squaresForRadius), never from this field.
-          -->
-          <label for="rsgb-locator">Locator</label>
-          <input
-            id="rsgb-locator"
-            name="locator"
-            type="text"
-            maxlength="8"
-            autocomplete="off"
-            autocapitalize="characters"
-            spellcheck="false"
-            placeholder="e.g. IO91WM"
-          />
-
-          <label for="rsgb-radius">Distance (km)</label>
-          <input id="rsgb-radius" name="radius" type="number" min="1" max="500" step="1" value="30" />
-        </div>
+      <form id="repeater-query-form" class="modal-card">
+        <h2 id="repeater-query-title">Query repeater source</h2>
+        <div id="repeater-query-grid" class="modal-grid"></div>
         <div class="modal-actions">
-          <button id="rsgb-cancel" type="button">Cancel</button>
-          <button id="rsgb-submit" type="submit">Query API</button>
+          <button id="repeater-query-cancel" type="button">Cancel</button>
+          <button id="repeater-query-submit" type="submit">Query API</button>
         </div>
       </form>
     </div>
