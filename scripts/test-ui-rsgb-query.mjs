@@ -283,24 +283,54 @@ test("reopening restores the defaults rather than the last selection", async () 
   );
 });
 
-test("the locator readout stays blank until both coordinates are real numbers", async () => {
+test("the locator field stays blank until both coordinates are real numbers", async () => {
   const { dom } = buildHarness();
   await dom.channelImportRsgbEl.dispatch("click");
   // Number("") is 0, so an empty modal once claimed to be in JJ00AA.
-  assert.equal(dom.rsgbLocatorEl.textContent, "--");
+  assert.equal(dom.rsgbLocatorEl.value, "");
 
   dom.rsgbLatitudeEl.value = "51.5072";
   await dom.rsgbLatitudeEl.dispatch("input");
-  assert.equal(dom.rsgbLocatorEl.textContent, "--", "latitude alone is not a position");
+  assert.equal(dom.rsgbLocatorEl.value, "", "latitude alone is not a position");
 
   dom.rsgbLongitudeEl.value = "-0.1276";
   await dom.rsgbLongitudeEl.dispatch("input");
-  assert.equal(dom.rsgbLocatorEl.textContent, "IO91WM");
+  assert.equal(dom.rsgbLocatorEl.value, "IO91WM");
 
   for (const outOfRange of ["91", "-100", "abc"]) {
     dom.rsgbLatitudeEl.value = outOfRange;
     await dom.rsgbLatitudeEl.dispatch("input");
-    assert.equal(dom.rsgbLocatorEl.textContent, "--", `${outOfRange} is not a latitude`);
+    assert.equal(dom.rsgbLocatorEl.value, "", `${outOfRange} is not a latitude`);
+  }
+});
+
+test("locator edits move the coordinates to the square's centre", async () => {
+  const { dom } = buildHarness();
+  await dom.channelImportRsgbEl.dispatch("click");
+
+  dom.rsgbLocatorEl.value = "IO91WM";
+  await dom.rsgbLocatorEl.dispatch("input");
+  assert.equal(dom.rsgbLatitudeEl.value, "51.520833");
+  assert.equal(dom.rsgbLongitudeEl.value, "-0.125000");
+
+  // Lower case and 4-character precision both decode.
+  dom.rsgbLocatorEl.value = "io91";
+  await dom.rsgbLocatorEl.dispatch("input");
+  assert.equal(dom.rsgbLatitudeEl.value, "51.500000");
+  assert.equal(dom.rsgbLongitudeEl.value, "-1.000000");
+});
+
+test("partial or invalid locator text leaves the coordinates alone", async () => {
+  const { dom } = buildHarness();
+  await dom.channelImportRsgbEl.dispatch("click");
+
+  dom.rsgbLatitudeEl.value = "51.5072";
+  dom.rsgbLongitudeEl.value = "-0.1276";
+  for (const text of ["", "I", "IO9", "99AB", "ZZ11"]) {
+    dom.rsgbLocatorEl.value = text;
+    await dom.rsgbLocatorEl.dispatch("input");
+    assert.equal(dom.rsgbLatitudeEl.value, "51.5072", `coords survived "${text}"`);
+    assert.equal(dom.rsgbLongitudeEl.value, "-0.1276", `coords survived "${text}"`);
   }
 });
 
@@ -312,7 +342,7 @@ test("the location button fills both fields and the locator", async () => {
 
   assert.equal(dom.rsgbLatitudeEl.value, "51.507200");
   assert.equal(dom.rsgbLongitudeEl.value, "-0.127600");
-  assert.equal(dom.rsgbLocatorEl.textContent, "IO91WM");
+  assert.equal(dom.rsgbLocatorEl.value, "IO91WM");
   assert.ok(log.debug.some((line) => line.includes("RSGB GEO 51.507200,-0.127600 IO91WM")));
   assert.deepEqual(log.errors, []);
 });

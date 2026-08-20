@@ -427,8 +427,23 @@
           <label for="rsgb-longitude">Longitude</label>
           <input id="rsgb-longitude" name="longitude" type="number" step="any" />
 
-          <span>Locator</span>
-          <span id="rsgb-locator" class="modal-fixed-value">--</span>
+          <!--
+            Two-way alternative to the coordinate pair, as in the przemienniki
+            modal: edits here move the coordinates to the square's centre and
+            vice versa. The query itself still fans out from the coordinates
+            (squaresForRadius), never from this field.
+          -->
+          <label for="rsgb-locator">Locator</label>
+          <input
+            id="rsgb-locator"
+            name="locator"
+            type="text"
+            maxlength="8"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            placeholder="e.g. IO91WM"
+          />
 
           <label for="rsgb-radius">Distance (km)</label>
           <input id="rsgb-radius" name="radius" type="number" min="1" max="500" step="1" value="30" />

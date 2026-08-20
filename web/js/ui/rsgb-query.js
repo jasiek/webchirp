@@ -5,6 +5,7 @@ import {
   RSGB_DEFAULT_RADIUS_KM,
   RSGB_MODES,
   buildRsgbRows,
+  decodeMaidenheadBox,
   dedupeRsgbRecords,
   encodeMaidenhead,
   fetchRsgbRecords,
@@ -103,13 +104,28 @@ export function createRsgbQuery(ctx) {
     return { latitude, longitude };
   }
 
-  // The locator readout is display only — the query fans out over 4-character
-  // squares, because /locator only prefix-matches at that length.
+  // The locator field is a two-way alternative way to enter the position, not
+  // a filter of its own — the query fans out over 4-character squares derived
+  // from the coordinates (squaresForRadius), because /locator only
+  // prefix-matches at that length. Editing one side rewrites the other; the
+  // rewrites are programmatic value assignments, which fire no input events,
+  // so the two handlers cannot feed back into each other.
   function refreshLocator() {
     const position = currentPosition();
-    dom.rsgbLocatorEl.textContent = position
+    dom.rsgbLocatorEl.value = position
       ? encodeMaidenhead(position.latitude, position.longitude, 6)
-      : "--";
+      : "";
+  }
+
+  function applyLocatorToCoords() {
+    const box = decodeMaidenheadBox(dom.rsgbLocatorEl.value);
+    if (!box) {
+      // Partial or invalid text (no valid 4-character prefix yet): keep the
+      // coordinates the user already has instead of wiping them mid-keystroke.
+      return;
+    }
+    dom.rsgbLatitudeEl.value = box.latitude.toFixed(6);
+    dom.rsgbLongitudeEl.value = box.longitude.toFixed(6);
   }
 
   function setModalOpen(open) {
@@ -261,6 +277,7 @@ export function createRsgbQuery(ctx) {
     });
     dom.rsgbLatitudeEl.addEventListener("input", refreshLocator);
     dom.rsgbLongitudeEl.addEventListener("input", refreshLocator);
+    dom.rsgbLocatorEl.addEventListener("input", applyLocatorToCoords);
     dom.rsgbCancelEl.addEventListener("click", () => {
       setModalOpen(false);
       log.setStatus("Cancelled RSGB ETCC query.");

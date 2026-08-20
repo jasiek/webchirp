@@ -1214,9 +1214,9 @@ button:disabled {
   font-size: 1rem;
 }
 
-/* A value the modal reports rather than asks for: the fixed RSGB country and
-   the locator derived from the entered position. Styled to read as text, not
-   as a disabled input the user might try to edit. */
+/* A value the modal reports rather than asks for: the fixed RSGB country.
+   Styled to read as text, not as a disabled input the user might try to
+   edit. */
 .modal-fixed-value {
   font-size: 0.9rem;
   color: var(--muted);
