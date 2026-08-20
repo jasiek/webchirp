@@ -276,7 +276,11 @@ export function createRepeaterSources(ctx, { endpoints }) {
           onRequest: ({ locator, count }) => log.logDebug(`RSGB SQUARE ${locator} -> ${count}`),
         });
         const deduped = dedupeRsgbRecords(records);
-        const modes = values.modes;
+        // An empty selection must not fall through to filterRsgbRecords()'s
+        // "any mode" convention: the form presents dmr/p25/nxdn/m17 as
+        // unavailable, and "any" would let those records through on a radio
+        // that advertises them. No selection means analogue only.
+        const modes = values.modes.length > 0 ? values.modes : ["A"];
         const entries = filterRsgbRecords(deduped, {
           latitude: position.latitude,
           longitude: position.longitude,

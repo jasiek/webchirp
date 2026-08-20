@@ -833,8 +833,10 @@ test("a repeater in an unusable mode is reported separately from an untunable on
 
   await openRsgb(dom);
   await geolocateButton(dom).dispatch("click");
+  // Both modes selected, so the D-STAR record reaches the row builder — an
+  // empty selection would fall back to analogue-only and filter it earlier.
   for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
-    el.checked = false;
+    el.checked = !el.disabled;
   }
   await dom.repeaterQueryFormEl.dispatch("submit");
 
@@ -844,6 +846,30 @@ test("a repeater in an unusable mode is reported separately from an untunable on
     log.statuses.some((line) => /skipped 1 in a mode it cannot use/.test(line)),
     `status lines were: ${log.statuses.join(" | ")}`,
   );
+});
+
+test("an RSGB query with no mode selected falls back to analogue only", async () => {
+  // The form presents dmr/p25/nxdn/m17 as unavailable, so an empty mode
+  // selection must not become filterRsgbRecords()'s "any mode" — even on a
+  // radio that advertises DMR, a DMR-only record must stay out.
+  const { dom, table } = buildHarness({ modeOptions: ["FM", "NFM", "DV", "DMR"] });
+  installGeolocation(LONDON);
+  installRsgbFetch({
+    IO91: [
+      repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ", modeCodes: ["A"] }),
+      repeaterRecord({ id: 2, repeater: "GB7DMR", tx: 439412500, rx: 430412500, locator: "IO91VJ", band: "70CM", modeCodes: ["M:1"] }),
+      repeaterRecord({ id: 3, repeater: "GB7DS", tx: 145737500, rx: 145137500, locator: "IO91VJ", modeCodes: ["D"] }),
+    ],
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+    el.checked = false;
+  }
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
 });
 
 test("the RSGB band and mode checkboxes filter what is inserted", async () => {
