@@ -7,8 +7,8 @@
 //
 // No extra dependencies: serves web/ with scripts/dev-server.mjs, drives a
 // locally installed Chrome in headless mode over the DevTools protocol using
-// Node's built-in WebSocket client, and waits until the radio catalog has
-// loaded before capturing.
+// Node's built-in WebSocket client, waits until the selected radio schema has
+// loaded, and queries live RSGB channels around IO82MM before capturing.
 
 import fs from "node:fs";
 import net from "node:net";
@@ -37,6 +37,7 @@ const SHOTS = [
 
 const APP_READY_TIMEOUT_MS = 120000;
 const APP_SETTLE_DELAY_MS = 3000;
+const SCREENSHOT_LOCATOR = "IO82MM";
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -187,7 +188,10 @@ async function evaluate(cdp, sessionId, expression) {
     sessionId
   );
   if (result.exceptionDetails) {
-    throw new Error(`Page evaluation failed: ${result.exceptionDetails.text}`);
+    const detail = result.exceptionDetails.exception?.description
+      || result.exceptionDetails.exception?.value
+      || result.exceptionDetails.text;
+    throw new Error(`Page evaluation failed: ${detail}`);
   }
   return result.result?.value;
 }
@@ -200,7 +204,13 @@ async function waitForAppReady(cdp, sessionId) {
       sessionId,
       `(() => {
         const makeEl = document.querySelector("#radio-make");
-        return Boolean(makeEl && !makeEl.disabled && makeEl.options.length > 0);
+        const debugOutput = document.querySelector("#debug-output");
+        return Boolean(
+          makeEl
+          && !makeEl.disabled
+          && makeEl.options.length > 0
+          && /STATUS Loaded \\d+ radio definitions/.test(debugOutput?.value || "")
+        );
       })()`
     );
     if (ready) {
@@ -208,6 +218,59 @@ async function waitForAppReady(cdp, sessionId) {
     }
     if (Date.now() > deadline) {
       throw new Error("Timed out waiting for the radio catalog to load.");
+    }
+    await delay(500);
+  }
+}
+
+// Release screenshots use the same reproducible, real-data starting point as
+// manual captures: the default radio's schema populated from the RSGB query at
+// IO82MM. Drive the public controls rather than reaching into module state, so
+// the screenshot run also exercises the user-visible query path.
+async function loadScreenshotChannels(cdp, sessionId) {
+  const started = await evaluate(
+    cdp,
+    sessionId,
+    `(() => {
+      document.querySelector("#channel-import-rsgb")?.click();
+      const locator = document.querySelector("#repeater-query-field-position-locator");
+      const form = document.querySelector("#repeater-query-form");
+      if (!locator || !form) {
+        return false;
+      }
+      locator.value = ${JSON.stringify(SCREENSHOT_LOCATOR)};
+      locator.dispatchEvent(new Event("input", { bubbles: true }));
+      form.requestSubmit();
+      return true;
+    })()`
+  );
+  if (!started) {
+    throw new Error("Could not open and submit the RSGB screenshot query.");
+  }
+
+  const deadline = Date.now() + APP_READY_TIMEOUT_MS;
+  for (;;) {
+    const result = await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const debugText = document.querySelector("#debug-output")?.value || "";
+        const modalClosed = document.querySelector("#repeater-query-modal")?.classList.contains("hidden");
+        if (modalClosed && /RSGB RESULTS /.test(debugText)) {
+          return { done: true, count: globalThis.currentRows?.length || 0 };
+        }
+        const failed = debugText.match(/RSGB ETCC QUERY ERROR[^\\n]*/)?.[0] || "";
+        return { done: false, failed };
+      })()`
+    );
+    if (result?.done) {
+      return result.count;
+    }
+    if (result?.failed) {
+      throw new Error(`RSGB screenshot query failed: ${result.failed}`);
+    }
+    if (Date.now() > deadline) {
+      throw new Error("Timed out waiting for the RSGB screenshot query.");
     }
     await delay(500);
   }
@@ -265,6 +328,9 @@ async function main() {
 
     console.log("Waiting for the app to finish loading (Pyodide + radio catalog)...");
     await waitForAppReady(cdp, sessionId);
+    console.log(`Querying RSGB channels around ${SCREENSHOT_LOCATOR}...`);
+    const channelCount = await loadScreenshotChannels(cdp, sessionId);
+    console.log(`Loaded ${channelCount} RSGB channel(s) for the screenshots.`);
     await delay(APP_SETTLE_DELAY_MS);
 
     await captureShots(cdp, sessionId);

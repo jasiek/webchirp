@@ -302,19 +302,32 @@
           <progress id="app-progress-bar" max="100"></progress>
         </div>
         <div class="debug-header">
-          <h2>Debug Output</h2>
-          <div class="debug-actions">
+          <h2>
+            <button
+              id="debug-toggle"
+              class="debug-toggle"
+              type="button"
+              aria-expanded="false"
+              aria-controls="debug-actions debug-output-content"
+            >
+              <span class="debug-toggle-icon" aria-hidden="true">&#9656;</span>
+              Debug Output
+            </button>
+          </h2>
+          <div id="debug-actions" class="debug-actions" hidden>
             <button id="report-issue" type="button">Report Bug</button>
             <button id="debug-copy" type="button">Copy</button>
             <button id="debug-clear" type="button">Clear</button>
           </div>
         </div>
-        <textarea
-          id="debug-output"
-          readonly
-          spellcheck="false"
-          placeholder="Runtime logs will appear here..."
-        ></textarea>
+        <div id="debug-output-content" class="debug-output-content" hidden>
+          <textarea
+            id="debug-output"
+            readonly
+            spellcheck="false"
+            placeholder="Runtime logs will appear here..."
+          ></textarea>
+        </div>
       </section>
     </div>
 

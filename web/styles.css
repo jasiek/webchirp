@@ -1260,7 +1260,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.4rem;
+  gap: 0.75rem;
 }
 
 .debug-actions {
@@ -1268,9 +1268,47 @@ button:disabled {
   gap: 0.5rem;
 }
 
+.debug-actions[hidden],
+.debug-output-content[hidden] {
+  display: none;
+}
+
 .debug-header h2 {
+  flex: 1;
   margin: 0;
   font-size: 0.9rem;
+}
+
+.debug-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  padding: 0.15rem 0;
+  font: inherit;
+  text-align: left;
+}
+
+.debug-toggle:not(:disabled):hover {
+  color: var(--accent);
+}
+
+.debug-toggle-icon {
+  display: inline-block;
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.debug-toggle[aria-expanded="true"] .debug-toggle-icon {
+  transform: rotate(90deg);
+}
+
+.debug-output-content {
+  margin-top: 0.4rem;
 }
 
 #report-issue {

@@ -7,6 +7,17 @@ import { trackEvent } from "./analytics.js";
 export function createDebugLog({ dom }) {
   let lastErrorSummary = "";
 
+  function isExpanded() {
+    return dom.debugToggleEl.getAttribute("aria-expanded") === "true";
+  }
+
+  function setExpanded(expanded) {
+    const nextExpanded = Boolean(expanded);
+    dom.debugToggleEl.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+    dom.debugActionsEl.hidden = !nextExpanded;
+    dom.debugOutputContentEl.hidden = !nextExpanded;
+  }
+
   function captureErrorSummary(line) {
     const text = String(line || "");
     if (!/\b(error|traceback|exception)\b/i.test(text)) {
@@ -79,6 +90,12 @@ export function createDebugLog({ dom }) {
   }
 
   function bindEvents() {
+    // Keep the initial state explicit here as well as in the HTML, so the
+    // accessibility state and both hidden regions can never drift apart.
+    setExpanded(false);
+    dom.debugToggleEl.addEventListener("click", () => {
+      setExpanded(!isExpanded());
+    });
     dom.debugClearEl.addEventListener("click", () => {
       clear();
     });

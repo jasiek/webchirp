@@ -1,5 +1,8 @@
 # Release Notes
 
+## 2026-08-23
+- Debug Output now starts folded into a compact footer row and expands on demand, leaving more room for channels while keeping app-wide progress visible.
+
 ## 2026-08-19
 - Browsers that cannot run WebCHIRP fully now grey out the app behind an explanation panel instead of a small sidebar note: it says when no serial transport exists (radio programming needs Web Serial — Chrome, Edge or recent Firefox) and when WebAssembly stack switching is missing so radio drivers cannot load at all (old Firefox — update), shows both on Safari, and offers "Continue anyway" for file-based editing.
 
