@@ -413,7 +413,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     try {
       await navigator.clipboard.writeText(payload.tsv);
     } catch (error) {
-      log.logDebug(`CLIPBOARD write failed: ${error}`);
+      log.logError(`CLIPBOARD write failed: ${error}`);
       log.setStatus(`Clipboard write blocked; press Ctrl+${remove ? "X" : "C"} / Cmd+${remove ? "X" : "C"} instead.`);
       return;
     }
@@ -496,7 +496,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     try {
       text = await navigator.clipboard.readText();
     } catch (error) {
-      log.logDebug(`CLIPBOARD read failed: ${error}`);
+      log.logError(`CLIPBOARD read failed: ${error}`);
       log.setStatus("Clipboard read blocked; press Ctrl+V / Cmd+V in the channel view instead.");
       return;
     }

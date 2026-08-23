@@ -26,6 +26,10 @@ class FakeElement {
   setAttribute(name, value) {
     this.attributes.set(String(name), String(value));
   }
+
+  focus() {}
+
+  select() {}
 }
 
 function fakeDom() {
@@ -59,4 +63,60 @@ test("debug output is folded initially and toggles both hidden regions together"
   assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "false");
   assert.equal(dom.debugActionsEl.hidden, true);
   assert.equal(dom.debugOutputContentEl.hidden, true);
+});
+
+test("routine logs stay folded but explicitly reported errors expand the panel", () => {
+  const dom = fakeDom();
+  const log = createDebugLog({ dom });
+  log.bindEvents();
+
+  log.logDebug("Loaded error.csv without errors.");
+  assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "false");
+
+  log.logError("Driver import failed");
+  assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "true");
+  assert.equal(dom.debugActionsEl.hidden, false);
+  assert.equal(dom.debugOutputContentEl.hidden, false);
+
+  dom.debugToggleEl.click();
+  log.logError("Worker stopped");
+  assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "true");
+  assert.equal(dom.debugActionsEl.hidden, false);
+  assert.equal(dom.debugOutputContentEl.hidden, false);
+});
+
+test("a delayed clipboard failure reopens a panel collapsed while copying", async () => {
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      clipboard: {
+        async writeText() {
+          throw new Error("Clipboard permission denied");
+        },
+      },
+    },
+  });
+
+  try {
+    const dom = fakeDom();
+    const log = createDebugLog({ dom });
+    log.bindEvents();
+    dom.debugToggleEl.click();
+
+    const copying = log.copyToClipboard();
+    dom.debugToggleEl.click();
+    assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "false");
+
+    await copying;
+    assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "true");
+    assert.match(dom.debugOutputEl.value, /DEBUG COPY ERROR/);
+    assert.match(dom.debugOutputEl.value, /Clipboard permission denied/);
+  } finally {
+    if (navigatorDescriptor) {
+      Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    } else {
+      delete globalThis.navigator;
+    }
+  }
 });

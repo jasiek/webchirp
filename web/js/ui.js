@@ -153,12 +153,12 @@ export function createUiController() {
     });
 
     window.addEventListener("error", (event) => {
-      log.logDebug(`WINDOW ERROR ${event.message}`);
+      log.logError(`WINDOW ERROR ${event.message}`);
     });
 
     window.addEventListener("unhandledrejection", (event) => {
       const msg = event.reason?.message || String(event.reason || "Unhandled rejection");
-      log.logDebug(`PROMISE ERROR ${msg}`);
+      log.logError(`PROMISE ERROR ${msg}`);
     });
   }
 
@@ -232,7 +232,7 @@ export function createUiController() {
     init,
     selectedRowsForOperations: table.selectedRowsForOperations,
     onRuntimeCrash(message) {
-      log.logDebug(`RUNTIME CRASH ${message}`);
+      log.logError(`RUNTIME CRASH ${message}`);
     },
   };
 }

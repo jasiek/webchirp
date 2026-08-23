@@ -411,7 +411,7 @@ export function createSettingsPanel({ dom, state, log, actions }) {
         groups: cloneGroups(result?.groups || []),
       };
     } catch (error) {
-      log.logDebug(`SETTINGS LOAD FALLBACK ${errorSummary(error)}`);
+      log.logError(`SETTINGS LOAD FALLBACK ${errorSummary(error)}`);
       nextState.message = "Radio-wide settings could not be prepared.";
     }
 

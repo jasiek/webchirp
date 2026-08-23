@@ -488,7 +488,7 @@ export function createRuntimeRpcClient({
           onRuntimeCrash(detailedError);
         }
         if (logDebug) {
-          logDebug(`RUNTIME ERROR ${detailedError}`);
+          logDebug(`RUNTIME ERROR ${detailedError}`, { isError: true });
         }
         throw new Error(detailedError);
       }

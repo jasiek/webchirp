@@ -18,22 +18,34 @@ export function createDebugLog({ dom }) {
     dom.debugOutputContentEl.hidden = !nextExpanded;
   }
 
+  // Establish the default before any runtime work can log. bindEvents() must
+  // not reset it later, because an error may arrive before listeners bind.
+  setExpanded(false);
+
   function captureErrorSummary(line) {
     const text = String(line || "");
-    if (!/\b(error|traceback|exception)\b/i.test(text)) {
-      return;
-    }
     lastErrorSummary = text.replace(/\s+/g, " ").trim().slice(0, 180);
+    // Routine diagnostics stay out of the way, but errors should never be
+    // hidden behind a disclosure the user does not yet know to open.
+    setExpanded(true);
   }
 
   // Append a timestamped line to the bottom debug console panel.
-  function logDebug(line) {
+  function logDebug(line, { isError = false } = {}) {
     const stamp = new Date().toISOString();
     const text = `[${stamp}] ${String(line || "")}`;
     const current = dom.debugOutputEl.value ? `${dom.debugOutputEl.value}\n` : "";
     dom.debugOutputEl.value = `${current}${text}`;
+    if (isError) {
+      captureErrorSummary(line);
+    }
+    // Error capture may have made the textarea measurable by expanding it;
+    // scroll afterwards so the triggering line is the one the user sees.
     dom.debugOutputEl.scrollTop = dom.debugOutputEl.scrollHeight;
-    captureErrorSummary(line);
+  }
+
+  function logError(line) {
+    logDebug(line, { isError: true });
   }
 
   // Emit status updates into the debug output stream.
@@ -49,7 +61,7 @@ export function createDebugLog({ dom }) {
   // Centralized UI + debug handling for action-level failures.
   function reportActionError(action, error) {
     const details = errorDetails(error);
-    logDebug(`${action.toUpperCase()} ERROR\n${details}`);
+    logError(`${action.toUpperCase()} ERROR\n${details}`);
     setStatus(`${action} failed (see Debug Output).`);
   }
 
@@ -82,7 +94,8 @@ export function createDebugLog({ dom }) {
         document.execCommand("copy");
       }
       setStatus("Debug log copied to clipboard.");
-    } catch {
+    } catch (error) {
+      logError(`DEBUG COPY ERROR\n${errorDetails(error)}`);
       dom.debugOutputEl.focus();
       dom.debugOutputEl.select();
       setStatus("Could not copy automatically; log text is selected — copy it manually.");
@@ -90,9 +103,6 @@ export function createDebugLog({ dom }) {
   }
 
   function bindEvents() {
-    // Keep the initial state explicit here as well as in the HTML, so the
-    // accessibility state and both hidden regions can never drift apart.
-    setExpanded(false);
     dom.debugToggleEl.addEventListener("click", () => {
       setExpanded(!isExpanded());
     });
@@ -111,6 +121,7 @@ export function createDebugLog({ dom }) {
   return {
     bindEvents,
     logDebug,
+    logError,
     logSerial,
     setStatus,
     reportActionError,
