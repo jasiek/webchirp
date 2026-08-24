@@ -224,6 +224,7 @@ export function createUiController() {
   return {
     setRuntimeApi,
     setSerialController: serial.setSerialController,
+    onSerialPortLost: serial.handlePortLost,
     setStatus: log.setStatus,
     logSerial: log.logSerial,
     logDebug: log.logDebug,

@@ -65,6 +65,11 @@ export class BrowserSerialBridge {
     // or "webusb". Forcing "webusb" is needed where native Web Serial exists but
     // cannot drive the adapter (e.g. FTDI cables on Chrome for Android).
     this.preferredTransport = "auto";
+    // Called when the browser reports that the adapter behind the open port has
+    // gone away — unplugged, or powered down with the radio where the adapter
+    // lives in the cable. The port is already torn down by the time it runs.
+    this.onPortLost = null;
+    this._portLostWatch = null;
     this._createWebUsbSerial = createWebUsbSerialImpl || createWebUsbSerial;
   }
 
@@ -156,6 +161,7 @@ export class BrowserSerialBridge {
       this.reader = this.port.readable.getReader();
       this.writer = this.port.writable.getWriter();
       this._startReadLoop();
+      this._watchForPortLoss();
       const viaWebUsb = this.transport === "webusb";
       return {
         connected: true,
@@ -183,6 +189,7 @@ export class BrowserSerialBridge {
   // Release reader/writer locks and close the port, clearing all session state.
   // Safe to call on a fully- or partially-open port.
   async _teardown() {
+    this._unwatchPortLoss();
     try {
       await this.reader?.cancel();
     } catch {
@@ -293,6 +300,97 @@ export class BrowserSerialBridge {
     }
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(settleMs || 0))));
     return { prepared: true };
+  }
+
+  // Both transports report a device going away as a "disconnect" event on the
+  // API object rather than on the port, so each event has to be matched back
+  // against the adapter we hold open: a different device being unplugged must
+  // not tear down a clone in progress.
+  _watchForPortLoss() {
+    this._unwatchPortLoss();
+    const handler = (event) => {
+      this._handleTransportDisconnect(event);
+    };
+    const targets = [];
+    if (hasNativeSerial() && typeof navigator.serial?.addEventListener === "function") {
+      targets.push(navigator.serial);
+    }
+    if (hasWebUsb() && typeof navigator.usb?.addEventListener === "function") {
+      targets.push(navigator.usb);
+    }
+    for (const target of targets) {
+      target.addEventListener("disconnect", handler);
+    }
+    this._portLostWatch = { handler, targets };
+  }
+
+  _unwatchPortLoss() {
+    const watch = this._portLostWatch;
+    if (!watch) {
+      return;
+    }
+    this._portLostWatch = null;
+    for (const target of watch.targets) {
+      try {
+        target.removeEventListener("disconnect", watch.handler);
+      } catch {
+        // Ignore listener-removal errors; the watch is gone either way.
+      }
+    }
+  }
+
+  async _handleTransportDisconnect(event) {
+    if (!this.port || !this._isActivePortEvent(event)) {
+      return;
+    }
+    const deviceName = this.lastDeviceName;
+    this._debug(`Serial port disconnected: ${deviceName || "unknown device"}`);
+    await this._teardown();
+    try {
+      this.onPortLost?.({ deviceName });
+    } catch {
+      // A broken notification sink must never take down the serial path.
+    }
+  }
+
+  // Native Web Serial fires the event at the very SerialPort open() returned,
+  // so object identity settles it. WebUSB reports the USBDevice instead, which
+  // our adapter-specific ports hold onto — except the polyfilled CDC port,
+  // which keeps it private and leaves the USB ids as the only handle we have.
+  _isActivePortEvent(event) {
+    const subject = event?.target || null;
+    if (subject && subject === this.port) {
+      return true;
+    }
+    if (event?.port && event.port === this.port) {
+      return true;
+    }
+    const device = event?.device
+      || (subject && typeof subject.vendorId === "number" ? subject : null);
+    if (!device) {
+      return false;
+    }
+    const active = this._activeUsbDevice();
+    if (active) {
+      return device === active;
+    }
+    const info = this.port?.getInfo?.() || {};
+    return Number.isInteger(info.usbVendorId)
+      && Number.isInteger(info.usbProductId)
+      && info.usbVendorId === Number(device.vendorId)
+      && info.usbProductId === Number(device.productId);
+  }
+
+  // The USBDevice behind a WebUSB-backed port, under whichever property the
+  // port class keeps it in.
+  _activeUsbDevice() {
+    for (const key of ["device", "device_", "_device", "usbDevice"]) {
+      const candidate = this.port?.[key];
+      if (candidate && typeof candidate === "object" && "vendorId" in candidate) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   _debug(message) {

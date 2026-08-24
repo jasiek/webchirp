@@ -24,6 +24,10 @@ ui.setRuntimeApi(rpcClient);
 
 // Read-path diagnostics (loop death, USB stats) go to the serial log.
 serialBridge.onDebug = (message) => ui.logSerial(message);
+// An adapter can vanish mid-session — unplugged, or powered down with the radio.
+// The bridge closes the port itself; this is what tells the UI to stop offering
+// clone actions against it.
+serialBridge.onPortLost = ({ deviceName } = {}) => ui.onSerialPortLost(deviceName);
 
 const serialCapability = serialBridge.getCapability();
 ui.setSerialController({

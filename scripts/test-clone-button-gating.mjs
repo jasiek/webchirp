@@ -114,3 +114,25 @@ test("a connected port does not override the other clone-button blocks", async (
     "Live-mode radios are not supported in this UI yet",
   );
 });
+
+test("losing the port mid-session takes the clone buttons away again", async () => {
+  const createSerialActions = await loadSerialActions();
+  const ctx = makeContext();
+  const serial = createSerialActions(ctx);
+  serial.setSidebarControlsEnabled(true);
+  serial.bindEvents();
+  await ctx.dom.serialConnectToggleEl.listener();
+  assert.equal(ctx.dom.radioDownloadEl.disabled, false);
+
+  // The bridge reports the adapter as gone; it has already closed the port.
+  serial.handlePortLost("USB VID:PID 0x0403:0x6015");
+  assert.equal(ctx.dom.radioDownloadEl.disabled, true);
+  assert.equal(ctx.dom.radioUploadEl.disabled, true);
+  assert.equal(ctx.dom.radioDownloadEl.title, "Connect to a serial port first");
+  // The toggle has to offer a way back in, not read "Disconnect".
+  assert.equal(ctx.dom.serialConnectToggleEl.textContent, "Connect via WebSerial");
+
+  // Reconnecting brings them back.
+  await ctx.dom.serialConnectToggleEl.listener();
+  assert.equal(ctx.dom.radioDownloadEl.disabled, false);
+});

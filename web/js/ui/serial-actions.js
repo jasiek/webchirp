@@ -108,6 +108,29 @@ export function createSerialActions(ctx) {
     }
   }
 
+  // The adapter behind the open port went away (unplugged, or powered down with
+  // the radio on cables that draw from it). The bridge has already torn the port
+  // down, so the UI's job is to stop claiming there is a connection — otherwise
+  // Download/Upload stay lit against a port that is gone.
+  function handlePortLost(deviceName) {
+    if (!connected) {
+      return;
+    }
+    const lostTransport = transport || "unknown";
+    connected = false;
+    transport = "";
+    log.setStatus("Serial port disconnected; reconnect to continue.");
+    log.logSerial(
+      `Serial port disconnected${deviceName ? ` (${deviceName})` : ""}.`,
+    );
+    trackEvent("serial_port_lost", {
+      ...radioEventParams(state.selectedRadio),
+      transport: lostTransport,
+    });
+    refreshSerialConnectToggleLabel();
+    updateSerialActionState();
+  }
+
   function setSidebarControlsEnabled(enabled) {
     sidebarControlsEnabled = Boolean(enabled);
     for (const el of dom.sidebarControlEls) {
@@ -470,6 +493,7 @@ export function createSerialActions(ctx) {
   return {
     bindEvents,
     setSerialController,
+    handlePortLost,
     setSidebarControlsEnabled,
     setBrowserUnsupportedOverlayVisible,
     refreshSerialConnectToggleLabel,
