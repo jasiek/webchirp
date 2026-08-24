@@ -237,14 +237,25 @@ export function createSerialActions(ctx) {
       : "Connect over WebUSB, for use with FTDI, Prolific PL2303, "
         + "WCH CH340/CH341 or Silicon Labs CP2102 adapters";
 
-    dom.radioDownloadEl.disabled = !actionsAllowed;
-    dom.radioDownloadEl.title = liveRadioUnsupported
-      ? "Live-mode radios are not supported in this UI yet"
-      : "";
+    // Both clone operations talk to an open port, so neither is offered until
+    // a port has been picked and opened through one of the connect buttons.
+    const cloneAllowed = actionsAllowed && connected;
+    const notConnectedTitle = "Connect to a serial port first";
 
-    dom.radioUploadEl.disabled = !actionsAllowed || ctx.settings.hasInvalidSettings();
+    dom.radioDownloadEl.disabled = !cloneAllowed;
+    if (liveRadioUnsupported) {
+      dom.radioDownloadEl.title = "Live-mode radios are not supported in this UI yet";
+    } else {
+      dom.radioDownloadEl.title = connected ? "" : notConnectedTitle;
+    }
+
+    dom.radioUploadEl.disabled = !cloneAllowed || ctx.settings.hasInvalidSettings();
     if (liveRadioUnsupported) {
       dom.radioUploadEl.title = "Live-mode radios are not supported in this UI yet";
+      return;
+    }
+    if (!connected) {
+      dom.radioUploadEl.title = notConnectedTitle;
       return;
     }
     dom.radioUploadEl.title = ctx.settings.hasInvalidSettings()
