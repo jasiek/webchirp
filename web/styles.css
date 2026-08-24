@@ -819,7 +819,6 @@ button:disabled {
 .channel-empty-card {
   max-width: 34rem;
   padding: 1.6rem 1.9rem;
-  text-align: center;
   color: var(--muted);
   background: var(--surface);
   border: 1px dashed var(--border);
