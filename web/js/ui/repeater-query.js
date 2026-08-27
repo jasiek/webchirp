@@ -44,10 +44,10 @@ const FIELD_FACTORIES = {
 export function createRepeaterQuery(ctx) {
   const { dom, state, log } = ctx;
 
-  // Online repeater queries against przemienniki.net/RepeaterBook depend on a
-  // CORS proxy; when none is configured (blank base) the endpoints are null
-  // and those sources are disabled: their menu items are hidden so they can't
-  // fire requests that will fail.
+  // Online repeater queries against przemienniki.net, RepeaterBook and IRTS
+  // depend on the configured API base; when none is configured (blank base)
+  // the endpoints are null and those sources are disabled: their menu items
+  // are hidden so they can't fire requests that will fail.
   const endpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
   const sources = createRepeaterSources(ctx, { endpoints });
   for (const source of sources) {

@@ -155,7 +155,7 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
   {
     parameterName: "repeater_source",
     displayName: "Repeater source",
-    description: "Which repeater directory a query ran against: przemienniki.net, RepeaterBook or RSGB ETCC.",
+    description: "Which repeater directory a query ran against: przemienniki.net, RepeaterBook, IRTS or RSGB ETCC.",
     scope: "EVENT",
   },
   {

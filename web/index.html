@@ -15,8 +15,8 @@
     <script type="module" src="./js/analytics.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
-      Base URL of the proxy that fronts przemienniki.net and repeaterbook.com
-      for the online repeater-query features. The default proxy only accepts
+      Base URL of the API that fronts przemienniki.net, repeaterbook.com and
+      IRTS for the online repeater-query features. The default API only accepts
       requests from https://codeplug.org, so forks hosted elsewhere should
       point this at their own proxy, or set content="" to hide the query
       features. Removing this tag falls back to the built-in default.
@@ -229,6 +229,9 @@
                   <button id="channel-import-repeaterbook" type="button" role="menuitem">
                     🌍 Query repeaterbook.com
                   </button>
+                  <button id="channel-import-irts" type="button" role="menuitem">
+                    🇮🇪 Query IRTS repeaters
+                  </button>
                   <button id="channel-import-rsgb" type="button" role="menuitem">
                     🇬🇧 Query RSGB ETCC API
                   </button>
@@ -341,7 +344,7 @@
 
     <!--
       Single query modal shared by every repeater directory (przemienniki.net,
-      RepeaterBook, RSGB ETCC). The grid is empty on purpose: each field is
+      RepeaterBook, IRTS, RSGB ETCC). The grid is empty on purpose: each field is
       built per source by web/js/ui/query-fields.js when the modal opens.
     -->
     <div

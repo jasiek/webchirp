@@ -23,10 +23,11 @@ import { trackEvent } from "./analytics.js";
 // Per-source configuration for the shared repeater-query modal
 // (ui/repeater-query.js). Each source declares which fields its form contains,
 // how its filter options are obtained, and how a query actually runs — the
-// flows differ at the root and stay per-source here: przemienniki.net and
-// RepeaterBook take the filter as query parameters (via a CORS proxy) and hand
-// back a filtered set, while RSGB filtering happens client-side over a
-// locator-square fan-out and needs no proxy. Only the form UI is shared.
+// flows differ at the root and stay per-source here: przemienniki.net,
+// RepeaterBook and IRTS take the filter as query parameters (via the configured
+// API base) and hand back a filtered set, while RSGB filtering happens
+// client-side over a locator-square fan-out and needs no proxy. Only the form
+// UI is shared.
 //
 // Not a create<Area> sibling module: this is a helper imported solely by
 // repeater-query.js, which passes it the constructed ctx.
@@ -59,10 +60,18 @@ export function createRepeaterSources(ctx, { endpoints }) {
       .filter((value) => value.length > 0);
   }
 
-  // przemienniki.net and RepeaterBook share everything but their labels and
-  // proxy endpoints: same field set, same /meta dictionary shape, same
+  // przemienniki.net, RepeaterBook and IRTS share everything but their labels
+  // and endpoints: same field set, same /meta dictionary shape, same
   // query-parameter API, same XML response format.
-  function remoteDirectorySource({ key, label, actionLabel, insertLabel, menuButton, sourceEndpoints }) {
+  function remoteDirectorySource({
+    key,
+    label,
+    actionLabel,
+    insertLabel,
+    menuButton,
+    sourceEndpoints,
+    qrgPerspective = "repeater",
+  }) {
     const apiUrl = sourceEndpoints?.apiUrl || "";
     const metaUrl = sourceEndpoints?.metaUrl || "";
 
@@ -145,7 +154,11 @@ export function createRepeaterSources(ctx, { endpoints }) {
           throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
         }
         const parsed = parsePrzemiennikiXml(await response.text());
-        const rowsToInsert = buildPrzemiennikiRows(parsed.repeaters, ctx.table.rowBuilderHooks());
+        const rowsToInsert = buildPrzemiennikiRows(
+          parsed.repeaters,
+          ctx.table.rowBuilderHooks(),
+          { qrgPerspective },
+        );
         ctx.table.insertRowsAtSelectionOrEnd(rowsToInsert, insertLabel);
         // result_count is the point of this event: a query that returns
         // nothing means the filters or the proxy are wrong, and today that is
@@ -343,6 +356,17 @@ export function createRepeaterSources(ctx, { endpoints }) {
       insertLabel: "repeaterbook",
       menuButton: "channelImportRepeaterbookEl",
       sourceEndpoints: endpoints?.repeaterbook,
+    }),
+    remoteDirectorySource({
+      key: "irts",
+      label: "IRTS",
+      actionLabel: "IRTS",
+      insertLabel: "IRTS",
+      menuButton: "channelImportIrtsEl",
+      sourceEndpoints: endpoints?.irts,
+      // The IRTS RXF route labels qrg rx/tx from the user's radio point of
+      // view, unlike the repeater-perspective labels in the other RXF routes.
+      qrgPerspective: "radio",
     }),
     rsgbSource(),
   ];

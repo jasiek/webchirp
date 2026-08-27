@@ -62,7 +62,8 @@ const GMRS_CHANNELS = [
   { name: "GMRS 22R", frequency: "462.72500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
 ];
 
-// Base URL of the proxy that fronts przemienniki.net and repeaterbook.com.
+// Base URL of the proxy that fronts przemienniki.net, repeaterbook.com and
+// IRTS.
 // Those upstreams don't send browser CORS headers, so the online-query
 // features depend on a proxy that adds them. api.codeplug.org restricts its
 // CORS allowlist to https://codeplug.org, so forks hosted elsewhere must
@@ -71,7 +72,7 @@ const GMRS_CHANNELS = [
 // tag (see index.html and buildRepeaterEndpoints).
 const DEFAULT_REPEATER_API_BASE = "https://api.codeplug.org";
 
-// Derive the przemienniki/repeaterbook endpoint URLs from an API base. Returns
+// Derive the remote-directory endpoint URLs from an API base. Returns
 // null when the base is blank so callers can disable the online-query features
 // instead of firing requests that will fail.
 function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
@@ -87,6 +88,10 @@ function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
     repeaterbook: {
       apiUrl: `${base}/repeaterbook`,
       metaUrl: `${base}/repeaterbook/meta`,
+    },
+    irts: {
+      apiUrl: `${base}/irts`,
+      metaUrl: `${base}/irts/meta`,
     },
   };
 }
@@ -285,11 +290,22 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }) {
   });
 }
 
-export function buildPrzemiennikiRows(repeaters, { createBlankRow, setRowValue, findEnumOption }) {
+export function buildPrzemiennikiRows(
+  repeaters,
+  { createBlankRow, setRowValue, findEnumOption },
+  { qrgPerspective = "repeater" } = {},
+) {
   return repeaters.map((repeater) => {
     const row = createBlankRow();
-    const receiveFrequency = Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx;
-    const transmitFrequency = Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx;
+    // przemienniki.net and RepeaterBook describe the repeater's receive and
+    // transmit sides; IRTS labels them from the user's radio perspective.
+    // Normalize both contracts into a CHIRP memory's receive/transmit pair.
+    const receiveFrequency = qrgPerspective === "radio"
+      ? (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx)
+      : (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx);
+    const transmitFrequency = qrgPerspective === "radio"
+      ? (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx)
+      : (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx);
 
     setRowValue(row, "Name", repeater.qra);
     const commentParts = [repeater.qth, repeater.remarks, repeater.link].filter((part) => String(part || "").trim());
@@ -325,9 +341,11 @@ export function buildPrzemiennikiRows(repeaters, { createBlankRow, setRowValue, 
       DSTAR: ["DV", "DSTAR", "D-STAR"],
       ATV: ["ATV"],
       ECHOLINK: ["ECHOLINK", "FM", "NFM", "FMN"],
+      DMR: ["DMR", "MOTOTRBO", "DIG"],
       MOTOTRBO: ["DMR", "MOTOTRBO", "DIG"],
       APCO25: ["P25", "APCO25", "APCO-25", "DIG"],
       C4FM: ["C4FM", "DN", "VW", "DIG"],
+      FUSION: ["DN", "C4FM", "VW", "DIG"],
       FMLINK: ["FM", "NFM", "FMN"],
       TETRA: ["TETRA", "DIG"],
       M17: ["M17", "DIG"],

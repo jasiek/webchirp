@@ -264,6 +264,7 @@ const STUBBED_SELECTORS = new Map([
   ["#channel-add-pmr446", "button"],
   ["#channel-import-przemienniki", "button"],
   ["#channel-import-repeaterbook", "button"],
+  ["#channel-import-irts", "button"],
   ["#repeater-query-form", "form"],
   ["#repeater-query-cancel", "button"],
   ["#import-csv", "button"],
