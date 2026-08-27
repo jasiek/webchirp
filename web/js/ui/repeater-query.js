@@ -44,10 +44,10 @@ const FIELD_FACTORIES = {
 export function createRepeaterQuery(ctx) {
   const { dom, state, log } = ctx;
 
-  // Online repeater queries against przemienniki.net/RepeaterBook depend on a
-  // CORS proxy; when none is configured (blank base) the endpoints are null
-  // and those sources are disabled: their menu items are hidden so they can't
-  // fire requests that will fail.
+  // przemienniki.net and RepeaterBook depend on the configured proxy base; a
+  // blank base hides them. IRTS remains available through api.codeplug.org so
+  // a service failure is visible when the user tries it, rather than silently
+  // removing the action.
   const endpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
   const sources = createRepeaterSources(ctx, { endpoints });
   for (const source of sources) {

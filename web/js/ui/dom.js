@@ -72,6 +72,7 @@ export const REQUIRED_ELEMENTS = {
   channelAddPmr446El: "#channel-add-pmr446",
   channelImportPrzemiennikiEl: "#channel-import-przemienniki",
   channelImportRepeaterbookEl: "#channel-import-repeaterbook",
+  channelImportIrtsEl: "#channel-import-irts",
   repeaterQueryModalEl: "#repeater-query-modal",
   repeaterQueryFormEl: "#repeater-query-form",
   repeaterQueryTitleEl: "#repeater-query-title",

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createRepeaterQuery } from "../web/js/ui/repeater-query.js";
+import { rowGeo } from "../web/js/row-geo.js";
 
 // The unified query modal is driven directly rather than through
 // createUiController, so each test can assert on exactly what it hands its
@@ -122,20 +123,67 @@ function descendants(root) {
   return found;
 }
 
-// parsePrzemiennikiXml runs in the browser on DOMParser; the query tests only
-// need the transport and URL side, so an empty-but-valid document is enough.
+// parsePrzemiennikiXml runs in the browser on DOMParser. This stand-in handles
+// the small RXF fixture shapes below so transport, perspective parsing and row
+// construction are exercised as one flow.
 class FakeXmlDocument {
-  querySelector() {
+  constructor(xmlText = "") {
+    this.xmlText = String(xmlText);
+  }
+
+  textOf(tagName) {
+    const match = this.xmlText.match(new RegExp(`<${tagName}(?:\\s[^>]*)?>([\\s\\S]*?)</${tagName}>`, "i"));
+    return match?.[1]?.trim();
+  }
+
+  attributedText(tagName, type) {
+    const pattern = new RegExp(`<${tagName}[^>]*type=["']${type}["'][^>]*>([\\s\\S]*?)</${tagName}>`, "i");
+    return this.xmlText.match(pattern)?.[1]?.trim();
+  }
+
+  querySelector(selector) {
+    if (selector === "rxf > perspective") {
+      const textContent = this.textOf("perspective");
+      return textContent === undefined ? null : { textContent };
+    }
     return null;
   }
 
-  querySelectorAll() {
+  querySelectorAll(selector) {
+    if (!this.xmlText.includes("<repeater>")) {
+      return [];
+    }
+    if (selector === "repeaters > repeater > country") {
+      const textContent = this.textOf("country");
+      return textContent === undefined ? [] : [{ textContent }];
+    }
+    if (selector === "repeaters > repeater") {
+      const values = new Map([
+        ["qra", this.textOf("qra")],
+        ["mode", this.textOf("mode")],
+        ['qrg[type="rx"]', this.attributedText("qrg", "rx")],
+        ['qrg[type="tx"]', this.attributedText("qrg", "tx")],
+        ["qth", this.textOf("qth")],
+        ["remarks", this.textOf("remarks")],
+        ["link", this.textOf("link")],
+        ['ctcss[type="rx"]', this.attributedText("ctcss", "rx")],
+        ['ctcss[type="tx"]', this.attributedText("ctcss", "tx")],
+        ["location > latitude", this.textOf("latitude")],
+        ["location > longitude", this.textOf("longitude")],
+      ]);
+      return [{
+        querySelector: (childSelector) => {
+          const textContent = values.get(String(childSelector));
+          return textContent === undefined ? null : { textContent };
+        },
+      }];
+    }
     return [];
   }
 }
 
 const DOM_KEYS = [
-  "channelImportPrzemiennikiEl", "channelImportRepeaterbookEl", "channelImportRsgbEl",
+  "channelImportPrzemiennikiEl", "channelImportRepeaterbookEl", "channelImportIrtsEl", "channelImportRsgbEl",
   "repeaterQueryModalEl", "repeaterQueryFormEl", "repeaterQueryTitleEl",
   "repeaterQueryGridEl", "repeaterQueryCancelEl", "repeaterQuerySubmitEl",
 ];
@@ -145,6 +193,14 @@ const META_JSON = JSON.stringify({
     country: ["PL", "DE"],
     band: ["2m", "70cm"],
     mode: ["fm", "dstar"],
+  },
+});
+
+const IRTS_META_JSON = JSON.stringify({
+  filters: {
+    country: ["ie", "gb"],
+    band: ["10m", "2m", "4m", "70cm"],
+    mode: ["dmr", "dstar", "fm", "fusion", "nxdn"],
   },
 });
 
@@ -193,8 +249,8 @@ function buildHarness({
   Object.defineProperty(globalThis, "DOMParser", {
     configurable: true,
     value: class {
-      parseFromString() {
-        return new FakeXmlDocument();
+      parseFromString(xmlText) {
+        return new FakeXmlDocument(xmlText);
       }
     },
   });
@@ -369,7 +425,7 @@ test("submitting sends the selected filters as URL parameters", async () => {
   const { dom, table } = buildHarness();
   const calls = installFetch([
     { match: "/przemienniki/meta", body: META_JSON },
-    { match: "/przemienniki", body: "<xml/>" },
+    { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
   ]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
@@ -416,7 +472,7 @@ test("blank optional filters are omitted from the query", async () => {
   const { dom } = buildHarness();
   const calls = installFetch([
     { match: "/repeaterbook/meta", body: META_JSON },
-    { match: "/repeaterbook", body: "<xml/>" },
+    { match: "/repeaterbook", body: "<rxf><perspective>repeater</perspective></rxf>" },
   ]);
 
   await dom.channelImportRepeaterbookEl.dispatch("click");
@@ -437,6 +493,90 @@ test("blank optional filters are omitted from the query", async () => {
     assert.equal(url.searchParams.get(param), null, `no ${param} parameter`);
   }
   assert.equal(url.searchParams.get("range"), "30");
+});
+
+test("IRTS loads its dictionary and submits through the shared RXF flow", async () => {
+  const { dom, table } = buildHarness();
+  const calls = installFetch([
+    { match: "/irts/meta", body: IRTS_META_JSON },
+    {
+      match: "/irts",
+      body: `
+        <rxf><perspective>radio</perspective><repeaters><repeater>
+          <qra>EI2TRR</qra><mode>fm</mode>
+          <qrg type="rx">145.6</qrg><qrg type="tx">145</qrg>
+          <qth>Three Rock, Co. Dublin</qth><remarks>Channel: RV48 / (R0)</remarks>
+          <link>https://www.irts.ie/cgi/repeater.cgi</link><ctcss type="tx">88.5</ctcss>
+          <location><latitude>53.229167</latitude><longitude>-6.208333</longitude></location>
+        </repeater></repeaters></rxf>
+      `,
+    },
+  ]);
+
+  await dom.channelImportIrtsEl.dispatch("click");
+
+  assert.equal(dom.repeaterQueryTitleEl.textContent, "Query IRTS");
+  assert.deepEqual(countrySelect(dom).children.slice(1).map((option) => option.value), ["IE", "GB"]);
+  assert.deepEqual(grid(dom).querySelectorAll('input[name="band"]').map((el) => el.value), ["10m", "2m", "4m", "70cm"]);
+  assert.deepEqual(
+    grid(dom).querySelectorAll('input[name="mode"]').map((el) => el.value),
+    ["dmr", "dstar", "fm", "fusion", "nxdn"],
+  );
+
+  countrySelect(dom).value = "IE";
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  const url = queryUrl(calls);
+  assert.equal(url.pathname, "/irts");
+  assert.equal(url.searchParams.get("country"), "ie");
+  assert.equal(url.searchParams.get("band"), "2m,70cm");
+  assert.deepEqual(url.searchParams.getAll("mode"), ["fm"]);
+  assert.equal(table.inserted[0].label, "IRTS");
+  assert.equal(table.inserted[0].rows.length, 1);
+  assert.equal(table.inserted[0].rows[0].Frequency, "145.600000");
+  assert.equal(table.inserted[0].rows[0].Duplex, "-");
+  assert.equal(table.inserted[0].rows[0].Offset, "0.600000");
+  assert.equal(table.inserted[0].rows[0].rToneFreq, "88.5");
+  assert.deepEqual(rowGeo(table.inserted[0].rows[0]), { latitude: 53.229167, longitude: -6.208333 });
+});
+
+test("IRTS rejects an RXF response without a frequency perspective", async () => {
+  const { dom, log, table } = buildHarness();
+  installFetch([
+    { match: "/irts/meta", body: IRTS_META_JSON },
+    { match: "/irts", body: "<rxf><repeaters></repeaters></rxf>" },
+  ]);
+
+  await dom.channelImportIrtsEl.dispatch("click");
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  assert.equal(table.inserted.length, 0);
+  assert.match(log.errors.join("\n"), /^IRTS query: RXF response is missing its frequency perspective\./);
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false);
+});
+
+test("IRTS skips and reports a digital mode the selected radio cannot use", async () => {
+  const { dom, log, table } = buildHarness({ modeOptions: ["FM", "DIG"] });
+  installFetch([
+    { match: "/irts/meta", body: IRTS_META_JSON },
+    {
+      match: "/irts",
+      body: `
+        <rxf><perspective>radio</perspective><repeaters><repeater>
+          <qra>EI7DMR</qra><mode>dmr</mode><country>ie</country>
+          <qrg type="rx">439.5</qrg><qrg type="tx">430.5</qrg>
+        </repeater></repeaters></rxf>
+      `,
+    },
+  ]);
+
+  await dom.channelImportIrtsEl.dispatch("click");
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  assert.equal(table.inserted.length, 1);
+  assert.deepEqual(table.inserted[0].rows, []);
+  assert.match(log.debug.join("\n"), /IRTS SKIPPED EI7DMR \(DMR not supported by the selected radio\)/);
+  assert.ok(log.statuses.includes("Inserted 0 channel(s); skipped 1 in a mode the radio cannot use."));
 });
 
 test("a failed query reports the error and leaves the modal open", async () => {
@@ -584,15 +724,22 @@ test("backdrop clicks close the modal; clicks inside it do not", async () => {
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
 });
 
-test("a blank API base hides the remote source buttons and refuses to open", async () => {
-  const { dom } = buildHarness({ repeaterApiBase: "" });
+test("a blank API base hides proxy sources but leaves IRTS available", async () => {
+  const { dom, log } = buildHarness({ repeaterApiBase: "" });
   const calls = installFetch([]);
 
   assert.equal(dom.channelImportPrzemiennikiEl.hidden, true);
   assert.equal(dom.channelImportRepeaterbookEl.hidden, true);
+  assert.equal(dom.channelImportIrtsEl.hidden, false);
   await dom.channelImportPrzemiennikiEl.dispatch("click");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
   assert.equal(calls.length, 0);
+
+  // IRTS remains visible on the default hosted endpoint and reports a service
+  // failure when used instead of disappearing with the proxy-backed sources.
+  await dom.channelImportIrtsEl.dispatch("click");
+  assert.deepEqual(calls.map((call) => call.url), ["https://api.codeplug.org/irts/meta"]);
+  assert.match(log.errors.join("\n"), /^IRTS modal: Unrouted fetch:/);
 
   // RSGB needs no CORS proxy, so it stays available on such deployments.
   assert.equal(dom.channelImportRsgbEl.hidden, false);

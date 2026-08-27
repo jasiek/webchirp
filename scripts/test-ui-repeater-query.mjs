@@ -149,6 +149,7 @@ function installFakeDom({ repeaterApiBase } = {}) {
   return {
     przemiennikiBtn: document.querySelector("#channel-import-przemienniki"),
     repeaterbookBtn: document.querySelector("#channel-import-repeaterbook"),
+    irtsBtn: document.querySelector("#channel-import-irts"),
   };
 }
 
@@ -169,23 +170,26 @@ async function bootUi() {
   return ui;
 }
 
-test("online repeater-query buttons are hidden when the API base is blank", async () => {
-  const { przemiennikiBtn, repeaterbookBtn } = installFakeDom({ repeaterApiBase: "" });
+test("a blank API base hides proxy sources but leaves IRTS visible", async () => {
+  const { przemiennikiBtn, repeaterbookBtn, irtsBtn } = installFakeDom({ repeaterApiBase: "" });
   await bootUi();
   assert.equal(przemiennikiBtn.hidden, true);
   assert.equal(repeaterbookBtn.hidden, true);
+  assert.equal(irtsBtn.hidden, false);
 });
 
 test("online repeater-query buttons stay visible with a configured API base", async () => {
-  const { przemiennikiBtn, repeaterbookBtn } = installFakeDom({ repeaterApiBase: "https://proxy.example.com" });
+  const { przemiennikiBtn, repeaterbookBtn, irtsBtn } = installFakeDom({ repeaterApiBase: "https://proxy.example.com" });
   await bootUi();
   assert.equal(przemiennikiBtn.hidden, false);
   assert.equal(repeaterbookBtn.hidden, false);
+  assert.equal(irtsBtn.hidden, false);
 });
 
 test("online repeater-query buttons default to visible when no meta tag is present", async () => {
-  const { przemiennikiBtn, repeaterbookBtn } = installFakeDom();
+  const { przemiennikiBtn, repeaterbookBtn, irtsBtn } = installFakeDom();
   await bootUi();
   assert.equal(przemiennikiBtn.hidden, false);
   assert.equal(repeaterbookBtn.hidden, false);
+  assert.equal(irtsBtn.hidden, false);
 });

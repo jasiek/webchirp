@@ -23,10 +23,11 @@ import { trackEvent } from "./analytics.js";
 // Per-source configuration for the shared repeater-query modal
 // (ui/repeater-query.js). Each source declares which fields its form contains,
 // how its filter options are obtained, and how a query actually runs — the
-// flows differ at the root and stay per-source here: przemienniki.net and
-// RepeaterBook take the filter as query parameters (via a CORS proxy) and hand
-// back a filtered set, while RSGB filtering happens client-side over a
-// locator-square fan-out and needs no proxy. Only the form UI is shared.
+// flows differ at the root and stay per-source here: przemienniki.net,
+// RepeaterBook and IRTS take the filter as query parameters (via the configured
+// API base) and hand back a filtered set, while RSGB filtering happens
+// client-side over a locator-square fan-out and needs no proxy. Only the form
+// UI is shared.
 //
 // Not a create<Area> sibling module: this is a helper imported solely by
 // repeater-query.js, which passes it the constructed ctx.
@@ -59,10 +60,17 @@ export function createRepeaterSources(ctx, { endpoints }) {
       .filter((value) => value.length > 0);
   }
 
-  // przemienniki.net and RepeaterBook share everything but their labels and
-  // proxy endpoints: same field set, same /meta dictionary shape, same
+  // przemienniki.net, RepeaterBook and IRTS share everything but their labels
+  // and endpoints: same field set, same /meta dictionary shape, same
   // query-parameter API, same XML response format.
-  function remoteDirectorySource({ key, label, actionLabel, insertLabel, menuButton, sourceEndpoints }) {
+  function remoteDirectorySource({
+    key,
+    label,
+    actionLabel,
+    insertLabel,
+    menuButton,
+    sourceEndpoints,
+  }) {
     const apiUrl = sourceEndpoints?.apiUrl || "";
     const metaUrl = sourceEndpoints?.metaUrl || "";
 
@@ -74,9 +82,9 @@ export function createRepeaterSources(ctx, { endpoints }) {
     return {
       key,
       menuButton,
-      // Online queries depend on the CORS proxy; a blank base means no
-      // endpoints and the source is disabled (its menu item is hidden).
-      available: endpoints !== null,
+      // Proxy-dependent sources have null endpoints when the configured base
+      // is blank. IRTS always receives its default api.codeplug.org endpoints.
+      available: Boolean(apiUrl && metaUrl),
       title: `Query ${label}`,
       label,
       actionLabel,
@@ -145,8 +153,18 @@ export function createRepeaterSources(ctx, { endpoints }) {
           throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
         }
         const parsed = parsePrzemiennikiXml(await response.text());
-        const rowsToInsert = buildPrzemiennikiRows(parsed.repeaters, ctx.table.rowBuilderHooks());
-        ctx.table.insertRowsAtSelectionOrEnd(rowsToInsert, insertLabel);
+        const { rows, skipped } = buildPrzemiennikiRows(
+          parsed.repeaters,
+          ctx.table.rowBuilderHooks(),
+          { qrgPerspective: parsed.perspective },
+        );
+        for (const entry of skipped) {
+          log.logDebug(
+            `${actionLabel.toUpperCase()} SKIPPED ${entry.repeater} `
+            + `(${entry.mode || "unknown mode"} not supported by the selected radio)`,
+          );
+        }
+        ctx.table.insertRowsAtSelectionOrEnd(rows, insertLabel);
         // result_count is the point of this event: a query that returns
         // nothing means the filters or the proxy are wrong, and today that is
         // invisible. The country code is a filter the user picked from a fixed
@@ -158,7 +176,10 @@ export function createRepeaterSources(ctx, { endpoints }) {
           result_count: parsed.repeaters.length,
         });
         log.logDebug(`${actionLabel.toUpperCase()} QUERY ${url.toString()}`);
-        log.logDebug(`${actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length}`);
+        log.logDebug(`${actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length} fetched, ${rows.length} inserted`);
+        if (skipped.length > 0) {
+          log.setStatus(`Inserted ${rows.length} channel(s); skipped ${skipped.length} in a mode the radio cannot use.`);
+        }
       },
     };
   }
@@ -343,6 +364,14 @@ export function createRepeaterSources(ctx, { endpoints }) {
       insertLabel: "repeaterbook",
       menuButton: "channelImportRepeaterbookEl",
       sourceEndpoints: endpoints?.repeaterbook,
+    }),
+    remoteDirectorySource({
+      key: "irts",
+      label: "IRTS",
+      actionLabel: "IRTS",
+      insertLabel: "IRTS",
+      menuButton: "channelImportIrtsEl",
+      sourceEndpoints: endpoints?.irts,
     }),
     rsgbSource(),
   ];
