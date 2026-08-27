@@ -1,5 +1,9 @@
 # Release Notes
 
+## 2026-08-27
+- Added an IRTS repeater directory query covering Ireland and the UK, with country, band and mode filters loaded from the directory itself and RX/TX honoured from the radio's perspective so the two sides are never programmed reversed (#71).
+- Updated the bundled CHIRP, which adds the Kenwood NX-800 driver among other upstream fixes (#72).
+
 ## 2026-08-23
 - Debug Output now starts folded into a compact footer row, expands on demand or automatically when an error occurs, and leaves app-wide progress visible.
 
