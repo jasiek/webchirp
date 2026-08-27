@@ -18,8 +18,9 @@
       Base URL of the API that fronts przemienniki.net, repeaterbook.com and
       IRTS for the online repeater-query features. The default API only accepts
       requests from https://codeplug.org, so forks hosted elsewhere should
-      point this at their own proxy, or set content="" to hide the query
-      features. Removing this tag falls back to the built-in default.
+      point this at their own proxy. Setting content="" hides the two
+      proxy-dependent query sources; IRTS remains on the built-in default.
+      Removing this tag falls back to that default for every source.
     -->
     <meta name="webchirp-repeater-api-base" content="https://api.codeplug.org" />
     <title>WebCHIRP | Browser-based CHIRP radio programming</title>

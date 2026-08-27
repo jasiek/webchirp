@@ -70,7 +70,6 @@ export function createRepeaterSources(ctx, { endpoints }) {
     insertLabel,
     menuButton,
     sourceEndpoints,
-    qrgPerspective = "repeater",
   }) {
     const apiUrl = sourceEndpoints?.apiUrl || "";
     const metaUrl = sourceEndpoints?.metaUrl || "";
@@ -83,9 +82,9 @@ export function createRepeaterSources(ctx, { endpoints }) {
     return {
       key,
       menuButton,
-      // Online queries depend on the CORS proxy; a blank base means no
-      // endpoints and the source is disabled (its menu item is hidden).
-      available: endpoints !== null,
+      // Proxy-dependent sources have null endpoints when the configured base
+      // is blank. IRTS always receives its default api.codeplug.org endpoints.
+      available: Boolean(apiUrl && metaUrl),
       title: `Query ${label}`,
       label,
       actionLabel,
@@ -154,12 +153,18 @@ export function createRepeaterSources(ctx, { endpoints }) {
           throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
         }
         const parsed = parsePrzemiennikiXml(await response.text());
-        const rowsToInsert = buildPrzemiennikiRows(
+        const { rows, skipped } = buildPrzemiennikiRows(
           parsed.repeaters,
           ctx.table.rowBuilderHooks(),
-          { qrgPerspective },
+          { qrgPerspective: parsed.perspective },
         );
-        ctx.table.insertRowsAtSelectionOrEnd(rowsToInsert, insertLabel);
+        for (const entry of skipped) {
+          log.logDebug(
+            `${actionLabel.toUpperCase()} SKIPPED ${entry.repeater} `
+            + `(${entry.mode || "unknown mode"} not supported by the selected radio)`,
+          );
+        }
+        ctx.table.insertRowsAtSelectionOrEnd(rows, insertLabel);
         // result_count is the point of this event: a query that returns
         // nothing means the filters or the proxy are wrong, and today that is
         // invisible. The country code is a filter the user picked from a fixed
@@ -171,7 +176,10 @@ export function createRepeaterSources(ctx, { endpoints }) {
           result_count: parsed.repeaters.length,
         });
         log.logDebug(`${actionLabel.toUpperCase()} QUERY ${url.toString()}`);
-        log.logDebug(`${actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length}`);
+        log.logDebug(`${actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length} fetched, ${rows.length} inserted`);
+        if (skipped.length > 0) {
+          log.setStatus(`Inserted ${rows.length} channel(s); skipped ${skipped.length} in a mode the radio cannot use.`);
+        }
       },
     };
   }
@@ -364,9 +372,6 @@ export function createRepeaterSources(ctx, { endpoints }) {
       insertLabel: "IRTS",
       menuButton: "channelImportIrtsEl",
       sourceEndpoints: endpoints?.irts,
-      // The IRTS RXF route labels qrg rx/tx from the user's radio point of
-      // view, unlike the repeater-perspective labels in the other RXF routes.
-      qrgPerspective: "radio",
     }),
     rsgbSource(),
   ];

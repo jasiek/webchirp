@@ -170,12 +170,12 @@ async function bootUi() {
   return ui;
 }
 
-test("online repeater-query buttons are hidden when the API base is blank", async () => {
+test("a blank API base hides proxy sources but leaves IRTS visible", async () => {
   const { przemiennikiBtn, repeaterbookBtn, irtsBtn } = installFakeDom({ repeaterApiBase: "" });
   await bootUi();
   assert.equal(przemiennikiBtn.hidden, true);
   assert.equal(repeaterbookBtn.hidden, true);
-  assert.equal(irtsBtn.hidden, true);
+  assert.equal(irtsBtn.hidden, false);
 });
 
 test("online repeater-query buttons stay visible with a configured API base", async () => {

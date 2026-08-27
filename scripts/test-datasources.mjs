@@ -8,7 +8,7 @@ import {
 } from "../web/js/datasources.js";
 import { rowGeo } from "../web/js/row-geo.js";
 
-function rowHooks() {
+function rowHooks({ modeOptions = ["FM", "DV", "DMR", "DN"] } = {}) {
   const columns = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Comment"];
   return {
     createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
@@ -18,7 +18,7 @@ function rowHooks() {
       }
     },
     findEnumOption: (column, choices) => {
-      const options = column === "Mode" ? ["FM", "DV", "DMR", "DN"] : ["Tone", "TSQL"];
+      const options = column === "Mode" ? modeOptions : ["Tone", "TSQL"];
       return choices.find((choice) => options.includes(choice)) || "";
     },
   };
@@ -49,10 +49,17 @@ test("buildRepeaterEndpoints trims whitespace and trailing slashes", () => {
   assert.equal(endpoints.irts.apiUrl, "https://proxy.example.com/irts");
 });
 
-test("buildRepeaterEndpoints returns null for a blank or null base", () => {
-  assert.equal(buildRepeaterEndpoints(""), null);
-  assert.equal(buildRepeaterEndpoints("   "), null);
-  assert.equal(buildRepeaterEndpoints(null), null);
+test("a blank proxy base disables only proxy-dependent sources", () => {
+  for (const value of ["", "   ", null]) {
+    assert.deepEqual(buildRepeaterEndpoints(value), {
+      przemienniki: null,
+      repeaterbook: null,
+      irts: {
+        apiUrl: "https://api.codeplug.org/irts",
+        metaUrl: "https://api.codeplug.org/irts/meta",
+      },
+    });
+  }
 });
 
 test("buildRepeaterEndpoints falls back to the default base when called with no argument", () => {
@@ -67,7 +74,7 @@ test("the default base points at the codeplug.org proxy", () => {
 });
 
 test("IRTS radio-perspective frequencies build a usable CHIRP channel", () => {
-  const [row] = buildPrzemiennikiRows([
+  const { rows: [row], skipped } = buildPrzemiennikiRows([
     {
       qra: "EI2TRR",
       mode: "fm",
@@ -93,14 +100,30 @@ test("IRTS radio-perspective frequencies build a usable CHIRP channel", () => {
   assert.equal(row.rToneFreq, "88.5");
   assert.equal(row.Mode, "FM");
   assert.deepEqual(rowGeo(row), { latitude: 53.229167, longitude: -6.208333 });
+  assert.deepEqual(skipped, []);
 });
 
 test("IRTS mode names map to CHIRP's DMR and Fusion values", () => {
   const base = { qra: "EI7TEST", qrgRx: 439.5, qrgTx: 430.5 };
-  const rows = buildPrzemiennikiRows(
+  const { rows, skipped } = buildPrzemiennikiRows(
     [{ ...base, mode: "dmr" }, { ...base, mode: "fusion" }],
     rowHooks(),
     { qrgPerspective: "radio" },
   );
   assert.deepEqual(rows.map((row) => row.Mode), ["DMR", "DN"]);
+  assert.deepEqual(skipped, []);
+});
+
+test("unsupported digital modes are skipped instead of retaining FM or substituting DIG", () => {
+  const base = { qra: "EI7TEST", qrgRx: 439.5, qrgTx: 430.5 };
+  const { rows, skipped } = buildPrzemiennikiRows(
+    [{ ...base, mode: "dmr" }, { ...base, qra: "EI7FUS", mode: "fusion" }],
+    rowHooks({ modeOptions: ["FM", "DIG"] }),
+    { qrgPerspective: "radio" },
+  );
+  assert.deepEqual(rows, []);
+  assert.deepEqual(skipped, [
+    { repeater: "EI7TEST", reason: "mode", mode: "DMR" },
+    { repeater: "EI7FUS", reason: "mode", mode: "FUSION" },
+  ]);
 });

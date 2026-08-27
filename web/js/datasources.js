@@ -62,36 +62,35 @@ const GMRS_CHANNELS = [
   { name: "GMRS 22R", frequency: "462.72500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
 ];
 
-// Base URL of the proxy that fronts przemienniki.net, repeaterbook.com and
-// IRTS.
-// Those upstreams don't send browser CORS headers, so the online-query
+// Base URL of the API that fronts przemienniki.net, repeaterbook.com and IRTS.
+// The first two upstreams don't send browser CORS headers, so their query
 // features depend on a proxy that adds them. api.codeplug.org restricts its
-// CORS allowlist to https://codeplug.org, so forks hosted elsewhere must
-// point this at their own proxy or leave it blank to disable the features.
+// CORS allowlist to https://codeplug.org, so forks hosted elsewhere can point
+// this at their own proxy or leave it blank to disable those two sources. IRTS
+// remains available through the default API when the override is blank.
 // Overridable per-deployment via a <meta name="webchirp-repeater-api-base">
 // tag (see index.html and buildRepeaterEndpoints).
 const DEFAULT_REPEATER_API_BASE = "https://api.codeplug.org";
 
-// Derive the remote-directory endpoint URLs from an API base. Returns
-// null when the base is blank so callers can disable the online-query features
-// instead of firing requests that will fail.
+// Derive the remote-directory endpoint URLs from an API base. A blank base
+// disables the two proxy-dependent directories, but IRTS remains on the
+// default API: that first-party route is part of the hosted app's contract and
+// a transport failure should surface to the user rather than hide the action.
 function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
   const base = String(apiBase ?? "").trim().replace(/\/+$/, "");
-  if (!base) {
-    return null;
-  }
+  const irtsBase = base || DEFAULT_REPEATER_API_BASE;
   return {
-    przemienniki: {
+    przemienniki: base ? {
       apiUrl: `${base}/przemienniki`,
       metaUrl: `${base}/przemienniki/meta`,
-    },
-    repeaterbook: {
+    } : null,
+    repeaterbook: base ? {
       apiUrl: `${base}/repeaterbook`,
       metaUrl: `${base}/repeaterbook/meta`,
-    },
+    } : null,
     irts: {
-      apiUrl: `${base}/irts`,
-      metaUrl: `${base}/irts/meta`,
+      apiUrl: `${irtsBase}/irts`,
+      metaUrl: `${irtsBase}/irts/meta`,
     },
   };
 }
@@ -119,6 +118,13 @@ function formatFrequencyMhz(value) {
 
 export function parsePrzemiennikiXml(xmlText) {
   const xmlDoc = parseXmlDocument(xmlText);
+  const perspective = firstText(xmlDoc, "rxf > perspective").toLowerCase();
+  if (!perspective) {
+    throw new Error("RXF response is missing its frequency perspective.");
+  }
+  if (perspective !== "radio" && perspective !== "repeater") {
+    throw new Error(`RXF response has unsupported frequency perspective: ${perspective}`);
+  }
 
   const countries = Array.from(
     new Set(
@@ -174,7 +180,7 @@ export function parsePrzemiennikiXml(xmlText) {
       };
     });
 
-  return { countries, bands, modes, repeaters };
+  return { perspective, countries, bands, modes, repeaters };
 }
 
 export function parsePrzemiennikiMetaJson(jsonText) {
@@ -295,11 +301,13 @@ export function buildPrzemiennikiRows(
   { createBlankRow, setRowValue, findEnumOption },
   { qrgPerspective = "repeater" } = {},
 ) {
-  return repeaters.map((repeater) => {
+  const rows = [];
+  const skipped = [];
+  for (const repeater of repeaters) {
     const row = createBlankRow();
-    // przemienniki.net and RepeaterBook describe the repeater's receive and
-    // transmit sides; IRTS labels them from the user's radio perspective.
-    // Normalize both contracts into a CHIRP memory's receive/transmit pair.
+    // RXF declares whether receive/transmit are labelled from the repeater's
+    // or the user's radio's perspective. Normalize both into a CHIRP memory's
+    // receive/transmit pair.
     const receiveFrequency = qrgPerspective === "radio"
       ? (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx)
       : (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx);
@@ -341,23 +349,26 @@ export function buildPrzemiennikiRows(
       DSTAR: ["DV", "DSTAR", "D-STAR"],
       ATV: ["ATV"],
       ECHOLINK: ["ECHOLINK", "FM", "NFM", "FMN"],
-      DMR: ["DMR", "MOTOTRBO", "DIG"],
-      MOTOTRBO: ["DMR", "MOTOTRBO", "DIG"],
-      APCO25: ["P25", "APCO25", "APCO-25", "DIG"],
-      C4FM: ["C4FM", "DN", "VW", "DIG"],
-      FUSION: ["DN", "C4FM", "VW", "DIG"],
+      DMR: ["DMR", "MOTOTRBO"],
+      MOTOTRBO: ["DMR", "MOTOTRBO"],
+      APCO25: ["P25", "APCO25", "APCO-25"],
+      C4FM: ["C4FM", "DN", "VW"],
+      FUSION: ["DN", "C4FM", "VW"],
       FMLINK: ["FM", "NFM", "FMN"],
-      TETRA: ["TETRA", "DIG"],
-      M17: ["M17", "DIG"],
+      TETRA: ["TETRA"],
+      M17: ["M17"],
     };
     const mode = String(repeater.mode || "").trim().toUpperCase();
     const mappedMode = findEnumOption("Mode", modeMappings[mode] || [mode], true);
-    if (mappedMode) {
-      setRowValue(row, "Mode", mappedMode);
+    if (!mappedMode) {
+      skipped.push({ repeater: String(repeater.qra || "").trim(), reason: "mode", mode });
+      continue;
     }
+    setRowValue(row, "Mode", mappedMode);
     setRowGeo(row, repeater.latitude, repeater.longitude);
-    return row;
-  });
+    rows.push(row);
+  }
+  return { rows, skipped };
 }
 
 export {
