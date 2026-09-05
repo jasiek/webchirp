@@ -68,6 +68,10 @@ function installSerialBridgeGlobals() {
       count: Number(count || 1),
       timeoutMs: Number(timeoutMs || 1200),
     });
+  globalThis.serial_in_waiting = (waitMs) =>
+    serialRpc("inWaiting", {
+      waitMs: Number(waitMs || 0),
+    });
   globalThis.serial_log = (message) =>
     serialRpc("log", {
       message: String(message || ""),

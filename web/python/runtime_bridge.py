@@ -103,6 +103,7 @@ from chirp.drivers.generic_csv import CSVRadio
 from js import (
     fetch_chirp_source,
     serial_close,
+    serial_in_waiting,
     serial_prepare_clone,
     serial_progress,
     serial_reset_buffers,
@@ -152,6 +153,17 @@ DEFAULT_EXPORT_POWER = "50W"
 # and drivers extend it with "split" and "off".
 DUPLEX_VALUES = ("", "+", "-", "split", "off")
 DEFAULT_SERIAL_PIPE_TIMEOUT = 1.2
+# How long ``WebSerialPipe.in_waiting`` parks waiting for the first byte when
+# the bridge buffer is empty. pyserial answers in_waiting from a local buffer,
+# so drivers poll it in tight loops -- ``anytone778uv.send_serial_command()``
+# spins on it for up to 0.5 s per clone block -- but here each read is a JSPI
+# round trip into JS, and a truthful non-blocking answer would cost thousands
+# of them per block. The bridge instead waits on its read event, which settles
+# as soon as bytes arrive, so this only bounds how long an *idle* line is
+# allowed to hold up one poll. It has to stay well under the shortest deadline
+# a driver polls against (0.5 s for anytone778uv) or a live radio would look
+# silent.
+IN_WAITING_WAIT_MS = 40
 
 # pyserial spells the framing options as single letters and floats (the shim
 # above carries its constants); Web Serial's open() takes words and whole
@@ -1241,8 +1253,24 @@ class WebSerialPipe:
         self.reset_output_buffer()
 
     @property
-    def in_waiting(self):
-        return 0
+    def in_waiting(self) -> int:
+        """Report bytes the JS bridge has buffered, as pyserial's in_waiting does.
+
+        This used to be a hardcoded 0, which is not a harmless approximation:
+        a driver that only reads when in_waiting is non-zero reads nothing at
+        all, and one polling it against a deadline just spins until it expires.
+        """
+        result = _js_to_py(_await_js(serial_in_waiting(IN_WAITING_WAIT_MS)))
+        try:
+            return int(result["available"])
+        except Exception:
+            # Never let a malformed bridge reply raise out of an attribute
+            # read; "nothing buffered" is what every caller already handles.
+            return 0
+
+    def inWaiting(self) -> int:
+        """Legacy pyserial spelling of in_waiting, still called by anytone778uv."""
+        return self.in_waiting
 
     def close(self):
         """Pyserial compatibility no-op; UI owns port lifecycle."""

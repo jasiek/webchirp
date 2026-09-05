@@ -148,6 +148,7 @@ function installJsBridgeStubs() {
   globalThis.serial_read_hex = async () => ({ read: 0, hex: "", timedOut: true });
   globalThis.serial_write_bytes = async () => ({ written: 0 });
   globalThis.serial_read_bytes = async () => [];
+  globalThis.serial_in_waiting = async () => ({ available: 0 });
   globalThis.serial_log = () => ({ logged: true });
   globalThis.serial_progress = () => ({ reported: true });
   globalThis.serial_prepare_clone = async () => ({ prepared: true });

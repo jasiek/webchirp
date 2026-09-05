@@ -393,6 +393,28 @@ export class BrowserSerialBridge {
     return bytes;
   }
 
+  // Report how many received bytes are sitting in the bridge's buffer, for
+  // drivers that gate their reads on pyserial's in_waiting / inWaiting().
+  //
+  // pyserial answers this from a local kernel buffer, so drivers treat it as
+  // free and poll it in tight loops - anytone778uv's send_serial_command()
+  // spins on it for up to 0.5 s per clone block. Here every peek is a full
+  // JSPI round trip out of Pyodide, so an honest non-blocking snapshot would
+  // turn one block read into thousands of them. When nothing is buffered we
+  // park on the same read event readHex() uses instead: it settles the instant
+  // bytes land, so a busy line costs nothing, and an idle one costs one round
+  // trip per waitMs rather than one per loop iteration.
+  async inWaiting(waitMs) {
+    if (!this.port) {
+      throw new Error("Port is not connected.");
+    }
+    const wait = Math.max(0, Number(waitMs || 0));
+    if (this.readBuffer.length === 0 && wait > 0) {
+      await this._waitForReadEvent(wait);
+    }
+    return { available: this.readBuffer.length };
+  }
+
   async prepareClone(wantsDtr, wantsRts, settleMs, baudRate) {
     if (!this.port) {
       throw new Error("Port is not connected.");
@@ -837,6 +859,12 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
     return res;
   }
 
+  // Deliberately unlogged: a clone polls this once per byte, so echoing it to
+  // the debug panel would bury every diagnostic the panel exists for.
+  async function handleInWaiting(payload = {}) {
+    return serialBridge.inWaiting(payload.waitMs);
+  }
+
   async function handleResetBuffers() {
     serialBridge.readBuffer = new Uint8Array(0);
     return { reset: true };
@@ -853,6 +881,7 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
     readHex: handleReadHex,
     writeBytes: handleWriteBytes,
     readBytes: handleReadBytes,
+    inWaiting: handleInWaiting,
     log: handleLog,
     progress: handleProgress,
     prepareClone: handlePrepareClone,

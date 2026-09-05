@@ -262,6 +262,20 @@ export class NodeSerialBridge {
     return Array.from(out);
   }
 
+  // Same contract as the browser bridge: report the buffered count, and when
+  // nothing is buffered wait up to waitMs for the first byte rather than
+  // answering 0 straight away. Drivers poll this in tight loops, so a real
+  // radio read over the agent CLI would otherwise spin through the Pyodide
+  // round trip for the driver's whole deadline.
+  async inWaiting(waitMs) {
+    this.ensureOpen();
+    const deadline = Date.now() + Math.max(0, Number(waitMs || 0));
+    while (this.readBuffer.length === 0 && Date.now() < deadline) {
+      await sleep(Math.min(5, deadline - Date.now()));
+    }
+    return { available: this.readBuffer.length };
+  }
+
   async readHex(count, timeoutMs) {
     const bytes = await this.readBytes(count, timeoutMs);
     const requested = Math.max(0, Number(count || 1));
@@ -389,6 +403,10 @@ class StubSerialBridge {
     return [];
   }
 
+  async inWaiting() {
+    return { available: 0 };
+  }
+
   async resetBuffers() {
     return { reset: true };
   }
@@ -421,6 +439,7 @@ function installSerialGlobals(serialBridge, target = globalThis) {
   target.serial_read_hex = (count, timeoutMs) => serialBridge.readHex(count, timeoutMs);
   target.serial_write_bytes = (bytes) => serialBridge.writeBytes(bytes);
   target.serial_read_bytes = (count, timeoutMs) => serialBridge.readBytes(count, timeoutMs);
+  target.serial_in_waiting = (waitMs) => serialBridge.inWaiting(waitMs);
   target.serial_log = (message) => {
     console.log(`[SERIAL] ${String(message || "")}`);
     return { logged: true };
@@ -449,14 +468,23 @@ function installSerialGlobals(serialBridge, target = globalThis) {
 }
 
 export class TestRadioHarness {
-  constructor({ repoRoot, chirpDir = "", portPath = "", serialMode = "stub" } = {}) {
+  // serialBridge lets a caller supply its own bridge object - a simulated
+  // radio, say - in place of the stub or the real serial port. It only has to
+  // answer the ops installSerialGlobals() forwards.
+  constructor({
+    repoRoot,
+    chirpDir = "",
+    portPath = "",
+    serialMode = "stub",
+    serialBridge = null,
+  } = {}) {
     this.repoRoot = path.resolve(String(repoRoot || process.cwd()));
     this.chirpDir = String(chirpDir || "");
     this.portPath = String(portPath || "");
     this.serialMode = String(serialMode || "stub");
     this.pythonSource = null;
     this.pyodide = null;
-    this.serialBridge = null;
+    this.serialBridge = serialBridge;
   }
 
   async init() {
@@ -466,10 +494,12 @@ export class TestRadioHarness {
     this.pythonSource = await createLocalPythonSource(this.repoRoot, this.chirpDir);
     installFetchChirpSourceGlobal(this.pythonSource);
 
-    this.serialBridge =
-      this.serialMode === "node"
-        ? new NodeSerialBridge(this.portPath)
-        : new StubSerialBridge();
+    if (!this.serialBridge) {
+      this.serialBridge =
+        this.serialMode === "node"
+          ? new NodeSerialBridge(this.portPath)
+          : new StubSerialBridge();
+    }
     installSerialGlobals(this.serialBridge);
 
     this.pyodide = await loadPyodide();
