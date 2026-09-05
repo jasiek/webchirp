@@ -1503,10 +1503,24 @@ def _ensure_clone_mode_radio(radio_cls):
         )
 
 
+def _driver_baud_rate(radio_cls: Any) -> Optional[int]:
+    """Return the driver's declared serial line rate, or None when unusable.
+
+    CHIRP drivers advertise BAUD_RATE as a plain class attribute, so it can be
+    missing, None, or (in out-of-tree drivers) a non-numeric value. Callers
+    need one shape they can hand both to the pipe and to the JS bridge.
+    """
+    try:
+        baud = int(getattr(radio_cls, "BAUD_RATE", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    return baud if baud > 0 else None
+
+
 def _create_radio_for_serial(radio_cls):
     """Instantiate selected radio with configured WebSerial pipe and status hook."""
     pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
-    pipe.baudrate = getattr(radio_cls, "BAUD_RATE", None)
+    pipe.baudrate = _driver_baud_rate(radio_cls)
     pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
     pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
     radio = radio_cls(pipe)
@@ -1514,13 +1528,20 @@ def _create_radio_for_serial(radio_cls):
     return radio
 
 
-def _prepare_clone_session(radio_cls):
-    """Reset/prepare transport lines before clone operations for stability."""
+def _prepare_clone_session(radio_cls: Any) -> None:
+    """Reset/prepare transport lines before clone operations for stability.
+
+    Also hands the bridge the driver's declared BAUD_RATE. The port's line rate
+    is latched when it opens, and the user may have connected with a different
+    radio selected, so the rate has to be re-applied per clone rather than
+    trusted from connect time (issue #76).
+    """
     _await_js(
         serial_prepare_clone(
             bool(getattr(radio_cls, "WANTS_DTR", True)),
             bool(getattr(radio_cls, "WANTS_RTS", True)),
             350,
+            _driver_baud_rate(radio_cls) or 0,
         )
     )
 
@@ -1746,7 +1767,7 @@ def _upload_selected_radio_sync(
     radio = _radio_from_image_bytes(radio_cls, base_image)
     radio.status_fn = _make_status_logger()
     pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
-    pipe.baudrate = getattr(radio_cls, "BAUD_RATE", None)
+    pipe.baudrate = _driver_baud_rate(radio_cls)
     pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
     pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
     radio.set_pipe(pipe)
@@ -1803,7 +1824,7 @@ def upload_image_base64(module_name: str, class_name: str, image_b64: str):
     radio = _radio_from_image_bytes(radio_cls, raw_image)
     radio.status_fn = _make_status_logger()
     pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
-    pipe.baudrate = getattr(radio_cls, "BAUD_RATE", None)
+    pipe.baudrate = _driver_baud_rate(radio_cls)
     pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
     pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
     radio.set_pipe(pipe)

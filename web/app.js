@@ -27,7 +27,7 @@ serialBridge.onDebug = (message) => ui.logSerial(message);
 // An adapter can vanish mid-session — unplugged, or powered down with the radio.
 // The bridge closes the port itself; this is what tells the UI to stop offering
 // clone actions against it.
-serialBridge.onPortLost = ({ deviceName } = {}) => ui.onSerialPortLost(deviceName);
+serialBridge.onPortLost = ({ deviceName, reason } = {}) => ui.onSerialPortLost(deviceName, reason);
 
 const serialCapability = serialBridge.getCapability();
 ui.setSerialController({

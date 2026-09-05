@@ -78,11 +78,14 @@ function installSerialBridgeGlobals() {
       max: Number(max),
       msg: String(msg || ""),
     });
-  globalThis.serial_prepare_clone = (wantsDtr, wantsRts, settleMs) =>
+  globalThis.serial_prepare_clone = (wantsDtr, wantsRts, settleMs, baudRate) =>
     serialRpc("prepareClone", {
       wantsDtr: Boolean(wantsDtr),
       wantsRts: Boolean(wantsRts),
       settleMs: Number(settleMs || 350),
+      // 0 means "the driver declares no rate"; the bridge then keeps whatever
+      // the port was opened with.
+      baudRate: Number(baudRate || 0),
     });
   globalThis.serial_reset_buffers = () => serialRpc("resetBuffers", {});
   installFetchChirpSourceGlobal(pythonSource);
