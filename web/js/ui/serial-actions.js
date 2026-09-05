@@ -339,6 +339,14 @@ export function createSerialActions(ctx) {
     ctx.settings.updateSummary();
     ctx.table.clearInvalidHighlights();
     const issues = Array.isArray(result?.issues) ? result.issues : [];
+    const warnings = Array.isArray(result?.warnings) ? result.warnings : [];
+    for (const warning of warnings) {
+      const rowIdx = Number(warning?.rowIndex);
+      const channel = state.currentRows[rowIdx]?.Location ?? rowIdx;
+      log.logDebug(
+        `PREFLIGHT WARNING channel=${channel} column=${warning?.column || "unknown"}: ${warning?.message || "Driver warning"}`,
+      );
+    }
     ctx.table.applyValidationIssues(issues);
     if (issues.length > 0) {
       ctx.table.render();
