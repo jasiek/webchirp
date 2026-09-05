@@ -381,6 +381,29 @@ export class BrowserSerialBridge {
     return { prepared: true, baudRate: this.baudRate, baudRateChanged: rate.changed };
   }
 
+  // Assert DTR/RTS on an already-open port. Separate from prepareClone()
+  // because drivers also toggle the control lines *during* a clone -- thd72
+  // raises RTS after the radio enters PROGRAM mode -- and those toggles must
+  // reach the port rather than only being remembered in Python. A null line is
+  // left as it is, so a driver changing one line does not clear the other.
+  async setSignals(dataTerminalReady, requestToSend) {
+    if (!this.port) {
+      throw new Error("Port is not connected.");
+    }
+    const signals = {};
+    if (dataTerminalReady !== null && dataTerminalReady !== undefined) {
+      signals.dataTerminalReady = Boolean(dataTerminalReady);
+    }
+    if (requestToSend !== null && requestToSend !== undefined) {
+      signals.requestToSend = Boolean(requestToSend);
+    }
+    if (!Object.keys(signals).length) {
+      return { applied: false, ...signals };
+    }
+    await this.port.setSignals(signals);
+    return { applied: true, ...signals };
+  }
+
   // Both transports report a device going away as a "disconnect" event on the
   // API object rather than on the port, so each event has to be matched back
   // against the adapter we hold open: a different device being unplugged must
@@ -555,6 +578,19 @@ export class BrowserSerialBridge {
   }
 }
 
+// Render a setSignals payload for the debug panel, naming only the lines the
+// caller actually asked to change.
+function describeSignals(payload = {}) {
+  const parts = [];
+  if (payload.dataTerminalReady !== null && payload.dataTerminalReady !== undefined) {
+    parts.push(`DTR=${Boolean(payload.dataTerminalReady)}`);
+  }
+  if (payload.requestToSend !== null && payload.requestToSend !== undefined) {
+    parts.push(`RTS=${Boolean(payload.requestToSend)}`);
+  }
+  return parts.length ? parts.join(" ") : "no lines";
+}
+
 // Build a serial RPC dispatcher used by runtime bridge messages.
 export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) {
   async function handleOpen(payload = {}) {
@@ -618,6 +654,27 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
     return res;
   }
 
+  // Control-line changes are advisory: adapters and browsers that cannot set
+  // DTR/RTS must not abort a clone that would otherwise work, so a failure is
+  // reported to the debug panel instead of propagating into the driver.
+  async function handleSetSignals(payload = {}) {
+    try {
+      const res = await serialBridge.setSignals(
+        payload.dataTerminalReady,
+        payload.requestToSend,
+      );
+      if (res.applied) {
+        logSerial(`Set control lines (${describeSignals(payload)})`);
+      }
+      return res;
+    } catch (err) {
+      logSerial(
+        `Control lines unchanged (${describeSignals(payload)}): ${err?.message || err}`,
+      );
+      return { applied: false, error: String(err?.message || err) };
+    }
+  }
+
   async function handleResetBuffers() {
     serialBridge.readBuffer = new Uint8Array(0);
     return { reset: true };
@@ -637,6 +694,7 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
     log: handleLog,
     progress: handleProgress,
     prepareClone: handlePrepareClone,
+    setSignals: handleSetSignals,
     resetBuffers: handleResetBuffers,
     getPortInfo: handleGetPortInfo,
   });
