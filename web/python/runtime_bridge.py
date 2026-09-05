@@ -1158,11 +1158,21 @@ class WebSerialPipe:
         self.rts = None
         self.dtr = None
 
-    def write(self, data):
-        """Write bytes to the JS serial bridge."""
+    def write(self, data: "str | bytes | bytearray | memoryview") -> int:
+        """Write bytes to the JS serial bridge and report the byte count.
+
+        pyserial's ``Serial.write`` returns how many bytes went out, and some
+        CHIRP drivers validate that value: ``puxing_px888k.pipewrite`` aborts
+        the clone with "operation returned <None>" when it is ``None``, and
+        ``tk11`` treats a falsy count as a failed transfer. The bridge either
+        transfers every byte or raises, so a call that returns normally wrote
+        the whole payload (issue #79).
+        """
         if isinstance(data, str):
             data = data.encode("latin1")
-        _await_js(serial_write_bytes(list(data)))
+        payload = bytes(data)
+        _await_js(serial_write_bytes(list(payload)))
+        return len(payload)
 
     def read(self, count=1):
         """Read up to count bytes from JS serial bridge with timeout semantics."""
