@@ -326,10 +326,18 @@
               Debug Output
             </button>
           </h2>
-          <div id="debug-actions" class="debug-actions" hidden>
+          <!--
+            Report Bug lives outside #debug-actions on purpose: a user who hits
+            a problem must be able to report it without first discovering the
+            disclosure. Copy and Clear only mean anything with the log on
+            screen, so they stay inside the collapsible group.
+          -->
+          <div class="debug-header-actions">
             <button id="report-issue" type="button">Report Bug</button>
-            <button id="debug-copy" type="button">Copy</button>
-            <button id="debug-clear" type="button">Clear</button>
+            <div id="debug-actions" class="debug-actions" hidden>
+              <button id="debug-copy" type="button">Copy</button>
+              <button id="debug-clear" type="button">Clear</button>
+            </div>
           </div>
         </div>
         <div id="debug-output-content" class="debug-output-content" hidden>
