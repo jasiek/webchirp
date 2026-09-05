@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import base64
 import builtins
@@ -9,6 +11,7 @@ import re
 import sys
 import tempfile
 import types
+from typing import Any, Optional, Sequence
 
 sys.path.insert(0, "/webchirp_runtime")
 
@@ -115,6 +118,26 @@ try:
     from pyodide.ffi import run_sync as pyodide_run_sync
 except Exception:
     pyodide_run_sync = None
+
+# A channel as it crosses the JS/Python boundary: one JSON object per channel,
+# keyed by CSV header name (``CSV_HEADERS`` below, from
+# ``chirp_common.Memory.CSV_FORMAT``) with text values — "Location": "25",
+# "Frequency": "443.000000", "Duplex": "+". It is the grid's row, serialized by
+# ``setRowsJsonGlobal()`` in ``web/js/runtime-rpc.js`` and parsed here with
+# ``json.loads``, so every value a header names is a string.
+#
+# The value type is ``Any`` rather than ``str`` because a row may also carry
+# non-header keys the editor rides along on it — currently the ``__geo``
+# sidecar (``web/js/row-geo.js``), an object, which is why the type cannot
+# promise ``str`` for arbitrary keys. Nothing here reads those: every consumer
+# below projects a row through ``CSV_HEADERS`` and ignores the rest, which is
+# what keeps the sidecar out of a codeplug.
+Row = dict[str, Any]
+Rows = list[Row]
+
+# One invalid cell reported by the upload preflight: which row, which column,
+# and CHIRP's own message for it.
+ValidationIssue = dict[str, Any]
 
 CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
 DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
@@ -354,7 +377,7 @@ def _blank_csv_radio(max_memory: int = 999):
     return radio
 
 
-def _row_values_for_csv(mem):
+def _row_values_for_csv(mem) -> list[Any]:
     """Return ``CSV_FORMAT``-aligned values for a memory.
 
     ``DVMemory.to_csv()`` upstream still emits a pre-RxDtcsCode/CrossMode/Power
@@ -382,16 +405,16 @@ def get_default_headers():
     return {"headers": CSV_HEADERS}
 
 
-def parse_csv(csv_text: str):
+def parse_csv(csv_text: str) -> dict[str, Any]:
     """Parse CSV content with CHIRP's CSV driver and return row dictionaries."""
     radio = _blank_csv_radio()
     radio.load_from(csv_text)
-    rows = []
+    rows: Rows = []
 
     for mem in radio.memories:
         if mem.empty:
             continue
-        row = {}
+        row: Row = {}
         for header, value in zip(CSV_HEADERS, _row_values_for_csv(mem)):
             row[header] = str(value)
         rows.append(row)
@@ -681,7 +704,7 @@ def _csv_text_for_memories(memories, src_features):
     return radio.as_string()
 
 
-def _memories_from_rows(rows, power_map):
+def _memories_from_rows(rows: Rows, power_map: dict[str, Any]) -> list[Any]:
     """Turn row text into memories with CHIRP's own CSV column converters.
 
     Calls ``CSVRadio._parse_csv_data_line()`` per row instead of feeding a CSV
@@ -716,7 +739,7 @@ def _memories_from_rows(rows, power_map):
     return memories
 
 
-def normalize_rows(rows, module_name="", class_name=""):
+def normalize_rows(rows: Rows, module_name: str = "", class_name: str = "") -> str:
     """Render rows as CSV the way CHIRP's CSV export renders the same channels."""
     # import_mem() needs the *source* radio's features to decide which columns it
     # has to fill in, so resolve them once and reuse them for the power labels.
@@ -729,7 +752,7 @@ def normalize_rows(rows, module_name="", class_name=""):
     return _csv_text_for_memories(memories, src_features)
 
 
-def _infer_csv_error_column(error_text: str):
+def _infer_csv_error_column(error_text: str) -> str:
     """Best-effort mapping from CHIRP parse error text to CSV column name."""
     text = str(error_text or "")
     match = re.search(r"vals\[(\d+)\]", text)
@@ -764,15 +787,69 @@ def _infer_csv_error_column(error_text: str):
     return ""
 
 
-def validate_rows_for_upload(rows, module_name="", class_name=""):
+def _memory_bounds_for_driver(
+    module_name: str, class_name: str
+) -> Optional[tuple[int, int]]:
+    """Return a driver's (lo, hi) memory bounds, or None if unavailable."""
+    rf = _driver_features(module_name, class_name)
+    bounds = getattr(rf, "memory_bounds", None) if rf else None
+    if not bounds:
+        return None
+    try:
+        lo, hi = bounds
+        return int(lo), int(hi)
+    except Exception:
+        return None
+
+
+def validate_rows_for_upload(
+    rows: Rows, module_name: str = "", class_name: str = ""
+) -> dict[str, Any]:
     """Validate row values with CHIRP CSV parsing and return per-cell issues."""
     level_map = _power_levels_by_label(
         _valid_power_levels_for_driver(module_name, class_name)
     )
-    issues = []
+    # Location is checked here as well as in _apply_rows_to_radio_instance,
+    # because that one raises partway through a clone: the radio is already
+    # open and some memories written. Preflight is the only place a bad
+    # Location can be reported while it is still just a highlighted cell.
+    bounds = _memory_bounds_for_driver(module_name, class_name)
+    seen_locations: dict[int, int] = {}
+    issues: list[ValidationIssue] = []
     for row_index, row in enumerate(rows or []):
         vals = [str((row or {}).get(header, "") or "") for header in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
+        # A non-integer Location already raises out of _memory_from_row_values
+        # below, so only range and uniqueness are checked here.
+        try:
+            location = int(str((row or {}).get("Location", "") or "").strip())
+        except (TypeError, ValueError):
+            location = None
+        if location is not None:
+            if bounds and not (bounds[0] <= location <= bounds[1]):
+                issues.append(
+                    {
+                        "rowIndex": int(row_index),
+                        "column": "Location",
+                        "message": (
+                            f"Channel Location {location} is outside radio "
+                            f"memory bounds {bounds[0]}-{bounds[1]}"
+                        ),
+                    }
+                )
+            elif location in seen_locations:
+                issues.append(
+                    {
+                        "rowIndex": int(row_index),
+                        "column": "Location",
+                        "message": (
+                            f"Channel Location {location} is already used by "
+                            f"row {seen_locations[location] + 1}"
+                        ),
+                    }
+                )
+            else:
+                seen_locations[location] = row_index
         try:
             _memory_from_row_values(vals, level_map)
         except Exception as exc:
@@ -1003,9 +1080,9 @@ def _iter_memory_numbers(radio):
     return range(int(lo), int(hi) + 1)
 
 
-def _radio_rows_from_instance(radio):
+def _radio_rows_from_instance(radio) -> Rows:
     """Extract channel rows from a radio instance using CHIRP memory API."""
-    rows = []
+    rows: Rows = []
     for number in _iter_memory_numbers(radio):
         try:
             mem = radio.get_memory(number)
@@ -1013,14 +1090,16 @@ def _radio_rows_from_instance(radio):
             continue
         if getattr(mem, "empty", False):
             continue
-        row = {}
+        row: Row = {}
         for header, value in zip(CSV_HEADERS, _row_values_for_csv(mem)):
             row[header] = str(value)
         rows.append(row)
     return rows
 
 
-def _apply_rows_to_radio_instance(radio, rows, module_name="", class_name=""):
+def _apply_rows_to_radio_instance(
+    radio, rows: Rows, module_name: str = "", class_name: str = ""
+) -> None:
     """Apply editable rows to a radio instance and fail on invalid channel writes."""
     if radio and (not module_name or not class_name):
         radio_cls = radio.__class__
@@ -1105,9 +1184,12 @@ def _serialize_setting_value(value):
         "current": current,
     }
 
-    def _serialize_numeric_bound(getter_name, attr_name):
+    def _serialize_numeric_bound(getter_name: str, attr_name: str) -> Optional[float]:
         getter = getattr(value, getter_name, None)
-        bound = getter() if callable(getter) else None
+        # CHIRP's settings objects are untyped and expose these bounds either as
+        # a getter or as a bare attribute depending on the value class, so what
+        # comes back is genuinely unknown until the float() call.
+        bound: Any = getter() if callable(getter) else None
         if bound is None:
             bound = getattr(value, attr_name, None)
         return float(bound) if bound is not None else None
@@ -1293,7 +1375,12 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
     }
 
 
-def _upload_selected_radio_sync(module_name: str, class_name: str, rows, settings_groups=None):
+def _upload_selected_radio_sync(
+    module_name: str,
+    class_name: str,
+    rows: Rows,
+    settings_groups: Optional[Sequence[Any]] = None,
+) -> dict[str, Any]:
     """Apply rows onto cached image and run selected driver's sync_out."""
     radio_cls = _import_radio_class(module_name, class_name)
     _ensure_clone_mode_radio(radio_cls)
@@ -1324,12 +1411,17 @@ def _upload_selected_radio_sync(module_name: str, class_name: str, rows, setting
     return {"uploaded": True, "settings": settings_result["settings"]}
 
 
-async def download_selected_radio(module_name: str, class_name: str):
+async def download_selected_radio(module_name: str, class_name: str) -> dict[str, Any]:
     """Async wrapper for selected-radio download operation."""
     return _download_selected_radio_sync(module_name, class_name)
 
 
-async def upload_selected_radio(module_name: str, class_name: str, rows, settings_groups=None):
+async def upload_selected_radio(
+    module_name: str,
+    class_name: str,
+    rows: Rows,
+    settings_groups: Optional[Sequence[Any]] = None,
+) -> dict[str, Any]:
     """Async wrapper for selected-radio upload operation."""
     return _upload_selected_radio_sync(module_name, class_name, rows, settings_groups)
 
@@ -1374,7 +1466,12 @@ def upload_image_base64(module_name: str, class_name: str, image_b64: str):
     return {"uploaded": True, "size": len(raw_image)}
 
 
-def export_image_base64(module_name: str, class_name: str, rows, settings_groups=None):
+def export_image_base64(
+    module_name: str,
+    class_name: str,
+    rows: Rows,
+    settings_groups: Optional[Sequence[Any]] = None,
+) -> dict[str, Any]:
     """Build a CHIRP .img payload from rows for selected clone-mode driver."""
     radio_cls = _import_radio_class(module_name, class_name)
     _ensure_clone_mode_radio(radio_cls)
@@ -1437,7 +1534,7 @@ def read_image_metadata_base64(image_b64: str):
     }
 
 
-def load_image_base64(image_b64: str):
+def load_image_base64(image_b64: str) -> dict[str, Any]:
     """Load a CHIRP .img payload, detect driver, and return rows + radio identity."""
     try:
         raw_image = base64.b64decode(str(image_b64 or ""), validate=True)

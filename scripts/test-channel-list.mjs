@@ -397,6 +397,41 @@ json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
     assert.equal(result.issues[0].column, "Frequency");
   });
 
+  // https://github.com/jasiek/webchirp/issues/73: _apply_rows_to_radio_instance
+  // rejects an out-of-bounds Location, but it does so partway through a clone
+  // with the radio already open. Preflight has to catch it while it is still
+  // a highlighted cell.
+  await t.test("preflight validator reports out-of-bounds and duplicate Locations", async () => {
+    const rows = makeChannelRows();
+    rows[0].Location = "9000";
+    rows[3].Location = rows[2].Location;
+    const result = await runPythonJson(
+      pyodide,
+      `
+_rows = json.loads(_rows_json)
+json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
+      `,
+      {
+        _rows_json: JSON.stringify(rows),
+        _sel_module: TEST_RADIO.module,
+        _sel_class: TEST_RADIO.className,
+      },
+    );
+
+    assert.equal(result.valid, false);
+    const byRow = new Map(
+      result.issues
+        .filter((issue) => issue.column === "Location")
+        .map((issue) => [issue.rowIndex, issue.message]),
+    );
+    assert.match(byRow.get(0) ?? "", /outside radio memory bounds 0-127/);
+    assert.match(byRow.get(3) ?? "", /already used by row 3/);
+    // Rows 1, 2 and 4+ are fine and must not be flagged.
+    assert.equal(byRow.has(1), false);
+    assert.equal(byRow.has(2), false);
+    assert.equal(byRow.has(4), false);
+  });
+
   await t.test("binary image export/load roundtrip preserves driver identity", async () => {
     const rows = makeChannelRows();
     const result = await runPythonJson(

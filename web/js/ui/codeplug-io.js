@@ -84,7 +84,8 @@ export function createCodeplugIo(ctx) {
 
   // Apply a parsed CSV to the editor: "replace" swaps the channel list out
   // wholesale (Locations come from the file); "merge" appends the imported
-  // channels below the existing ones and renumbers Locations.
+  // channels below the existing ones, where they keep the Location the file
+  // gave them unless it is out of bounds or already taken by a loaded channel.
   function applyParsedCsv(parsed, mode = "replace", csvSource = "csv") {
     const headersFromMeta = state.radioMetadata.headers || [];
     const parsedHeaders = parsed.headers || [];
@@ -93,10 +94,16 @@ export function createCodeplugIo(ctx) {
     if (mode === "merge") {
       state.currentRows = state.currentRows.concat(imported);
       state.codeplugSource = "mixed";
-      ctx.table.reindexLocationColumn();
+      // Merging is an edit: imported channels have to be given somewhere to
+      // live that the loaded ones are not already using.
+      ctx.table.reconcileLocations();
     } else {
       state.currentRows = imported;
       state.codeplugSource = csvSource;
+      // Replacing is not. The file's Locations are the user's data, so they
+      // are only sorted into memory order; a duplicate or out-of-bounds one
+      // stays wrong until the upload preflight says so.
+      ctx.table.sortRowsByLocation();
     }
     ctx.table.clearInvalidHighlights();
     ctx.table.resetRowSelection();
@@ -245,6 +252,7 @@ export function createCodeplugIo(ctx) {
       : (loaded.headers || state.currentHeaders);
     state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
     state.codeplugSource = "img";
+    ctx.table.sortRowsByLocation();
     ctx.table.clearInvalidHighlights();
     ctx.table.resetRowSelection();
     ctx.table.render();
