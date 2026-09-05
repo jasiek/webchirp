@@ -54,6 +54,20 @@ export function createRepeaterSources(ctx, { endpoints }) {
       .sort((a, b) => a.value.localeCompare(b.value));
   }
 
+  // Both row builders return `skipped` entries tagged with why the selected
+  // radio could not express the repeater. One phrasing for both, so the status
+  // line reads the same whichever directory was queried.
+  function skippedDetail(skipped) {
+    const counts = {
+      frequency: skipped.filter((entry) => entry.reason === "frequency").length,
+      mode: skipped.filter((entry) => entry.reason === "mode").length,
+    };
+    return [
+      counts.frequency > 0 ? `${counts.frequency} outside its frequency range` : "",
+      counts.mode > 0 ? `${counts.mode} in a mode it cannot use` : "",
+    ].filter((part) => part.length > 0).join(", ");
+  }
+
   function normalized(values) {
     return Array.from(values || [])
       .map((value) => String(value || "").trim().toLowerCase())
@@ -159,10 +173,10 @@ export function createRepeaterSources(ctx, { endpoints }) {
           { qrgPerspective: parsed.perspective },
         );
         for (const entry of skipped) {
-          log.logDebug(
-            `${actionLabel.toUpperCase()} SKIPPED ${entry.repeater} `
-            + `(${entry.mode || "unknown mode"} not supported by the selected radio)`,
-          );
+          const reason = entry.reason === "frequency"
+            ? "frequency not supported by the selected radio"
+            : `${entry.mode || "unknown mode"} not supported by the selected radio`;
+          log.logDebug(`${actionLabel.toUpperCase()} SKIPPED ${entry.repeater} (${reason})`);
         }
         ctx.table.insertRowsAtSelectionOrEnd(rows, insertLabel);
         // result_count is the point of this event: a query that returns
@@ -178,7 +192,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
         log.logDebug(`${actionLabel.toUpperCase()} QUERY ${url.toString()}`);
         log.logDebug(`${actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length} fetched, ${rows.length} inserted`);
         if (skipped.length > 0) {
-          log.setStatus(`Inserted ${rows.length} channel(s); skipped ${skipped.length} in a mode the radio cannot use.`);
+          log.setStatus(`Inserted ${rows.length} channel(s); skipped ${skippedDetail(skipped)}.`);
         }
       },
     };
@@ -320,10 +334,6 @@ export function createRepeaterSources(ctx, { endpoints }) {
         // Repeaters the radio cannot express are dropped rather than written
         // as something they are not; a shorter list than the match count needs
         // saying out loud, or it reads as results going missing.
-        const byReason = {
-          frequency: skipped.filter((entry) => entry.reason === "frequency").length,
-          mode: skipped.filter((entry) => entry.reason === "mode").length,
-        };
         for (const entry of skipped) {
           log.logDebug(`RSGB SKIPPED ${entry.repeater} (${entry.reason} not supported by the selected radio)`);
         }
@@ -338,11 +348,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
           result_count: rows.length,
         });
         if (skipped.length > 0) {
-          const detail = [
-            byReason.frequency > 0 ? `${byReason.frequency} outside its frequency range` : "",
-            byReason.mode > 0 ? `${byReason.mode} in a mode it cannot use` : "",
-          ].filter((part) => part.length > 0).join(", ");
-          log.setStatus(`Inserted ${rows.length} channel(s); skipped ${detail}.`);
+          log.setStatus(`Inserted ${rows.length} channel(s); skipped ${skippedDetail(skipped)}.`);
         }
       },
     };

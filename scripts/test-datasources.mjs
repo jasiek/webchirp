@@ -8,14 +8,21 @@ import {
 } from "../web/js/datasources.js";
 import { rowGeo } from "../web/js/row-geo.js";
 
-function rowHooks({ modeOptions = ["FM", "DV", "DMR", "DN"] } = {}) {
+function rowHooks({ modeOptions = ["FM", "DV", "DMR", "DN"], maxFrequencyMhz = Infinity } = {}) {
   const columns = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Comment"];
   return {
     createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
     setRowValue: (row, column, value) => {
-      if (columns.includes(column)) {
-        row[column] = String(value ?? "");
+      if (!columns.includes(column)) {
+        return;
       }
+      // normalizeValue keeps the previous value when a frequency falls outside
+      // the driver's valid_bands, and Offset is exempt from that check — the
+      // asymmetry this builder has to notice.
+      if (column === "Frequency" && Number.parseFloat(value) > maxFrequencyMhz) {
+        return;
+      }
+      row[column] = String(value ?? "");
     },
     findEnumOption: (column, choices) => {
       const options = column === "Mode" ? modeOptions : ["Tone", "TSQL"];
@@ -126,4 +133,45 @@ test("unsupported digital modes are skipped instead of retaining FM or substitut
     { repeater: "EI7TEST", reason: "mode", mode: "DMR" },
     { repeater: "EI7FUS", reason: "mode", mode: "FUSION" },
   ]);
+});
+
+test("a repeater outside the radio's bands is skipped, not left as a blank frequency", () => {
+  const { rows, skipped } = buildPrzemiennikiRows(
+    [
+      { qra: "SR2m", mode: "fm", qrgRx: 145.6, qrgTx: 145.0 },
+      // 70cm on a 2m-only radio: the Frequency write is refused while the
+      // Offset write is accepted, so an unguarded builder emits a row with no
+      // frequency and a -7.6 MHz shift — which erases a memory on upload.
+      { qra: "SR70cm", mode: "fm", qrgRx: 438.6, qrgTx: 431.0 },
+    ],
+    rowHooks({ maxFrequencyMhz: 174 }),
+    { qrgPerspective: "radio" },
+  );
+
+  assert.deepEqual(rows.map((row) => row.Name), ["SR2m"]);
+  assert.deepEqual(skipped, [{ repeater: "SR70cm", reason: "frequency" }]);
+});
+
+test("a repeater with no usable frequency at all is skipped", () => {
+  const { rows, skipped } = buildPrzemiennikiRows(
+    [{ qra: "SR0", mode: "fm" }],
+    rowHooks(),
+    { qrgPerspective: "radio" },
+  );
+
+  assert.deepEqual(rows, []);
+  assert.deepEqual(skipped, [{ repeater: "SR0", reason: "frequency" }]);
+});
+
+test("an out-of-band repeater is reported as frequency, not as an unusable mode", () => {
+  // The frequency guard runs before the mode lookup, so a row that fails both
+  // is counted once and under the reason the user can act on.
+  const { rows, skipped } = buildPrzemiennikiRows(
+    [{ qra: "SRDMR", mode: "dmr", qrgRx: 1298.0, qrgTx: 1270.0 }],
+    rowHooks({ modeOptions: ["FM"], maxFrequencyMhz: 470 }),
+    { qrgPerspective: "radio" },
+  );
+
+  assert.deepEqual(rows, []);
+  assert.deepEqual(skipped, [{ repeater: "SRDMR", reason: "frequency" }]);
 });

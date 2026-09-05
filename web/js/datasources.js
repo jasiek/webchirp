@@ -296,6 +296,11 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }) {
   });
 }
 
+// Returns `{ rows, skipped }`. A repeater the selected radio cannot express is
+// left out rather than written as something it is not, and `skipped` carries a
+// reason per record — "frequency" (outside the driver's valid_bands) or "mode"
+// (the radio advertises no Mode the repeater can be worked in) — so the caller
+// can say which and why. Same contract as buildRsgbRows in web/js/rsgb.js.
 export function buildPrzemiennikiRows(
   repeaters,
   { createBlankRow, setRowValue, findEnumOption },
@@ -321,6 +326,16 @@ export function buildPrzemiennikiRows(
 
     if (Number.isFinite(receiveFrequency)) {
       setRowValue(row, "Frequency", formatFrequencyMhz(receiveFrequency));
+    }
+    // setRowValue validates against the selected radio's own column metadata
+    // and keeps the previous value when a write falls outside valid_bands, so
+    // a 70cm repeater on a 2m-only radio would otherwise reach the grid with a
+    // blank Frequency and an accepted -7.6 MHz Offset (Offset is exempt from
+    // the band check). A blank Frequency is not merely a bad row: on upload
+    // _apply_rows_to_radio_instance reads it as "erase this memory".
+    if (!(Number.parseFloat(String(row.Frequency ?? "")) > 0)) {
+      skipped.push({ repeater: String(repeater.qra || "").trim(), reason: "frequency" });
+      continue;
     }
     if (Number.isFinite(receiveFrequency) && Number.isFinite(transmitFrequency)) {
       const delta = transmitFrequency - receiveFrequency;

@@ -149,34 +149,42 @@ class FakeXmlDocument {
     return null;
   }
 
+  // Each <repeater> is scoped to its own document, so a response carrying more
+  // than one does not have every field answered from the first.
+  repeaterDocs() {
+    return (this.xmlText.match(/<repeater>[\s\S]*?<\/repeater>/gi) || [])
+      .map((block) => new FakeXmlDocument(block));
+  }
+
   querySelectorAll(selector) {
-    if (!this.xmlText.includes("<repeater>")) {
-      return [];
-    }
     if (selector === "repeaters > repeater > country") {
-      const textContent = this.textOf("country");
-      return textContent === undefined ? [] : [{ textContent }];
+      return this.repeaterDocs()
+        .map((doc) => doc.textOf("country"))
+        .filter((textContent) => textContent !== undefined)
+        .map((textContent) => ({ textContent }));
     }
     if (selector === "repeaters > repeater") {
-      const values = new Map([
-        ["qra", this.textOf("qra")],
-        ["mode", this.textOf("mode")],
-        ['qrg[type="rx"]', this.attributedText("qrg", "rx")],
-        ['qrg[type="tx"]', this.attributedText("qrg", "tx")],
-        ["qth", this.textOf("qth")],
-        ["remarks", this.textOf("remarks")],
-        ["link", this.textOf("link")],
-        ['ctcss[type="rx"]', this.attributedText("ctcss", "rx")],
-        ['ctcss[type="tx"]', this.attributedText("ctcss", "tx")],
-        ["location > latitude", this.textOf("latitude")],
-        ["location > longitude", this.textOf("longitude")],
-      ]);
-      return [{
-        querySelector: (childSelector) => {
-          const textContent = values.get(String(childSelector));
-          return textContent === undefined ? null : { textContent };
-        },
-      }];
+      return this.repeaterDocs().map((doc) => {
+        const values = new Map([
+          ["qra", doc.textOf("qra")],
+          ["mode", doc.textOf("mode")],
+          ['qrg[type="rx"]', doc.attributedText("qrg", "rx")],
+          ['qrg[type="tx"]', doc.attributedText("qrg", "tx")],
+          ["qth", doc.textOf("qth")],
+          ["remarks", doc.textOf("remarks")],
+          ["link", doc.textOf("link")],
+          ['ctcss[type="rx"]', doc.attributedText("ctcss", "rx")],
+          ['ctcss[type="tx"]', doc.attributedText("ctcss", "tx")],
+          ["location > latitude", doc.textOf("latitude")],
+          ["location > longitude", doc.textOf("longitude")],
+        ]);
+        return {
+          querySelector: (childSelector) => {
+            const textContent = values.get(String(childSelector));
+            return textContent === undefined ? null : { textContent };
+          },
+        };
+      });
     }
     return [];
   }
@@ -576,7 +584,43 @@ test("IRTS skips and reports a digital mode the selected radio cannot use", asyn
   assert.equal(table.inserted.length, 1);
   assert.deepEqual(table.inserted[0].rows, []);
   assert.match(log.debug.join("\n"), /IRTS SKIPPED EI7DMR \(DMR not supported by the selected radio\)/);
-  assert.ok(log.statuses.includes("Inserted 0 channel(s); skipped 1 in a mode the radio cannot use."));
+  assert.ok(log.statuses.includes("Inserted 0 channel(s); skipped 1 in a mode it cannot use."));
+});
+
+test("IRTS skips a repeater the selected radio cannot tune", async () => {
+  const { dom, log, table } = buildHarness();
+  installFetch([
+    { match: "/irts/meta", body: IRTS_META_JSON },
+    {
+      match: "/irts",
+      body: `
+        <rxf><perspective>radio</perspective><repeaters>
+          <repeater>
+            <qra>EI2TRR</qra><mode>fm</mode><country>ie</country>
+            <qrg type="rx">145.6</qrg><qrg type="tx">145</qrg>
+          </repeater>
+          <repeater>
+            <qra>EI23CM</qra><mode>fm</mode><country>ie</country>
+            <qrg type="rx">1298.5</qrg><qrg type="tx">1290.9</qrg>
+          </repeater>
+        </repeaters></rxf>
+      `,
+    },
+  ]);
+
+  await dom.channelImportIrtsEl.dispatch("click");
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  // The 23cm repeater is above the harness radio's 470 MHz ceiling. Before the
+  // frequency guard it arrived as a row with a blank Frequency and a -7.6 MHz
+  // Offset, which erases the memory it lands on when uploaded.
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["EI2TRR"]);
+  assert.ok(table.inserted[0].rows.every((row) => Number.parseFloat(row.Frequency) > 0));
+  assert.ok(log.debug.some((line) => /IRTS SKIPPED EI23CM \(frequency not supported/.test(line)));
+  assert.ok(
+    log.statuses.includes("Inserted 1 channel(s); skipped 1 outside its frequency range."),
+    `status lines were: ${log.statuses.join(" | ")}`,
+  );
 });
 
 test("a failed query reports the error and leaves the modal open", async () => {
