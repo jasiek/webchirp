@@ -374,6 +374,7 @@ export function createSerialActions(ctx) {
         ? state.radioMetadata.headers
         : (result.headers || []);
       state.currentRows = result.rows;
+      ctx.table.reconcileLocations();
       state.codeplugSource = "radio";
       ctx.settings.replaceState({
         supported: Array.isArray(result.settings) && result.settings.length > 0,

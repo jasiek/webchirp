@@ -268,17 +268,56 @@ test("a sparse codeplug loads with the radio's own memory numbering", async () =
   assert.deepEqual(tableLocations(document), ["0", "1", "25", "26", "124"]);
 });
 
+test("a codeplug listing channels out of order loads in memory order", async () => {
+  // A radio or image always yields ascending memories, but a hand-written CSV
+  // need not, and the grid still has to read as the radio's memory map.
+  const { document } = await bootWithRows([
+    { Location: "124", Name: "VCALL", Frequency: "155.750000" },
+    { Location: "1", Name: "Bravo", Frequency: "146.940000" },
+    { Location: "25", Name: "HTAC1", Frequency: "443.000000" },
+  ]);
+  assert.deepEqual(tableLocations(document), ["1", "25", "124"]);
+  assert.deepEqual(tableNames(document), ["Bravo", "HTAC1", "VCALL"]);
+});
+
 test("insert takes the lowest free memory and leaves every other channel in place", async () => {
   const { document } = await bootWithRows(SPARSE_ROWS);
   clickLocationButton(document, 2);
   click(document, "#channel-insert");
   await flushMicrotasks();
 
-  // The blank row lands at index 2 and claims memory 2 — the first one free.
-  // Before the fix this renumbered the list to 0-5, moving HTAC1 off 25 and
-  // dropping VCALL from 124 entirely.
+  // The blank row claims memory 2 — the first one free — and appears between
+  // Bravo and HTAC1, where memory 2 belongs. Before the fix this renumbered
+  // the list to 0-5, moving HTAC1 off 25 and dropping VCALL from 124.
   assert.deepEqual(tableLocations(document), ["0", "1", "2", "25", "26", "124"]);
   assert.deepEqual(tableNames(document), ["Alpha", "Bravo", "", "HTAC1", "HTAC2", "VCALL"]);
+});
+
+test("an inserted channel sorts into its memory rather than onto the end", async () => {
+  // The reported case: memories run 0-10 then resume at 30, so the new
+  // channel takes 11 and has to appear between them, not below memory 30.
+  const rows = [
+    ...Array.from({ length: 11 }, (_, n) => ({
+      Location: String(n),
+      Name: `LOW${n}`,
+      Frequency: "145.000000",
+    })),
+    { Location: "30", Name: "HIGH30", Frequency: "435.000000" },
+    { Location: "31", Name: "HIGH31", Frequency: "435.100000" },
+  ];
+  const { document } = await bootWithRows(rows);
+  // Nothing selected: the old code appended the row to the end of the list.
+  click(document, "#channel-insert");
+  await flushMicrotasks();
+
+  const locations = tableLocations(document);
+  assert.equal(locations[11], "11");
+  assert.deepEqual(locations.slice(9), ["9", "10", "11", "30", "31"]);
+  assert.deepEqual(
+    locations.map(Number),
+    [...locations].map(Number).sort((a, b) => a - b),
+    "grid must always be in memory order",
+  );
 });
 
 test("insert on a 1-based radio never allocates memory 0", async () => {
@@ -295,7 +334,10 @@ test("insert on a 1-based radio never allocates memory 0", async () => {
   click(document, "#channel-insert");
   await flushMicrotasks();
 
-  assert.deepEqual(tableLocations(document), ["2", "1", "3"]);
+  // Memory 2 is the lowest free slot at or above the 1 floor, and the row
+  // sits between memories 1 and 3 where that slot belongs.
+  assert.deepEqual(tableLocations(document), ["1", "2", "3"]);
+  assert.deepEqual(tableNames(document), ["Alpha", "", "Bravo"]);
 });
 
 test("removing a channel frees its memory and moves no other channel", async () => {
@@ -351,5 +393,11 @@ test("paste past the end of the list allocates free memories", async () => {
   click(document, "#channel-paste");
   await flushMicrotasks();
 
-  assert.deepEqual(tableLocations(document), ["0", "1", "25", "26", "124", "2", "3"]);
+  // Slots 2 and 3 are free, and the pasted rows appear where those memories
+  // sit rather than trailing the list.
+  assert.deepEqual(tableLocations(document), ["0", "1", "2", "3", "25", "26", "124"]);
+  assert.deepEqual(
+    tableNames(document),
+    ["Alpha", "Bravo", "New1", "New2", "HTAC1", "HTAC2", "VCALL"],
+  );
 });

@@ -94,11 +94,13 @@ export function createCodeplugIo(ctx) {
     if (mode === "merge") {
       state.currentRows = state.currentRows.concat(imported);
       state.codeplugSource = "mixed";
-      ctx.table.assignFreeLocations();
     } else {
       state.currentRows = imported;
       state.codeplugSource = csvSource;
     }
+    // Both branches: a CSV can list channels in any order, and the grid shows
+    // them in the radio's.
+    ctx.table.reconcileLocations();
     ctx.table.clearInvalidHighlights();
     ctx.table.resetRowSelection();
     ctx.table.render();
@@ -246,6 +248,7 @@ export function createCodeplugIo(ctx) {
       : (loaded.headers || state.currentHeaders);
     state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
     state.codeplugSource = "img";
+    ctx.table.reconcileLocations();
     ctx.table.clearInvalidHighlights();
     ctx.table.resetRowSelection();
     ctx.table.render();

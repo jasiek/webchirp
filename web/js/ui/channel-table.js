@@ -207,6 +207,55 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
   }
 
+  // The grid is a view of the radio's memories, so its order is the radio's
+  // order: row N is whatever sits in the Nth occupied memory. Before the
+  // Location fix that held for free, because Location *was* the row index.
+  // Now that a channel keeps its own slot, an inserted row can be handed
+  // memory 11 while sitting at the end of the array, so the ordering has to
+  // be restored explicitly.
+  function sortRowsByLocation() {
+    if (!state.currentHeaders.includes("Location")) {
+      return;
+    }
+    const keyed = state.currentRows.map((row, index) => ({
+      row,
+      index,
+      location: parsedLocation(row),
+    }));
+    keyed.sort((a, b) => {
+      // A row with no usable Location has no place in memory order; it sorts
+      // last, keeping the order it arrived in, and the upload preflight is
+      // what tells the user about it.
+      if (a.location === null || b.location === null) {
+        if (a.location === b.location) {
+          return a.index - b.index;
+        }
+        return a.location === null ? 1 : -1;
+      }
+      return a.location - b.location || a.index - b.index;
+    });
+    state.currentRows = keyed.map((entry) => entry.row);
+  }
+
+  // The one call every row operation makes after mutating state.currentRows:
+  // give slots to rows that need one, then put the list back in memory order.
+  function reconcileLocations() {
+    assignFreeLocations();
+    sortRowsByLocation();
+  }
+
+  // Row operations know which row objects they touched, not where those rows
+  // end up once the list is reordered. Resolve identity to position here.
+  function selectRowsByIdentity(rows) {
+    const positionOf = new Map(state.currentRows.map((row, index) => [row, index]));
+    const indexes = rows
+      .map((row) => positionOf.get(row))
+      .filter((index) => index !== undefined);
+    selectedRowIndexes = new Set(indexes);
+    selectionAnchorIndex = indexes.length > 0 ? Math.min(...indexes) : null;
+    return indexes;
+  }
+
   function createBlankChannelRow() {
     const row = {};
     for (const column of state.currentHeaders) {
@@ -274,16 +323,16 @@ export function createChannelTable({ dom, state, log, actions }) {
       return;
     }
 
-    const selectedIndexes = sortedSelectedRowIndexes();
-    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
-    state.currentRows.splice(insertAt, 0, createBlankChannelRow());
-    assignFreeLocations();
+    // Where the row is spliced no longer decides anything: it takes the
+    // lowest free memory and then sorts into place by that.
+    const inserted = createBlankChannelRow();
+    state.currentRows.push(inserted);
+    reconcileLocations();
     clearInvalidHighlights();
 
-    selectedRowIndexes = new Set([insertAt]);
-    selectionAnchorIndex = insertAt;
+    selectRowsByIdentity([inserted]);
     render();
-    log.setStatus(`Inserted new channel at channel ${insertAt}.`);
+    log.setStatus(`Inserted new channel at memory ${inserted.Location || "(none free)"}.`);
   }
 
   function insertRowsAtSelectionOrEnd(rowsToInsert, label) {
@@ -295,23 +344,23 @@ export function createChannelTable({ dom, state, log, actions }) {
       log.setStatus(`No ${label} entries to insert.`);
       return false;
     }
-    const selectedIndexes = sortedSelectedRowIndexes();
-    const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
-    state.currentRows.splice(insertAt, 0, ...rowsToInsert);
+    state.currentRows.push(...rowsToInsert);
     // Every bulk insert lands here — repeater queries, RSGB queries, band-plan
     // presets — and each one makes the codeplug no longer purely whatever it
     // was read from. Reporting an upload of that as "radio" would answer the
     // provenance question wrongly on exactly the path it exists for.
     state.codeplugSource = "mixed";
-    assignFreeLocations();
+    reconcileLocations();
     clearInvalidHighlights();
 
-    selectedRowIndexes = new Set(
-      rowsToInsert.map((_, offset) => insertAt + offset),
-    );
-    selectionAnchorIndex = insertAt;
+    selectRowsByIdentity(rowsToInsert);
     render();
-    log.setStatus(`Inserted ${rowsToInsert.length} ${label} channel(s) at channel ${insertAt}.`);
+    const firstLocation = rowsToInsert[0]?.Location;
+    log.setStatus(
+      firstLocation
+        ? `Inserted ${rowsToInsert.length} ${label} channel(s) from memory ${firstLocation}.`
+        : `Inserted ${rowsToInsert.length} ${label} channel(s).`,
+    );
     return true;
   }
 
@@ -377,16 +426,20 @@ export function createChannelTable({ dom, state, log, actions }) {
       return;
     }
     const locationsByPosition = state.currentRows.map((row) => row.Location);
+    const movedRows = selectedIndexes.map((idx) => state.currentRows[idx]);
     state.currentRows = order.map((idx) => state.currentRows[idx]);
     if (state.currentHeaders.includes("Location")) {
       state.currentRows.forEach((row, idx) => {
         row.Location = locationsByPosition[idx];
       });
     }
+    // Slots were reassigned along the already-ascending positions, so the
+    // list is still in memory order and this sort is a no-op — it runs so the
+    // invariant holds from one place rather than by argument.
+    reconcileLocations();
     clearInvalidHighlights();
 
-    selectedRowIndexes = new Set(selected);
-    selectionAnchorIndex = direction < 0 ? Math.min(...selected) : Math.max(...selected);
+    selectRowsByIdentity(movedRows);
     render();
     log.setStatus(`Moved ${selected.length} channel(s) ${direction < 0 ? "up" : "down"}.`);
   }
@@ -541,13 +594,17 @@ export function createChannelTable({ dom, state, log, actions }) {
         state.currentRows.push(row);
       }
     });
-    assignFreeLocations();
+    reconcileLocations();
     clearInvalidHighlights();
 
-    selectedRowIndexes = new Set(rows.map((_, offset) => startAt + offset));
-    selectionAnchorIndex = startAt;
+    selectRowsByIdentity(rows);
     render();
-    log.setStatus(`Pasted ${rows.length} channel(s) at channel ${startAt}.`);
+    const firstLocation = rows[0]?.Location;
+    log.setStatus(
+      firstLocation
+        ? `Pasted ${rows.length} channel(s) from memory ${firstLocation}.`
+        : `Pasted ${rows.length} channel(s).`,
+    );
   }
 
   async function pasteChannelsViaApi() {
@@ -1142,7 +1199,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     applyValidationIssues,
     selectedRowsForOperations,
     hasRealChannels,
-    assignFreeLocations,
+    reconcileLocations,
     insertRowsAtSelectionOrEnd,
     createBlankChannelRow,
     setRowValueIfPresent,
