@@ -21,7 +21,7 @@
     "test:build": "node --test scripts/test-retain-assets.mjs scripts/test-web-manifest.mjs",
     "test:api": "node --test scripts/test-rsgb-live.mjs",
     "test:hw": "node --experimental-wasm-stack-switching scripts/test-hw-radio.mjs",
-    "test:settings": "node --test --experimental-wasm-stack-switching scripts/test-radio-settings.mjs"
+    "test:settings": "node --test --experimental-wasm-stack-switching scripts/test-radio-settings.mjs scripts/test-settings-round-trip.mjs"
   },
   "dependencies": {
     "pyodide": "^0.27.2",
