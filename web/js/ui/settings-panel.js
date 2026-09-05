@@ -375,22 +375,16 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     }
   }
 
-  async function load(options = {}) {
-    const loadToken = options.loadToken ?? nextRadioLoadToken(state);
-    if (!state.selectedRadio) {
-      settingsState = {
+  async function fetchForRadio(radio) {
+    if (!radio) {
+      return {
         supported: false,
         available: false,
         requiresImage: false,
         message: "",
         groups: [],
       };
-      clearInvalid();
-      updateViewButtons();
-      render();
-      return;
     }
-    const preserveCurrent = Boolean(options.preserveCurrent);
     let nextState = {
       supported: false,
       available: false,
@@ -400,8 +394,8 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     };
     try {
       const result = await requireRuntimeApi(state).getRadioSettings({
-        module: state.selectedRadio.module,
-        className: state.selectedRadio.className,
+        module: radio.module,
+        className: radio.className,
       });
       nextState = {
         supported: Boolean(result?.supported),
@@ -414,11 +408,11 @@ export function createSettingsPanel({ dom, state, log, actions }) {
       log.logError(`SETTINGS LOAD FALLBACK ${errorSummary(error)}`);
       nextState.message = "Radio-wide settings could not be prepared.";
     }
+    return nextState;
+  }
 
-    if (isStaleRadioLoad(state, loadToken)) {
-      return;
-    }
-
+  function applyLoadedState(nextState, options = {}) {
+    const preserveCurrent = Boolean(options.preserveCurrent);
     if (preserveCurrent && radioHasSettings() && nextState.supported) {
       const currentByKey = new Map();
       for (const field of flattenSettingsFields(settingsState.groups)) {
@@ -442,6 +436,16 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     render();
   }
 
+  async function load(options = {}) {
+    const loadToken = options.loadToken ?? nextRadioLoadToken(state);
+    const radio = state.selectedRadio;
+    const nextState = await fetchForRadio(radio);
+    if (isStaleRadioLoad(state, loadToken)) {
+      return;
+    }
+    applyLoadedState(nextState, options);
+  }
+
   // Record per-setting issues reported by the upload preflight so the affected
   // fields and their tabs render as invalid.
   function applyValidationIssues(issues) {
@@ -461,6 +465,8 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     cloneGroups,
     render,
     load,
+    fetchForRadio,
+    applyLoadedState,
     updateViewButtons,
     updateSummary,
     radioHasSettings,

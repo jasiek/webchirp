@@ -568,6 +568,88 @@ test("stale metadata response does not overwrite a newer radio selection", async
   assert.ok(!headers.includes("SlowHeader"));
 });
 
+test("reselecting the loaded radio rejects partial loads in either completion order", async () => {
+  const { createUiController } = await import("../web/js/ui.js");
+  const settingsFor = (name) => ({
+    supported: true,
+    available: true,
+    requiresImage: false,
+    message: "",
+    groups: [{ id: name, label: `${name} settings`, children: [] }],
+  });
+
+  for (const deferredPart of ["metadata", "settings"]) {
+    const { radioMakeEl, radioModelEl } = installFakeDom();
+    const ui = createUiController();
+    const pending = createDeferred();
+    const metadataCalls = [];
+    const settingsCalls = [];
+    const metadataFor = (name) => ({
+      headers: ["Location", `${name}Header`],
+      columns: {},
+    });
+
+    ui.setRuntimeApi({
+      listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
+      getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+      getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+      getRadioMetadata: async ({ module }) => {
+        metadataCalls.push(module);
+        return module === "slow" && deferredPart === "metadata"
+          ? pending.promise
+          : metadataFor(module);
+      },
+      getRadioSettings: async ({ module }) => {
+        settingsCalls.push(module);
+        return module === "slow" && deferredPart === "settings"
+          ? pending.promise
+          : settingsFor(module);
+      },
+      parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
+    });
+
+    await ui.init(true);
+    // Startup does not mark its default as the last dropdown-loaded radio.
+    // Complete Fast -> Alpha first so the final return to Alpha below must
+    // take reloadForSelectedRadio()'s no-new-request path from issue #111.
+    radioMakeEl.value = "FastCo";
+    radioMakeEl.dispatchEvent({ type: "change" });
+    await flushMicrotasks();
+    radioMakeEl.value = "Acme";
+    radioMakeEl.dispatchEvent({ type: "change" });
+    await flushMicrotasks();
+
+    assert.ok(tableHeaderTexts(globalThis.document).includes("alphaHeader"));
+    assert.equal(globalThis.document.querySelector("#settings-tabs").textContent, "alpha settings");
+    const alphaMetadataCalls = metadataCalls.filter((module) => module === "alpha").length;
+    const alphaSettingsCalls = settingsCalls.filter((module) => module === "alpha").length;
+
+    // One half of Slow's load resolves before the other. Returning to Alpha
+    // must invalidate that work even though Alpha is already the last fully
+    // loaded radio, regardless of which half arrived first.
+    radioMakeEl.value = "SlowCo";
+    radioMakeEl.dispatchEvent({ type: "change" });
+    await flushMicrotasks();
+    radioMakeEl.value = "Acme";
+    radioMakeEl.dispatchEvent({ type: "change" });
+    await flushMicrotasks();
+
+    pending.resolve(
+      deferredPart === "metadata" ? metadataFor("slow") : settingsFor("slow"),
+    );
+    await flushMicrotasks();
+
+    const headers = tableHeaderTexts(globalThis.document);
+    assert.equal(radioMakeEl.value, "Acme");
+    assert.equal(radioModelEl.value, "alpha:AlphaRadio");
+    assert.equal(metadataCalls.filter((module) => module === "alpha").length, alphaMetadataCalls);
+    assert.equal(settingsCalls.filter((module) => module === "alpha").length, alphaSettingsCalls);
+    assert.ok(headers.includes("alphaHeader"));
+    assert.ok(!headers.includes("slowHeader"));
+    assert.equal(globalThis.document.querySelector("#settings-tabs").textContent, "alpha settings");
+  }
+});
+
 test("picking a search suggestion sets make/model and loads the radio once", async () => {
   const { radioSearchEl, radioSearchResultsEl, radioMakeEl, radioModelEl } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
