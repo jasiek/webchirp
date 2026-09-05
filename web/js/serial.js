@@ -50,6 +50,10 @@ export class BrowserSerialBridge {
     this.port = null;
     this.reader = null;
     this.writer = null;
+    // Line rate the open port was configured with. port.open() latches the
+    // rate and no API changes it in place, so the bridge tracks it to know
+    // when a driver needs the port reopened (issue #76).
+    this.baudRate = 0;
     this.readBuffer = new Uint8Array(0);
     this.readWaiters = new Set();
     this.lastDeviceName = "";
@@ -136,9 +140,15 @@ export class BrowserSerialBridge {
     // attempt that failed mid-open can leave this.port set with no writer; treat
     // that as not-connected and tear it down before retrying.
     if (this.port && this.writer) {
+      // Reuse the port we already hold rather than reporting success blindly:
+      // a second open() at a different rate used to be swallowed here, leaving
+      // the clone to run at the first radio's rate (issue #76).
+      const applied = await this.applyBaudRate(baudRate);
       return {
         connected: true,
-        message: "Already connected.",
+        message: applied.changed
+          ? `Reopened at ${applied.baudRate} baud`
+          : "Already connected.",
         transport: this.transport,
       };
     }
@@ -158,6 +168,7 @@ export class BrowserSerialBridge {
       });
       const identity = this._getPortIdentity(this.port);
       this.lastDeviceName = this._describePort(this.port);
+      this.baudRate = Number(baudRate) || 0;
       this.reader = this.port.readable.getReader();
       this.writer = this.port.writable.getWriter();
       this._startReadLoop();
@@ -178,6 +189,59 @@ export class BrowserSerialBridge {
     }
   }
 
+  // Re-open the port we already hold at a different line rate. Each CHIRP
+  // driver declares its own BAUD_RATE and the rate is fixed when the port
+  // opens, so a session connected for a 9600-baud radio has to be re-rated
+  // before cloning a 115200-baud one or the transfer times out on garbage
+  // (issue #76). Reusing the same port handle keeps this off the browser's
+  // port picker: no fresh user gesture, nothing to re-select.
+  async applyBaudRate(baudRate) {
+    const wanted = Number(baudRate);
+    if (!Number.isFinite(wanted) || wanted <= 0 || wanted === this.baudRate) {
+      return { changed: false, baudRate: this.baudRate, previousBaudRate: this.baudRate };
+    }
+    if (!this.port || !this.writer) {
+      throw new Error("Port is not connected.");
+    }
+    const previousBaudRate = this.baudRate;
+    const port = this.port;
+    this._unwatchPortLoss();
+    await this._releaseStreams();
+    try {
+      await port.close();
+      await port.open({
+        baudRate: wanted,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "none",
+      });
+    } catch (error) {
+      // Half-reopened is worse than disconnected: the UI would keep offering
+      // Download against a port that can no longer carry it. Tear the session
+      // down and report the loss on the same channel an unplug uses, so the
+      // clone buttons go with it rather than pointing at a closed port.
+      const deviceName = this.lastDeviceName;
+      await this._teardown();
+      try {
+        this.onPortLost?.({ deviceName, reason: "baud-rate-change" });
+      } catch {
+        // A broken notification sink must never take down the serial path.
+      }
+      throw new Error(
+        `Could not reopen the serial port at ${wanted} baud: ${error?.message || error}`,
+      );
+    }
+    this.readBuffer = new Uint8Array(0);
+    this.baudRate = wanted;
+    this.reader = port.readable.getReader();
+    this.writer = port.writable.getWriter();
+    this._startReadLoop();
+    this._watchForPortLoss();
+    this._debug(`Serial port reopened at ${wanted} baud (was ${previousBaudRate || "unknown"}).`);
+    return { changed: true, baudRate: wanted, previousBaudRate };
+  }
+
   async close() {
     if (!this.port) {
       return { connected: false, message: "No port connected." };
@@ -190,6 +254,24 @@ export class BrowserSerialBridge {
   // Safe to call on a fully- or partially-open port.
   async _teardown() {
     this._unwatchPortLoss();
+    await this._releaseStreams();
+    try {
+      await this.port?.close();
+    } catch {
+      // Ignore close errors.
+    }
+
+    this.port = null;
+    this.reader = null;
+    this.writer = null;
+    this.baudRate = 0;
+    this.readBuffer = new Uint8Array(0);
+    this._resolveReadWaiters(false);
+  }
+
+  // Cancel the read loop and drop the reader/writer locks, leaving the port
+  // handle alone. Teardown and a baud-rate reopen both need this half.
+  async _releaseStreams() {
     try {
       await this.reader?.cancel();
     } catch {
@@ -205,23 +287,15 @@ export class BrowserSerialBridge {
     } catch {
       // Ignore lock-release errors.
     }
-    try {
-      await this.port?.close();
-    } catch {
-      // Ignore close errors.
-    }
-
-    this.port = null;
     this.reader = null;
     this.writer = null;
-    this.readBuffer = new Uint8Array(0);
-    this._resolveReadWaiters(false);
   }
 
   getPortInfo() {
     const identity = this.port ? this._getPortIdentity(this.port) : {};
     return {
       connected: Boolean(this.port),
+      baudRate: this.baudRate,
       deviceName: this.port ? this._describePort(this.port) : this.lastDeviceName,
       usbVendorId: identity.usbVendorId,
       usbProductId: identity.usbProductId,
@@ -285,10 +359,15 @@ export class BrowserSerialBridge {
     return bytes;
   }
 
-  async prepareClone(wantsDtr, wantsRts, settleMs) {
+  async prepareClone(wantsDtr, wantsRts, settleMs, baudRate) {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }
+    // The driver's declared rate wins over whatever the port was connected
+    // with: the radio selected at Connect time need not be the one being
+    // cloned now (issue #76). Done first so the control lines and settle
+    // delay below apply to the port the transfer will actually use.
+    const rate = await this.applyBaudRate(baudRate);
     this.readBuffer = new Uint8Array(0);
     try {
       await this.port.setSignals({
@@ -299,7 +378,7 @@ export class BrowserSerialBridge {
       // Some adapters/browsers may not support control line changes.
     }
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(settleMs || 0))));
-    return { prepared: true };
+    return { prepared: true, baudRate: this.baudRate, baudRateChanged: rate.changed };
   }
 
   // Both transports report a device going away as a "disconnect" event on the
@@ -402,10 +481,14 @@ export class BrowserSerialBridge {
   }
 
   async _startReadLoop() {
+    // Pinned rather than re-read each pass: a baud-rate reopen installs a new
+    // reader while this loop may still be unwinding, and an unpinned loop would
+    // then read from the successor's stream.
+    const reader = this.reader;
     let endReason = "port closed";
-    while (this.port && this.reader) {
+    while (this.port && this.reader === reader) {
       try {
-        const { value, done } = await this.reader.read();
+        const { value, done } = await reader.read();
         if (done) {
           endReason = "stream ended (done)";
           break;
@@ -523,9 +606,14 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
       payload.wantsDtr,
       payload.wantsRts,
       payload.settleMs,
+      payload.baudRate,
     );
+    // The baud rate belongs in this line because it is the one clone parameter
+    // that can differ from what the user chose at Connect time; a mismatch
+    // shows up as timeouts, and the log is where that gets diagnosed.
     logSerial(
-      `Prepared clone session (DTR=${Boolean(payload.wantsDtr)} RTS=${Boolean(payload.wantsRts)})`,
+      `Prepared clone session (DTR=${Boolean(payload.wantsDtr)} RTS=${Boolean(payload.wantsRts)}`
+      + ` baud=${res.baudRate || "unchanged"}${res.baudRateChanged ? ", reopened" : ""})`,
     );
     return res;
   }

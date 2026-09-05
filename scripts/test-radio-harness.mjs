@@ -126,10 +126,17 @@ async function flushSerialPort(port) {
   });
 }
 
+async function updateSerialPortBaudRate(port, baudRate) {
+  await new Promise((resolve, reject) => {
+    port.update({ baudRate }, (error) => (error ? reject(error) : resolve(undefined)));
+  });
+}
+
 class NodeSerialBridge {
   constructor(portPath) {
     this.portPath = String(portPath || "");
     this.port = null;
+    this.baudRate = 0;
     this.readBuffer = Buffer.alloc(0);
     this.onData = (chunk) => {
       if (!chunk || !chunk.length) {
@@ -148,9 +155,12 @@ class NodeSerialBridge {
 
   async open(baudRate) {
     if (this.port?.isOpen) {
+      const applied = await this.applyBaudRate(baudRate);
       return {
         connected: true,
-        message: `Already connected to ${this.portPath}`,
+        message: applied.changed
+          ? `Reopened ${this.portPath} @ ${applied.baudRate} bps`
+          : `Already connected to ${this.portPath}`,
         deviceName: this.portPath,
       };
     }
@@ -161,6 +171,7 @@ class NodeSerialBridge {
       autoOpen: false,
     });
     this.readBuffer = Buffer.alloc(0);
+    this.baudRate = baud;
     this.port.on("data", this.onData);
     await openSerialPort(this.port);
     return {
@@ -170,12 +181,27 @@ class NodeSerialBridge {
     };
   }
 
+  // Match the browser bridge: the driver about to clone decides the line rate,
+  // not whatever the port happened to be opened with (issue #76).
+  async applyBaudRate(baudRate) {
+    const wanted = Number(baudRate);
+    if (!Number.isFinite(wanted) || wanted <= 0 || wanted === this.baudRate) {
+      return { changed: false, baudRate: this.baudRate };
+    }
+    this.ensureOpen();
+    await updateSerialPortBaudRate(this.port, wanted);
+    this.readBuffer = Buffer.alloc(0);
+    this.baudRate = wanted;
+    return { changed: true, baudRate: wanted };
+  }
+
   async close() {
     if (!this.port) {
       return { connected: false, message: "Serial already disconnected." };
     }
     const current = this.port;
     this.port = null;
+    this.baudRate = 0;
     current.off("data", this.onData);
     if (current.isOpen) {
       await closeSerialPort(current);
@@ -230,8 +256,9 @@ class NodeSerialBridge {
     return { reset: true };
   }
 
-  async prepareClone(wantsDtr, wantsRts, settleMs) {
+  async prepareClone(wantsDtr, wantsRts, settleMs, baudRate) {
     this.ensureOpen();
+    await this.applyBaudRate(baudRate);
     await this.resetBuffers();
     await setSerialPortLines(this.port, {
       dtr: Boolean(wantsDtr),
@@ -241,11 +268,17 @@ class NodeSerialBridge {
     if (settle > 0) {
       await sleep(settle);
     }
-    return { prepared: true, settleMs: settle };
+    return { prepared: true, settleMs: settle, baudRate: this.baudRate };
   }
 }
 
 class StubSerialBridge {
+  constructor() {
+    // Recorded so tests can assert what the Python bridge asked for — the
+    // driver's baud rate in particular, which nothing else observes.
+    this.prepareCloneCalls = [];
+  }
+
   async open() {
     return { connected: true, message: "stub open" };
   }
@@ -274,8 +307,14 @@ class StubSerialBridge {
     return { reset: true };
   }
 
-  async prepareClone() {
-    return { prepared: true, settleMs: 0 };
+  async prepareClone(wantsDtr, wantsRts, settleMs, baudRate) {
+    this.prepareCloneCalls.push({
+      wantsDtr: Boolean(wantsDtr),
+      wantsRts: Boolean(wantsRts),
+      settleMs: Number(settleMs || 0),
+      baudRate: Number(baudRate || 0),
+    });
+    return { prepared: true, settleMs: 0, baudRate: Number(baudRate || 0) };
   }
 }
 
@@ -291,8 +330,8 @@ function installSerialGlobals(serialBridge, target = globalThis) {
     return { logged: true };
   };
   target.serial_progress = () => ({ reported: true });
-  target.serial_prepare_clone = (wantsDtr, wantsRts, settleMs) =>
-    serialBridge.prepareClone(wantsDtr, wantsRts, settleMs);
+  target.serial_prepare_clone = (wantsDtr, wantsRts, settleMs, baudRate) =>
+    serialBridge.prepareClone(wantsDtr, wantsRts, settleMs, baudRate);
   target.serial_reset_buffers = () => serialBridge.resetBuffers();
 }
 

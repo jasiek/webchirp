@@ -108,21 +108,23 @@ export function createSerialActions(ctx) {
     }
   }
 
-  // The adapter behind the open port went away (unplugged, or powered down with
-  // the radio on cables that draw from it). The bridge has already torn the port
-  // down, so the UI's job is to stop claiming there is a connection — otherwise
+  // The open port is gone: unplugged, powered down with the radio on cables
+  // that draw from it, or refused when the bridge reopened it for a driver with
+  // a different baud rate. The bridge has already torn the port down, so the
+  // UI's job is to stop claiming there is a connection — otherwise
   // Download/Upload stay lit against a port that is gone.
-  function handlePortLost(deviceName) {
+  function handlePortLost(deviceName, reason) {
     if (!connected) {
       return;
     }
     const lostTransport = transport || "unknown";
     connected = false;
     transport = "";
-    log.setStatus("Serial port disconnected; reconnect to continue.");
-    log.logSerial(
-      `Serial port disconnected${deviceName ? ` (${deviceName})` : ""}.`,
-    );
+    const cause = reason === "baud-rate-change"
+      ? "Serial port closed while switching to the selected radio's baud rate"
+      : "Serial port disconnected";
+    log.setStatus(`${cause}; reconnect to continue.`);
+    log.logSerial(`${cause}${deviceName ? ` (${deviceName})` : ""}.`);
     trackEvent("serial_port_lost", {
       ...radioEventParams(state.selectedRadio),
       transport: lostTransport,
