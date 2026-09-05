@@ -227,6 +227,26 @@ const SPARSE_ROWS = [
 
 const HEADERS = ["Location", "Name", "Frequency"];
 
+function shiftClickLocationButton(document, rowIdx) {
+  const tbody = document.querySelector("#mem-table tbody");
+  const button = channelRows(document)[rowIdx].children[0].children[0];
+  tbody.dispatchEvent({
+    type: "click",
+    target: button,
+    shiftKey: true,
+    ctrlKey: false,
+    metaKey: false,
+    preventDefault() {},
+    stopPropagation() {},
+  });
+}
+
+function selectedNames(document) {
+  return channelRows(document)
+    .filter((tr) => tr.children[0]?.children[0]?.getAttribute("aria-pressed") === "true")
+    .map((tr) => tr.children[1]?.children[0]?.value ?? "");
+}
+
 function tableLocations(document) {
   return channelRows(document).map((tr) => tr.children[0]?.children[0]?.textContent ?? "");
 }
@@ -278,6 +298,21 @@ test("a codeplug listing channels out of order loads in memory order", async () 
   ]);
   assert.deepEqual(tableLocations(document), ["1", "25", "124"]);
   assert.deepEqual(tableNames(document), ["Bravo", "HTAC1", "VCALL"]);
+});
+
+test("loading never rewrites the Locations a file gave, however wrong", async () => {
+  // Regression: sorting on load must not drag slot *assignment* along with
+  // it. A file listing 5, 5 and 9000 has one duplicate and one out-of-bounds
+  // memory; silently moving them to 0 and 1 would hide exactly the mistake
+  // the upload preflight exists to report, and would edit the user's data on
+  // the way in.
+  const { document } = await bootWithRows([
+    { Location: "5", Name: "A", Frequency: "146.000000" },
+    { Location: "5", Name: "Bdup", Frequency: "146.100000" },
+    { Location: "9000", Name: "Coob", Frequency: "146.200000" },
+  ]);
+  assert.deepEqual(tableLocations(document), ["5", "5", "9000"]);
+  assert.deepEqual(tableNames(document), ["A", "Bdup", "Coob"]);
 });
 
 test("insert takes the lowest free memory and leaves every other channel in place", async () => {
@@ -399,5 +434,56 @@ test("paste past the end of the list allocates free memories", async () => {
   assert.deepEqual(
     tableNames(document),
     ["Alpha", "Bravo", "New1", "New2", "HTAC1", "HTAC2", "VCALL"],
+  );
+});
+
+test("moving down leaves the anchor on the trailing edge for shift-click", async () => {
+  // A single moved row cannot tell the two anchors apart, so move two: after
+  // moving down they occupy indexes 1 and 2, and a shift-click extends from
+  // 2 (the edge they travelled towards), not from 1.
+  const { document } = await bootWithRows(SPARSE_ROWS);
+  clickLocationButton(document, 0);
+  shiftClickLocationButton(document, 1);
+  assert.deepEqual(selectedNames(document), ["Alpha", "Bravo"]);
+
+  click(document, "#channel-move-down");
+  await flushMicrotasks();
+  assert.deepEqual(
+    tableNames(document),
+    ["HTAC1", "Alpha", "Bravo", "HTAC2", "VCALL"],
+  );
+
+  shiftClickLocationButton(document, 4);
+  assert.deepEqual(selectedNames(document), ["Bravo", "HTAC2", "VCALL"]);
+});
+
+test("a pasted block lands on consecutive memories and clobbers nothing distant", async () => {
+  // Regression: paste used to walk consecutive *rows*, so on a sparse
+  // codeplug a 3-row block pasted at memory 26 landed on 26, 124 and 2 —
+  // scattered across the radio, silently overwriting VCALL at 124, a channel
+  // the confirmation had named but the user never aimed at.
+  const { document, navigator } = await bootWithRows(SPARSE_ROWS);
+  let confirmed = "";
+  window.confirm = (message) => {
+    confirmed = message;
+    return true;
+  };
+  navigator.clipboard = {
+    readText: async () =>
+      "Name\tFrequency\nP1\t145.000000\nP2\t145.100000\nP3\t145.200000\n",
+  };
+  clickLocationButton(document, 3); // HTAC2, memory 26
+  click(document, "#channel-paste");
+  await flushMicrotasks();
+
+  // 26 is occupied and is the only channel overwritten; 27 and 28 are free.
+  assert.match(confirmed, /channel 26/);
+  assert.deepEqual(
+    tableLocations(document),
+    ["0", "1", "25", "26", "27", "28", "124"],
+  );
+  assert.deepEqual(
+    tableNames(document),
+    ["Alpha", "Bravo", "HTAC1", "P1", "P2", "P3", "VCALL"],
   );
 });

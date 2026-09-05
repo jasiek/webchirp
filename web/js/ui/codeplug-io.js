@@ -94,13 +94,17 @@ export function createCodeplugIo(ctx) {
     if (mode === "merge") {
       state.currentRows = state.currentRows.concat(imported);
       state.codeplugSource = "mixed";
+      // Merging is an edit: imported channels have to be given somewhere to
+      // live that the loaded ones are not already using.
+      ctx.table.reconcileLocations();
     } else {
       state.currentRows = imported;
       state.codeplugSource = csvSource;
+      // Replacing is not. The file's Locations are the user's data, so they
+      // are only sorted into memory order; a duplicate or out-of-bounds one
+      // stays wrong until the upload preflight says so.
+      ctx.table.sortRowsByLocation();
     }
-    // Both branches: a CSV can list channels in any order, and the grid shows
-    // them in the radio's.
-    ctx.table.reconcileLocations();
     ctx.table.clearInvalidHighlights();
     ctx.table.resetRowSelection();
     ctx.table.render();
@@ -248,7 +252,7 @@ export function createCodeplugIo(ctx) {
       : (loaded.headers || state.currentHeaders);
     state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
     state.codeplugSource = "img";
-    ctx.table.reconcileLocations();
+    ctx.table.sortRowsByLocation();
     ctx.table.clearInvalidHighlights();
     ctx.table.resetRowSelection();
     ctx.table.render();

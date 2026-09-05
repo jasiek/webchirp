@@ -237,8 +237,11 @@ export function createChannelTable({ dom, state, log, actions }) {
     state.currentRows = keyed.map((entry) => entry.row);
   }
 
-  // The one call every row operation makes after mutating state.currentRows:
+  // The call every *editing* operation makes after mutating state.currentRows:
   // give slots to rows that need one, then put the list back in memory order.
+  // Loading is different and calls sortRowsByLocation() alone — a file's own
+  // Locations are the user's data, and a duplicate or out-of-bounds one is for
+  // the upload preflight to report, not for this to silently reassign.
   function reconcileLocations() {
     assignFreeLocations();
     sortRowsByLocation();
@@ -439,7 +442,12 @@ export function createChannelTable({ dom, state, log, actions }) {
     reconcileLocations();
     clearInvalidHighlights();
 
-    selectRowsByIdentity(movedRows);
+    const movedIndexes = selectRowsByIdentity(movedRows);
+    // Shift-click extends from the edge the selection travelled towards.
+    if (movedIndexes.length > 0) {
+      selectionAnchorIndex =
+        direction < 0 ? Math.min(...movedIndexes) : Math.max(...movedIndexes);
+    }
     render();
     log.setStatus(`Moved ${selected.length} channel(s) ${direction < 0 ? "up" : "down"}.`);
   }
@@ -557,15 +565,47 @@ export function createChannelTable({ dom, state, log, actions }) {
       log.setStatus("No channels found in pasted text.");
       return;
     }
+    // Paste lands on consecutive *memories* from the selected channel's own
+    // memory, not on consecutive rows. On a sparse codeplug those differ: the
+    // rows below memory 26 might be 124 and 127, and walking rows would fling
+    // a pasted block across the radio and clobber distant channels it never
+    // named. With nothing selected there is no anchor, so the block goes to
+    // the lowest free memories instead.
     const selectedIndexes = sortedSelectedRowIndexes();
-    const startAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
-    const overwriteLocations = [];
-    for (let offset = 0; offset < rows.length && startAt + offset < state.currentRows.length; offset += 1) {
-      const target = state.currentRows[startAt + offset];
-      if (rowLooksNonEmpty(target)) {
-        overwriteLocations.push(String(target.Location ?? startAt + offset));
+    const keepsLocation = state.currentHeaders.includes("Location");
+    const { hi } = locationBounds();
+    const anchorLocation =
+      keepsLocation && selectedIndexes.length > 0
+        ? parsedLocation(state.currentRows[selectedIndexes[0]])
+        : null;
+    const rowByLocation = new Map();
+    if (anchorLocation !== null) {
+      for (const row of state.currentRows) {
+        const location = parsedLocation(row);
+        if (location !== null) {
+          rowByLocation.set(location, row);
+        }
       }
     }
+    // Target memory per pasted row, or null where the block runs past the end
+    // of the radio and reconcileLocations() has to find somewhere for it.
+    const targetLocations = rows.map((_row, offset) => {
+      if (anchorLocation === null) {
+        return null;
+      }
+      const location = anchorLocation + offset;
+      return location <= hi ? location : null;
+    });
+    const overwriteLocations = [];
+    targetLocations.forEach((location) => {
+      if (location === null) {
+        return;
+      }
+      const target = rowByLocation.get(location);
+      if (target && rowLooksNonEmpty(target)) {
+        overwriteLocations.push(String(location));
+      }
+    });
     if (overwriteLocations.length > 0) {
       const summary =
         overwriteLocations.length === 1
@@ -578,17 +618,20 @@ export function createChannelTable({ dom, state, log, actions }) {
         return;
       }
     }
-    const keepsLocation = state.currentHeaders.includes("Location");
     rows.forEach((row, offset) => {
-      const at = startAt + offset;
-      if (at < state.currentRows.length) {
-        // Overwrite means "replace the channel in this memory", so the pasted
-        // channel inherits the slot rather than the Location it was copied
-        // from — pasting between codeplugs must not drag the source's
-        // numbering across.
-        if (keepsLocation) {
-          row.Location = state.currentRows[at].Location;
-        }
+      const location = targetLocations[offset];
+      if (location === null) {
+        // No anchor, or past the last memory: reconcileLocations() places it.
+        state.currentRows.push(row);
+        return;
+      }
+      // The pasted channel takes the memory it lands on rather than the one it
+      // was copied from — pasting between codeplugs must not drag the source's
+      // numbering across.
+      row.Location = String(location);
+      const target = rowByLocation.get(location);
+      const at = target ? state.currentRows.indexOf(target) : -1;
+      if (at >= 0) {
         state.currentRows[at] = row;
       } else {
         state.currentRows.push(row);
@@ -1200,6 +1243,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     selectedRowsForOperations,
     hasRealChannels,
     reconcileLocations,
+    sortRowsByLocation,
     insertRowsAtSelectionOrEnd,
     createBlankChannelRow,
     setRowValueIfPresent,
