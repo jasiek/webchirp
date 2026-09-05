@@ -233,23 +233,38 @@ const CATALOG = [
   },
 ];
 
+const BETA_RADIO = {
+  vendor: "Acme",
+  model: "Beta",
+  module: "beta",
+  className: "BetaRadio",
+  key: "beta:BetaRadio",
+  isLiveRadio: false,
+};
+
 // Records which loader a drop reached and with what payload.
-function createRuntimeApi() {
-  const calls = { parseCsv: [], loadImage: [] };
+function createRuntimeApi({ catalog = CATALOG, imageRadio = CATALOG[0] } = {}) {
+  const calls = { parseCsv: [], loadImage: [], metadata: [], settings: [] };
   return {
     calls,
     api: {
-      listRadios: async () => ({ radios: CATALOG }),
+      listRadios: async () => ({ radios: catalog }),
       getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
       getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
-      getRadioMetadata: async () => ({ headers: ["Location", "Name", "Frequency"], columns: {} }),
-      getRadioSettings: async () => ({
-        supported: false,
-        available: false,
-        requiresImage: false,
-        message: "",
-        groups: [],
-      }),
+      getRadioMetadata: async ({ module }) => {
+        calls.metadata.push(module);
+        return { headers: ["Location", `${module} Name`, "Frequency"], columns: {} };
+      },
+      getRadioSettings: async ({ module }) => {
+        calls.settings.push(module);
+        return {
+          supported: false,
+          available: false,
+          requiresImage: false,
+          message: "",
+          groups: [],
+        };
+      },
       parseCsv: async ({ csvText }) => {
         calls.parseCsv.push(csvText);
         return {
@@ -261,10 +276,10 @@ function createRuntimeApi() {
       loadImage: async ({ imageBase64 }) => {
         calls.loadImage.push(imageBase64);
         return {
-          module: "alpha",
-          className: "AlphaRadio",
-          vendor: "Acme",
-          model: "Alpha",
+          module: imageRadio.module,
+          className: imageRadio.className,
+          vendor: imageRadio.vendor,
+          model: imageRadio.model,
           headers: ["Location", "Name", "Frequency"],
           rows: [{ Location: "0", Name: "FromImg", Frequency: "146.000000" }],
           settings: [],
@@ -286,8 +301,8 @@ function dropEvent(files) {
   return { dataTransfer: { types: ["Files"], files } };
 }
 
-async function bootUi() {
-  const { calls, api } = createRuntimeApi();
+async function bootUi(options) {
+  const { calls, api } = createRuntimeApi(options);
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
   ui.setRuntimeApi(api);
@@ -320,6 +335,44 @@ test("dropping an .img file loads it through the binary codeplug loader", async 
   // The .img bytes reach the runtime base64-encoded, not as a CSV parse.
   assert.equal(calls.loadImage[0], Buffer.from([0xff, 0x00, 0x42]).toString("base64"));
   assert.match(debugOutputEl.value, /STATUS Loaded binary codeplug for Acme Alpha/);
+});
+
+test("reselecting a radio after an .img load refreshes its schema and settings", async () => {
+  const { window } = installFakeDom();
+  const { calls } = await bootUi({ catalog: [...CATALOG, BETA_RADIO], imageRadio: BETA_RADIO });
+  const radioModelEl = globalThis.document.querySelector("#radio-model");
+
+  // Record Alpha as the last radio fully loaded through the dropdown path.
+  radioModelEl.value = CATALOG[0].key;
+  radioModelEl.dispatchEvent({ type: "change" });
+  await flushAsync();
+
+  // Loading an image switches the UI to Beta and applies Beta's schema.
+  await window.emit("drop", dropEvent([fakeFile("beta.img")]));
+  assert.equal(radioModelEl.value, BETA_RADIO.key);
+  assert.equal(calls.metadata.at(-1), BETA_RADIO.module);
+
+  // Re-selecting the image's own radio remains a no-op, preserving the
+  // image-backed settings rather than replacing them with a blank probe.
+  const metadataCallsAfterImage = calls.metadata.length;
+  const settingsCallsAfterImage = calls.settings.length;
+  radioModelEl.dispatchEvent({ type: "change" });
+  await flushAsync();
+  assert.equal(calls.metadata.length, metadataCallsAfterImage);
+  assert.equal(calls.settings.length, settingsCallsAfterImage);
+
+  // Re-selecting Alpha must not be mistaken for a no-op just because it was
+  // the last dropdown-loaded radio before the image changed the active schema.
+  const metadataCallsBeforeReselect = calls.metadata.length;
+  const settingsCallsBeforeReselect = calls.settings.length;
+  radioModelEl.value = CATALOG[0].key;
+  radioModelEl.dispatchEvent({ type: "change" });
+  await flushAsync();
+
+  assert.equal(calls.metadata.length, metadataCallsBeforeReselect + 1);
+  assert.equal(calls.metadata.at(-1), CATALOG[0].module);
+  assert.equal(calls.settings.length, settingsCallsBeforeReselect + 1);
+  assert.equal(calls.settings.at(-1), CATALOG[0].module);
 });
 
 test("a dropped CSV goes through the same replace-or-merge prompt as Import CSV", async () => {
