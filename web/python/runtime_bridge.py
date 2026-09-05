@@ -147,6 +147,11 @@ RowChangeAction = Literal["skip", "erase", "set"]
 CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
 DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
 LAST_IMAGE_BY_DRIVER = {}
+# Which class actually produced/parses LAST_IMAGE_BY_DRIVER[key]. Serial
+# detection and image loading can both resolve the user's selection to a
+# variant subclass with a different codeplug layout, so re-parsing the cached
+# bytes with the selected parent class would decode the wrong fields.
+IMAGE_CLASS_BY_DRIVER: dict[str, type] = {}
 DEFAULT_EXPORT_POWER = "50W"
 # Duplex values CHIRP drivers actually emit. chirp_common has no single
 # constant for these: RadioFeatures defaults valid_duplexes to ["", "+", "-"],
@@ -478,7 +483,8 @@ def _driver_features(module_name: str, class_name: str):
     image = LAST_IMAGE_BY_DRIVER.get(_driver_cache_key(module_name, class_name))
     factories = [lambda: radio_cls(None), lambda: radio_cls("")]
     if image:
-        factories.insert(0, lambda: _radio_from_image_bytes(radio_cls, image))
+        image_cls = _cached_image_class(module_name, class_name, radio_cls)
+        factories.insert(0, lambda: _radio_from_image_bytes(image_cls, image))
     for factory in factories:
         try:
             return factory().get_features()
@@ -1444,6 +1450,27 @@ def _driver_cache_key(module_name: str, class_name: str) -> str:
     return f"{module_name}.{class_name}"
 
 
+def _remember_image_class(
+    module_name: str, class_name: str, image_cls: type
+) -> None:
+    """Record which class the driver key's cached image bytes belong to."""
+    IMAGE_CLASS_BY_DRIVER[_driver_cache_key(module_name, class_name)] = image_cls
+
+
+def _cached_image_class(
+    module_name: str, class_name: str, radio_cls: type
+) -> type:
+    """Return the class that should re-parse this driver key's cached image.
+
+    Falls back to the selected class when nothing has been cached under this
+    key, or when the cache came from a path that had no better answer.
+    """
+    return (
+        IMAGE_CLASS_BY_DRIVER.get(_driver_cache_key(module_name, class_name))
+        or radio_cls
+    )
+
+
 def _radio_from_image_bytes(
     radio_cls: type[chirp_common.Radio], image_bytes: bytes
 ) -> chirp_common.Radio:
@@ -1518,7 +1545,9 @@ def _best_effort_radio_instance(module_name: str, class_name: str, require_cache
             return radio_cls("")
 
     if base_image is not None:
-        radio = _radio_from_image_bytes(radio_cls, base_image)
+        radio = _radio_from_image_bytes(
+            _cached_image_class(module_name, class_name, radio_cls), base_image
+        )
     elif issubclass(radio_cls, chirp_common.CloneModeRadio):
         memsize = int(getattr(radio_cls, "_memsize", 0) or 0)
         if memsize > 0:
@@ -1711,10 +1740,61 @@ def _new_serial_pipe(radio_cls: type[chirp_common.Radio]) -> WebSerialPipe:
     )
 
 
-def _create_radio_for_serial(radio_cls):
-    """Instantiate selected radio with configured WebSerial pipe and status hook."""
+def _detect_radio_class(
+    radio_cls: type[chirp_common.Radio], pipe: WebSerialPipe
+) -> type[chirp_common.Radio]:
+    """Let the driver talk to the radio and say which class really matches.
+
+    CHIRP's clone dialog runs this before sync_in() (chirp/wxui/clone.py), and
+    for several driver families it is not merely a variant lookup: ga510 and
+    tdh8 send the program handshake from here and their download paths
+    deliberately do not repeat it, so a clone that skips detection gets no
+    response at all. leixen, h777, anytone778uv, tdm11 and uvk5 use it to pick
+    the subclass whose codeplug layout matches the radio on the wire.
+
+    Drivers with nothing to detect inherit DetectableInterface's base method,
+    whose NotImplementedError means "use the class as selected". RadioError and
+    friends are left to propagate so a failed handshake is reported rather than
+    silently downgraded into a clone against the wrong class.
+    """
+    detect = getattr(radio_cls, "detect_from_serial", None)
+    if not callable(detect):
+        return radio_cls
+    try:
+        detected = detect(pipe)
+    except NotImplementedError:
+        return radio_cls
+    if not isinstance(detected, type) or not issubclass(detected, chirp_common.Radio):
+        _log_debug(
+            f"Driver detection returned {detected!r}, which is not a radio class; "
+            f"continuing with {radio_cls.__name__}"
+        )
+        return radio_cls
+    if detected is not radio_cls:
+        label = " ".join(
+            part
+            for part in (
+                str(getattr(detected, "VENDOR", "")),
+                str(getattr(detected, "MODEL", "")),
+                str(getattr(detected, "VARIANT", "")),
+            )
+            if part
+        )
+        _log_debug(f"Radio detected as {label} ({detected.__name__})")
+    return detected
+
+
+def _create_radio_for_serial(radio_cls: type[chirp_common.Radio]) -> chirp_common.Radio:
+    """Instantiate the radio actually on the wire, on a detection-shared pipe.
+
+    Detection has to run on the same pipe the clone then uses: drivers that
+    hand-shake during detection leave the radio in program mode and expect the
+    instance they return to carry on from there (issue #81).
+    """
     pipe = _new_serial_pipe(radio_cls)
-    radio = radio_cls(pipe)
+    detected_cls = _detect_radio_class(radio_cls, pipe)
+    _ensure_clone_mode_radio(detected_cls)
+    radio = detected_cls(pipe)
     radio.status_fn = _make_status_logger()
     return radio
 
@@ -1927,6 +2007,9 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
     radio = _create_radio_for_serial(radio_cls)
     radio.sync_in()
     driver_key = _driver_cache_key(module_name, class_name)
+    # The image belongs to whatever detection settled on, not to the selection
+    # the user made in the UI, and upload/export have to re-parse it as such.
+    _remember_image_class(module_name, class_name, radio.__class__)
     LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
 
     rows = _radio_rows_from_instance(radio)
@@ -1955,16 +2038,20 @@ def _upload_selected_radio_sync(
         raise RuntimeUnsupportedError(
             "No cached radio image for this model. Download from radio first, then upload."
         )
-    radio = _radio_from_image_bytes(radio_cls, base_image)
+    # CHIRP does not re-detect on upload -- the class that downloaded the image
+    # is the one that writes it back, and drivers like ga510 send their own
+    # program handshake from do_upload().
+    image_cls = _cached_image_class(module_name, class_name, radio_cls)
+    radio = _radio_from_image_bytes(image_cls, base_image)
     radio.status_fn = _make_status_logger()
-    radio.set_pipe(_new_serial_pipe(radio_cls))
+    radio.set_pipe(_new_serial_pipe(image_cls))
     _apply_rows_to_radio_instance(radio, rows, module_name, class_name)
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
     )
     if not settings_result["valid"]:
         raise RuntimeUnsupportedError("Radio settings validation failed before upload")
-    _prepare_clone_session(radio_cls)
+    _prepare_clone_session(image_cls)
     radio.sync_out()
     LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
     return {"uploaded": True, "settings": settings_result["settings"]}
@@ -2015,6 +2102,9 @@ def upload_image_base64(module_name: str, class_name: str, image_b64: str):
     radio.sync_out()
 
     driver_key = _driver_cache_key(module_name, class_name)
+    # This image came from the caller, parsed as the selected class, so it
+    # replaces any variant class a previous download had recorded.
+    _remember_image_class(module_name, class_name, radio_cls)
     LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
     return {"uploaded": True, "size": len(raw_image)}
 
@@ -2038,7 +2128,9 @@ def export_image_base64(
             )
         base_image = bytes(memsize)
 
-    radio = _radio_from_image_bytes(radio_cls, base_image)
+    radio = _radio_from_image_bytes(
+        _cached_image_class(module_name, class_name, radio_cls), base_image
+    )
     _apply_rows_to_radio_instance(radio, rows or [], module_name, class_name)
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
@@ -2046,6 +2138,7 @@ def export_image_base64(
     if not settings_result["valid"]:
         raise RuntimeUnsupportedError("Radio settings validation failed before export")
     image_data = _image_bytes_from_radio(radio)
+    _remember_image_class(module_name, class_name, radio.__class__)
     LAST_IMAGE_BY_DRIVER[driver_key] = image_data
     return {
         "imageBase64": base64.b64encode(image_data).decode("ascii"),
@@ -2115,6 +2208,7 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     module_short = str(base_cls.__module__).rsplit(".", 1)[-1]
     class_name = str(base_cls.__name__)
     driver_key = _driver_cache_key(module_short, class_name)
+    _remember_image_class(module_short, class_name, radio.__class__)
     LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
     rows = _radio_rows_from_instance(radio)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
