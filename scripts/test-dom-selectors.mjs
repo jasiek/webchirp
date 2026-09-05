@@ -113,3 +113,23 @@ test("queryUiElements reports every missing element at once", async () => {
     globalThis.document = previousDocument;
   }
 });
+
+// #debug-actions is toggled hidden with the Debug Output disclosure, so any
+// control that must stay reachable while the panel is folded has to live
+// outside it. Report Bug is that control: a user who cannot open the panel is
+// exactly the user with something to report.
+test("Report Bug sits outside the collapsible debug actions", () => {
+  const actionsAt = HTML.indexOf('id="debug-actions"');
+  assert.ok(actionsAt > 0, "index.html has no #debug-actions container");
+  const actionsEnd = HTML.indexOf("</div>", actionsAt);
+  const collapsible = HTML.slice(actionsAt, actionsEnd);
+
+  assert.ok(
+    !collapsible.includes('id="report-issue"'),
+    "#report-issue is inside #debug-actions and disappears when Debug Output is folded",
+  );
+  assert.ok(
+    /<div id="debug-actions"[^>]*\shidden/.test(HTML),
+    "#debug-actions is expected to start hidden; this test's premise no longer holds",
+  );
+});

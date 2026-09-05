@@ -1262,8 +1262,10 @@ button:disabled {
   gap: 0.75rem;
 }
 
+.debug-header-actions,
 .debug-actions {
   display: inline-flex;
+  align-items: center;
   gap: 0.5rem;
 }
 
@@ -1658,7 +1660,7 @@ button:disabled {
   #channel-menu-toggle,
   .channel-menu-popup button,
   .modal-actions button,
-  .debug-actions button {
+  .debug-header-actions button {
     min-height: 2.75rem;
   }
 
