@@ -225,20 +225,31 @@ export function createRadioCatalog(ctx) {
     persistSelectedRadioCookie();
     ctx.table.clearInvalidHighlights();
     ctx.settings.clearInvalid();
-    if (state.selectedRadio && state.selectedRadio.key === state.lastLoadedRadioKey) {
+    // Every selection transition invalidates older work, including one that
+    // returns to the last fully loaded radio and needs no new runtime calls.
+    const loadToken = nextRadioLoadToken(state);
+    const radio = state.selectedRadio;
+    if (radio && radio.key === state.lastLoadedRadioKey) {
       ctx.table.render();
       return;
     }
-    const loadToken = nextRadioLoadToken(state);
     Promise.all([
-      loadSelectedRadioMetadata(loadToken),
-      ctx.settings.load({ loadToken }),
+      fetchRadioMetadata(radio),
+      ctx.settings.fetchForRadio(radio),
     ])
-      .then(() => {
-        if (isStaleRadioLoad(state, loadToken)) {
+      .then(([metadata, settingsState]) => {
+        if (
+          isStaleRadioLoad(state, loadToken)
+          || state.selectedRadio?.key !== radio?.key
+        ) {
           return;
         }
-        state.lastLoadedRadioKey = state.selectedRadio?.key || "";
+        // Commit the schema and settings together. If one request finishes
+        // before the other, the editor keeps showing the previous radio's
+        // complete state rather than a temporary mixture of both radios.
+        applyRadioMetadata(metadata);
+        ctx.settings.applyLoadedState(settingsState);
+        state.lastLoadedRadioKey = radio?.key || "";
         ctx.table.render();
       })
       .catch((error) => {
@@ -367,22 +378,32 @@ export function createRadioCatalog(ctx) {
     refreshModelOptions();
   }
 
-  // Load selected radio's CHIRP-derived column metadata from Python runtime.
-  async function loadSelectedRadioMetadata(loadToken = nextRadioLoadToken(state)) {
-    if (!state.selectedRadio) {
-      return;
+  async function fetchRadioMetadata(radio) {
+    if (!radio) {
+      return { headers: [], columns: {} };
     }
-    const meta = await requireRuntimeApi(state).getRadioMetadata({
-      module: state.selectedRadio.module,
-      className: state.selectedRadio.className,
+    const metadata = await requireRuntimeApi(state).getRadioMetadata({
+      module: radio.module,
+      className: radio.className,
     });
-    if (isStaleRadioLoad(state, loadToken)) {
-      return;
-    }
-    state.radioMetadata = meta || { headers: [], columns: {} };
+    return metadata || { headers: [], columns: {} };
+  }
+
+  function applyRadioMetadata(metadata) {
+    state.radioMetadata = metadata;
     state.currentHeaders = state.radioMetadata.headers?.length
       ? state.radioMetadata.headers
       : state.currentHeaders;
+  }
+
+  // Load selected radio's CHIRP-derived column metadata from Python runtime.
+  async function loadSelectedRadioMetadata(loadToken = nextRadioLoadToken(state)) {
+    const radio = state.selectedRadio;
+    const metadata = await fetchRadioMetadata(radio);
+    if (isStaleRadioLoad(state, loadToken)) {
+      return;
+    }
+    applyRadioMetadata(metadata);
   }
 
   function bindEvents() {
