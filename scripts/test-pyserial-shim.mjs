@@ -157,3 +157,43 @@ json.dumps({
     { dataTerminalReady: false, requestToSend: true },
   ]);
 });
+
+// Drivers reconfigure the port mid-clone and the pipe used to only remember the
+// number: thd72 jumps to 57600 after "0M PROGRAM", icf.start_hispeed_clone to
+// 38400 for 11 Icom models, and tk8180/nx800 to 19200. The framing spellings
+// differ between pyserial and Web Serial, and pyserial values with no Web
+// Serial equivalent must be kept for read-back but not guessed at on the port.
+test("pipe baud-rate and framing changes reach the transport", async () => {
+  const harness = await getHarness();
+  const before = harness.serialBridge.reconfigureCalls.length;
+  const result = await harness.runPythonJson(
+    `
+_pipe = WebSerialPipe(baudrate=9600)
+_seeded = _pipe.baudrate
+_pipe.baudrate = 9600
+_pipe.baudrate = 57600
+_pipe.stopbits = 2
+_pipe.parity = "E"
+_pipe.stopbits = 1.5
+json.dumps({
+  "seeded": _seeded,
+  "baudrate": _pipe.baudrate,
+  "stopbits": _pipe.stopbits,
+  "parity": _pipe.parity,
+})
+    `,
+  );
+
+  assert.equal(result.seeded, 9600, "the constructor seeds the rate the port was opened at");
+  assert.equal(result.baudrate, 57600);
+  // pyserial's own value is what reads back, not the Web Serial translation.
+  assert.equal(result.stopbits, 1.5);
+  assert.equal(result.parity, "E");
+  assert.deepEqual(harness.serialBridge.reconfigureCalls.slice(before), [
+    // Seeding pushes nothing, and neither does re-assigning the current rate.
+    { baudRate: 57600 },
+    { baudRate: 57600, stopBits: 2 },
+    { baudRate: 57600, stopBits: 2, parity: "even" },
+    // 1.5 stop bits has no Web Serial equivalent, so the port is left alone.
+  ]);
+});

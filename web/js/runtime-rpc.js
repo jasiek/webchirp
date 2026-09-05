@@ -95,6 +95,25 @@ function installSerialBridgeGlobals() {
       dataTerminalReady: dtr === null || dtr === undefined ? null : Boolean(dtr),
       requestToSend: rts === null || rts === undefined ? null : Boolean(rts),
     });
+  // Mid-clone port reconfiguration (baud rate and framing). Only the fields
+  // the pipe actually holds a value for are sent; the rest keep what the port
+  // was opened with.
+  globalThis.serial_reconfigure = (baudRate, dataBits, stopBits, parity) => {
+    const options = {};
+    if (baudRate !== null && baudRate !== undefined) {
+      options.baudRate = Number(baudRate);
+    }
+    if (dataBits !== null && dataBits !== undefined) {
+      options.dataBits = Number(dataBits);
+    }
+    if (stopBits !== null && stopBits !== undefined) {
+      options.stopBits = Number(stopBits);
+    }
+    if (parity !== null && parity !== undefined) {
+      options.parity = String(parity);
+    }
+    return serialRpc("reconfigure", { options });
+  };
   globalThis.serial_reset_buffers = () => serialRpc("resetBuffers", {});
   installFetchChirpSourceGlobal(pythonSource);
 }

@@ -149,6 +149,12 @@ export function ch340GetDivisor(baudRate, { limitedPrescaler = false } = {}) {
 }
 
 export class Ch340SerialPort {
+  // This driver programs the line at 8N1 and nothing reads open()'s
+  // dataBits/stopBits/parity: the LCR pair is written LCR_8N1 unconditionally.
+  // Declared so the bridge refuses a framing change on this transport
+  // rather than reopening and reporting a success the wire does not have.
+  supportsFraming = false;
+
   constructor(device) {
     this.device = device;
     this.readable = null;

@@ -132,11 +132,25 @@ async function updateSerialPortBaudRate(port, baudRate) {
   });
 }
 
-class NodeSerialBridge {
+// Mirrors DEFAULT_PORT_OPTIONS in web/js/serial.js, in node-serialport's
+// spelling: a clone starts from these rather than inheriting the framing the
+// previous clone's driver set.
+const NODE_DEFAULT_PORT_OPTIONS = Object.freeze({
+  dataBits: 8,
+  stopBits: 1,
+  parity: "none",
+});
+
+const NODE_FRAMING_OPTIONS = Object.freeze(["dataBits", "stopBits", "parity"]);
+
+export class NodeSerialBridge {
   constructor(portPath) {
     this.portPath = String(portPath || "");
     this.port = null;
-    this.baudRate = 0;
+    // What the port is currently configured with. Derived from -- never kept
+    // alongside -- so a mid-clone reconfigure and a clone-start re-rate cannot
+    // disagree about the current rate and skip a reopen that was needed.
+    this.portOptions = null;
     this.readBuffer = Buffer.alloc(0);
     this.onData = (chunk) => {
       if (!chunk || !chunk.length) {
@@ -170,8 +184,8 @@ class NodeSerialBridge {
       baudRate: baud,
       autoOpen: false,
     });
+    this.portOptions = { ...NODE_DEFAULT_PORT_OPTIONS, baudRate: baud };
     this.readBuffer = Buffer.alloc(0);
-    this.baudRate = baud;
     this.port.on("data", this.onData);
     await openSerialPort(this.port);
     return {
@@ -181,17 +195,27 @@ class NodeSerialBridge {
     };
   }
 
+  get baudRate() {
+    return Number(this.portOptions?.baudRate) || 0;
+  }
+
   // Match the browser bridge: the driver about to clone decides the line rate,
-  // not whatever the port happened to be opened with (issue #76).
+  // not whatever the port happened to be opened with (issue #76). Framing goes
+  // back to the defaults for the same reason it does there -- it is sticky once
+  // a driver sets it, and the next radio must not inherit it.
   async applyBaudRate(baudRate) {
     const wanted = Number(baudRate);
-    if (!Number.isFinite(wanted) || wanted <= 0 || wanted === this.baudRate) {
+    if (!Number.isFinite(wanted) || wanted <= 0) {
       return { changed: false, baudRate: this.baudRate };
     }
     this.ensureOpen();
-    await updateSerialPortBaudRate(this.port, wanted);
+    const target = { ...NODE_DEFAULT_PORT_OPTIONS, baudRate: wanted };
+    const current = this.portOptions || {};
+    if (Object.keys(target).every((key) => target[key] === current[key])) {
+      return { changed: false, baudRate: this.baudRate };
+    }
+    await this._applySettings(target);
     this.readBuffer = Buffer.alloc(0);
-    this.baudRate = wanted;
     return { changed: true, baudRate: wanted };
   }
 
@@ -201,7 +225,7 @@ class NodeSerialBridge {
     }
     const current = this.port;
     this.port = null;
-    this.baudRate = 0;
+    this.portOptions = null;
     current.off("data", this.onData);
     if (current.isOpen) {
       await closeSerialPort(current);
@@ -287,6 +311,45 @@ class NodeSerialBridge {
     await setSerialPortLines(this.port, lines);
     return { applied: true, ...lines };
   }
+
+  // Mid-clone port reconfiguration. node-serialport can change the settings on
+  // an open handle, so this needs no close/reopen dance -- unlike Web Serial,
+  // whose only route is closing the port and opening it again.
+  async reconfigure(options = {}) {
+    this.ensureOpen();
+    const current = this.portOptions || {};
+    const next = { ...current, ...options };
+    const changed = Object.keys(next).filter((key) => next[key] !== current[key]);
+    if (!changed.length) {
+      return { reconfigured: false, options: next, changed };
+    }
+    await this._applySettings(next);
+    return { reconfigured: true, options: next, changed };
+  }
+
+  // node-serialport's update() only carries the baud rate, so a framing change
+  // needs the handle closed and reopened -- the same route Web Serial takes for
+  // everything. Reported through portOptions only once it has actually landed,
+  // so a failure cannot leave the record claiming settings the port never took.
+  async _applySettings(nextOptions) {
+    const current = this.portOptions || {};
+    const framingChanged = NODE_FRAMING_OPTIONS.some(
+      (key) => nextOptions[key] !== current[key],
+    );
+    if (!framingChanged) {
+      await updateSerialPortBaudRate(this.port, Number(nextOptions.baudRate));
+      this.portOptions = nextOptions;
+      return;
+    }
+    const pending = this.readBuffer;
+    this.port.off("data", this.onData);
+    await closeSerialPort(this.port);
+    this.port = new SerialPort({ ...nextOptions, path: this.portPath, autoOpen: false });
+    this.port.on("data", this.onData);
+    await openSerialPort(this.port);
+    this.portOptions = nextOptions;
+    this.readBuffer = pending;
+  }
 }
 
 class StubSerialBridge {
@@ -297,6 +360,9 @@ class StubSerialBridge {
     // Every setSignals() call, in order, so tests can assert that a driver's
     // control-line changes actually reached the transport (issue #77).
     this.signalCalls = [];
+    // Every reconfigure() the pipe actually pushed, in order. The stub opens at
+    // no particular rate, so it reports every call as a change.
+    this.reconfigureCalls = [];
   }
 
   async open() {
@@ -341,6 +407,11 @@ class StubSerialBridge {
     this.signalCalls.push({ dataTerminalReady, requestToSend });
     return { applied: true };
   }
+
+  async reconfigure(options = {}) {
+    this.reconfigureCalls.push({ ...options });
+    return { reconfigured: true, options, changed: Object.keys(options) };
+  }
 }
 
 function installSerialGlobals(serialBridge, target = globalThis) {
@@ -358,6 +429,22 @@ function installSerialGlobals(serialBridge, target = globalThis) {
   target.serial_prepare_clone = (wantsDtr, wantsRts, settleMs, baudRate) =>
     serialBridge.prepareClone(wantsDtr, wantsRts, settleMs, baudRate);
   target.serial_set_signals = (dtr, rts) => serialBridge.setSignals(dtr, rts);
+  target.serial_reconfigure = (baudRate, dataBits, stopBits, parity) => {
+    const options = {};
+    if (baudRate !== null && baudRate !== undefined) {
+      options.baudRate = Number(baudRate);
+    }
+    if (dataBits !== null && dataBits !== undefined) {
+      options.dataBits = Number(dataBits);
+    }
+    if (stopBits !== null && stopBits !== undefined) {
+      options.stopBits = Number(stopBits);
+    }
+    if (parity !== null && parity !== undefined) {
+      options.parity = String(parity);
+    }
+    return serialBridge.reconfigure(options);
+  };
   target.serial_reset_buffers = () => serialBridge.resetBuffers();
 }
 

@@ -111,6 +111,7 @@ from js import (
     serial_open,
     serial_read_bytes,
     serial_read_hex,
+    serial_reconfigure,
     serial_write_bytes,
     serial_write_hex,
 )
@@ -151,6 +152,23 @@ DEFAULT_EXPORT_POWER = "50W"
 # and drivers extend it with "split" and "off".
 DUPLEX_VALUES = ("", "+", "-", "split", "off")
 DEFAULT_SERIAL_PIPE_TIMEOUT = 1.2
+
+# pyserial spells the framing options as single letters and floats (the shim
+# above carries its constants); Web Serial's open() takes words and whole
+# numbers, and supports a narrower set. Values with no entry here -- 5/6 data
+# bits, 1.5 stop bits, mark/space parity -- have no Web Serial equivalent, so
+# they are left at the port's current setting rather than guessed at: a wrong
+# framing corrupts every byte, where an unchanged one merely fails to help.
+WEB_SERIAL_DATA_BITS = {7: 7, 8: 8}
+WEB_SERIAL_STOP_BITS = {1: 1, 2: 2}
+WEB_SERIAL_PARITY = {"N": "none", "E": "even", "O": "odd"}
+
+
+def _web_serial_framing(table: dict, value: Any) -> Any:
+    """Translate one pyserial framing value, or None when there is no mapping."""
+    if value is None:
+        return None
+    return table.get(value)
 
 
 def _log_debug(message) -> None:
@@ -1155,19 +1173,26 @@ class WebSerialPipe:
     def __init__(
         self,
         timeout: float = DEFAULT_SERIAL_PIPE_TIMEOUT,
+        baudrate: Optional[int] = None,
         dtr: Optional[bool] = None,
         rts: Optional[bool] = None,
     ) -> None:
         """Expose a minimal pyserial-like pipe for CHIRP clone-mode drivers.
 
-        ``dtr``/``rts`` seed the line state without touching the port:
-        ``_prepare_clone_session()`` is what actually asserts the driver's
-        wanted lines, with the settle delay radios need after a level change.
-        Later writes -- ``setDTR()``, ``setRTS()`` or the properties -- are
-        driver-initiated and do reach the port.
+        ``baudrate``/``dtr``/``rts`` seed the port state without touching the
+        port. The seeds describe what the port was already opened with -- the
+        UI connects at the driver's ``BAUD_RATE`` -- so seeding is what makes a
+        later assignment of the *same* value correctly a no-op, and
+        ``_prepare_clone_session()`` remains the one place that asserts the
+        driver's wanted lines with the settle delay a radio needs. Later writes
+        -- ``setDTR()``, ``setRTS()``, or assigning ``baudrate`` and the framing
+        properties -- are driver-initiated and do reach the port.
         """
         self.timeout = timeout
-        self.baudrate = None
+        self._baudrate = None if baudrate is None else int(baudrate)
+        self._bytesize = None
+        self._stopbits = None
+        self._parity = None
         self._dtr = None if dtr is None else bool(dtr)
         self._rts = None if rts is None else bool(rts)
 
@@ -1255,6 +1280,82 @@ class WebSerialPipe:
     @dtr.setter
     def dtr(self, value: bool) -> None:
         self.setDTR(value)
+
+    # Drivers reconfigure the port part-way through a clone: thd72 jumps to
+    # 57600 immediately after the "0M PROGRAM" handshake, and the radio has
+    # already switched by the time the assignment runs, so a pipe that merely
+    # remembers the number leaves the two ends talking past each other. These
+    # are properties rather than plain attributes for that reason alone.
+    @property
+    def baudrate(self) -> Optional[int]:
+        return self._baudrate
+
+    @baudrate.setter
+    def baudrate(self, value: Optional[int]) -> None:
+        rate = None if value is None else int(value)
+        if rate == self._baudrate:
+            return
+        self._baudrate = rate
+        if rate is not None:
+            self._push_port_config()
+
+    @property
+    def bytesize(self) -> Optional[int]:
+        return self._bytesize
+
+    @bytesize.setter
+    def bytesize(self, value: Optional[int]) -> None:
+        self._set_framing("_bytesize", value, WEB_SERIAL_DATA_BITS, "bytesize")
+
+    @property
+    def stopbits(self) -> Optional[float]:
+        return self._stopbits
+
+    @stopbits.setter
+    def stopbits(self, value: Optional[float]) -> None:
+        self._set_framing("_stopbits", value, WEB_SERIAL_STOP_BITS, "stopbits")
+
+    @property
+    def parity(self) -> Optional[str]:
+        return self._parity
+
+    @parity.setter
+    def parity(self, value: Optional[str]) -> None:
+        self._set_framing("_parity", value, WEB_SERIAL_PARITY, "parity")
+
+    def _set_framing(self, attr: str, value: Any, table: dict, label: str) -> None:
+        """Record a framing change and push it, keeping the pyserial value.
+
+        The attribute keeps what the driver assigned so a read-back matches
+        pyserial; only the push is skipped when the value has no Web Serial
+        equivalent, and that skip is logged rather than silent.
+        """
+        if value == getattr(self, attr):
+            return
+        setattr(self, attr, value)
+        if value is None:
+            return
+        if value not in table:
+            _log_debug(f"Serial {label}={value!r} has no Web Serial equivalent; port unchanged")
+            return
+        self._push_port_config()
+
+    def _push_port_config(self) -> None:
+        """Reopen the port with the pipe's current baud rate and framing.
+
+        Unlike the control lines, this is *not* advisory. The radio has already
+        switched by the time a driver assigns the new rate, so a port left
+        behind cannot complete the clone -- and the failure would otherwise
+        surface as an unexplained read timeout much later. Errors propagate.
+        """
+        _await_js(
+            serial_reconfigure(
+                self._baudrate,
+                _web_serial_framing(WEB_SERIAL_DATA_BITS, self._bytesize),
+                _web_serial_framing(WEB_SERIAL_STOP_BITS, self._stopbits),
+                _web_serial_framing(WEB_SERIAL_PARITY, self._parity),
+            )
+        )
 
     def _push_signals(self) -> None:
         """Forward the current DTR/RTS state to the JS serial bridge.
@@ -1574,13 +1675,12 @@ def _new_serial_pipe(radio_cls: type[chirp_common.Radio]) -> WebSerialPipe:
     the same way -- and so the seeded line state stays in step with what
     ``_prepare_clone_session()`` asserts on the port.
     """
-    pipe = WebSerialPipe(
+    return WebSerialPipe(
         timeout=_serial_pipe_timeout_seconds(),
+        baudrate=_driver_baud_rate(radio_cls),
         dtr=bool(getattr(radio_cls, "WANTS_DTR", True)),
         rts=bool(getattr(radio_cls, "WANTS_RTS", True)),
     )
-    pipe.baudrate = _driver_baud_rate(radio_cls)
-    return pipe
 
 
 def _create_radio_for_serial(radio_cls):
