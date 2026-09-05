@@ -457,6 +457,59 @@ json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
     );
   });
 
+  await t.test("GT-5R immutable TX fields block preflight and the write path", async () => {
+    const result = await runPythonJson(
+      pyodide,
+      `
+_module = "uv5r"
+_class_name = "RadioddityGT5RRadio"
+_radio_cls = _import_radio_class(_module, _class_name)
+_radio = _radio_cls(memmap.MemoryMapBytes(bytes(_radio_cls._memsize)))
+_existing = chirp_common.Memory(1)
+_existing.freq = chirp_common.parse_freq("462.562500")
+_existing.duplex = "off"
+_existing.offset = 0
+_existing.mode = "NFM"
+_radio.set_memory(_existing)
+_image = _radio.get_mmap().get_byte_compatible().get_packed()
+LAST_IMAGE_BY_DRIVER[_driver_cache_key(_module, _class_name)] = bytes(_image)
+_row = next(
+    _row for _row in _radio_rows_from_instance(_radio)
+    if _row["Location"] == "1"
+)
+_rows = [_row]
+_row["Duplex"] = "+"
+_row["Offset"] = "5.000000"
+_preflight = validate_rows_for_upload(_rows, _module, _class_name)
+try:
+    _write_radio = _radio_cls(memmap.MemoryMapBytes(bytes(_image)))
+    _apply_rows_to_radio_instance(_write_radio, _rows, _module, _class_name)
+    _write_error = ""
+except Exception as _exc:
+    _write_error = str(_exc)
+json.dumps({"preflight": _preflight, "writeError": _write_error})
+      `,
+    );
+
+    assert.equal(result.preflight.valid, false);
+    const immutableColumns = new Set(
+      result.preflight.issues
+        .filter((issue) => /not mutable/.test(issue.message))
+        .map((issue) => issue.column),
+    );
+    assert.deepEqual(
+      immutableColumns,
+      new Set(["Duplex", "Offset"]),
+      JSON.stringify(result),
+    );
+    assert.ok(
+      result.preflight.warnings.some((warning) =>
+        /Duplex must be "off"/.test(warning.message)),
+    );
+    assert.match(result.writeError, /Field duplex is not mutable/);
+    assert.match(result.writeError, /Field offset is not mutable/);
+  });
+
   await t.test("the driver's name filter is applied before set_memory", async () => {
     const rows = makeChannelRows().slice(0, 1);
     rows[0].Name = "lower*toolong";

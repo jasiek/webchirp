@@ -814,6 +814,27 @@ def _radio_instance_for_row_validation(
     )
 
 
+def _immutable_field_errors(
+    existing: chirp_common.Memory, new: chirp_common.Memory
+) -> list[ValidationMessage]:
+    """Return errors for driver-declared fields changed by a row.
+
+    CHIRP's grid prevents edits to ``Memory.immutable`` fields before its
+    driver policy hook is involved. Some drivers deliberately relax that hook
+    for bulk import, so the browser must retain this explicit check to match
+    the grid and avoid writing fields the driver presented as read-only.
+    """
+    immutable_errors: list[ValidationMessage] = []
+    for field in list(getattr(existing, "immutable", None) or []):
+        if getattr(existing, field) != getattr(new, field):
+            immutable_errors.append(
+                chirp_common.ImmutableValueError(
+                    f"Field {field} is not mutable on this memory"
+                )
+            )
+    return immutable_errors
+
+
 def _preserve_unedited_immutable_fields(
     row: Row, existing: chirp_common.Memory, mem: chirp_common.Memory
 ) -> None:
@@ -879,8 +900,8 @@ def _immutable_policy_errors(
     existing: chirp_common.Memory,
     new: chirp_common.Memory,
 ) -> list[ValidationMessage]:
-    """Return errors from the driver's immutable-memory policy."""
-    validation_errors: list[ValidationMessage] = []
+    """Run both the declared-field and driver-specific immutable policies."""
+    validation_errors = _immutable_field_errors(existing, new)
     try:
         radio.check_set_memory_immutable_policy(existing, new)
     except Exception as exc:

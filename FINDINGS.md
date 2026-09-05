@@ -52,6 +52,7 @@ CHIRP `80d93fe5`.
 
 *Pinned by tests:*
 - Our CSV export is byte-identical to CHIRP's own across the image corpus, an import invents no channel 0, and a DV row keeps the documented column layout; the band-keyed power divergences are tracked as an explicit list that fails when one appears or disappears — `test-csv-export-parity.mjs`.
+- CHIRP's GT-5R driver marks out-of-band duplex/offset fields immutable but clears that list inside its bulk-import policy hook; matching the desktop grid requires enforcing the declared fields before calling the hook — `test-channel-list.mjs`.
 - Driver validation only runs for changed rows, because legacy codeplugs can contain unchanged memories their current driver rejects. Cached images must use CHIRP's file load/save path rather than `get_mmap()`: high-bit-flipped Icom drivers return a wire-format map there, which is not valid file input — `test-channel-list.mjs`, `test-channel-round-trip.mjs`.
 - `really_from_csv()` cannot read back what `to_csv()` writes (it ignores the Power column and rejects `split`/`off` duplex), so `_memory_from_row_values()` parses rows directly: power resolves to the driver's *own* `PowerLevel` object, frequencies parse with `parse_freq()`, and an unset power stays unset — `test-channel-round-trip.mjs`, whose header carries both original defects in full.
 - Power labels publish the wattage CHIRP would export, duplicates included, and the grid spells the table out as a hover legend — `test-power-level-watts.mjs`.
