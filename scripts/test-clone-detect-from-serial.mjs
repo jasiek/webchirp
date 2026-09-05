@@ -35,6 +35,9 @@ import types
 import chirp.drivers
 
 _events = []
+# Which class detection answers with. A list so a test can retarget it without
+# rebinding a name the driver class closed over.
+_detect_target = [None]
 
 
 class _FakeBase(chirp_common.CloneModeRadio):
@@ -63,7 +66,7 @@ class _FakeBase(chirp_common.CloneModeRadio):
     @classmethod
     def detect_from_serial(cls, pipe):
         _events.append(("detect", cls.__name__, id(pipe)))
-        return _FakeVariant
+        return _detect_target[0] or _FakeVariant
 
     def sync_in(self):
         _events.append(("sync_in", type(self).__name__, id(self.pipe)))
@@ -77,6 +80,14 @@ class _FakeBase(chirp_common.CloneModeRadio):
 class _FakeVariant(_FakeBase):
     MODEL = "DetectVariant"
     _fill = 0xB2
+
+
+class _FakeSaveFails(_FakeBase):
+    MODEL = "SaveFails"
+    _fill = 0xD4
+
+    def save_mmap(self, filename):
+        raise RuntimeError("simulated save_mmap failure")
 
 
 class _FakeUndetectable(_FakeBase):
@@ -105,7 +116,7 @@ class _FakeRaises(_FakeBase):
 
 
 _module = types.ModuleType("chirp.drivers.webchirp_detect_fake")
-for _name in ("_FakeBase", "_FakeVariant", "_FakeUndetectable",
+for _name in ("_FakeBase", "_FakeVariant", "_FakeSaveFails", "_FakeUndetectable",
               "_FakeReturnsJunk", "_FakeRaises"):
     setattr(_module, _name, locals()[_name])
 sys.modules["chirp.drivers.webchirp_detect_fake"] = _module
@@ -207,4 +218,40 @@ json.dumps({
     ["sync_in", "_FakeVariant"],
     ["sync_out", "_FakeVariant"],
   ]);
+});
+
+test("a download that cannot be serialized leaves the cached pair alone", async () => {
+  const harness = await getHarness();
+  const result = await withFakeDriver(
+    harness,
+    `
+_module_name = "webchirp_detect_fake"
+_class_name = "_FakeBase"
+_detect_target[0] = None
+_download_selected_radio_sync(_module_name, _class_name)
+
+# Same driver key, a different detected class, and this one cannot save.
+_detect_target[0] = _FakeSaveFails
+try:
+    _download_selected_radio_sync(_module_name, _class_name)
+    _outcome = "returned"
+except RuntimeError:
+    _outcome = "raised"
+finally:
+    _detect_target[0] = None
+
+json.dumps({
+  "outcome": _outcome,
+  "imageClass": _cached_image_class(_module_name, _class_name, _FakeBase).__name__,
+  "cachedFill": list(LAST_IMAGE_BY_DRIVER[_driver_cache_key(_module_name, _class_name)][:1]),
+})
+    `,
+  );
+
+  assert.equal(result.outcome, "raised");
+  // The bytes and the class that parses them are one fact in two dicts. A
+  // half-applied write would tag the first download's codeplug with the second
+  // download's class, and every later upload/export would decode it wrong.
+  assert.equal(result.imageClass, "_FakeVariant");
+  assert.deepEqual(result.cachedFill, [0xb2]);
 });

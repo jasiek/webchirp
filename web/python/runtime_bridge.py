@@ -1450,11 +1450,23 @@ def _driver_cache_key(module_name: str, class_name: str) -> str:
     return f"{module_name}.{class_name}"
 
 
-def _remember_image_class(
-    module_name: str, class_name: str, image_cls: type
-) -> None:
-    """Record which class the driver key's cached image bytes belong to."""
-    IMAGE_CLASS_BY_DRIVER[_driver_cache_key(module_name, class_name)] = image_cls
+def _cache_driver_image(
+    module_name: str, class_name: str, radio: chirp_common.Radio
+) -> bytes:
+    """Cache a radio's image bytes together with the class that owns them.
+
+    The two entries are one fact split across two dicts -- consumers re-parse
+    the bytes with the recorded class -- so they have to move together. That is
+    why every writer goes through here and why serialization happens first: if
+    save_mmap() raises, a caller that had already recorded the class would
+    leave the *previous* download's bytes tagged with this radio's class, and a
+    later upload or export would decode them against the wrong layout.
+    """
+    image = _image_bytes_from_radio(radio)
+    driver_key = _driver_cache_key(module_name, class_name)
+    IMAGE_CLASS_BY_DRIVER[driver_key] = radio.__class__
+    LAST_IMAGE_BY_DRIVER[driver_key] = image
+    return image
 
 
 def _cached_image_class(
@@ -2006,11 +2018,9 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
     _prepare_clone_session(radio_cls)
     radio = _create_radio_for_serial(radio_cls)
     radio.sync_in()
-    driver_key = _driver_cache_key(module_name, class_name)
     # The image belongs to whatever detection settled on, not to the selection
     # the user made in the UI, and upload/export have to re-parse it as such.
-    _remember_image_class(module_name, class_name, radio.__class__)
-    LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
+    _cache_driver_image(module_name, class_name, radio)
 
     rows = _radio_rows_from_instance(radio)
     csv_text = normalize_rows(rows, module_name, class_name)
@@ -2053,7 +2063,7 @@ def _upload_selected_radio_sync(
         raise RuntimeUnsupportedError("Radio settings validation failed before upload")
     _prepare_clone_session(image_cls)
     radio.sync_out()
-    LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
+    _cache_driver_image(module_name, class_name, radio)
     return {"uploaded": True, "settings": settings_result["settings"]}
 
 
@@ -2101,11 +2111,9 @@ def upload_image_base64(module_name: str, class_name: str, image_b64: str):
     _prepare_clone_session(radio_cls)
     radio.sync_out()
 
-    driver_key = _driver_cache_key(module_name, class_name)
     # This image came from the caller, parsed as the selected class, so it
     # replaces any variant class a previous download had recorded.
-    _remember_image_class(module_name, class_name, radio_cls)
-    LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
+    _cache_driver_image(module_name, class_name, radio)
     return {"uploaded": True, "size": len(raw_image)}
 
 
@@ -2137,9 +2145,7 @@ def export_image_base64(
     )
     if not settings_result["valid"]:
         raise RuntimeUnsupportedError("Radio settings validation failed before export")
-    image_data = _image_bytes_from_radio(radio)
-    _remember_image_class(module_name, class_name, radio.__class__)
-    LAST_IMAGE_BY_DRIVER[driver_key] = image_data
+    image_data = _cache_driver_image(module_name, class_name, radio)
     return {
         "imageBase64": base64.b64encode(image_data).decode("ascii"),
         "size": len(image_data),
@@ -2207,9 +2213,7 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     base_cls = getattr(radio.__class__, "_orig_rclass", radio.__class__)
     module_short = str(base_cls.__module__).rsplit(".", 1)[-1]
     class_name = str(base_cls.__name__)
-    driver_key = _driver_cache_key(module_short, class_name)
-    _remember_image_class(module_short, class_name, radio.__class__)
-    LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
+    _cache_driver_image(module_short, class_name, radio)
     rows = _radio_rows_from_instance(radio)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
