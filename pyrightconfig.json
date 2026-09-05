@@ -1,0 +1,9 @@
+{
+  "include": ["web/python"],
+  "stubPath": "web/python/typings",
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportAttributeAccessIssue": "none"
+}
