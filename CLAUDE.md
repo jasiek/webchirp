@@ -31,7 +31,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Prefer generic, parameterized flows based on selected CHIRP driver/module/class.
 - Do not reintroduce radio-specific RPC methods when generic selected-radio methods can be used.
 - Preserve debug visibility: full errors/tracebacks should be logged to the bottom debug panel.
-- Avoid context pollution by spawning sub-agents when appropriate. Use sub-agent sandboxing when a read-only task is to be executed.
+- Newly added functions need a comment as to what they do and why.
+- Python functions must have type signatures.
+- Avoid context pollution by spawning sub-agents when appropriate.
+  - Use sub-agent sandboxing when a read-only task is to be executed.
   - Use sub-agents to produce a summary for a commit message.
 - When you discover something new, or unexpected, put it in FINDINGS.md.
 - Analytics goes through `trackEvent` in `web/js/ui/analytics.js`; never reach
@@ -63,13 +66,13 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Keep commits small and scoped to one functional fix/refactor when practical.
 - Include clear commit messages that describe user-visible behavior or architectural impact.
 - Never use backticks (`) anywhere in any generated command to execute.
-- Include model information in the commit message.
+- Include LLM model information in the commit message.
 - Never modify RELEASE_NOTES.md when on a branch. When on master, update RELEASE_NOTES.md based on PRs which were merged in with current date. Each entry is a single line: the user-visible change plus the PR number, no multi-sentence detail. At the same time run `npm run screenshots` to regenerate images/screenshot.png, images/screenshot-for-opengraph.png, and web/images/social-preview.png from the current version of the app. When generating a screenshot, query the RSGB API channels for locator IO82MM. When you do this, also consolidate/update FINDINGS.md so that it is always up to date.
 
 # PR Behaviour
 - When submitting a PR, in the PR description include any new dependencies which were added.
 
 ## Validation
-Before committing, run syntax checks and all tests.
+Before committing, run syntax checks, typechecking and all tests.
 
 
