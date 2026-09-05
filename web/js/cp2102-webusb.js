@@ -253,6 +253,12 @@ export function cp2102QuantizeBaudRate(baudRate, {
 }
 
 export class Cp2102SerialPort {
+  // This driver programs the line at 8N1 and nothing reads open()'s
+  // dataBits/stopBits/parity: SET_LINE_CTL is issued as LINE_CTL_8N1 unconditionally.
+  // Declared so the bridge refuses a framing change on this transport
+  // rather than reopening and reporting a success the wire does not have.
+  supportsFraming = false;
+
   constructor(device) {
     this.device = device;
     this.readable = null;

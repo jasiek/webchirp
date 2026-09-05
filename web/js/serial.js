@@ -49,6 +49,11 @@ function hasWebUsb() {
 // A clone starts from these every time: framing a previous clone's driver set
 // (tk280 wants even parity, tg_uv2p two stop bits) must not be inherited by the
 // next radio, which would corrupt every byte it reads.
+// The open() options that describe the character frame rather than its speed.
+// Native Web Serial and the CDC polyfill honour all three; our four WebUSB chip
+// drivers program 8N1 and read none of them, which is why they say so.
+const FRAMING_OPTIONS = Object.freeze(["dataBits", "stopBits", "parity"]);
+
 const DEFAULT_PORT_OPTIONS = Object.freeze({
   dataBits: 8,
   stopBits: 1,
@@ -256,9 +261,6 @@ export class BrowserSerialBridge {
         `Could not reopen the serial port at ${wanted} baud: ${error?.message || error}`,
       );
     }
-    // Nothing has been transferred yet, so anything buffered is pre-clone
-    // noise; prepareClone() clears it a moment later in any case.
-    this.readBuffer = new Uint8Array(0);
     this._debug(`Serial port reopened at ${wanted} baud (was ${previousBaudRate || "unknown"}).`);
     return { changed: true, baudRate: wanted, previousBaudRate };
   }
@@ -464,19 +466,30 @@ export class BrowserSerialBridge {
       return { reconfigured: false, options: next, changed };
     }
 
+    // A transport that cannot carry the requested frame must say so rather than
+    // reopen and report success: wrong parity or stop bits corrupts every byte,
+    // and a clone that fails on garbage names nothing. Absence of the flag means
+    // the port honours open()'s framing (native Web Serial, the CDC polyfill).
+    const framing = changed.filter((key) => FRAMING_OPTIONS.includes(key));
+    if (framing.length && this.port.supportsFraming === false) {
+      throw new Error(
+        `This serial adapter cannot change ${framing.join(", ")}: it runs at 8N1 only. `
+        + "Connect through a native Web Serial port to clone this radio.",
+      );
+    }
+
     // Bytes buffered before the switch arrived at the old rate and are real
     // driver data -- pyserial reconfigures without flushing the input queue and
     // drivers are written against that -- so they survive the reopen.
-    const pending = this.readBuffer;
     try {
-      await this._reopenPort(next);
+      await this._reopenPort(next, { preserveBuffer: true });
     } catch (error) {
       // Unlike a clone-start re-rate, the session is worth saving here: the
       // port itself is fine, only the change failed, and a live port lets the
       // user retry without re-picking the device. Put it back as it was.
       try {
-        await this._reopenPort(current);
-        await this._resumeBuffered(pending);
+        await this._reopenPort(current, { preserveBuffer: true });
+        await this._restoreSignals();
       } catch {
         await this._teardown();
       }
@@ -484,7 +497,7 @@ export class BrowserSerialBridge {
         `Could not reconfigure the port (${changed.join(", ")}): ${error?.message || error}`,
       );
     }
-    await this._resumeBuffered(pending);
+    await this._restoreSignals();
     return { reconfigured: true, options: next, changed };
   }
 
@@ -493,27 +506,39 @@ export class BrowserSerialBridge {
   // and the disconnect watch. Throws with the port left closed -- the caller
   // decides what that means, because the right answer differs between a
   // clone-start re-rate and a mid-clone change.
-  async _reopenPort(nextOptions) {
+  async _reopenPort(nextOptions, { preserveBuffer = false } = {}) {
     const port = this.port;
     this._unwatchPortLoss();
     await this._releaseStreams();
-    await port.close();
+    // Snapshotted only now, and installed below before the next loop starts.
+    // Both halves matter: _releaseStreams() has cancelled the reader and waited
+    // for the loop, so nothing can append after this line -- read any earlier
+    // and a chunk landing during cancellation is dropped -- and installing it
+    // before the new loop means a chunk the reopened stream delivers
+    // immediately appends to these bytes instead of being overwritten by them.
+    const pending = preserveBuffer ? this.readBuffer : new Uint8Array(0);
+    try {
+      await port.close();
+    } catch {
+      // Already closed (a failed reopen being put back), or refusing to; either
+      // way it is open() below that decides whether this worked.
+    }
     await port.open(nextOptions);
     this.portOptions = nextOptions;
+    this.readBuffer = pending;
     this.reader = port.readable.getReader();
     this.writer = port.writable.getWriter();
     this._readLoop = this._startReadLoop();
     this._watchForPortLoss();
+    if (pending.length) {
+      this._debug(`Kept ${pending.length} buffered byte(s) across port reconfigure`);
+    }
   }
 
-  // Restore what a mid-clone reopen has to carry across it: the bytes received
-  // before the switch, and the control lines the close dropped back to the
-  // adapter's defaults.
-  async _resumeBuffered(pendingBuffer) {
-    this.readBuffer = pendingBuffer || new Uint8Array(0);
-    if (this.readBuffer.length) {
-      this._debug(`Kept ${this.readBuffer.length} buffered byte(s) across port reconfigure`);
-    }
+  // Put back the control lines the close dropped to the adapter's defaults.
+  // Only the mid-clone path needs this: at clone start prepareClone() asserts
+  // them a moment later anyway.
+  async _restoreSignals() {
     if (this.lastSignals) {
       try {
         await this.port.setSignals(this.lastSignals);

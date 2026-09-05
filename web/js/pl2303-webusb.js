@@ -100,6 +100,12 @@ export function detectPl2303Type({ deviceClass, maxPacketSize0, usbVersion, devi
 }
 
 export class Pl2303SerialPort {
+  // This driver programs the line at 8N1 and nothing reads open()'s
+  // dataBits/stopBits/parity: the line-coding block is written 8N1 unconditionally.
+  // Declared so the bridge refuses a framing change on this transport
+  // rather than reopening and reporting a success the wire does not have.
+  supportsFraming = false;
+
   constructor(device) {
     this.device = device;
     this.readable = null;

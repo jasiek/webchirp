@@ -28,10 +28,25 @@ function makeEmitter(extra = {}) {
   };
 }
 
+function tick() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 // A port that records how it was opened and closed, parks its read loop until
 // cancelled (as a real one does), and can be told to refuse the next open.
-function makeFakePort({ failOpenWhen = () => null } = {}) {
+//
+// deliverOnCancel models a chunk the adapter had already completed when the
+// reopen began: a real reader hands it to the pending read() before the
+// cancellation takes effect. deliverOnReopen models the reopened stream having
+// a chunk ready the instant the new loop asks for one. Both are the windows in
+// which a mid-clone reopen can lose bytes.
+function makeFakePort({
+  failOpenWhen = () => null,
+  deliverOnCancel = null,
+  deliverOnReopen = null,
+} = {}) {
   let releaseRead = () => {};
+  let readers = 0;
   return {
     opens: [],
     closes: 0,
@@ -51,15 +66,31 @@ function makeFakePort({ failOpenWhen = () => null } = {}) {
       this.signals.push({ ...signals });
     },
     readable: {
-      getReader: () => ({
-        read: () => new Promise((resolve) => {
-          releaseRead = () => resolve({ done: true });
-        }),
-        async cancel() {
-          releaseRead();
-        },
-        releaseLock() {},
-      }),
+      getReader: () => {
+        readers += 1;
+        const reopened = readers > 1;
+        let pendingDelivery = reopened ? deliverOnReopen : null;
+        return {
+          read: () => {
+            if (pendingDelivery) {
+              const value = Uint8Array.from(pendingDelivery);
+              pendingDelivery = null;
+              return Promise.resolve({ value, done: false });
+            }
+            return new Promise((resolve) => {
+              releaseRead = resolve;
+            });
+          },
+          async cancel() {
+            if (!reopened && deliverOnCancel) {
+              releaseRead({ value: Uint8Array.from(deliverOnCancel), done: false });
+              await tick();
+            }
+            releaseRead({ done: true });
+          },
+          releaseLock() {},
+        };
+      },
     },
     writable: {
       getWriter: () => ({ write: async () => {}, releaseLock() {} }),
@@ -263,4 +294,71 @@ test("a clone at the settings the port already has still does not reopen", async
 
   assert.equal(res.changed, false);
   assert.equal(port.opens.length, opens);
+});
+
+// The two windows in which the hand-off can lose bytes. Both are ordering bugs
+// rather than transport ones, so they only show up against a port that
+// actually delivers a chunk at the awkward moment.
+test("a chunk arriving as the port closes is not lost by the reopen", async () => {
+  const { bridge } = await openBridge({ deliverOnCancel: [0x41] });
+  bridge.readBuffer = Uint8Array.from([0x06]);
+
+  await bridge.reconfigure({ baudRate: 57600 });
+
+  // The 0x41 landed after the switch was decided but before the stream stopped;
+  // snapshotting the buffer any earlier than the quiet window drops it.
+  assert.deepEqual(Array.from(bridge.readBuffer), [0x06, 0x41]);
+});
+
+test("a chunk the reopened stream has ready is not overwritten by the kept bytes", async () => {
+  const { bridge } = await openBridge({ deliverOnReopen: [0x42] });
+  bridge.readBuffer = Uint8Array.from([0x06]);
+
+  await bridge.reconfigure({ baudRate: 57600 });
+  await tick();
+
+  assert.deepEqual(Array.from(bridge.readBuffer), [0x06, 0x42]);
+});
+
+// The four WebUSB chip drivers program the line at 8N1 and read none of open()'s
+// framing options, so honouring a driver's parity or stop-bit change is
+// something only a native Web Serial port (or the CDC polyfill) can do. The
+// bridge has to refuse rather than reopen and claim success -- wrong framing
+// corrupts every byte, and the clone would fail on garbage naming nothing.
+test("an adapter that cannot change framing refuses instead of pretending", async () => {
+  const { bridge, port } = await openBridge();
+  port.supportsFraming = false;
+  const opens = port.opens.length;
+
+  await assert.rejects(
+    () => bridge.reconfigure({ parity: "even" }),
+    /cannot change parity: it runs at 8N1 only/,
+  );
+  assert.equal(port.opens.length, opens, "the port must not have been reopened");
+});
+
+test("such an adapter still takes a baud-rate change", async () => {
+  const { bridge, port } = await openBridge();
+  port.supportsFraming = false;
+
+  const res = await bridge.reconfigure({ baudRate: 57600 });
+
+  assert.equal(res.reconfigured, true);
+  assert.equal(port.opens.at(-1).baudRate, 57600);
+});
+
+// Every in-repo WebUSB chip driver must declare the limitation, or the refusal
+// above silently stops applying to it.
+test("each WebUSB chip driver declares that it cannot change framing", async () => {
+  const drivers = [
+    ["../web/js/ftdi-webusb.js", "FtdiSerialPort"],
+    ["../web/js/pl2303-webusb.js", "Pl2303SerialPort"],
+    ["../web/js/ch340-webusb.js", "Ch340SerialPort"],
+    ["../web/js/cp2102-webusb.js", "Cp2102SerialPort"],
+  ];
+  for (const [path, className] of drivers) {
+    const mod = await import(path);
+    const port = new mod[className]({});
+    assert.equal(port.supportsFraming, false, `${className} must declare supportsFraming`);
+  }
 });
