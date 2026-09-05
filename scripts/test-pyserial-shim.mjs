@@ -122,3 +122,38 @@ json.dumps({"error": _pipewrite_error})
   );
   assert.equal(result.error, "");
 });
+
+// Issue #77: thd72 calls `self.pipe.setRTS()` with no argument and guards only
+// against AttributeError, so a required parameter here aborts the clone with a
+// TypeError before the first block. The lines must also actually reach the
+// transport -- storing a boolean makes every mid-clone toggle inert.
+test("pipe control lines default to asserted and reach the serial bridge", async () => {
+  const harness = await getHarness();
+  const before = harness.serialBridge.signalCalls.length;
+  const result = await harness.runPythonJson(
+    `
+_pipe = WebSerialPipe(dtr=False, rts=False)
+_seeded = [_pipe.dtr, _pipe.rts]
+_pipe.setRTS()
+_after_bare_setrts = [_pipe.dtr, _pipe.rts]
+_pipe.dtr = True
+_pipe.setDTR(False)
+json.dumps({
+  "seeded": _seeded,
+  "afterBareSetRts": _after_bare_setrts,
+  "final": [_pipe.dtr, _pipe.rts],
+})
+    `,
+  );
+
+  assert.deepEqual(result.seeded, [false, false]);
+  assert.deepEqual(result.afterBareSetRts, [false, true], "setRTS() must default to True");
+  assert.deepEqual(result.final, [false, true]);
+  // Seeding the constructor must not touch the port: _prepare_clone_session()
+  // owns the initial assertion, together with the settle delay.
+  assert.deepEqual(harness.serialBridge.signalCalls.slice(before), [
+    { dataTerminalReady: false, requestToSend: true },
+    { dataTerminalReady: true, requestToSend: true },
+    { dataTerminalReady: false, requestToSend: true },
+  ]);
+});

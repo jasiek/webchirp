@@ -151,6 +151,7 @@ function installJsBridgeStubs() {
   globalThis.serial_log = () => ({ logged: true });
   globalThis.serial_progress = () => ({ reported: true });
   globalThis.serial_prepare_clone = async () => ({ prepared: true });
+  globalThis.serial_set_signals = async () => ({ applied: true });
   globalThis.serial_reset_buffers = async () => ({ reset: true });
 }
 

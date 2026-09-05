@@ -270,6 +270,23 @@ class NodeSerialBridge {
     }
     return { prepared: true, settleMs: settle, baudRate: this.baudRate };
   }
+
+  // Mid-clone control-line change; a null line is left as it is.
+  async setSignals(dataTerminalReady, requestToSend) {
+    this.ensureOpen();
+    const lines = {};
+    if (dataTerminalReady !== null && dataTerminalReady !== undefined) {
+      lines.dtr = Boolean(dataTerminalReady);
+    }
+    if (requestToSend !== null && requestToSend !== undefined) {
+      lines.rts = Boolean(requestToSend);
+    }
+    if (!Object.keys(lines).length) {
+      return { applied: false };
+    }
+    await setSerialPortLines(this.port, lines);
+    return { applied: true, ...lines };
+  }
 }
 
 class StubSerialBridge {
@@ -277,6 +294,9 @@ class StubSerialBridge {
     // Recorded so tests can assert what the Python bridge asked for — the
     // driver's baud rate in particular, which nothing else observes.
     this.prepareCloneCalls = [];
+    // Every setSignals() call, in order, so tests can assert that a driver's
+    // control-line changes actually reached the transport (issue #77).
+    this.signalCalls = [];
   }
 
   async open() {
@@ -316,6 +336,11 @@ class StubSerialBridge {
     });
     return { prepared: true, settleMs: 0, baudRate: Number(baudRate || 0) };
   }
+
+  async setSignals(dataTerminalReady, requestToSend) {
+    this.signalCalls.push({ dataTerminalReady, requestToSend });
+    return { applied: true };
+  }
 }
 
 function installSerialGlobals(serialBridge, target = globalThis) {
@@ -332,6 +357,7 @@ function installSerialGlobals(serialBridge, target = globalThis) {
   target.serial_progress = () => ({ reported: true });
   target.serial_prepare_clone = (wantsDtr, wantsRts, settleMs, baudRate) =>
     serialBridge.prepareClone(wantsDtr, wantsRts, settleMs, baudRate);
+  target.serial_set_signals = (dtr, rts) => serialBridge.setSignals(dtr, rts);
   target.serial_reset_buffers = () => serialBridge.resetBuffers();
 }
 

@@ -87,6 +87,14 @@ function installSerialBridgeGlobals() {
       // the port was opened with.
       baudRate: Number(baudRate || 0),
     });
+  // Mid-clone control-line changes from CHIRP drivers. Each line is passed
+  // through as null when the pipe has no opinion on it yet, so setting one
+  // line never implicitly clears the other.
+  globalThis.serial_set_signals = (dtr, rts) =>
+    serialRpc("setSignals", {
+      dataTerminalReady: dtr === null || dtr === undefined ? null : Boolean(dtr),
+      requestToSend: rts === null || rts === undefined ? null : Boolean(rts),
+    });
   globalThis.serial_reset_buffers = () => serialRpc("resetBuffers", {});
   installFetchChirpSourceGlobal(pythonSource);
 }

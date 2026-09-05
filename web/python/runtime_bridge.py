@@ -106,6 +106,7 @@ from js import (
     serial_prepare_clone,
     serial_progress,
     serial_reset_buffers,
+    serial_set_signals,
     serial_log,
     serial_open,
     serial_read_bytes,
@@ -1151,12 +1152,24 @@ async def webserial_txrx_hex(tx_hex: str, rx_bytes: int, timeout_ms: int):
 class WebSerialPipe:
     """Minimal pyserial-like API over JS bridge for CHIRP drivers."""
 
-    def __init__(self, timeout=DEFAULT_SERIAL_PIPE_TIMEOUT):
-        """Expose a minimal pyserial-like pipe for CHIRP clone-mode drivers."""
+    def __init__(
+        self,
+        timeout: float = DEFAULT_SERIAL_PIPE_TIMEOUT,
+        dtr: Optional[bool] = None,
+        rts: Optional[bool] = None,
+    ) -> None:
+        """Expose a minimal pyserial-like pipe for CHIRP clone-mode drivers.
+
+        ``dtr``/``rts`` seed the line state without touching the port:
+        ``_prepare_clone_session()`` is what actually asserts the driver's
+        wanted lines, with the settle delay radios need after a level change.
+        Later writes -- ``setDTR()``, ``setRTS()`` or the properties -- are
+        driver-initiated and do reach the port.
+        """
         self.timeout = timeout
         self.baudrate = None
-        self.rts = None
-        self.dtr = None
+        self._dtr = None if dtr is None else bool(dtr)
+        self._rts = None if rts is None else bool(rts)
 
     def write(self, data: "str | bytes | bytearray | memoryview") -> int:
         """Write bytes to the JS serial bridge and report the byte count.
@@ -1210,13 +1223,50 @@ class WebSerialPipe:
         """Pyserial compatibility no-op; UI owns port lifecycle."""
         return
 
-    def setRTS(self, value):
-        """Store requested RTS line state for driver compatibility."""
-        self.rts = bool(value)
+    # ``value`` defaults to True to match pyserial, whose setRTS()/setDTR()
+    # take an optional level. CHIRP drivers rely on that default: thd72 calls
+    # ``self.pipe.setRTS()`` bare and only guards against AttributeError, so a
+    # required argument here aborts the clone with a TypeError (issue #77).
+    def setRTS(self, value: bool = True) -> None:
+        """Assert or clear RTS on the port, pyserial-style."""
+        self._rts = bool(value)
+        self._push_signals()
 
-    def setDTR(self, value):
-        """Store requested DTR line state for driver compatibility."""
-        self.dtr = bool(value)
+    def setDTR(self, value: bool = True) -> None:
+        """Assert or clear DTR on the port, pyserial-style."""
+        self._dtr = bool(value)
+        self._push_signals()
+
+    # pyserial exposes the lines as writable properties as well as setters, and
+    # drivers use both spellings (thd72 falls back to ``pipe.rts = True``), so
+    # both have to reach the port rather than just recording a boolean.
+    @property
+    def rts(self) -> Optional[bool]:
+        return self._rts
+
+    @rts.setter
+    def rts(self, value: bool) -> None:
+        self.setRTS(value)
+
+    @property
+    def dtr(self) -> Optional[bool]:
+        return self._dtr
+
+    @dtr.setter
+    def dtr(self, value: bool) -> None:
+        self.setDTR(value)
+
+    def _push_signals(self) -> None:
+        """Forward the current DTR/RTS state to the JS serial bridge.
+
+        Control lines are advisory: some adapters and browsers cannot change
+        them, and a clone that would otherwise work must not die because of
+        that. Failures are logged to the debug panel instead of raised.
+        """
+        try:
+            _await_js(serial_set_signals(self._dtr, self._rts))
+        except Exception as exc:
+            _log_debug(f"Serial control lines not applied (DTR/RTS): {exc}")
 
     def log(self, msg):
         """Forward driver log/status text to the browser debug console."""
@@ -1517,12 +1567,25 @@ def _driver_baud_rate(radio_cls: Any) -> Optional[int]:
     return baud if baud > 0 else None
 
 
+def _new_serial_pipe(radio_cls: type[chirp_common.Radio]) -> WebSerialPipe:
+    """Build the pipe a clone runs over, seeded from the driver's declarations.
+
+    Shared by every clone entry point so the pipe a driver sees is configured
+    the same way -- and so the seeded line state stays in step with what
+    ``_prepare_clone_session()`` asserts on the port.
+    """
+    pipe = WebSerialPipe(
+        timeout=_serial_pipe_timeout_seconds(),
+        dtr=bool(getattr(radio_cls, "WANTS_DTR", True)),
+        rts=bool(getattr(radio_cls, "WANTS_RTS", True)),
+    )
+    pipe.baudrate = _driver_baud_rate(radio_cls)
+    return pipe
+
+
 def _create_radio_for_serial(radio_cls):
     """Instantiate selected radio with configured WebSerial pipe and status hook."""
-    pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
-    pipe.baudrate = _driver_baud_rate(radio_cls)
-    pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
-    pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
+    pipe = _new_serial_pipe(radio_cls)
     radio = radio_cls(pipe)
     radio.status_fn = _make_status_logger()
     return radio
@@ -1766,11 +1829,7 @@ def _upload_selected_radio_sync(
         )
     radio = _radio_from_image_bytes(radio_cls, base_image)
     radio.status_fn = _make_status_logger()
-    pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
-    pipe.baudrate = _driver_baud_rate(radio_cls)
-    pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
-    pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
-    radio.set_pipe(pipe)
+    radio.set_pipe(_new_serial_pipe(radio_cls))
     _apply_rows_to_radio_instance(radio, rows, module_name, class_name)
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
@@ -1823,11 +1882,7 @@ def upload_image_base64(module_name: str, class_name: str, image_b64: str):
 
     radio = _radio_from_image_bytes(radio_cls, raw_image)
     radio.status_fn = _make_status_logger()
-    pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
-    pipe.baudrate = _driver_baud_rate(radio_cls)
-    pipe.setDTR(getattr(radio_cls, "WANTS_DTR", True))
-    pipe.setRTS(getattr(radio_cls, "WANTS_RTS", True))
-    radio.set_pipe(pipe)
+    radio.set_pipe(_new_serial_pipe(radio_cls))
     _prepare_clone_session(radio_cls)
     radio.sync_out()
 
