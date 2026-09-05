@@ -29,6 +29,8 @@ const POWER_ROUND_TRIP_IMAGES = [
   "BTECH_UV-25X2.img",
 ];
 const SPLIT_DUPLEX_IMAGES = ["Baofeng_UV-5R.img", "Anysecu_WP-9900.img"];
+const MIGRATED_IMAGE_FIXTURES = ["Icom_ID-5100.img", "Icom_ID-51_Plus2.img"];
+const LOSSY_IMMUTABLE_POWER_FIXTURES = ["Retevis_RB618.img", "Retevis_RT647.img"];
 
 async function loadImageFor(harness, catalog, name) {
   const raw = await fs.readFile(path.join(imagesDir, name));
@@ -100,6 +102,49 @@ test("channels with split and off duplex survive a read/write cycle", async () =
     sawNonStandardDuplex,
     "fixture images no longer contain a split/off channel; pick different ones",
   );
+});
+
+test("migrated images can export without re-reading incompatible cached bytes", async () => {
+  const harness = await createTestRadioHarness({ repoRoot });
+  const catalog = await readCatalog();
+
+  for (const name of MIGRATED_IMAGE_FIXTURES) {
+    const { match, loaded } = await loadImageFor(harness, catalog, name);
+    const exported = await harness.exportCodeplugBinary(
+      match.module,
+      match.className,
+      loaded.rows,
+      loaded.settings || [],
+    );
+    assert.ok(exported.image.length > 0, `${name} produced no image`);
+  }
+});
+
+test("editing a mutable field preserves lossy immutable power values", async () => {
+  const harness = await createTestRadioHarness({ repoRoot });
+  const catalog = await readCatalog();
+
+  for (const name of LOSSY_IMMUTABLE_POWER_FIXTURES) {
+    const { match, loaded } = await loadImageFor(harness, catalog, name);
+    assert.ok(loaded.rows.length > 0, `${name} has no channels`);
+    const originalPower = loaded.rows[0].Power;
+    loaded.rows[0].Tone = "Tone";
+    loaded.rows[0].rToneFreq = "88.5";
+    const exported = await harness.exportCodeplugBinary(
+      match.module,
+      match.className,
+      loaded.rows,
+      loaded.settings || [],
+    );
+    const reloaded = await harness.loadCodeplugBinary(exported.image);
+    assert.equal(reloaded.rows[0].Tone, "Tone", `${name} lost the mutable edit`);
+    assert.equal(reloaded.rows[0].rToneFreq, "88.5", `${name} lost the tone value`);
+    assert.equal(
+      reloaded.rows[0].Power,
+      originalPower,
+      `${name} changed immutable power while editing its tone`,
+    );
+  }
 });
 
 // Guards the specific mechanism rather than just the symptom: the map has to

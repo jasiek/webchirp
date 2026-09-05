@@ -11,7 +11,7 @@ import re
 import sys
 import tempfile
 import types
-from typing import Any, Optional, Sequence
+from typing import Any, Literal, Optional, Sequence
 
 sys.path.insert(0, "/webchirp_runtime")
 
@@ -138,6 +138,8 @@ Rows = list[Row]
 # One invalid cell reported by the upload preflight: which row, which column,
 # and CHIRP's own message for it.
 ValidationIssue = dict[str, Any]
+ValidationMessage = str | Exception
+RowChangeAction = Literal["skip", "erase", "set"]
 
 CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
 DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
@@ -445,7 +447,7 @@ def _driver_features(module_name: str, class_name: str):
     image = LAST_IMAGE_BY_DRIVER.get(_driver_cache_key(module_name, class_name))
     factories = [lambda: radio_cls(None), lambda: radio_cls("")]
     if image:
-        factories.insert(0, lambda: radio_cls(memmap.MemoryMapBytes(bytes(image))))
+        factories.insert(0, lambda: _radio_from_image_bytes(radio_cls, image))
     for factory in factories:
         try:
             return factory().get_features()
@@ -767,6 +769,7 @@ def _infer_csv_error_column(error_text: str) -> str:
         "frequency": "Frequency",
         "duplex": "Duplex",
         "offset": "Offset",
+        "tuning step": "TStep",
         "tone": "Tone",
         "rtonefreq": "rToneFreq",
         "ctonefreq": "cToneFreq",
@@ -802,12 +805,215 @@ def _memory_bounds_for_driver(
         return None
 
 
+def _radio_instance_for_row_validation(
+    module_name: str, class_name: str
+) -> chirp_common.Radio:
+    """Build the same image-backed radio that a later upload/export will use."""
+    return _best_effort_radio_instance(
+        module_name, class_name, require_cached=False
+    )
+
+
+def _preserve_unedited_immutable_fields(
+    row: Row, existing: chirp_common.Memory, mem: chirp_common.Memory
+) -> None:
+    """Keep immutable values whose grid representation was not edited.
+
+    A few drivers expose an immutable value that their feature list cannot
+    reconstruct (notably fixed power levels). Comparing the source row avoids
+    turning an edit to another column into an accidental immutable-field edit.
+    """
+    field_headers: dict[str, str] = {
+        "name": "Name",
+        "freq": "Frequency",
+        "duplex": "Duplex",
+        "offset": "Offset",
+        "tmode": "Tone",
+        "rtone": "rToneFreq",
+        "ctone": "cToneFreq",
+        "dtcs": "DtcsCode",
+        "dtcs_polarity": "DtcsPolarity",
+        "rx_dtcs": "RxDtcsCode",
+        "cross_mode": "CrossMode",
+        "mode": "Mode",
+        "tuning_step": "TStep",
+        "skip": "Skip",
+        "power": "Power",
+        "comment": "Comment",
+    }
+    existing_row: dict[str, str] = {
+        header: str(value)
+        for header, value in zip(CSV_HEADERS, _row_values_for_csv(existing))
+    }
+    for field in list(getattr(existing, "immutable", None) or []):
+        header = field_headers.get(field)
+        if header and str(row.get(header, "") or "") == existing_row[header]:
+            setattr(mem, field, getattr(existing, field))
+
+
+def _prepare_and_validate_memory(
+    radio: chirp_common.Radio,
+    existing: chirp_common.Memory,
+    mem: chirp_common.Memory,
+    row: Optional[Row] = None,
+) -> tuple[chirp_common.Memory, list[str], list[ValidationMessage]]:
+    """Apply CHIRP's name filter and return driver warnings and errors."""
+    mem.name = radio.filter_name(mem.name)
+    if row is not None:
+        _preserve_unedited_immutable_fields(row, existing, mem)
+
+    validation_errors = _immutable_policy_errors(radio, existing, mem)
+
+    try:
+        messages = radio.validate_memory(chirp_common.FrozenMemory(mem))
+    except Exception as exc:
+        validation_errors.append(exc)
+        messages = []
+    warnings, driver_errors = chirp_common.split_validation_msgs(messages)
+    validation_errors.extend(driver_errors)
+    return mem, list(warnings), validation_errors
+
+
+def _immutable_policy_errors(
+    radio: chirp_common.Radio,
+    existing: chirp_common.Memory,
+    new: chirp_common.Memory,
+) -> list[ValidationMessage]:
+    """Return errors from the driver's immutable-memory policy."""
+    validation_errors: list[ValidationMessage] = []
+    try:
+        radio.check_set_memory_immutable_policy(existing, new)
+    except Exception as exc:
+        if str(exc) not in {str(error) for error in validation_errors}:
+            validation_errors.append(exc)
+    return validation_errors
+
+
+def _memory_row_changed(
+    existing: chirp_common.Memory, new: chirp_common.Memory
+) -> bool:
+    """Return whether any field represented by the channel grid changed."""
+    fields = (
+        "name",
+        "freq",
+        "duplex",
+        "offset",
+        "tmode",
+        "rtone",
+        "ctone",
+        "dtcs",
+        "dtcs_polarity",
+        "rx_dtcs",
+        "cross_mode",
+        "mode",
+        "tuning_step",
+        "skip",
+        "power",
+        "comment",
+        "empty",
+    )
+    for field in fields:
+        existing_value = getattr(existing, field)
+        new_value = getattr(new, field)
+        if field == "power":
+            # Rows carry only the driver's display label. Some drivers use the
+            # same label for multiple wattages or return an unadvertised level,
+            # so object equality would turn a lossless row round-trip into an
+            # apparent edit of an immutable field.
+            if str(existing_value) != str(new_value):
+                return True
+        elif existing_value != new_value:
+            return True
+    return False
+
+
+def _row_matches_memory(row: Row, memory: chirp_common.Memory) -> bool:
+    """Compare a grid row at exactly the fidelity exposed by the grid."""
+    row_values = [str(row.get(header, "") or "") for header in CSV_HEADERS]
+    memory_values = [str(value) for value in _row_values_for_csv(memory)]
+    return row_values == memory_values
+
+
+def _prepare_row_change(
+    radio: chirp_common.Radio,
+    row: Row,
+    existing: chirp_common.Memory,
+    mem: chirp_common.Memory,
+) -> tuple[
+    RowChangeAction,
+    chirp_common.Memory,
+    list[str],
+    list[ValidationMessage],
+]:
+    """Prepare one grid row for validation and writing.
+
+    Validation must compare against the driver's current memory so immutable
+    policies see the original values. Exact grid round trips are skipped:
+    legacy images may contain values rejected by today's driver, and writing
+    an untouched row should neither reject nor normalize them. Empty frequency
+    means erase, which is itself checked against the immutable policy.
+    """
+    if _row_matches_memory(row, existing):
+        return "skip", existing, [], []
+    if not str(row.get("Frequency", "") or "").strip():
+        if existing.empty:
+            return "skip", existing, [], []
+        erased = existing.dupe()
+        erased.empty = True
+        return "erase", erased, [], _immutable_policy_errors(
+            radio, existing, erased
+        )
+
+    if not mem.mode:
+        mem.mode = "FM"
+    mem, warnings, validation_errors = _prepare_and_validate_memory(
+        radio, existing, mem, row
+    )
+    if not _memory_row_changed(existing, mem):
+        return "skip", existing, [], []
+    return "set", mem, warnings, validation_errors
+
+
+def _validation_column(message: ValidationMessage) -> str:
+    """Map a CHIRP validation or immutable-field message to a grid column."""
+    text = str(message or "")
+    match = re.search(r"Field ([A-Za-z_]+) is not mutable", text)
+    if match:
+        return {
+            "number": "Location",
+            "name": "Name",
+            "freq": "Frequency",
+            "duplex": "Duplex",
+            "offset": "Offset",
+            "tmode": "Tone",
+            "rtone": "rToneFreq",
+            "ctone": "cToneFreq",
+            "dtcs": "DtcsCode",
+            "dtcs_polarity": "DtcsPolarity",
+            "rx_dtcs": "RxDtcsCode",
+            "cross_mode": "CrossMode",
+            "mode": "Mode",
+            "tuning_step": "TStep",
+            "skip": "Skip",
+            "power": "Power",
+            "comment": "Comment",
+            "empty": "Frequency",
+        }.get(match.group(1), "")
+    return _infer_csv_error_column(text)
+
+
 def validate_rows_for_upload(
     rows: Rows, module_name: str = "", class_name: str = ""
 ) -> dict[str, Any]:
-    """Validate row values with CHIRP CSV parsing and return per-cell issues."""
+    """Validate rows with the selected driver and return errors and warnings."""
+    radio = (
+        _radio_instance_for_row_validation(module_name, class_name)
+        if module_name and class_name
+        else None
+    )
+    levels = list(radio.get_features().valid_power_levels or []) if radio else []
     level_map = _power_levels_by_label(
-        _valid_power_levels_for_driver(module_name, class_name)
+        levels or _valid_power_levels_for_driver(module_name, class_name)
     )
     # Location is checked here as well as in _apply_rows_to_radio_instance,
     # because that one raises partway through a clone: the radio is already
@@ -816,6 +1022,7 @@ def validate_rows_for_upload(
     bounds = _memory_bounds_for_driver(module_name, class_name)
     seen_locations: dict[int, int] = {}
     issues: list[ValidationIssue] = []
+    warnings: list[ValidationIssue] = []
     for row_index, row in enumerate(rows or []):
         vals = [str((row or {}).get(header, "") or "") for header in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
@@ -851,7 +1058,7 @@ def validate_rows_for_upload(
             else:
                 seen_locations[location] = row_index
         try:
-            _memory_from_row_values(vals, level_map)
+            mem = _memory_from_row_values(vals, level_map)
         except Exception as exc:
             error_text = str(exc)
             issues.append(
@@ -861,7 +1068,41 @@ def validate_rows_for_upload(
                     "message": error_text,
                 }
             )
-    return {"valid": len(issues) == 0, "issues": issues}
+            continue
+
+        if (
+            radio is None
+            or location is None
+            or (bounds and not (bounds[0] <= location <= bounds[1]))
+        ):
+            continue
+        try:
+            existing = radio.get_memory(location)
+            action, mem, row_warnings, row_errors = _prepare_row_change(
+                radio, row, existing, mem
+            )
+            if action == "skip":
+                continue
+        except Exception as exc:
+            row_warnings: list[str] = []
+            row_errors: list[ValidationMessage] = [exc]
+        for message in row_errors:
+            issues.append(
+                {
+                    "rowIndex": int(row_index),
+                    "column": _validation_column(message),
+                    "message": str(message),
+                }
+            )
+        for message in row_warnings:
+            warnings.append(
+                {
+                    "rowIndex": int(row_index),
+                    "column": _validation_column(message),
+                    "message": str(message),
+                }
+            )
+    return {"valid": len(issues) == 0, "issues": issues, "warnings": warnings}
 
 
 async def webserial_connect(baudrate: int):
@@ -980,15 +1221,60 @@ class ImageDetectionError(RuntimeUnsupportedError):
     """
 
 
-def _import_radio_class(module_name: str, class_name: str):
+def _import_radio_class(
+    module_name: str, class_name: str
+) -> type[chirp_common.Radio]:
     """Resolve a radio class object from selected module/class names."""
     module = __import__(f"chirp.drivers.{module_name}", fromlist=[class_name])
     return getattr(module, class_name)
 
 
-def _driver_cache_key(module_name: str, class_name: str):
+def _driver_cache_key(module_name: str, class_name: str) -> str:
     """Build a stable key for cached image data by selected driver."""
     return f"{module_name}.{class_name}"
+
+
+def _radio_from_image_bytes(
+    radio_cls: type[chirp_common.Radio], image_bytes: bytes
+) -> chirp_common.Radio:
+    """Load stored image bytes through CHIRP's driver file-loading path.
+
+    This keeps reconstruction paired with ``_image_bytes_from_radio`` and lets
+    each driver apply its normal file parsing and metadata handling.
+    """
+    with tempfile.NamedTemporaryFile(
+        mode="wb", suffix=".img", prefix="webchirp-cache-", delete=False
+    ) as image_file:
+        image_path = image_file.name
+        image_file.write(bytes(image_bytes))
+    try:
+        return radio_cls(image_path)
+    finally:
+        try:
+            os.unlink(image_path)
+        except Exception:
+            pass
+
+
+def _image_bytes_from_radio(radio: chirp_common.Radio) -> bytes:
+    """Serialize through CHIRP without confusing a transport map for a file.
+
+    Icom's ``get_mmap`` may flip high bits for clone transport, while
+    ``save_mmap`` writes the internal file representation expected on reload.
+    """
+    with tempfile.NamedTemporaryFile(
+        suffix=".img", prefix="webchirp-cache-", delete=False
+    ) as image_file:
+        image_path = image_file.name
+    try:
+        radio.save_mmap(image_path)
+        with open(image_path, "rb") as image_file:
+            return image_file.read()
+    finally:
+        try:
+            os.unlink(image_path)
+        except Exception:
+            pass
 
 
 def _has_cached_image(module_name: str, class_name: str) -> bool:
@@ -1022,7 +1308,7 @@ def _best_effort_radio_instance(module_name: str, class_name: str, require_cache
             return radio_cls("")
 
     if base_image is not None:
-        radio = radio_cls(memmap.MemoryMapBytes(base_image))
+        radio = _radio_from_image_bytes(radio_cls, base_image)
     elif issubclass(radio_cls, chirp_common.CloneModeRadio):
         memsize = int(getattr(radio_cls, "_memsize", 0) or 0)
         if memsize > 0:
@@ -1100,7 +1386,7 @@ def _radio_rows_from_instance(radio) -> Rows:
 def _apply_rows_to_radio_instance(
     radio, rows: Rows, module_name: str = "", class_name: str = ""
 ) -> None:
-    """Apply editable rows to a radio instance and fail on invalid channel writes."""
+    """Validate editable rows, then apply them to a radio instance."""
     if radio and (not module_name or not class_name):
         radio_cls = radio.__class__
         module_name = module_name or str(getattr(radio_cls, "__module__", "")).split(".")[-1]
@@ -1111,6 +1397,7 @@ def _apply_rows_to_radio_instance(
     )
     valid_numbers = set(_iter_memory_numbers(radio))
     seen_numbers = set()
+    unreadable_erase_slots: dict[str, list[int]] = {}
     for row in rows:
         try:
             number = int(row.get("Location", "0") or 0)
@@ -1123,21 +1410,58 @@ def _apply_rows_to_radio_instance(
                 f"Channel Location {number} is outside radio memory bounds"
             )
         seen_numbers.add(number)
-        freq_text = str(row.get("Frequency", "") or "").strip()
-        if not freq_text:
-            radio.erase_memory(number)
-            continue
+        # CHIRP's immutable policy needs the current driver memory, not merely
+        # the flattened grid row, before deciding whether a write is allowed.
+        existing = radio.get_memory(number)
         vals = [str(row.get(h, "") or "") for h in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
         vals[0] = str(number)
         mem = _memory_from_row_values(vals, level_map)
         mem.number = number
-        if not mem.mode:
-            mem.mode = "FM"
-        radio.set_memory(mem)
+        action, mem, warnings, validation_errors = _prepare_row_change(
+            radio, row, existing, mem
+        )
+        if action == "skip":
+            continue
+        if validation_errors:
+            raise RuntimeUnsupportedError(
+                f"Channel {number}: {'; '.join(str(error) for error in validation_errors)}"
+            )
+        for warning in warnings:
+            _log_debug(f"Channel {number} validation warning: {warning}")
+        if action == "erase":
+            radio.erase_memory(number)
+        else:
+            radio.set_memory(mem)
 
     for number in sorted(valid_numbers - seen_numbers):
+        # Omitted rows mean erase. Read first so immutable special channels are
+        # protected and already-empty slots do not trigger needless writes.
+        try:
+            existing = radio.get_memory(number)
+        except Exception as exc:
+            reason = str(exc) or exc.__class__.__name__
+            unreadable_erase_slots.setdefault(reason, []).append(number)
+            continue
+        if existing.empty:
+            continue
+        erased = existing.dupe()
+        erased.empty = True
+        validation_errors = _immutable_policy_errors(radio, existing, erased)
+        if validation_errors:
+            raise RuntimeUnsupportedError(
+                f"Channel {number}: {'; '.join(str(error) for error in validation_errors)}"
+            )
         radio.erase_memory(number)
+
+    for reason, numbers in unreadable_erase_slots.items():
+        slots = ", ".join(str(number) for number in numbers[:8])
+        remainder = len(numbers) - 8
+        suffix = f" and {remainder} more" if remainder > 0 else ""
+        _log_debug(
+            f"Channels {slots}{suffix} were not erased because their current "
+            f"values could not be checked: {reason}"
+        )
 
 
 def _ensure_clone_mode_radio(radio_cls):
@@ -1360,9 +1684,7 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
     radio = _create_radio_for_serial(radio_cls)
     radio.sync_in()
     driver_key = _driver_cache_key(module_name, class_name)
-    LAST_IMAGE_BY_DRIVER[driver_key] = (
-        radio.get_mmap().get_byte_compatible().get_packed()
-    )
+    LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
 
     rows = _radio_rows_from_instance(radio)
     csv_text = normalize_rows(rows, module_name, class_name)
@@ -1390,7 +1712,7 @@ def _upload_selected_radio_sync(
         raise RuntimeUnsupportedError(
             "No cached radio image for this model. Download from radio first, then upload."
         )
-    radio = radio_cls(memmap.MemoryMapBytes(base_image))
+    radio = _radio_from_image_bytes(radio_cls, base_image)
     radio.status_fn = _make_status_logger()
     pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
     pipe.baudrate = getattr(radio_cls, "BAUD_RATE", None)
@@ -1405,9 +1727,7 @@ def _upload_selected_radio_sync(
         raise RuntimeUnsupportedError("Radio settings validation failed before upload")
     _prepare_clone_session(radio_cls)
     radio.sync_out()
-    LAST_IMAGE_BY_DRIVER[driver_key] = (
-        radio.get_mmap().get_byte_compatible().get_packed()
-    )
+    LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
     return {"uploaded": True, "settings": settings_result["settings"]}
 
 
@@ -1449,7 +1769,7 @@ def upload_image_base64(module_name: str, class_name: str, image_b64: str):
     except Exception as exc:
         raise RuntimeUnsupportedError("Invalid image base64 payload") from exc
 
-    radio = radio_cls(memmap.MemoryMapBytes(raw_image))
+    radio = _radio_from_image_bytes(radio_cls, raw_image)
     radio.status_fn = _make_status_logger()
     pipe = WebSerialPipe(timeout=_serial_pipe_timeout_seconds())
     pipe.baudrate = getattr(radio_cls, "BAUD_RATE", None)
@@ -1460,9 +1780,7 @@ def upload_image_base64(module_name: str, class_name: str, image_b64: str):
     radio.sync_out()
 
     driver_key = _driver_cache_key(module_name, class_name)
-    LAST_IMAGE_BY_DRIVER[driver_key] = (
-        radio.get_mmap().get_byte_compatible().get_packed()
-    )
+    LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
     return {"uploaded": True, "size": len(raw_image)}
 
 
@@ -1485,17 +1803,15 @@ def export_image_base64(
             )
         base_image = bytes(memsize)
 
-    radio = radio_cls(memmap.MemoryMapBytes(base_image))
+    radio = _radio_from_image_bytes(radio_cls, base_image)
     _apply_rows_to_radio_instance(radio, rows or [], module_name, class_name)
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
     )
     if not settings_result["valid"]:
         raise RuntimeUnsupportedError("Radio settings validation failed before export")
-    packed = radio.get_mmap().get_byte_compatible().get_packed()
-    LAST_IMAGE_BY_DRIVER[driver_key] = bytes(packed)
-    metadata_blob = radio._make_metadata()
-    image_data = bytes(packed) + chirp_common.CloneModeRadio.MAGIC + bytes(metadata_blob)
+    image_data = _image_bytes_from_radio(radio)
+    LAST_IMAGE_BY_DRIVER[driver_key] = image_data
     return {
         "imageBase64": base64.b64encode(image_data).decode("ascii"),
         "size": len(image_data),
@@ -1564,7 +1880,7 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     module_short = str(base_cls.__module__).rsplit(".", 1)[-1]
     class_name = str(base_cls.__name__)
     driver_key = _driver_cache_key(module_short, class_name)
-    LAST_IMAGE_BY_DRIVER[driver_key] = radio.get_mmap().get_byte_compatible().get_packed()
+    LAST_IMAGE_BY_DRIVER[driver_key] = _image_bytes_from_radio(radio)
     rows = _radio_rows_from_instance(radio)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {

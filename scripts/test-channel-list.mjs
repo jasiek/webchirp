@@ -432,6 +432,87 @@ json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
     assert.equal(byRow.has(4), false);
   });
 
+  await t.test("driver validation rejects a globally valid tuning step", async () => {
+    const rows = makeChannelRows().slice(0, 1);
+    rows[0].TStep = "15.00";
+    const result = await runPythonJson(
+      pyodide,
+      `
+_rows = json.loads(_rows_json)
+json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
+      `,
+      {
+        _rows_json: JSON.stringify(rows),
+        _sel_module: TEST_RADIO.module,
+        _sel_class: TEST_RADIO.className,
+      },
+    );
+
+    assert.equal(result.valid, false);
+    const issue = result.issues.find((candidate) => candidate.column === "TStep");
+    assert.match(
+      issue?.message ?? "",
+      /Tuning step 15\.00 not supported/,
+      JSON.stringify(result),
+    );
+  });
+
+  await t.test("the driver's name filter is applied before set_memory", async () => {
+    const rows = makeChannelRows().slice(0, 1);
+    rows[0].Name = "lower*toolong";
+    const result = await runPythonJson(
+      pyodide,
+      `
+_rows = json.loads(_rows_json)
+_radio_cls = _import_radio_class(_sel_module, _sel_class)
+_radio = _radio_cls(memmap.MemoryMapBytes(bytes(_radio_cls._memsize)))
+_expected = _radio.filter_name(_rows[0]["Name"])
+_apply_rows_to_radio_instance(_radio, _rows, _sel_module, _sel_class)
+json.dumps({"expected": _expected, "stored": _radio.get_memory(1).name})
+      `,
+      {
+        _rows_json: JSON.stringify(rows),
+        _sel_module: TEST_RADIO.module,
+        _sel_class: TEST_RADIO.className,
+      },
+    );
+
+    assert.equal(result.stored, result.expected);
+    assert.notEqual(result.stored, rows[0].Name);
+  });
+
+  await t.test("clearing a frequency validates and erases the existing memory", async () => {
+    const rows = makeChannelRows().slice(0, 1);
+    const result = await runPythonJson(
+      pyodide,
+      `
+_rows = json.loads(_rows_json)
+_radio_cls = _import_radio_class(_sel_module, _sel_class)
+_radio = _radio_cls(memmap.MemoryMapBytes(bytes(_radio_cls._memsize)))
+_apply_rows_to_radio_instance(_radio, _rows, _sel_module, _sel_class)
+_image = _radio.get_mmap().get_byte_compatible().get_packed()
+LAST_IMAGE_BY_DRIVER[_driver_cache_key(_sel_module, _sel_class)] = bytes(_image)
+_rows[0]["Frequency"] = ""
+_preflight = validate_rows_for_upload(_rows, _sel_module, _sel_class)
+_write_radio = _radio_cls(memmap.MemoryMapBytes(bytes(_image)))
+_apply_rows_to_radio_instance(_write_radio, _rows, _sel_module, _sel_class)
+json.dumps({
+    "preflight": _preflight,
+    "isEmpty": bool(_write_radio.get_memory(1).empty),
+})
+      `,
+      {
+        _rows_json: JSON.stringify(rows),
+        _sel_module: TEST_RADIO.module,
+        _sel_class: TEST_RADIO.className,
+      },
+    );
+
+    assert.equal(result.preflight.valid, true, JSON.stringify(result));
+    assert.deepEqual(result.preflight.issues, []);
+    assert.equal(result.isEmpty, true);
+  });
+
   await t.test("binary image export/load roundtrip preserves driver identity", async () => {
     const rows = makeChannelRows();
     const result = await runPythonJson(
