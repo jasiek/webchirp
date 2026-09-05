@@ -152,13 +152,59 @@ export function createChannelTable({ dom, state, log, actions }) {
     return "";
   }
 
-  function reindexLocationColumn() {
+  // The driver's memory_bounds, surfaced as the Location column's int range by
+  // get_radio_column_metadata(). 147 of CHIRP's driver call sites number
+  // memories from 1 rather than 0 (against 65 from 0), so nothing may assume a
+  // 0 floor. With no radio selected (the generic-CSV schema) there are no
+  // bounds and 0.. applies.
+  function locationBounds() {
+    const meta = state.radioMetadata.columns?.Location || {};
+    return {
+      lo: Number.isFinite(meta.min) ? Number(meta.min) : 0,
+      hi: Number.isFinite(meta.max) ? Number(meta.max) : Number.POSITIVE_INFINITY,
+    };
+  }
+
+  function parsedLocation(row) {
+    const value = Number.parseInt(String(row?.Location ?? "").trim(), 10);
+    return Number.isInteger(value) ? value : null;
+  }
+
+  // Give every row a memory slot without disturbing the slots rows already
+  // hold. A Location is data, not a row index: it says which memory the
+  // channel occupies, and a codeplug read from a radio is routinely sparse
+  // (the UV-5R test image fills 37 of its 128 slots, at 0-1, 25-31, 50-66,
+  // 80-86 and 124-127). Renumbering to the array index used to move every
+  // channel on any edit, which uploads then wrote to the wrong memories.
+  // Rows keep any in-bounds Location no earlier row has claimed; the rest —
+  // blank inserts, pasted rows past the end, imported rows colliding with
+  // what is already loaded — take the lowest free slot.
+  function assignFreeLocations() {
     if (!state.currentHeaders.includes("Location")) {
       return;
     }
-    state.currentRows.forEach((row, idx) => {
-      row.Location = String(idx);
-    });
+    const { lo, hi } = locationBounds();
+    const claimed = new Set();
+    const needsSlot = [];
+    for (const row of state.currentRows) {
+      const location = parsedLocation(row);
+      if (location === null || location < lo || location > hi || claimed.has(location)) {
+        needsSlot.push(row);
+        continue;
+      }
+      claimed.add(location);
+    }
+    let next = lo;
+    for (const row of needsSlot) {
+      while (claimed.has(next)) {
+        next += 1;
+      }
+      // A full codeplug leaves the surplus rows without a slot. Blanking is
+      // what keeps that visible: the upload preflight flags an empty Location
+      // rather than the runtime rejecting an out-of-bounds one mid-transfer.
+      row.Location = next > hi ? "" : String(next);
+      claimed.add(next);
+    }
   }
 
   function createBlankChannelRow() {
@@ -231,7 +277,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     const selectedIndexes = sortedSelectedRowIndexes();
     const insertAt = selectedIndexes.length > 0 ? selectedIndexes[0] : state.currentRows.length;
     state.currentRows.splice(insertAt, 0, createBlankChannelRow());
-    reindexLocationColumn();
+    assignFreeLocations();
     clearInvalidHighlights();
 
     selectedRowIndexes = new Set([insertAt]);
@@ -257,7 +303,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     // was read from. Reporting an upload of that as "radio" would answer the
     // provenance question wrongly on exactly the path it exists for.
     state.codeplugSource = "mixed";
-    reindexLocationColumn();
+    assignFreeLocations();
     clearInvalidHighlights();
 
     selectedRowIndexes = new Set(
@@ -282,7 +328,8 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (removed === 0) {
       return 0;
     }
-    reindexLocationColumn();
+    // No reassignment: removing a channel frees its memory and leaves every
+    // surviving channel where it was.
     clearInvalidHighlights();
 
     resetRowSelection();
@@ -306,7 +353,10 @@ export function createChannelTable({ dom, state, log, actions }) {
   }
 
   // Move each selected row by one position, preserving relative order and
-  // clamping at the edges; Location renumbers to match the new order.
+  // clamping at the edges. The memory slots stay where they are and the
+  // channels rotate through them, so moving a channel up swaps its memory
+  // with its neighbour's instead of renumbering the whole codeplug. That
+  // keeps the set of occupied memories — and so a sparse layout — intact.
   function moveSelectedChannelRows(direction) {
     const selectedIndexes = sortedSelectedRowIndexes();
     if (selectedIndexes.length === 0) {
@@ -326,8 +376,13 @@ export function createChannelTable({ dom, state, log, actions }) {
       );
       return;
     }
+    const locationsByPosition = state.currentRows.map((row) => row.Location);
     state.currentRows = order.map((idx) => state.currentRows[idx]);
-    reindexLocationColumn();
+    if (state.currentHeaders.includes("Location")) {
+      state.currentRows.forEach((row, idx) => {
+        row.Location = locationsByPosition[idx];
+      });
+    }
     clearInvalidHighlights();
 
     selectedRowIndexes = new Set(selected);
@@ -470,15 +525,23 @@ export function createChannelTable({ dom, state, log, actions }) {
         return;
       }
     }
+    const keepsLocation = state.currentHeaders.includes("Location");
     rows.forEach((row, offset) => {
       const at = startAt + offset;
       if (at < state.currentRows.length) {
+        // Overwrite means "replace the channel in this memory", so the pasted
+        // channel inherits the slot rather than the Location it was copied
+        // from — pasting between codeplugs must not drag the source's
+        // numbering across.
+        if (keepsLocation) {
+          row.Location = state.currentRows[at].Location;
+        }
         state.currentRows[at] = row;
       } else {
         state.currentRows.push(row);
       }
     });
-    reindexLocationColumn();
+    assignFreeLocations();
     clearInvalidHighlights();
 
     selectedRowIndexes = new Set(rows.map((_, offset) => startAt + offset));
@@ -1079,7 +1142,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     applyValidationIssues,
     selectedRowsForOperations,
     hasRealChannels,
-    reindexLocationColumn,
+    assignFreeLocations,
     insertRowsAtSelectionOrEnd,
     createBlankChannelRow,
     setRowValueIfPresent,

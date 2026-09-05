@@ -764,15 +764,65 @@ def _infer_csv_error_column(error_text: str):
     return ""
 
 
+def _memory_bounds_for_driver(module_name: str, class_name: str):
+    """Return a driver's (lo, hi) memory bounds, or None if unavailable."""
+    rf = _driver_features(module_name, class_name)
+    bounds = getattr(rf, "memory_bounds", None) if rf else None
+    if not bounds:
+        return None
+    try:
+        lo, hi = bounds
+        return int(lo), int(hi)
+    except Exception:
+        return None
+
+
 def validate_rows_for_upload(rows, module_name="", class_name=""):
     """Validate row values with CHIRP CSV parsing and return per-cell issues."""
     level_map = _power_levels_by_label(
         _valid_power_levels_for_driver(module_name, class_name)
     )
+    # Location is checked here as well as in _apply_rows_to_radio_instance,
+    # because that one raises partway through a clone: the radio is already
+    # open and some memories written. Preflight is the only place a bad
+    # Location can be reported while it is still just a highlighted cell.
+    bounds = _memory_bounds_for_driver(module_name, class_name)
+    seen_locations = {}
     issues = []
     for row_index, row in enumerate(rows or []):
         vals = [str((row or {}).get(header, "") or "") for header in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
+        # A non-integer Location already raises out of _memory_from_row_values
+        # below, so only range and uniqueness are checked here.
+        try:
+            location = int(str((row or {}).get("Location", "") or "").strip())
+        except (TypeError, ValueError):
+            location = None
+        if location is not None:
+            if bounds and not (bounds[0] <= location <= bounds[1]):
+                issues.append(
+                    {
+                        "rowIndex": int(row_index),
+                        "column": "Location",
+                        "message": (
+                            f"Channel Location {location} is outside radio "
+                            f"memory bounds {bounds[0]}-{bounds[1]}"
+                        ),
+                    }
+                )
+            elif location in seen_locations:
+                issues.append(
+                    {
+                        "rowIndex": int(row_index),
+                        "column": "Location",
+                        "message": (
+                            f"Channel Location {location} is already used by "
+                            f"row {seen_locations[location] + 1}"
+                        ),
+                    }
+                )
+            else:
+                seen_locations[location] = row_index
         try:
             _memory_from_row_values(vals, level_map)
         except Exception as exc:

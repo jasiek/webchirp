@@ -84,7 +84,8 @@ export function createCodeplugIo(ctx) {
 
   // Apply a parsed CSV to the editor: "replace" swaps the channel list out
   // wholesale (Locations come from the file); "merge" appends the imported
-  // channels below the existing ones and renumbers Locations.
+  // channels below the existing ones, where they keep the Location the file
+  // gave them unless it is out of bounds or already taken by a loaded channel.
   function applyParsedCsv(parsed, mode = "replace", csvSource = "csv") {
     const headersFromMeta = state.radioMetadata.headers || [];
     const parsedHeaders = parsed.headers || [];
@@ -93,7 +94,7 @@ export function createCodeplugIo(ctx) {
     if (mode === "merge") {
       state.currentRows = state.currentRows.concat(imported);
       state.codeplugSource = "mixed";
-      ctx.table.reindexLocationColumn();
+      ctx.table.assignFreeLocations();
     } else {
       state.currentRows = imported;
       state.codeplugSource = csvSource;
