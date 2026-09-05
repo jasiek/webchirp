@@ -45,15 +45,22 @@ function hasWebUsb() {
 }
 
 // Manage Web Serial lifecycle and provide buffered byte-oriented I/O helpers.
+// What a port is opened with before any driver has asked for something else.
+// A clone starts from these every time: framing a previous clone's driver set
+// (tk280 wants even parity, tg_uv2p two stop bits) must not be inherited by the
+// next radio, which would corrupt every byte it reads.
+const DEFAULT_PORT_OPTIONS = Object.freeze({
+  dataBits: 8,
+  stopBits: 1,
+  parity: "none",
+  flowControl: "none",
+});
+
 export class BrowserSerialBridge {
   constructor({ createWebUsbSerial: createWebUsbSerialImpl } = {}) {
     this.port = null;
     this.reader = null;
     this.writer = null;
-    // Line rate the open port was configured with. port.open() latches the
-    // rate and no API changes it in place, so the bridge tracks it to know
-    // when a driver needs the port reopened (issue #76).
-    this.baudRate = 0;
     this.readBuffer = new Uint8Array(0);
     this.readWaiters = new Set();
     this.lastDeviceName = "";
@@ -74,11 +81,30 @@ export class BrowserSerialBridge {
     // lives in the cable. The port is already torn down by the time it runs.
     this.onPortLost = null;
     this._portLostWatch = null;
+    // The full option set this.port was opened with. A reconfigure has to hand
+    // open() every option again, not just the changed one, so what the caller
+    // did not touch has to be remembered rather than re-defaulted.
+    this.portOptions = null;
+    // The last DTR/RTS state we applied. Closing a port drops the control lines
+    // back to the adapter's defaults, so a reconfigure has to put them back --
+    // otherwise a rate change silently undoes the line state a driver set just
+    // before it (thd72 does both, two lines apart).
+    this.lastSignals = null;
+    // The in-flight read loop, so a reopen can wait for the old one to die
+    // before starting the next. Two loops sharing this.readBuffer would
+    // interleave stale and fresh bytes.
+    this._readLoop = null;
     this._createWebUsbSerial = createWebUsbSerialImpl || createWebUsbSerial;
   }
 
   // Choose the transport open() will use. Resets any cached provider while
   // disconnected so the next connect re-resolves against the new preference.
+  // Derived rather than stored: portOptions is what the port was actually
+  // opened with, and a second copy of the rate could drift from it.
+  get baudRate() {
+    return Number(this.portOptions?.baudRate) || 0;
+  }
+
   setPreferredTransport(transport) {
     this.preferredTransport =
       transport === "webusb" || transport === "webserial" ? transport : "auto";
@@ -159,19 +185,14 @@ export class BrowserSerialBridge {
     const serial = await this._ensureSerial();
     try {
       this.port = await serial.requestPort({});
-      await this.port.open({
-        baudRate,
-        dataBits: 8,
-        stopBits: 1,
-        parity: "none",
-        flowControl: "none",
-      });
+      const options = { ...DEFAULT_PORT_OPTIONS, baudRate };
+      await this.port.open(options);
+      this.portOptions = options;
       const identity = this._getPortIdentity(this.port);
       this.lastDeviceName = this._describePort(this.port);
-      this.baudRate = Number(baudRate) || 0;
       this.reader = this.port.readable.getReader();
       this.writer = this.port.writable.getWriter();
-      this._startReadLoop();
+      this._readLoop = this._startReadLoop();
       this._watchForPortLoss();
       const viaWebUsb = this.transport === "webusb";
       return {
@@ -195,27 +216,30 @@ export class BrowserSerialBridge {
   // before cloning a 115200-baud one or the transfer times out on garbage
   // (issue #76). Reusing the same port handle keeps this off the browser's
   // port picker: no fresh user gesture, nothing to re-select.
+  //
+  // This is the clone-*start* entry point; reconfigure() is the mid-clone one.
+  // They share the reopen but not the failure policy, and deliberately so:
+  // nothing has been transferred yet here, so a port that cannot carry the
+  // clone is better torn down than left open and offering Download.
   async applyBaudRate(baudRate) {
     const wanted = Number(baudRate);
-    if (!Number.isFinite(wanted) || wanted <= 0 || wanted === this.baudRate) {
+    if (!Number.isFinite(wanted) || wanted <= 0) {
       return { changed: false, baudRate: this.baudRate, previousBaudRate: this.baudRate };
     }
     if (!this.port || !this.writer) {
       throw new Error("Port is not connected.");
     }
+    // Back to the defaults, not to whatever the last clone's driver left
+    // behind, and compared as a whole set so drifted framing is reset even when
+    // the rate itself is unchanged.
+    const target = { ...DEFAULT_PORT_OPTIONS, baudRate: wanted };
+    const current = this.portOptions || {};
+    if (Object.keys(target).every((key) => target[key] === current[key])) {
+      return { changed: false, baudRate: this.baudRate, previousBaudRate: this.baudRate };
+    }
     const previousBaudRate = this.baudRate;
-    const port = this.port;
-    this._unwatchPortLoss();
-    await this._releaseStreams();
     try {
-      await port.close();
-      await port.open({
-        baudRate: wanted,
-        dataBits: 8,
-        stopBits: 1,
-        parity: "none",
-        flowControl: "none",
-      });
+      await this._reopenPort(target);
     } catch (error) {
       // Half-reopened is worse than disconnected: the UI would keep offering
       // Download against a port that can no longer carry it. Tear the session
@@ -232,12 +256,9 @@ export class BrowserSerialBridge {
         `Could not reopen the serial port at ${wanted} baud: ${error?.message || error}`,
       );
     }
+    // Nothing has been transferred yet, so anything buffered is pre-clone
+    // noise; prepareClone() clears it a moment later in any case.
     this.readBuffer = new Uint8Array(0);
-    this.baudRate = wanted;
-    this.reader = port.readable.getReader();
-    this.writer = port.writable.getWriter();
-    this._startReadLoop();
-    this._watchForPortLoss();
     this._debug(`Serial port reopened at ${wanted} baud (was ${previousBaudRate || "unknown"}).`);
     return { changed: true, baudRate: wanted, previousBaudRate };
   }
@@ -264,7 +285,9 @@ export class BrowserSerialBridge {
     this.port = null;
     this.reader = null;
     this.writer = null;
-    this.baudRate = 0;
+    this.portOptions = null;
+    this.lastSignals = null;
+    this._readLoop = null;
     this.readBuffer = new Uint8Array(0);
     this._resolveReadWaiters(false);
   }
@@ -277,6 +300,15 @@ export class BrowserSerialBridge {
     } catch {
       // Ignore cancellation errors.
     }
+    try {
+      // Cancelling settles the pending read, but the loop's own continuation is
+      // still queued. A reopen that carries the read buffer across cannot have
+      // the outgoing loop appending to it afterwards, so wait for it to finish.
+      await this._readLoop;
+    } catch {
+      // The loop reports its own end; a rejection must not mask the caller.
+    }
+    this._readLoop = null;
     try {
       this.reader?.releaseLock();
     } catch {
@@ -369,11 +401,12 @@ export class BrowserSerialBridge {
     // delay below apply to the port the transfer will actually use.
     const rate = await this.applyBaudRate(baudRate);
     this.readBuffer = new Uint8Array(0);
+    this.lastSignals = {
+      dataTerminalReady: Boolean(wantsDtr),
+      requestToSend: Boolean(wantsRts),
+    };
     try {
-      await this.port.setSignals({
-        dataTerminalReady: Boolean(wantsDtr),
-        requestToSend: Boolean(wantsRts),
-      });
+      await this.port.setSignals(this.lastSignals);
     } catch {
       // Some adapters/browsers may not support control line changes.
     }
@@ -400,8 +433,94 @@ export class BrowserSerialBridge {
     if (!Object.keys(signals).length) {
       return { applied: false, ...signals };
     }
+    // Recorded as intent, before the attempt and whether or not it succeeds, so
+    // it matches prepareClone() and so a later reopen restores what the driver
+    // asked for. A port that could not honour it will not honour the restore
+    // either, which is the same harmless no-op.
+    this.lastSignals = { ...(this.lastSignals || {}), ...signals };
     await this.port.setSignals(signals);
     return { applied: true, ...signals };
+  }
+
+  // The mid-clone counterpart to applyBaudRate(): drivers change the port's
+  // settings part-way through a transfer (thd72 jumps to 57600 after its
+  // PROGRAM handshake), and by then the radio has already switched. Options the
+  // caller leaves out keep their current value.
+  async reconfigure(options = {}) {
+    if (!this.port) {
+      throw new Error("Port is not connected.");
+    }
+    const current = this.portOptions || {};
+    const next = { ...current };
+    for (const [key, value] of Object.entries(options)) {
+      if (value !== null && value !== undefined) {
+        next[key] = value;
+      }
+    }
+    const changed = Object.keys(next).filter((key) => next[key] !== current[key]);
+    if (!changed.length) {
+      // Drivers assign the rate they are already running at (often once per
+      // block); a reopen per assignment would restart the chip mid-clone.
+      return { reconfigured: false, options: next, changed };
+    }
+
+    // Bytes buffered before the switch arrived at the old rate and are real
+    // driver data -- pyserial reconfigures without flushing the input queue and
+    // drivers are written against that -- so they survive the reopen.
+    const pending = this.readBuffer;
+    try {
+      await this._reopenPort(next);
+    } catch (error) {
+      // Unlike a clone-start re-rate, the session is worth saving here: the
+      // port itself is fine, only the change failed, and a live port lets the
+      // user retry without re-picking the device. Put it back as it was.
+      try {
+        await this._reopenPort(current);
+        await this._resumeBuffered(pending);
+      } catch {
+        await this._teardown();
+      }
+      throw new Error(
+        `Could not reconfigure the port (${changed.join(", ")}): ${error?.message || error}`,
+      );
+    }
+    await this._resumeBuffered(pending);
+    return { reconfigured: true, options: next, changed };
+  }
+
+  // Close and reopen the port we already hold with a new option set, keeping
+  // everything a reopen must survive: the port object, the pending read waiters
+  // and the disconnect watch. Throws with the port left closed -- the caller
+  // decides what that means, because the right answer differs between a
+  // clone-start re-rate and a mid-clone change.
+  async _reopenPort(nextOptions) {
+    const port = this.port;
+    this._unwatchPortLoss();
+    await this._releaseStreams();
+    await port.close();
+    await port.open(nextOptions);
+    this.portOptions = nextOptions;
+    this.reader = port.readable.getReader();
+    this.writer = port.writable.getWriter();
+    this._readLoop = this._startReadLoop();
+    this._watchForPortLoss();
+  }
+
+  // Restore what a mid-clone reopen has to carry across it: the bytes received
+  // before the switch, and the control lines the close dropped back to the
+  // adapter's defaults.
+  async _resumeBuffered(pendingBuffer) {
+    this.readBuffer = pendingBuffer || new Uint8Array(0);
+    if (this.readBuffer.length) {
+      this._debug(`Kept ${this.readBuffer.length} buffered byte(s) across port reconfigure`);
+    }
+    if (this.lastSignals) {
+      try {
+        await this.port.setSignals(this.lastSignals);
+      } catch {
+        // Same rule as setSignals(): control lines are advisory.
+      }
+    }
   }
 
   // Both transports report a device going away as a "disconnect" event on the
@@ -591,6 +710,12 @@ function describeSignals(payload = {}) {
   return parts.length ? parts.join(" ") : "no lines";
 }
 
+// Name the port options a reconfigure actually changed, for the debug panel.
+function describeOptions(options = {}, changed = []) {
+  const keys = changed.length ? changed : Object.keys(options);
+  return keys.map((key) => `${key}=${options[key]}`).join(" ") || "no change";
+}
+
 // Build a serial RPC dispatcher used by runtime bridge messages.
 export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) {
   async function handleOpen(payload = {}) {
@@ -675,6 +800,18 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
     }
   }
 
+  // A rate change is not advisory the way DTR/RTS is. By the time a driver
+  // assigns it the radio has already switched, so a port left at the old rate
+  // cannot complete the clone -- a silent timeout ten seconds later is a much
+  // worse diagnostic than the failure itself. This one propagates.
+  async function handleReconfigure(payload = {}) {
+    const res = await serialBridge.reconfigure(payload.options || {});
+    if (res.reconfigured) {
+      logSerial(`Reopened port (${describeOptions(res.options, res.changed)})`);
+    }
+    return res;
+  }
+
   async function handleResetBuffers() {
     serialBridge.readBuffer = new Uint8Array(0);
     return { reset: true };
@@ -695,6 +832,7 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
     progress: handleProgress,
     prepareClone: handlePrepareClone,
     setSignals: handleSetSignals,
+    reconfigure: handleReconfigure,
     resetBuffers: handleResetBuffers,
     getPortInfo: handleGetPortInfo,
   });

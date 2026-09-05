@@ -170,6 +170,7 @@ class NodeSerialBridge {
       baudRate: baud,
       autoOpen: false,
     });
+    this.portOptions = { baudRate: baud };
     this.readBuffer = Buffer.alloc(0);
     this.baudRate = baud;
     this.port.on("data", this.onData);
@@ -287,6 +288,26 @@ class NodeSerialBridge {
     await setSerialPortLines(this.port, lines);
     return { applied: true, ...lines };
   }
+
+  // Mid-clone port reconfiguration. node-serialport can change the settings on
+  // an open handle, so this needs no close/reopen dance -- unlike Web Serial,
+  // whose only route is closing the port and opening it again.
+  async reconfigure(options = {}) {
+    this.ensureOpen();
+    const current = this.portOptions || {};
+    const next = { ...current, ...options };
+    const changed = Object.keys(next).filter((key) => next[key] !== current[key]);
+    if (!changed.length) {
+      return { reconfigured: false, options: next, changed };
+    }
+    await new Promise((resolve, reject) => {
+      this.port.update({ baudRate: Number(next.baudRate) }, (error) =>
+        error ? reject(error) : resolve(undefined),
+      );
+    });
+    this.portOptions = next;
+    return { reconfigured: true, options: next, changed };
+  }
 }
 
 class StubSerialBridge {
@@ -297,6 +318,9 @@ class StubSerialBridge {
     // Every setSignals() call, in order, so tests can assert that a driver's
     // control-line changes actually reached the transport (issue #77).
     this.signalCalls = [];
+    // Every reconfigure() the pipe actually pushed, in order. The stub opens at
+    // no particular rate, so it reports every call as a change.
+    this.reconfigureCalls = [];
   }
 
   async open() {
@@ -341,6 +365,11 @@ class StubSerialBridge {
     this.signalCalls.push({ dataTerminalReady, requestToSend });
     return { applied: true };
   }
+
+  async reconfigure(options = {}) {
+    this.reconfigureCalls.push({ ...options });
+    return { reconfigured: true, options, changed: Object.keys(options) };
+  }
 }
 
 function installSerialGlobals(serialBridge, target = globalThis) {
@@ -358,6 +387,22 @@ function installSerialGlobals(serialBridge, target = globalThis) {
   target.serial_prepare_clone = (wantsDtr, wantsRts, settleMs, baudRate) =>
     serialBridge.prepareClone(wantsDtr, wantsRts, settleMs, baudRate);
   target.serial_set_signals = (dtr, rts) => serialBridge.setSignals(dtr, rts);
+  target.serial_reconfigure = (baudRate, dataBits, stopBits, parity) => {
+    const options = {};
+    if (baudRate !== null && baudRate !== undefined) {
+      options.baudRate = Number(baudRate);
+    }
+    if (dataBits !== null && dataBits !== undefined) {
+      options.dataBits = Number(dataBits);
+    }
+    if (stopBits !== null && stopBits !== undefined) {
+      options.stopBits = Number(stopBits);
+    }
+    if (parity !== null && parity !== undefined) {
+      options.parity = String(parity);
+    }
+    return serialBridge.reconfigure(options);
+  };
   target.serial_reset_buffers = () => serialBridge.resetBuffers();
 }
 
