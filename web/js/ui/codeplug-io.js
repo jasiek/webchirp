@@ -258,6 +258,10 @@ export function createCodeplugIo(ctx) {
     ctx.table.render();
     ctx.settings.updateViewButtons();
     ctx.settings.render();
+    // The image has now supplied both the detected driver's schema and its
+    // settings. Keep the reload short-circuit aligned with that applied state,
+    // rather than whichever radio was last loaded through the dropdowns.
+    state.lastLoadedRadioKey = state.selectedRadio.key;
     // Reported after the image has selected its radio, so the event names the
     // driver the file turned out to need rather than whatever was selected
     // before the load.
