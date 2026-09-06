@@ -108,6 +108,18 @@ function firstText(parent, selector) {
   return String(parent?.querySelector(selector)?.textContent || "").trim();
 }
 
+// Read an RXF <qrg> body as a frequency in MHz, yielding NaN for anything that
+// is not a usable one. Number("") is 0 rather than NaN, so a plain
+// Number(firstText(...)) turned an absent or empty element into a finite 0 that
+// passed every Number.isFinite guard downstream: it defeated the
+// receive/transmit fallbacks in buildPrzemiennikiRows and turned a one-sided
+// entry into a bogus multi-MHz Duplex/Offset. A literal 0 in the feed is
+// rejected for the same reason -- no repeater works on 0 Hz.
+function parseQrgMhz(text) {
+  const numeric = Number(text || NaN);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : NaN;
+}
+
 function formatFrequencyMhz(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
@@ -168,8 +180,8 @@ export function parsePrzemiennikiXml(xmlText) {
       return {
         qra: firstText(repeaterEl, "qra"),
         mode: firstText(repeaterEl, "mode"),
-        qrgRx: Number(firstText(repeaterEl, 'qrg[type="rx"]')),
-        qrgTx: Number(firstText(repeaterEl, 'qrg[type="tx"]')),
+        qrgRx: parseQrgMhz(firstText(repeaterEl, 'qrg[type="rx"]')),
+        qrgTx: parseQrgMhz(firstText(repeaterEl, 'qrg[type="tx"]')),
         qth: firstText(repeaterEl, "qth"),
         remarks: firstText(repeaterEl, "remarks"),
         link: firstText(repeaterEl, "link"),

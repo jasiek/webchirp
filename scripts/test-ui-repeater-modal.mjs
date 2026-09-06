@@ -623,6 +623,34 @@ test("IRTS skips a repeater the selected radio cannot tune", async () => {
   );
 });
 
+test("an RXF entry missing one qrg imports as simplex, not as a bogus split", async () => {
+  const { dom, table } = buildHarness();
+  installFetch([
+    { match: "/irts/meta", body: IRTS_META_JSON },
+    {
+      match: "/irts",
+      body: `
+        <rxf><perspective>radio</perspective><repeaters><repeater>
+          <qra>EI2ONE</qra><mode>fm</mode><country>ie</country>
+          <qrg type="tx">145.6</qrg>
+        </repeater></repeaters></rxf>
+      `,
+    },
+  ]);
+
+  await dom.channelImportIrtsEl.dispatch("click");
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  // An absent <qrg> used to parse as Number("") === 0, a finite value that
+  // satisfied every downstream isFinite guard: this row arrived as a 0 MHz
+  // receive frequency and was dropped as out of band. It now parses as NaN and
+  // falls back to the one frequency the entry does carry.
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["EI2ONE"]);
+  assert.equal(table.inserted[0].rows[0].Frequency, "145.600000");
+  assert.equal(table.inserted[0].rows[0].Duplex, "");
+  assert.equal(table.inserted[0].rows[0].Offset, "0.000000");
+});
+
 test("a failed query reports the error and leaves the modal open", async () => {
   const { dom, log, table } = buildHarness();
   installFetch([
