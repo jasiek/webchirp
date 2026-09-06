@@ -1837,31 +1837,106 @@ def _serialize_radio_settings(settings_tree):
     return [_serialize_setting_node(group, []) for group in settings_tree]
 
 
-def _apply_setting_value(setting, value_index, next_value):
-    """Assign one serialized setting value onto the corresponding CHIRP setting."""
-    target = setting[value_index] if len(setting) > 1 else setting.value
-    target.set_value(next_value)
+def _settings_container_children(container: Any) -> list[Any]:
+    """List a settings container's child nodes in tree order.
+
+    CHIRP hands us three shapes of container and only two of them index by
+    name: `RadioSettings` (a list subclass with a name-aware `__getitem__`),
+    `RadioSettingGroup` (a name dict), and the bare `list` some drivers return
+    from `get_settings()` -- `icf520.py:1417` returns `list(RadioSettingGroup(
+    "top", ...))`, which indexes only by integer. Position is the one form of
+    addressing all three answer to.
+    """
+    if isinstance(container, chirp_settings.RadioSettingGroup):
+        return list(container.values())
+    return list(container)
 
 
-def _setting_value_is_mutable(setting, value_index):
-    """Report whether the selected CHIRP setting value accepts updates."""
+def _match_serialized_child(
+    actual_children: Sequence[Any], child_id: str, position: int
+) -> Optional[Any]:
+    """Resolve the CHIRP node a serialized child refers to, position first.
+
+    Names are not unique: `kguv920pa.py:770` names its Repeater group
+    "rmt_grp" alongside the Remote Control group of the same name, and
+    `retevis_ha2.py:1212` has two "aprsinfo" groups. A name lookup returns the
+    first of the pair every time, so every setting under the second was
+    reported as missing from the image. The tree we replay onto is built by
+    the same driver code from the same bytes, so the child at the same
+    position is the right one, and the name is a consistency check rather
+    than the lookup key.
+
+    The name scan is only a fallback for two trees that genuinely differ in
+    shape, and it refuses an ambiguous name rather than guessing: with a
+    duplicate name and a shifted shape, taking the first match would write an
+    edited value into the wrong group. Reporting the mismatch is the safer
+    failure -- it stops the upload instead of silently miswriting it.
+    """
+    if 0 <= position < len(actual_children):
+        candidate = actual_children[position]
+        if str(candidate.get_name()) == child_id:
+            return candidate
+    named = [
+        candidate
+        for candidate in actual_children
+        if str(candidate.get_name()) == child_id
+    ]
+    return named[0] if len(named) == 1 else None
+
+
+def _setting_value_at(setting: Any, value_index: int) -> Optional[Any]:
+    """Return the CHIRP value object a serialized value index addresses."""
     try:
-        target = setting[value_index] if len(setting) > 1 else setting.value
+        return setting[value_index] if len(setting) > 1 else setting.value
     except Exception:
+        return None
+
+
+def _setting_value_is_mutable(setting: Any, value_index: int) -> bool:
+    """Report whether the selected CHIRP setting value accepts updates."""
+    target = _setting_value_at(setting, value_index)
+    if target is None:
         return False
     return bool(getattr(target, "get_mutable", lambda: True)())
 
 
-def _apply_serialized_settings(actual_container, payload_children, issues, prefix):
+def _serialized_value_matches(target: Any, next_value: Any) -> bool:
+    """Report whether a serialized value already equals CHIRP's current one.
+
+    Writing back a value the driver itself emitted is a no-op at best and a
+    validation failure at worst, because CHIRP's read and write sides are not
+    symmetric. `RadioSettingValueString.set_value()` autopads to maxlength, so
+    a driver that narrows the charset afterwards (`retevis_c2.py:1189`) rejects
+    the padded string it just handed us; a `RadioSettingValueList` whose stored
+    index is outside its own options rejects the option it just reported. Only
+    values the user actually changed are worth writing.
+    """
+    try:
+        current = target.get_value()
+    except Exception:
+        return False
+    if current is None:
+        return False
+    if current == next_value:
+        return True
+    return str(current) == str(next_value)
+
+
+def _apply_serialized_settings(
+    actual_container: Any,
+    payload_children: Optional[Sequence[Any]],
+    issues: list[dict[str, Any]],
+    prefix: list[str],
+) -> None:
     """Apply serialized UI settings onto a fresh CHIRP settings tree."""
     children = payload_children or []
-    for payload in children:
+    actual_children = _settings_container_children(actual_container)
+    for position, payload in enumerate(children):
         child_id = str(payload.get("id", ""))
         if not child_id:
             continue
-        try:
-            actual_child = actual_container[child_id]
-        except Exception:
+        actual_child = _match_serialized_child(actual_children, child_id, position)
+        if actual_child is None:
             issues.append(
                 {
                     "path": _setting_path(prefix + [child_id]),
@@ -1890,8 +1965,39 @@ def _apply_serialized_settings(actual_container, payload_children, issues, prefi
         for value_index, value_payload in enumerate(payload_values):
             if not _setting_value_is_mutable(actual_child, value_index):
                 continue
+            target = _setting_value_at(actual_child, value_index)
+            if target is None:
+                continue
+            # An uninitialized value is one CHIRP could not load: the driver
+            # built it from image content its own validation rejects, and
+            # `RadioSettingGroup.__init__` logged and swallowed the error
+            # (`settings.py:80-90`), leaving `_current` at None. It serializes
+            # as null, and replaying null reaches `len(None)` inside
+            # set_value(). Desktop CHIRP strips these before applying
+            # (`wxui/settingsedit.py:177-190`); skipping them is the same rule.
+            if not bool(getattr(target, "initialized", True)):
+                continue
+            # Past that guard the live value exists, so a null in the payload
+            # is not CHIRP declining to load it -- it is a payload that lost a
+            # value the radio has. Skipping would silently keep the old one
+            # and report the upload as clean, so say so instead. Measured
+            # across every upstream image that carries settings, a serialized
+            # null and an uninitialized target always coincide, so this
+            # reports a malformed payload rather than a driver quirk.
+            next_value = value_payload.get("current")
+            if next_value is None:
+                issues.append(
+                    {
+                        "path": _setting_path(path),
+                        "valueIndex": int(value_index),
+                        "message": "Setting has no value to write.",
+                    }
+                )
+                continue
+            if _serialized_value_matches(target, next_value):
+                continue
             try:
-                _apply_setting_value(actual_child, value_index, value_payload.get("current"))
+                target.set_value(next_value)
             except Exception as exc:
                 issues.append(
                     {
