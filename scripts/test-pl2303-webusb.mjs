@@ -12,23 +12,19 @@ import {
   pickPl2303BaudRate,
 } from "../web/js/pl2303-webusb.js";
 import { createWebUsbSerial } from "../web/js/webusb-serial.js";
-
-function setNavigator(value) {
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value });
-}
-
-// A device descriptor blob for GET_DESCRIPTOR: bcdUSB at bytes 2-3,
-// bDeviceClass at 4, bMaxPacketSize0 at 7, bcdDevice at bytes 12-13.
-function descriptorBytes({ usbVersion, deviceClass, maxPacketSize0, deviceVersion }) {
-  const bytes = new Uint8Array(18);
-  bytes[2] = usbVersion & 0xff;
-  bytes[3] = (usbVersion >> 8) & 0xff;
-  bytes[4] = deviceClass;
-  bytes[7] = maxPacketSize0;
-  bytes[12] = deviceVersion & 0xff;
-  bytes[13] = (deviceVersion >> 8) & 0xff;
-  return bytes;
-}
+import {
+  PL2303_HXN_DESCRIPTOR,
+  PL2303_HX_DESCRIPTOR,
+  bytesOf,
+  deviceDescriptorBytes,
+  makeFakeUsbDevice,
+} from "./test-support/fake-usb.mjs";
+import { withNavigator } from "./test-support/globals.mjs";
+import {
+  expectFullPipeline,
+  expectOnePacketPerTransfer,
+  expectStallRecovery,
+} from "./test-support/usb-read-path.mjs";
 
 // Fake USBDevice for a PL2303: interrupt IN + bulk OUT + bulk IN endpoints,
 // records all control transfers, answers GET_DESCRIPTOR and the HX probe.
@@ -45,27 +41,16 @@ function makeFakeDevice({
 }) {
   const controlIn = [];
   const controlOut = [];
-  const transferInCalls = [];
-  const clearHaltCalls = [];
-  // Transfers the driver has queued that the fake has not answered yet.
-  const outstanding = [];
-  const device = {
+  const fake = makeFakeUsbDevice({
     vendorId: 0x067b,
     productId: 0x2303,
-    configuration: {
-      interfaces: [
-        {
-          interfaceNumber,
-          alternate: { endpoints },
-        },
-      ],
-    },
-    open: async () => {},
-    claimInterface: async () => {},
+    endpoints,
+    interfaceNumber,
+    cancelOnClearHalt,
     controlTransferIn: async (setup, length) => {
       controlIn.push({ ...setup, length });
       if (setup.requestType === "standard" && setup.request === 0x06) {
-        return { status: "ok", data: new DataView(descriptorBytes(descriptor).buffer) };
+        return { status: "ok", data: new DataView(deviceDescriptorBytes(descriptor).buffer) };
       }
       if (setup.requestType === "vendor" && setup.value === 0x8080) {
         if (!hxProbeSucceeds) {
@@ -76,48 +61,15 @@ function makeFakeDevice({
       return { status: "ok", data: new DataView(new Uint8Array(length || 1).buffer) };
     },
     controlTransferOut: async (setup, data) => {
-      controlOut.push({ ...setup, data: data ? new Uint8Array(data.slice ? data.slice(0) : data) : null });
+      controlOut.push({ ...setup, data: bytesOf(data) });
       return { status: "ok" };
     },
-    clearHalt: async (direction, endpoint) => {
-      clearHaltCalls.push({ direction, endpoint });
-      if (cancelOnClearHalt) {
-        // Chromium cancels every transfer outstanding on the interface before
-        // it clears the endpoint, and Blink rejects a cancelled transfer with
-        // AbortError rather than completing it with a status.
-        for (const transfer of outstanding.splice(0)) {
-          transfer.reject(Object.assign(
-            new Error("The transfer was cancelled."),
-            { name: "AbortError" },
-          ));
-        }
-      }
-    },
-    transferIn: async (endpointNumber, length) => {
-      transferInCalls.push({ endpointNumber, length });
-      // Left unanswered until the test delivers a result, the way real hardware
-      // leaves a transfer pending until bytes arrive.
-      return new Promise((resolve, reject) => {
-        outstanding.push({ resolve, reject });
-      });
-    },
-    transferOut: async () => ({ status: "ok" }),
-  };
-  // Answer the oldest unanswered transfer — bulk transfers on one endpoint
-  // complete in the order they were issued.
-  const deliver = (result) => {
-    outstanding.shift()?.resolve(result);
-  };
-  return { device, controlIn, controlOut, transferInCalls, clearHaltCalls, deliver };
+  });
+  return { ...fake, controlIn, controlOut };
 }
 
-// Let the stream's pull run: it is invoked off a microtask and awaits transfers.
-function tick() {
-  return new Promise((resolve) => { setTimeout(resolve, 0); });
-}
-
-const HX_DESCRIPTOR = { usbVersion: 0x110, deviceClass: 0, maxPacketSize0: 64, deviceVersion: 0x400 };
-const HXN_DESCRIPTOR = { usbVersion: 0x200, deviceClass: 0, maxPacketSize0: 64, deviceVersion: 0x100 };
+const HX_DESCRIPTOR = PL2303_HX_DESCRIPTOR;
+const HXN_DESCRIPTOR = PL2303_HXN_DESCRIPTOR;
 
 test("isProlificDevice recognizes the Prolific vendor id", () => {
   assert.equal(PROLIFIC_VENDOR_ID, 0x067b);
@@ -248,9 +200,9 @@ test("read path passes bulk payload through unmodified (no status header)", asyn
   assert.deepEqual(Array.from(value), [0x50, 0xbb, 0xff]);
 });
 
-test("WebUSB provider dispatches Prolific devices to the PL2303 driver", async () => {
+test("WebUSB provider dispatches Prolific devices to the PL2303 driver", async (t) => {
   let requestedOptions = null;
-  setNavigator({
+  withNavigator(t, {
     usb: {
       requestDevice: async (options) => {
         requestedOptions = options;
@@ -284,24 +236,10 @@ test("Pl2303SerialPort keeps a full pipeline of bulk IN transfers queued", async
   // high-water mark: 16 transfers are queued up front, and each of the 15 pulls
   // after the first replenishes exactly one. A shallower depth, or the default
   // queue of one, yields a smaller number.
-  const { device, deliver, transferInCalls } = makeFakeDevice({ descriptor: HX_DESCRIPTOR });
-  const port = new Pl2303SerialPort(device);
-  await port.open({ baudRate: 115200 });
-  // The stream pulls as soon as it is constructed, which primes the queue.
-  await tick();
-
-  assert.equal(transferInCalls.length, 16, "the queue must be primed to full depth");
-
-  for (let i = 0; i < 16; i += 1) {
-    deliver({ status: "ok", data: new DataView(new Uint8Array([i]).buffer) });
-    await tick();
-  }
-
-  assert.equal(
-    transferInCalls.length,
-    31,
-    "16 queued up front plus one replenished per pull, with no reader attached",
-  );
+  await expectFullPipeline({
+    Port: Pl2303SerialPort,
+    fake: makeFakeDevice({ descriptor: HX_DESCRIPTOR }),
+  });
 });
 
 test("Pl2303SerialPort read path recovers when clearHalt cancels the queue", async () => {
@@ -310,41 +248,24 @@ test("Pl2303SerialPort read path recovers when clearHalt cancels the queue", asy
   // rejected promise (AbortError), not as a result carrying a status, so a read
   // path that keeps the pre-stall queue awaits a cancelled transfer on its next
   // turn and errors the stream for good.
-  const { device, clearHaltCalls, deliver } = makeFakeDevice({
-    descriptor: HX_DESCRIPTOR,
-    cancelOnClearHalt: true,
-  });
-  const port = new Pl2303SerialPort(device);
-  await port.open({ baudRate: 9600 });
-  const reader = port.readable.getReader();
-  const read = reader.read();
-  await tick();
-
-  deliver({ status: "stall" });
-  await tick();
-
+  //
   // Empty packets must not resolve the pull either (that wedges reads).
-  deliver({ status: "ok", data: new DataView(new Uint8Array([]).buffer) });
-  await tick();
-  deliver({ status: "ok", data: new DataView(new Uint8Array([0x50, 0xbb, 0xff]).buffer) });
-
-  const { value } = await read;
-  assert.deepEqual(clearHaltCalls, [{ direction: "in", endpoint: 3 }]);
-  assert.deepEqual(Array.from(value), [0x50, 0xbb, 0xff]);
+  await expectStallRecovery({
+    Port: Pl2303SerialPort,
+    fake: makeFakeDevice({ descriptor: HX_DESCRIPTOR, cancelOnClearHalt: true }),
+    endpointNumber: 3,
+    payload: [0x50, 0xbb, 0xff],
+  });
 });
 
 test("Pl2303SerialPort asks for exactly one packet per bulk IN transfer", async () => {
   // Throughput comes from queue depth, not from asking for more bytes per
   // transfer: a request spanning packets can only end on a short packet or an
   // exact fill, which is what strands replies outright on the CH340.
-  const { device, transferInCalls } = makeFakeDevice({ descriptor: HX_DESCRIPTOR });
-  const port = new Pl2303SerialPort(device);
-  await port.open({ baudRate: 115200 });
-  await tick();
-
-  assert.ok(transferInCalls.length > 0, "expected the read path to queue a transfer");
-  for (const call of transferInCalls) {
-    assert.equal(call.endpointNumber, 3);
-    assert.equal(call.length, 64, "bulk IN transfers must request exactly one packet");
-  }
+  await expectOnePacketPerTransfer({
+    Port: Pl2303SerialPort,
+    fake: makeFakeDevice({ descriptor: HX_DESCRIPTOR }),
+    endpointNumber: 3,
+    packetSize: 64,
+  });
 });
