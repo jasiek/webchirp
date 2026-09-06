@@ -17,6 +17,23 @@ const RADIO_SEARCH_MAX_RESULTS = 50;
 const NO_MAKE_LABEL = "Select radio make...";
 const NO_MODEL_LABEL = "Select a make first";
 
+// The "nothing chosen" row both dropdowns lead with. Three properties, each
+// load-bearing: the empty value is what lets a select hold "nothing chosen" as
+// a value at all, since one with no such option always reports its first
+// option instead; disabled keeps the user from picking it back after choosing
+// a radio, which would drop the loaded driver's column metadata for nothing;
+// and selected is set explicitly because a select with nothing selected falls
+// back to its first ENABLED option -- the implicit default this row exists to
+// prevent. Disabled only blocks the user, so assigning the value still works.
+function createPlaceholderOption(label) {
+  const option = document.createElement("option");
+  option.value = "";
+  option.textContent = String(label || "");
+  option.disabled = true;
+  option.selected = true;
+  return option;
+}
+
 // Radio selection: the make/model dropdowns, the free-text search box with its
 // autocomplete list, the "last radio" cookie, and the metadata load that
 // follows a selection. Owns the search-result state; the catalog and the
@@ -284,18 +301,13 @@ export function createRadioCatalog(ctx) {
     return hasDuplicateModel ? `${modelLabel} (${radio.className})` : modelLabel;
   }
 
-  // Replace a select's options with a single inert row. The row carries an
-  // empty value so the select can hold "nothing chosen" as a value at all: a
-  // select with no such option always reports its first option instead.
+  // Replace a select's options with a single placeholder row.
   function setSelectPlaceholder(selectEl, label) {
     if (!selectEl) {
       return;
     }
     selectEl.innerHTML = "";
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = String(label || "");
-    selectEl.appendChild(option);
+    selectEl.appendChild(createPlaceholderOption(label));
     selectEl.value = "";
   }
 
@@ -401,10 +413,7 @@ export function createRadioCatalog(ctx) {
       return;
     }
 
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = NO_MAKE_LABEL;
-    dom.radioMakeEl.appendChild(placeholder);
+    dom.radioMakeEl.appendChild(createPlaceholderOption(NO_MAKE_LABEL));
     for (const vendor of vendors) {
       const option = document.createElement("option");
       option.value = vendor;
