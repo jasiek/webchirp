@@ -21,6 +21,7 @@ import {
   radioEventParams,
   trackEvent,
 } from "./ui/analytics.js";
+import { captureError, setContextProvider } from "./sentry.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
 export { buildExportFileName };
@@ -62,6 +63,15 @@ export function createUiController() {
   Object.assign(ctx, { settings, table, catalog, repeaterQuery, repeaterMap, codeplugIo, serial });
 
   exposeCurrentRowsForDebugging(state);
+
+  // Which radio was selected when something broke, stamped onto every error
+  // report including the unhandled ones that never pass through app code.
+  // Registered as a provider rather than pushed on each selection so there is
+  // one place that decides what an error carries, and so it is read at the
+  // moment of the failure. radioEventParams is reused verbatim: the driver
+  // identity worth reporting is the same one analytics already sends, and it is
+  // a CHIRP identifier rather than anything belonging to the user.
+  setContextProvider(() => radioEventParams(state.selectedRadio));
 
   function setRuntimeApi(api) {
     state.runtimeApi = api;
@@ -237,8 +247,13 @@ export function createUiController() {
     beginProgress: progress.begin,
     init,
     selectedRowsForOperations: table.selectedRowsForOperations,
+    // The Pyodide worker died rather than returned an error. Reported directly
+    // instead of through reportActionError because there is no action to name:
+    // the runtime took whatever was in flight down with it, and the message is
+    // all that survives.
     onRuntimeCrash(message) {
       log.logError(`RUNTIME CRASH ${message}`);
+      captureError(message, { action: "Runtime", tags: { error_kind: "runtime_crash" } });
     },
   };
 }
