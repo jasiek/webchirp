@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { findCatalogRadioForImageMetadata } from "../web/js/image-metadata.mjs";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const imagesDir = path.join(repoRoot, "chirp/tests/images");
+import { loadImageFor, readCatalog, sharedHarness } from "./test-support/chirp.mjs";
 
 // Reading a radio's settings and writing them straight back used to fail for 9
 // of the 231 upstream test images that carry a settings tree. Four distinct
@@ -49,33 +42,11 @@ const ALL_FIXTURES = [
 // still writes the values a user actually edited.
 const EDITABLE_IMAGE = "Baofeng_UV-5R.img";
 
-// Every test here drives the same runtime, and createTestRadioHarness() boots a
-// fresh Pyodide each time it is called -- six WebAssembly runtimes for six
-// tests. One harness for the file keeps that to one, the way
-// test-radio-settings.mjs already does for its sweep.
-let sharedContext = null;
+// Every test here drives the same runtime. sharedHarness() memoizes the boot,
+// so six tests cost one WebAssembly runtime rather than six; the catalog read
+// is cheap enough to repeat.
 async function context() {
-  if (!sharedContext) {
-    const harness = await createTestRadioHarness({ repoRoot });
-    const text = await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8");
-    sharedContext = { harness, catalog: JSON.parse(text).radios };
-  }
-  return sharedContext;
-}
-
-async function loadImageFor(harness, catalog, name) {
-  const raw = await fs.readFile(path.join(imagesDir, name));
-  const metadata = await harness.runPythonJson(
-    "json.dumps(read_image_metadata_base64(_b))",
-    { _b: raw.toString("base64") },
-  );
-  const match = findCatalogRadioForImageMetadata(catalog, metadata);
-  assert.ok(match, `${name} should resolve to a catalog radio`);
-  await harness.runPythonJson("ensure_radio_module(_m) or json.dumps({})", {
-    _m: match.module,
-  });
-  const loaded = await harness.loadCodeplugBinary(raw);
-  return { match, loaded, raw };
+  return { harness: await sharedHarness(), catalog: await readCatalog() };
 }
 
 /** Flatten a serialized settings tree into path -> value entries. */
