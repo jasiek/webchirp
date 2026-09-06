@@ -1,19 +1,21 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { undecodedChannelsNote } from "../web/js/ui/format.js";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const imagesDir = path.join(repoRoot, "chirp/tests/images");
+import { readImage, sharedHarness } from "./test-support/chirp.mjs";
 
 // A memory the driver cannot decode used to disappear from the grid with
 // nothing in the debug panel, and the upload path read that absence as "the
 // user deleted this channel" and erased the slot on the radio.
 const FIXTURE_IMAGE = "Baofeng_UV-5R.img";
+
+// Both probes monkeypatch the driver class and the runtime's serial_log, and
+// what this file tests is the state a failed decode leaves behind -- the
+// per-driver unreadable record and the cached image. Each probe lifts its
+// patches in a finally and starts from a clean load, so sharing would work
+// today, but a fresh runtime per probe keeps its starting state a fact rather
+// than something the previous probe's clean-up has to guarantee.
+const FRESH_RUNTIME = { isolated: true };
 
 // The decode failure is injected on the driver *class* and lifted again before
 // the export, so every radio built afterwards reads the slot without error.
@@ -111,8 +113,8 @@ json.dumps({
 `;
 
 test("a channel that failed to decode survives export even when the failure does not repeat", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const raw = await fs.readFile(path.join(imagesDir, FIXTURE_IMAGE));
+  const harness = await sharedHarness(FRESH_RUNTIME);
+  const raw = await readImage(FIXTURE_IMAGE);
   const result = await harness.runPythonJson(TRANSIENT_FAILURE_PROBE, {
     _image_b64: raw.toString("base64"),
   });
@@ -152,8 +154,8 @@ test("a channel that failed to decode survives export even when the failure does
 });
 
 test("unique per-channel failure messages cannot flood the debug panel", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const raw = await fs.readFile(path.join(imagesDir, FIXTURE_IMAGE));
+  const harness = await sharedHarness(FRESH_RUNTIME);
+  const raw = await readImage(FIXTURE_IMAGE);
   const result = await harness.runPythonJson(UNIQUE_MESSAGES_PROBE, {
     _image_b64: raw.toString("base64"),
   });

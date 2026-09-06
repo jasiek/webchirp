@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { findCatalogRadioForImageMetadata } from "../web/js/image-metadata.mjs";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const imagesDir = path.join(repoRoot, "chirp/tests/images");
+import { loadImageFor, readCatalog, sharedHarness } from "./test-support/chirp.mjs";
 
 // Reading a radio and writing it straight back used to fail for 113 of the 248
 // resolvable upstream test images. Two defects accounted for 96 of them, both
@@ -32,28 +25,8 @@ const SPLIT_DUPLEX_IMAGES = ["Baofeng_UV-5R.img", "Anysecu_WP-9900.img"];
 const MIGRATED_IMAGE_FIXTURES = ["Icom_ID-5100.img", "Icom_ID-51_Plus2.img"];
 const LOSSY_IMMUTABLE_POWER_FIXTURES = ["Retevis_RB618.img", "Retevis_RT647.img"];
 
-async function loadImageFor(harness, catalog, name) {
-  const raw = await fs.readFile(path.join(imagesDir, name));
-  const metadata = await harness.runPythonJson(
-    "json.dumps(read_image_metadata_base64(_b))",
-    { _b: raw.toString("base64") },
-  );
-  const match = findCatalogRadioForImageMetadata(catalog, metadata);
-  assert.ok(match, `${name} should resolve to a catalog radio`);
-  await harness.runPythonJson("ensure_radio_module(_m) or json.dumps({})", {
-    _m: match.module,
-  });
-  const loaded = await harness.loadCodeplugBinary(raw);
-  return { match, loaded, raw };
-}
-
-async function readCatalog() {
-  const text = await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8");
-  return JSON.parse(text).radios;
-}
-
 test("power levels survive a read/write cycle without dBm truncation", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const catalog = await readCatalog();
 
   for (const name of POWER_ROUND_TRIP_IMAGES) {
@@ -76,7 +49,7 @@ test("power levels survive a read/write cycle without dBm truncation", async () 
 });
 
 test("channels with split and off duplex survive a read/write cycle", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const catalog = await readCatalog();
 
   let sawNonStandardDuplex = false;
@@ -105,7 +78,7 @@ test("channels with split and off duplex survive a read/write cycle", async () =
 });
 
 test("migrated images can export without re-reading incompatible cached bytes", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const catalog = await readCatalog();
 
   for (const name of MIGRATED_IMAGE_FIXTURES) {
@@ -121,7 +94,7 @@ test("migrated images can export without re-reading incompatible cached bytes", 
 });
 
 test("editing a mutable field preserves lossy immutable power values", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const catalog = await readCatalog();
 
   for (const name of LOSSY_IMMUTABLE_POWER_FIXTURES) {
@@ -151,7 +124,7 @@ test("editing a mutable field preserves lossy immutable power values", async () 
 // hand back the driver's own PowerLevel object, because a rebuilt one compares
 // unequal for every level whose dBm is not a whole number.
 test("power label resolution returns the driver's own PowerLevel objects", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const result = await harness.runPythonJson(
     `
 ensure_radio_module("anytone")
@@ -183,7 +156,7 @@ json.dumps({"levels": _out, "csvLabels": _labels})
 // Memory.to_csv() formats it with "%s". The previous code could not parse that
 // and fell back to a default, silently writing the radio's first power level.
 test("a channel with no power level stays unset instead of getting a default", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const result = await harness.runPythonJson(
     `
 ensure_radio_module("anytone")
@@ -205,7 +178,7 @@ json.dumps({
 // to_MHz(float(text)) truncates: an 8.219000 MHz offset lands on 8218999 Hz,
 // so 27 channels of the IC-M710 image drifted by 1 Hz on every write.
 test("frequencies and offsets keep full precision across a write", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const parsed = await harness.runPythonJson(
     `json.dumps({"legacy": chirp_common.to_MHz(float("8.219000")),
                  "current": chirp_common.parse_freq("8.219000")})`,
@@ -228,7 +201,7 @@ test("frequencies and offsets keep full precision across a write", async () => {
 });
 
 test("unsupported power text fails with the radio's valid values, not an index error", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   await assert.rejects(
     () =>
       harness.runPythonJson(

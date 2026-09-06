@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { createTestRadioHarness, resolveChirpPackageDir } from "./test-radio-harness.mjs";
+import { resolveChirpPackageDir } from "./test-radio-harness.mjs";
+import { sharedHarness } from "./test-support/chirp.mjs";
+import { repoRoot } from "./test-support/repo-paths.mjs";
 
 // CHIRP calls its translation helpers as builtins, which only the wx frontend
 // installs. These are every spelling gettext can install; the scan below finds
@@ -53,12 +54,11 @@ async function findTranslationBuiltinUses(files) {
 }
 
 test("CHIRP's translation builtins are available to the browser runtime", async (t) => {
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const chirpPackageDir = await resolveChirpPackageDir(
     process.env.WEBCHIRP_CHIRP_DIR || path.join(repoRoot, "chirp"),
   );
   const uses = await findTranslationBuiltinUses(await listRuntimeSourceFiles(chirpPackageDir));
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
 
   // Probe defensively: a missing builtin must fail the subtest that names it,
   // not blow up this shared setup and hide the rest.

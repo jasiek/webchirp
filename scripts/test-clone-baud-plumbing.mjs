@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { sharedHarness } from "./test-support/chirp.mjs";
 
 // The browser can only re-rate the port if Python tells it which rate the
 // driver wants. This covers that hand-off: _prepare_clone_session() has to send
@@ -11,21 +9,10 @@ import { createTestRadioHarness } from "./test-radio-harness.mjs";
 // been opened for a different radio (issue #76). The reopen itself is covered
 // by scripts/test-clone-baud-rate.mjs.
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
 // Two clone-mode drivers whose declared rates differ by more than a decimal
 // point: cloning one at the other's rate returns timeouts or garbage.
 const SLOW_RADIO = { module: "uv5r", className: "BaofengUV5R", baudRate: 9600 };
 const FAST_RADIO = { module: "retevis_ra25", className: "RA25UVRadio", baudRate: 115200 };
-
-let harnessPromise = null;
-
-function getHarness() {
-  if (!harnessPromise) {
-    harnessPromise = createTestRadioHarness({ repoRoot });
-  }
-  return harnessPromise;
-}
 
 async function prepareCloneFor(harness, radio) {
   await harness.runPythonJson(
@@ -41,7 +28,7 @@ json.dumps({"prepared": True})
 }
 
 test("preparing a clone sends the selected driver's declared baud rate", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
 
   const slow = await prepareCloneFor(harness, SLOW_RADIO);
   assert.equal(slow.baudRate, SLOW_RADIO.baudRate);
@@ -58,7 +45,7 @@ test("preparing a clone sends the selected driver's declared baud rate", async (
 });
 
 test("a driver that declares no baud rate leaves the open port's rate alone", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const call = await harness.runPythonJson(
     `
 class _NoBaudRadio:
