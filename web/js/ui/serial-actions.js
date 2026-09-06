@@ -13,6 +13,9 @@ import {
 } from "../serial-errors.js";
 import { requireRuntimeApi } from "./state.js";
 
+const LIVE_RADIO_TITLE = "Live-mode radios are not supported in this UI yet";
+const NO_RADIO_SELECTED_TITLE = "Search for and select a radio first";
+
 // Everything on the serial path: connect/disconnect over Web Serial or WebUSB,
 // the enabled/visible state of the sidebar's radio actions, the clone progress
 // bar, and the download/upload clone operations with their preflight. Owns the
@@ -237,7 +240,16 @@ export function createSerialActions(ctx) {
 
   function updateSerialActionState() {
     const liveRadioUnsupported = selectedRadioIsLiveMode();
-    const actionsAllowed = sidebarControlsEnabled && !liveRadioUnsupported;
+    // Radios are chosen by searching, so a fresh session has none selected and
+    // every serial action has to explain that rather than act on nothing.
+    const noRadioSelected = !state.selectedRadio;
+    const actionsAllowed =
+      sidebarControlsEnabled && !liveRadioUnsupported && !noRadioSelected;
+    // Why the radio itself blocks these controls, if it does. Checked before
+    // the connection state so the buttons name the first thing to fix.
+    const selectionBlockedTitle = noRadioSelected
+      ? NO_RADIO_SELECTED_TITLE
+      : (liveRadioUnsupported ? LIVE_RADIO_TITLE : "");
 
     setLiveRadioSupportWarningVisible(liveRadioUnsupported);
 
@@ -262,17 +274,15 @@ export function createSerialActions(ctx) {
 
     dom.serialConnectToggleEl.hidden = !showWebSerialToggle;
     dom.serialConnectToggleEl.disabled = !actionsAllowed;
-    dom.serialConnectToggleEl.title = liveRadioUnsupported
-      ? "Live-mode radios are not supported in this UI yet"
-      : (isAndroidPlatform()
+    dom.serialConnectToggleEl.title = selectionBlockedTitle
+      || (isAndroidPlatform()
         ? "Connect over native Web Serial, for use with Bluetooth serial ports"
         : "");
 
     dom.webusbConnectToggleEl.hidden = !showWebUsbToggle;
     dom.webusbConnectToggleEl.disabled = !actionsAllowed;
-    dom.webusbConnectToggleEl.title = liveRadioUnsupported
-      ? "Live-mode radios are not supported in this UI yet"
-      : "Connect over WebUSB, for use with FTDI, Prolific PL2303, "
+    dom.webusbConnectToggleEl.title = selectionBlockedTitle
+      || "Connect over WebUSB, for use with FTDI, Prolific PL2303, "
         + "WCH CH340/CH341 or Silicon Labs CP2102 adapters";
 
     // Both clone operations talk to an open port, so neither is offered until
@@ -281,15 +291,12 @@ export function createSerialActions(ctx) {
     const notConnectedTitle = "Connect to a serial port first";
 
     dom.radioDownloadEl.disabled = !cloneAllowed;
-    if (liveRadioUnsupported) {
-      dom.radioDownloadEl.title = "Live-mode radios are not supported in this UI yet";
-    } else {
-      dom.radioDownloadEl.title = connected ? "" : notConnectedTitle;
-    }
+    dom.radioDownloadEl.title = selectionBlockedTitle
+      || (connected ? "" : notConnectedTitle);
 
     dom.radioUploadEl.disabled = !cloneAllowed || ctx.settings.hasInvalidSettings();
-    if (liveRadioUnsupported) {
-      dom.radioUploadEl.title = "Live-mode radios are not supported in this UI yet";
+    if (selectionBlockedTitle) {
+      dom.radioUploadEl.title = selectionBlockedTitle;
       return;
     }
     if (!connected) {
@@ -377,7 +384,7 @@ export function createSerialActions(ctx) {
 
   async function downloadFromRadio() {
     if (!state.selectedRadio) {
-      log.setStatus("Select a radio make/model first.");
+      log.setStatus("Search for and select a radio first.");
       return;
     }
     // Captured up front: a clone runs long enough for the user to pick a
@@ -428,7 +435,7 @@ export function createSerialActions(ctx) {
 
   async function uploadToRadio() {
     if (!state.selectedRadio) {
-      log.setStatus("Select a radio make/model first.");
+      log.setStatus("Search for and select a radio first.");
       return;
     }
     // Captured for the same reason as in downloadFromRadio(): the selection can

@@ -38,6 +38,10 @@ const SHOTS = [
 const APP_READY_TIMEOUT_MS = 120000;
 const APP_SETTLE_DELAY_MS = 3000;
 const SCREENSHOT_LOCATOR = "IO82MM";
+// Radios are chosen by searching, so nothing is selected at startup and the
+// screenshot has to pick one. A widely recognised model keeps the sidebar
+// readout and the channel schema meaningful in the published images.
+const SCREENSHOT_RADIO_QUERY = "Baofeng UV-5R";
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -203,12 +207,11 @@ async function waitForAppReady(cdp, sessionId) {
       cdp,
       sessionId,
       `(() => {
-        const makeEl = document.querySelector("#radio-make");
+        const searchEl = document.querySelector("#radio-search");
         const debugOutput = document.querySelector("#debug-output");
         return Boolean(
-          makeEl
-          && !makeEl.disabled
-          && makeEl.options.length > 0
+          searchEl
+          && !searchEl.disabled
           && /STATUS Loaded \\d+ radio definitions/.test(debugOutput?.value || "")
         );
       })()`
@@ -221,6 +224,34 @@ async function waitForAppReady(cdp, sessionId) {
     }
     await delay(500);
   }
+}
+
+// Drive the radio search box the way a user does — type, then take the first
+// suggestion — so the shot exercises the real selection path rather than
+// reaching into module state.
+async function selectScreenshotRadio(cdp, sessionId) {
+  const selected = await evaluate(
+    cdp,
+    sessionId,
+    `(() => {
+      const searchEl = document.querySelector("#radio-search");
+      if (!searchEl) {
+        return "";
+      }
+      searchEl.value = ${JSON.stringify(SCREENSHOT_RADIO_QUERY)};
+      searchEl.dispatchEvent(new Event("input", { bubbles: true }));
+      searchEl.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+      );
+      return document.querySelector("#radio-selection-name")?.textContent || "";
+    })()`
+  );
+  if (!selected || selected === "No radio model selected") {
+    throw new Error(
+      `Could not select "${SCREENSHOT_RADIO_QUERY}" through the radio search box.`
+    );
+  }
+  return selected;
 }
 
 // Release screenshots use the same reproducible, real-data starting point as
@@ -328,6 +359,12 @@ async function main() {
 
     console.log("Waiting for the app to finish loading (Pyodide + radio catalog)...");
     await waitForAppReady(cdp, sessionId);
+    const selectedRadio = await selectScreenshotRadio(cdp, sessionId);
+    console.log(`Selected radio: ${selectedRadio}`);
+    // Selecting kicks off a Pyodide schema+settings load that re-renders the
+    // grid when it lands. Let it finish before the repeater query fills the
+    // grid, so the capture is not racing a second render.
+    await delay(2000);
     console.log(`Querying RSGB channels around ${SCREENSHOT_LOCATOR}...`);
     const channelCount = await loadScreenshotChannels(cdp, sessionId);
     console.log(`Loaded ${channelCount} RSGB channel(s) for the screenshots.`);

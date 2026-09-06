@@ -193,14 +193,19 @@ export function createUiController() {
       const catalogResponse = await requireRuntimeApi(state).listRadios();
       state.radioCatalog = catalogResponse.radios || [];
       state.runtimeInfo = (await requireRuntimeApi(state).getRuntimeInfo()) || state.runtimeInfo;
-      catalog.refreshMakeOptions();
+      catalog.refreshCatalog();
       catalog.restoreSelectedRadioCookie();
       await catalog.loadSelectedRadioMetadata();
       await settings.load();
       // Schema only: the grid starts empty and shows its own "load something"
       // notice, so the status line stays on the catalog result.
       await codeplugIo.loadEmptySchema();
-      log.setStatus(`Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources.`);
+      log.setStatus(
+        state.selectedRadio
+          ? `Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources.`
+          : `Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources. `
+            + "Search for your radio to get started.",
+      );
       settings.render();
       serial.setSidebarControlsEnabled(true);
       trackEvent("app_ready", {
