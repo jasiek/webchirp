@@ -12,6 +12,8 @@ import {
   isAnalyticsHost,
   trackEvent,
 } from "../web/js/analytics.js";
+import { makeWindow } from "./test-support/fake-window.mjs";
+import { htmlPages, repoRoot, webDir } from "./test-support/repo-paths.mjs";
 
 // Analytics fails silently by design — a dropped event looks exactly like a
 // quiet day in the GA console — so the wiring is only ever checked here. The
@@ -20,45 +22,7 @@ import {
 // hard: a dev server or a fork's Pages site reporting into the shared property
 // is silent when it happens and unfixable afterwards, since GA4 does not let
 // you delete events you wish you had not collected.
-const WEB_DIR = path.join(process.cwd(), "web");
-const ANALYTICS_MODULE = fs.readFileSync(path.join(WEB_DIR, "js", "analytics.js"), "utf8");
-
-// Minimal window stand-in: records listeners so tests can dispatch at them,
-// answers matchMedia from an explicit set of matching queries, and records
-// every script the module appends to the document.
-function makeWindow({ displayModes = [], standalone = undefined, hostname = "codeplug.org" } = {}) {
-  const listeners = new Map();
-  const injected = [];
-  return {
-    location: { hostname },
-    injected,
-    document: {
-      createElement: () => ({}),
-      head: {
-        appendChild(node) {
-          injected.push(node);
-        },
-      },
-    },
-    navigator: standalone === undefined ? {} : { standalone },
-    matchMedia: (query) => ({
-      matches: displayModes.some((mode) => query === `(display-mode: ${mode})`),
-    }),
-    addEventListener(type, handler) {
-      const existing = listeners.get(type) || [];
-      existing.push(handler);
-      listeners.set(type, existing);
-    },
-    dispatch(type, event) {
-      for (const handler of listeners.get(type) || []) {
-        handler(event);
-      }
-    },
-    listenerCount(type) {
-      return (listeners.get(type) || []).length;
-    },
-  };
-}
+const ANALYTICS_MODULE = fs.readFileSync(path.join(webDir, "js", "analytics.js"), "utf8");
 
 // dataLayer holds arguments objects, not arrays.
 function calls(win) {
@@ -121,7 +85,7 @@ test("the allowlist covers the domain the site is actually served from", () => {
   // CNAME is what GitHub Pages serves the app on. If the domain ever moves and
   // the allowlist is not moved with it, analytics goes silent — the failure
   // that would otherwise take months to notice.
-  const cname = fs.readFileSync(path.join(process.cwd(), "CNAME"), "utf8").trim();
+  const cname = fs.readFileSync(path.join(repoRoot, "CNAME"), "utf8").trim();
   assert.ok(ANALYTICS_HOSTS.includes(cname), `CNAME is ${cname}, which ANALYTICS_HOSTS does not include`);
 });
 
@@ -243,8 +207,8 @@ test("install tracking binds nothing on a window that cannot listen", () => {
 });
 
 test("every page loads analytics exactly once, and only through the module", () => {
-  for (const page of ["index.html", "about.html"]) {
-    const html = fs.readFileSync(path.join(WEB_DIR, page), "utf8");
+  for (const page of htmlPages) {
+    const html = fs.readFileSync(path.join(webDir, page), "utf8");
 
     const modules = html.match(/<script type="module" src="\.\/js\/analytics\.js"><\/script>/g) || [];
     assert.equal(modules.length, 1, `${page} should load the analytics module once`);
@@ -265,8 +229,8 @@ test("every page loads analytics exactly once, and only through the module", () 
 test("the encoding declaration stays inside the first 1024 bytes", () => {
   // HTML requires it there. The analytics comment above it is long enough, and
   // non-ASCII enough, to push it out if it ever moves back below.
-  for (const page of ["index.html", "about.html"]) {
-    const html = fs.readFileSync(path.join(WEB_DIR, page));
+  for (const page of htmlPages) {
+    const html = fs.readFileSync(path.join(webDir, page));
     const at = html.indexOf("charset");
     assert.ok(at >= 0 && at < 1024, `${page} declares its encoding at byte ${at}`);
   }
