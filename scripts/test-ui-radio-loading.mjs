@@ -133,6 +133,10 @@ class FakeElement {
     return this.attributes.get(String(name)) || null;
   }
 
+  removeAttribute(name) {
+    this.attributes.delete(String(name));
+  }
+
   contains(target) {
     if (target === this) {
       return true;
@@ -250,8 +254,6 @@ const STUBBED_SELECTORS = new Map([
   ["#live-radio-support-warning", "p"],
   ["#radio-search", "input"],
   ["#radio-search-results", "ul"],
-  ["#radio-make", "select"],
-  ["#radio-model", "select"],
   ["#serial-connect-toggle", "button"],
   ["#radio-download", "button"],
   ["#radio-upload", "button"],
@@ -315,9 +317,35 @@ function installFakeDom() {
     document,
     radioSearchEl: document.querySelector("#radio-search"),
     radioSearchResultsEl: document.querySelector("#radio-search-results"),
-    radioMakeEl: document.querySelector("#radio-make"),
-    radioModelEl: document.querySelector("#radio-model"),
+    radioSelectionEl: document.querySelector("#radio-selection"),
+    radioSelectionNameEl: document.querySelector("#radio-selection-name"),
+    radioSelectionDriverEl: document.querySelector("#radio-selection-driver"),
   };
+}
+
+// Selecting a radio is search-only now, so tests drive the search box the way
+// a user does: type, then take a suggestion by keyboard or mouse.
+function typeRadioSearch(radioSearchEl, query) {
+  radioSearchEl.value = query;
+  radioSearchEl.dispatchEvent({ type: "input" });
+}
+
+function noopKeyEvent(key) {
+  return { type: "keydown", key, preventDefault() {}, stopPropagation() {} };
+}
+
+// Type a query and accept the first suggestion, which the list pre-highlights.
+function selectRadioBySearch(radioSearchEl, query) {
+  typeRadioSearch(radioSearchEl, query);
+  radioSearchEl.dispatchEvent(noopKeyEvent("Enter"));
+}
+
+// Each suggestion renders as a name element plus, when the query hit an alias,
+// a second line naming it. Read them apart rather than as one blob of text.
+function suggestionLines(radioSearchResultsEl) {
+  return radioSearchResultsEl.children.map((li) =>
+    li.children.map((span) => span.textContent),
+  );
 }
 
 function createDeferred() {
@@ -328,8 +356,8 @@ function createDeferred() {
   return { promise, resolve };
 }
 
-test("radio dropdowns show Loading... while CHIRP drivers are loading", async () => {
-  const { radioMakeEl, radioModelEl } = installFakeDom();
+test("the selected-radio readout shows Loading... while CHIRP drivers are loading", async () => {
+  const { radioSelectionNameEl, radioSelectionDriverEl, radioSelectionEl } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
   const radioListDeferred = createDeferred();
   const ui = createUiController();
@@ -358,10 +386,8 @@ test("radio dropdowns show Loading... while CHIRP drivers are loading", async ()
 
   const initPromise = ui.init(true);
 
-  assert.equal(radioMakeEl.children.length, 1);
-  assert.equal(radioModelEl.children.length, 1);
-  assert.equal(radioMakeEl.children[0].textContent, "Loading...");
-  assert.equal(radioModelEl.children[0].textContent, "Loading...");
+  assert.equal(radioSelectionNameEl.textContent, "Loading...");
+  assert.equal(radioSelectionDriverEl.textContent, "");
 
   radioListDeferred.resolve({
     radios: [
@@ -386,20 +412,14 @@ test("radio dropdowns show Loading... while CHIRP drivers are loading", async ()
 
   await initPromise;
 
-  assert.deepEqual(
-    radioMakeEl.children.map((option) => option.textContent),
-    ["Acme"],
-  );
-  assert.deepEqual(
-    radioModelEl.children.map((option) => option.textContent),
-    ["Alpha", "Beta"],
-  );
-  assert.ok(!radioMakeEl.children.some((option) => option.textContent === "Loading..."));
-  assert.ok(!radioModelEl.children.some((option) => option.textContent === "Loading..."));
+  // A loaded catalog does not choose for the user: the readout asks for a
+  // search instead of naming an arbitrary first-vendor radio.
+  assert.equal(radioSelectionNameEl.textContent, "No radio selected");
+  assert.ok(radioSelectionEl.classList.contains("is-empty"));
 });
 
-test("search box shows narrowing make+model suggestions without touching dropdowns", async () => {
-  const { radioSearchEl, radioSearchResultsEl, radioMakeEl, radioModelEl } = installFakeDom();
+test("search box shows narrowing make+model suggestions", async () => {
+  const { radioSearchEl, radioSearchResultsEl } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
 
@@ -421,8 +441,7 @@ test("search box shows narrowing make+model suggestions without touching dropdow
   await ui.init(true);
 
   // A vendor query lists all of that vendor's models as "<Make> <Model>".
-  radioSearchEl.value = "acme";
-  radioSearchEl.dispatchEvent({ type: "input" });
+  typeRadioSearch(radioSearchEl, "acme");
   assert.equal(radioSearchResultsEl.hidden, false);
   assert.deepEqual(
     radioSearchResultsEl.children.map((li) => li.textContent),
@@ -430,28 +449,32 @@ test("search box shows narrowing make+model suggestions without touching dropdow
   );
 
   // A model query narrows the list to the matching radio.
-  radioSearchEl.value = "uv-5r";
-  radioSearchEl.dispatchEvent({ type: "input" });
+  typeRadioSearch(radioSearchEl, "uv-5r");
   assert.deepEqual(
     radioSearchResultsEl.children.map((li) => li.textContent),
     ["Baofeng UV-5R"],
   );
 
-  // Typing never narrows the make/model dropdowns themselves.
-  assert.deepEqual(radioMakeEl.children.map((o) => o.textContent), ["Acme", "Baofeng"]);
-  assert.deepEqual(radioModelEl.children.map((o) => o.textContent), ["Alpha", "Beta"]);
-
   // No matches shows an inert placeholder row.
-  radioSearchEl.value = "nonesuch";
-  radioSearchEl.dispatchEvent({ type: "input" });
+  typeRadioSearch(radioSearchEl, "nonesuch");
   assert.deepEqual(radioSearchResultsEl.children.map((li) => li.textContent), ["No matching radios"]);
   assert.ok(radioSearchResultsEl.children[0].classList.contains("radio-search-empty"));
 
+  // The combobox points a screen reader at the highlighted suggestion, since
+  // there is no dropdown left to announce the selection instead.
+  typeRadioSearch(radioSearchEl, "acme");
+  assert.equal(radioSearchEl.getAttribute("aria-activedescendant"), "radio-search-option-0");
+  assert.equal(radioSearchResultsEl.children[0].getAttribute("aria-selected"), "true");
+  radioSearchEl.dispatchEvent(noopKeyEvent("ArrowDown"));
+  assert.equal(radioSearchEl.getAttribute("aria-activedescendant"), "radio-search-option-1");
+  assert.equal(radioSearchResultsEl.children[0].getAttribute("aria-selected"), "false");
+  assert.equal(radioSearchResultsEl.children[1].getAttribute("aria-selected"), "true");
+
   // Clearing the box closes the suggestion list.
-  radioSearchEl.value = "";
-  radioSearchEl.dispatchEvent({ type: "input" });
+  typeRadioSearch(radioSearchEl, "");
   assert.equal(radioSearchResultsEl.hidden, true);
   assert.equal(radioSearchResultsEl.children.length, 0);
+  assert.equal(radioSearchEl.getAttribute("aria-activedescendant"), null);
 });
 
 test("search suggestions disambiguate duplicates, cap results, and close on Escape", async () => {
@@ -504,7 +527,7 @@ test("search suggestions disambiguate duplicates, cap results, and close on Esca
   assert.equal(footer.textContent, "10 more — keep typing to narrow down");
 
   // Escape closes the list without changing the input text.
-  radioSearchEl.dispatchEvent({ type: "keydown", key: "Escape", preventDefault() {}, stopPropagation() {} });
+  radioSearchEl.dispatchEvent(noopKeyEvent("Escape"));
   assert.equal(radioSearchResultsEl.hidden, true);
   assert.equal(radioSearchEl.value, "filler");
 });
@@ -527,7 +550,7 @@ const STALE_TEST_CATALOG = [
 const EMPTY_SETTINGS = { supported: false, available: false, requiresImage: false, message: "", groups: [] };
 
 test("stale metadata response does not overwrite a newer radio selection", async () => {
-  const { radioMakeEl } = installFakeDom();
+  const { radioSearchEl } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
   const slowMetadata = createDeferred();
@@ -550,12 +573,10 @@ test("stale metadata response does not overwrite a newer radio selection", async
   await ui.init(true);
 
   // Select the slow radio; its metadata response stays in flight.
-  radioMakeEl.value = "SlowCo";
-  radioMakeEl.dispatchEvent({ type: "change" });
+  selectRadioBySearch(radioSearchEl, "SlowCo Slow");
 
   // Move on to the fast radio, whose metadata resolves immediately.
-  radioMakeEl.value = "FastCo";
-  radioMakeEl.dispatchEvent({ type: "change" });
+  selectRadioBySearch(radioSearchEl, "FastCo Fast");
   await flushMicrotasks();
   assert.ok(tableHeaderTexts(globalThis.document).includes("FastHeader"));
 
@@ -579,7 +600,7 @@ test("reselecting the loaded radio rejects partial loads in either completion or
   });
 
   for (const deferredPart of ["metadata", "settings"]) {
-    const { radioMakeEl, radioModelEl } = installFakeDom();
+    const { radioSearchEl, radioSelectionNameEl } = installFakeDom();
     const ui = createUiController();
     const pending = createDeferred();
     const metadataCalls = [];
@@ -609,14 +630,11 @@ test("reselecting the loaded radio rejects partial loads in either completion or
     });
 
     await ui.init(true);
-    // Startup does not mark its default as the last dropdown-loaded radio.
     // Complete Fast -> Alpha first so the final return to Alpha below must
     // take reloadForSelectedRadio()'s no-new-request path from issue #111.
-    radioMakeEl.value = "FastCo";
-    radioMakeEl.dispatchEvent({ type: "change" });
+    selectRadioBySearch(radioSearchEl, "FastCo Fast");
     await flushMicrotasks();
-    radioMakeEl.value = "Acme";
-    radioMakeEl.dispatchEvent({ type: "change" });
+    selectRadioBySearch(radioSearchEl, "Acme Alpha");
     await flushMicrotasks();
 
     assert.ok(tableHeaderTexts(globalThis.document).includes("alphaHeader"));
@@ -627,11 +645,9 @@ test("reselecting the loaded radio rejects partial loads in either completion or
     // One half of Slow's load resolves before the other. Returning to Alpha
     // must invalidate that work even though Alpha is already the last fully
     // loaded radio, regardless of which half arrived first.
-    radioMakeEl.value = "SlowCo";
-    radioMakeEl.dispatchEvent({ type: "change" });
+    selectRadioBySearch(radioSearchEl, "SlowCo Slow");
     await flushMicrotasks();
-    radioMakeEl.value = "Acme";
-    radioMakeEl.dispatchEvent({ type: "change" });
+    selectRadioBySearch(radioSearchEl, "Acme Alpha");
     await flushMicrotasks();
 
     pending.resolve(
@@ -640,8 +656,7 @@ test("reselecting the loaded radio rejects partial loads in either completion or
     await flushMicrotasks();
 
     const headers = tableHeaderTexts(globalThis.document);
-    assert.equal(radioMakeEl.value, "Acme");
-    assert.equal(radioModelEl.value, "alpha:AlphaRadio");
+    assert.equal(radioSelectionNameEl.textContent, "Acme Alpha");
     assert.equal(metadataCalls.filter((module) => module === "alpha").length, alphaMetadataCalls);
     assert.equal(settingsCalls.filter((module) => module === "alpha").length, alphaSettingsCalls);
     assert.ok(headers.includes("alphaHeader"));
@@ -650,8 +665,13 @@ test("reselecting the loaded radio rejects partial loads in either completion or
   }
 });
 
-test("picking a search suggestion sets make/model and loads the radio once", async () => {
-  const { radioSearchEl, radioSearchResultsEl, radioMakeEl, radioModelEl } = installFakeDom();
+test("picking a search suggestion names the radio in the readout and loads it once", async () => {
+  const {
+    radioSearchEl,
+    radioSearchResultsEl,
+    radioSelectionNameEl,
+    radioSelectionDriverEl,
+  } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
   const metadataCalls = [];
@@ -670,13 +690,10 @@ test("picking a search suggestion sets make/model and loads the radio once", asy
 
   await ui.init(true);
   const callsAfterInit = metadataCalls.length;
-  const noopKeyEvent = (key) => ({ type: "keydown", key, preventDefault() {}, stopPropagation() {} });
 
   // Typing only opens suggestions; no radio load happens yet.
-  radioSearchEl.value = "slow";
-  radioSearchEl.dispatchEvent({ type: "input" });
-  radioSearchEl.value = "co";
-  radioSearchEl.dispatchEvent({ type: "input" });
+  typeRadioSearch(radioSearchEl, "slow");
+  typeRadioSearch(radioSearchEl, "co");
   assert.equal(metadataCalls.length, callsAfterInit);
   assert.deepEqual(
     radioSearchResultsEl.children.map((li) => li.textContent),
@@ -688,24 +705,124 @@ test("picking a search suggestion sets make/model and loads the radio once", asy
   radioSearchEl.dispatchEvent(noopKeyEvent("Enter"));
   await flushMicrotasks();
 
-  assert.equal(radioMakeEl.value, "FastCo");
-  assert.equal(radioModelEl.value, "fast:FastRadio");
-  assert.equal(radioSearchEl.value, "FastCo Fast");
+  assert.equal(radioSelectionNameEl.textContent, "FastCo Fast");
+  assert.equal(radioSelectionDriverEl.textContent, "fast.FastRadio");
+  // The box is a way to change the selection, not a display of it: it empties
+  // once the readout has the answer.
+  assert.equal(radioSearchEl.value, "");
   assert.equal(radioSearchResultsEl.hidden, true);
   assert.equal(metadataCalls.length, callsAfterInit + 1);
   assert.equal(metadataCalls.at(-1), "fast");
 
   // Clicking a suggestion with the mouse selects it as well.
-  radioSearchEl.value = "slow";
-  radioSearchEl.dispatchEvent({ type: "input" });
+  typeRadioSearch(radioSearchEl, "slow");
   const slowItem = radioSearchResultsEl.children[0];
   radioSearchResultsEl.dispatchEvent({ type: "mousedown", target: slowItem, preventDefault() {} });
   await flushMicrotasks();
 
-  assert.equal(radioMakeEl.value, "SlowCo");
-  assert.equal(radioModelEl.value, "slow:SlowRadio");
-  assert.equal(radioSearchEl.value, "SlowCo Slow");
+  assert.equal(radioSelectionNameEl.textContent, "SlowCo Slow");
+  assert.equal(radioSelectionDriverEl.textContent, "slow.SlowRadio");
+  assert.equal(radioSearchEl.value, "");
   assert.equal(metadataCalls.at(-1), "slow");
+});
+
+// CHIRP drivers carry ALIASES: the other vendor/model badges the same radio
+// ships under. With the make dropdown gone, searching those aliases is the only
+// way an owner of a rebadged radio can find the driver at all, since the
+// catalog lists the entry under its primary vendor only.
+test("search finds radios by their alias identities and names the matching alias", async () => {
+  const { radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installFakeDom();
+  const { createUiController } = await import("../web/js/ui.js");
+  const ui = createUiController();
+
+  ui.setRuntimeApi({
+    listRadios: async () => ({
+      radios: [
+        {
+          vendor: "Baofeng",
+          model: "UV-5R",
+          module: "uv5r",
+          className: "BaofengUV5RGeneric",
+          key: "uv5r:BaofengUV5RGeneric",
+          isLiveRadio: false,
+          aliases: [
+            { vendor: "Retevis", model: "RT5R", variant: "" },
+            { vendor: "Baofeng", model: "UV-5R", variant: "" },
+          ],
+        },
+        {
+          vendor: "Acme",
+          model: "Alpha",
+          module: "alpha",
+          className: "AlphaRadio",
+          key: "alpha:AlphaRadio",
+          isLiveRadio: false,
+        },
+      ],
+    }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
+    getRadioSettings: async () => EMPTY_SETTINGS,
+    parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
+  });
+
+  await ui.init(true);
+
+  // The alias vendor matches, and the suggestion explains why a Baofeng came
+  // back for a Retevis query.
+  typeRadioSearch(radioSearchEl, "retevis");
+  assert.deepEqual(suggestionLines(radioSearchResultsEl), [
+    ["Baofeng UV-5R", "also sold as Retevis RT5R"],
+  ]);
+
+  // Tokens may straddle the primary identity and the alias.
+  typeRadioSearch(radioSearchEl, "rt5r uv-5r");
+  assert.deepEqual(suggestionLines(radioSearchResultsEl), [
+    ["Baofeng UV-5R", "also sold as Retevis RT5R"],
+  ]);
+
+  // A query the radio's own vendor/model answers is not labelled with an alias.
+  typeRadioSearch(radioSearchEl, "baofeng");
+  assert.deepEqual(suggestionLines(radioSearchResultsEl), [["Baofeng UV-5R"]]);
+
+  // Selecting through an alias still commits the driver's own identity.
+  selectRadioBySearch(radioSearchEl, "retevis");
+  await flushMicrotasks();
+  assert.equal(radioSelectionNameEl.textContent, "Baofeng UV-5R");
+});
+
+// Nothing is selected at startup now, so the serial path has to say "pick a
+// radio" rather than offer buttons that would clone against no driver.
+test("serial and clone actions stay disabled until a radio is selected", async () => {
+  const { radioSearchEl, document } = installFakeDom();
+  const { createUiController } = await import("../web/js/ui.js");
+  const ui = createUiController();
+
+  ui.setRuntimeApi({
+    listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
+    getRadioSettings: async () => EMPTY_SETTINGS,
+    parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
+  });
+
+  await ui.init(true);
+
+  const connectEl = document.querySelector("#serial-connect-toggle");
+  const downloadEl = document.querySelector("#radio-download");
+  assert.equal(connectEl.disabled, true);
+  assert.equal(connectEl.title, "Search for and select a radio first");
+  assert.equal(downloadEl.disabled, true);
+  assert.equal(downloadEl.title, "Search for and select a radio first");
+
+  selectRadioBySearch(radioSearchEl, "Acme Alpha");
+  await flushMicrotasks();
+
+  assert.equal(connectEl.disabled, false);
+  // Clone still waits on an open port, but the radio is no longer the blocker.
+  assert.equal(downloadEl.title, "Connect to a serial port first");
 });
 
 // This file stubs a DOM for the UI to run against, so it can drift from the

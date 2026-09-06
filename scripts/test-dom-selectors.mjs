@@ -90,7 +90,7 @@ test("queryUiElements reports every missing element at once", async () => {
   const { queryUiElements } = await import("../web/js/ui/dom.js");
   const previousDocument = globalThis.document;
   globalThis.document = {
-    querySelector: (selector) => (selector === "#radio-make" ? {} : null),
+    querySelector: (selector) => (selector === "#radio-search" ? {} : null),
     querySelectorAll: () => [],
   };
   try {
@@ -103,7 +103,7 @@ test("queryUiElements reports every missing element at once", async () => {
         assert.match(error.message, new RegExp(`missing ${total - 1} required`));
         assert.match(error.message, /tableHead -> #mem-table thead/);
         assert.ok(
-          !error.message.includes("radioMakeEl"),
+          !error.message.includes("radioSearchEl"),
           "elements that resolved should not be reported missing",
         );
         return true;

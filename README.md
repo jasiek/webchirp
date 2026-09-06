@@ -12,9 +12,10 @@ Prototype for running parts of [CHIRP](https://github.com/kk7ds/chirp) in the br
 - Browser UI with a CHIRP-inspired **Channels** table and a **Settings** editor,
   switchable with tabs.
 - Python runtime in-browser (Pyodide) running unmodified CHIRP driver code.
-- Radio make/model dropdowns populated from CHIRP driver sources, served from a
-  prebuilt static catalog (`web/radio-catalog.json`) with live enumeration as a
-  fallback.
+- Radio picked by searching CHIRP's driver catalog — including the alternate
+  vendor/model names a driver is rebadged under — served from a prebuilt static
+  catalog (`web/radio-catalog.json`) with live enumeration as a fallback. The
+  sidebar names the radio in use.
 - Selection-aware **Download Radio** / **Upload Radio** using the selected CHIRP
   clone-mode driver (`sync_in`/`sync_out`), with the clone image cached per driver.
 - Radio settings read and validated through the selected driver
@@ -88,7 +89,9 @@ Pyodide synchronous JS bridging can use `SharedArrayBuffer` without warnings.
 
 For radio cloning:
 
-1. Choose `Radio make` and `Radio model` from dropdowns (loaded from CHIRP sources).
+1. Type your radio's make, model or the name it is rebadged under into
+   `Search radios` and pick it from the suggestions. The sidebar's
+   `Selected radio` readout names what the rest of the app will act on.
 2. Click `Connect` (baud is prefilled when available from selected driver).
 3. Click `Download Radio` to read channels into the table.
 4. Edit values and click `Upload Radio` to write back.
@@ -181,7 +184,7 @@ Live browser serial executes the selected CHIRP clone-mode driver
 (`sync_in`/`sync_out`) through a generalized pyserial-like bridge, and has been
 verified end-to-end (e.g. Baofeng UV-5R). Compatibility with any given radio
 still depends on that driver's expectations and on browser transport limits, so
-treat an untested make/model as unverified.
+treat an untested radio as unverified.
 
 ## Sequence diagram (sketch) of how it all works
 
@@ -208,9 +211,9 @@ sequenceDiagram
     RPC->>PY: list_registered_radios(...)
     PY-->>RPC: radios[]
   end
-  RPC-->>UI: Populate make/model dropdowns
+  RPC-->>UI: Load searchable radio catalog
 
-  U->>UI: Select make/model, click Connect
+  U->>UI: Search for and select a radio, click Connect
   UI->>RPC: serialConnect(baudRate)
   RPC->>PY: webserial_connect(baud)
   PY->>RPC: serial_open(...)

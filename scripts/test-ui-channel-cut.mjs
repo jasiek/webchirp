@@ -139,16 +139,12 @@ class FakeElement {
 
 function installFakeDom() {
   const elements = new Map();
-  const tagFor = (selector) =>
-    selector.includes("select") || selector === "#radio-make" || selector === "#radio-model"
-      ? "select"
-      : "div";
   const document = {
     cookie: "",
     querySelector(selector) {
       const key = String(selector);
       if (!elements.has(key)) {
-        elements.set(key, new FakeElement(tagFor(key)));
+        elements.set(key, new FakeElement("div"));
       }
       return elements.get(key);
     },
@@ -275,6 +271,21 @@ test("cut deletes the rows captured at copy time, not the selection at write com
 // Regression: radios with has_tuning_step=False (e.g. Baofeng UV-5R) mark
 // TStep read-only; paste must still restore the copied value instead of
 // silently resetting it to the first enum option.
+// Pick the stubbed radio the way the UI requires: type into the search box and
+// accept the pre-highlighted first suggestion. Without this no radio is
+// selected, so the driver's column metadata is never fetched.
+function selectStubbedRadio(document, query) {
+  const searchEl = document.querySelector("#radio-search");
+  searchEl.value = query;
+  searchEl.dispatchEvent({ type: "input" });
+  searchEl.dispatchEvent({
+    type: "keydown",
+    key: "Enter",
+    preventDefault() {},
+    stopPropagation() {},
+  });
+}
+
 test("paste preserves read-only column values and matches unpadded numeric enums", async () => {
   const { document, navigator } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
@@ -302,6 +313,8 @@ test("paste preserves read-only column values and matches unpadded numeric enums
   });
 
   await ui.init(true);
+  selectStubbedRadio(document, "Acme One");
+  await flushMicrotasks();
 
   // Header-mapped TSV as produced by Copy (TStep "5.00") plus a
   // spreadsheet-style unpadded value ("12.5") that must match "12.50".

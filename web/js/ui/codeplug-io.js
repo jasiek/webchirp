@@ -200,7 +200,7 @@ export function createCodeplugIo(ctx) {
 
   async function exportBinaryCodeplug() {
     if (!state.selectedRadio) {
-      log.setStatus("Select a radio make/model first.");
+      log.setStatus("Search for and select a radio first.");
       return;
     }
     log.setStatus("Preparing CHIRP binary codeplug...");

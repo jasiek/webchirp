@@ -572,9 +572,7 @@ button:disabled {
   display: none;
 }
 
-#radio-search,
-#radio-make,
-#radio-model {
+#radio-search {
   width: 100%;
   margin: 0.2rem 0 0.55rem;
   padding: 0.4rem 0.45rem;
@@ -582,6 +580,51 @@ button:disabled {
   border-radius: 4px;
   background: var(--surface);
   color: var(--text);
+}
+
+.radio-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0.2rem 0 0.75rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.radio-selection-caption {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.radio-selection-name {
+  font-size: 0.95rem;
+  line-height: 1.25;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.radio-selection-driver {
+  font-size: 0.72rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.radio-selection-driver:empty {
+  display: none;
+}
+
+.radio-selection.is-empty {
+  border-left-color: var(--border);
+}
+
+.radio-selection.is-empty .radio-selection-name {
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .radio-search-wrap {
@@ -610,13 +653,20 @@ button:disabled {
 }
 
 .radio-search-results li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
   padding: 0.32rem 0.5rem;
   font-size: 0.85rem;
+  line-height: 1.3;
   color: var(--text);
   cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+
+.radio-search-alias {
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 
 .radio-search-results li:hover,

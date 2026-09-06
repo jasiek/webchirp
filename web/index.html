@@ -129,12 +129,19 @@
               Live-mode radios are not supported in this UI at the moment. Select a clone-mode
               radio to use Connect, Download Radio, and Upload Radio.
             </p>
+            <div id="radio-selection" class="radio-selection is-empty">
+              <span class="radio-selection-caption">Selected radio</span>
+              <strong id="radio-selection-name" class="radio-selection-name" aria-live="polite"
+                >No radio selected</strong
+              >
+              <span id="radio-selection-driver" class="radio-selection-driver"></span>
+            </div>
             <label for="radio-search">Search radios</label>
             <div class="radio-search-wrap">
               <input
                 id="radio-search"
                 type="search"
-                placeholder="Type a make or model…"
+                placeholder="Search make, model or alias…"
                 autocomplete="off"
                 role="combobox"
                 aria-expanded="false"
@@ -144,10 +151,6 @@
               />
               <ul id="radio-search-results" class="radio-search-results" role="listbox" hidden></ul>
             </div>
-            <label for="radio-make">Radio make</label>
-            <select id="radio-make" disabled></select>
-            <label for="radio-model">Radio model</label>
-            <select id="radio-model" disabled></select>
             <div class="serial-actions">
               <button id="serial-connect-toggle" disabled>Connect via WebSerial</button>
               <button id="serial-connect-webusb" disabled hidden>Connect via WebUSB</button>

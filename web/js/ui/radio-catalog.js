@@ -8,15 +8,24 @@ import { radioEventParams, trackEvent } from "./analytics.js";
 
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
+const NO_RADIO_SELECTED_TEXT = "No radio selected";
+// Suggestions are the only way to choose a radio, so each one needs an id for
+// the combobox's aria-activedescendant to point a screen reader at.
+const RADIO_SEARCH_OPTION_ID_PREFIX = "radio-search-option-";
 
-// Radio selection: the make/model dropdowns, the free-text search box with its
-// autocomplete list, the "last radio" cookie, and the metadata load that
-// follows a selection. Owns the search-result state; the catalog and the
+// Radio selection: the free-text search box with its autocomplete list, the
+// sidebar readout naming the radio in use, the "last radio" cookie, and the
+// metadata load that follows a selection. Search is the only way to pick a
+// radio, so nothing is selected until the user picks one (or the cookie
+// restores their last). Owns the search-result state; the catalog and the
 // selected entry live in the shared state because export/upload read them.
 export function createRadioCatalog(ctx) {
   const { dom, state, log, actions } = ctx;
   let searchMatches = [];
   let searchActiveIndex = -1;
+  // Overrides the readout while the catalog is loading or failed to load, so a
+  // cold start does not claim the user simply has not chosen a radio yet.
+  let catalogStatusText = "";
 
   function setCookie(name, value, maxAgeSeconds = 31536000) {
     document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
@@ -60,29 +69,22 @@ export function createRadioCatalog(ctx) {
     if (!make || !key) {
       return false;
     }
-    if (!state.radioCatalog.some((r) => r.vendor === make && r.key === key)) {
+    const restored = state.radioCatalog.find((r) => r.vendor === make && r.key === key);
+    if (!restored) {
       return false;
     }
     clearRadioFilter();
-    dom.radioMakeEl.value = make;
-    refreshModelOptions();
-    dom.radioModelEl.value = key;
-    state.selectedRadio = state.radioCatalog.find((r) => r.key === key) || null;
-    if (!state.selectedRadio) {
-      return false;
-    }
+    state.selectedRadio = restored;
+    renderSelectedRadio();
     actions.updateSerialActionState();
-    trackRadioSelected(state.selectedRadio, "restored");
+    trackRadioSelected(restored, "restored");
     log.logDebug(
-      `RADIO RESTORE ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
+      `RADIO RESTORE ${makeModelLabel(restored)} (${restored.module}.${restored.className})`,
     );
     return true;
   }
 
-  // Report which radio a user landed on and how they got there. Deliberately
-  // not fired from refreshModelOptions(), which also runs at boot and when a
-  // vendor change defaults the model: only the paths below are a user choosing
-  // a radio.
+  // Report which radio a user landed on and how they got there.
   function trackRadioSelected(radio, method) {
     if (!radio) {
       return;
@@ -93,30 +95,70 @@ export function createRadioCatalog(ctx) {
     });
   }
 
-  // Produce a sorted unique list of vendor names from the radio catalog.
-  function uniqueVendors(radios) {
-    return Array.from(new Set(radios.map((r) => r.vendor))).sort((a, b) =>
-      a.localeCompare(b),
+  // Alternate vendor/model identities the same driver is sold under (CHIRP's
+  // ALIASES). Searching these is what replaces browsing a make dropdown: a
+  // Retevis RT5R owner has no other way to discover it is a Baofeng UV-5R
+  // driver, because the catalog lists the entry under Baofeng only.
+  function radioAliasIdentities(radio) {
+    return (radio.aliases || []).filter(
+      (alias) => alias.vendor !== radio.vendor || alias.model !== radio.model,
     );
   }
 
+  function aliasLabel(alias) {
+    return `${alias.vendor} ${alias.model}${alias.variant ? ` ${alias.variant}` : ""}`;
+  }
+
+  // The radio's own searchable text, without its aliases.
+  function primaryHaystack(radio) {
+    return `${radio.vendor} ${radio.model} ${radio.className}`.toLowerCase();
+  }
+
+  function matchesAllTokens(haystack, tokens) {
+    return tokens.every((token) => haystack.includes(token));
+  }
+
   // Match a radio against a search query; every whitespace-separated token must
-  // appear somewhere in the "vendor model class" text (case-insensitive).
+  // appear somewhere in its own or an alias identity's text (case-insensitive).
   function radioMatchesFilter(radio, tokens) {
     if (tokens.length === 0) {
       return true;
     }
-    const haystack = `${radio.vendor} ${radio.model} ${radio.className}`.toLowerCase();
-    return tokens.every((token) => haystack.includes(token));
+    const primary = primaryHaystack(radio);
+    if (matchesAllTokens(primary, tokens)) {
+      return true;
+    }
+    return radioAliasIdentities(radio).some((alias) =>
+      matchesAllTokens(`${primary} ${aliasLabel(alias)}`.toLowerCase(), tokens),
+    );
+  }
+
+  // The alias that explains why a radio matched, or null when its own
+  // vendor/model already covers the query. Used to label the suggestion, so a
+  // search for "retevis" does not return a list of unexplained Baofengs.
+  function matchedAlias(radio, tokens) {
+    const primary = primaryHaystack(radio);
+    if (tokens.length === 0 || matchesAllTokens(primary, tokens)) {
+      return null;
+    }
+    return (
+      radioAliasIdentities(radio).find((alias) =>
+        matchesAllTokens(`${primary} ${aliasLabel(alias)}`.toLowerCase(), tokens),
+      ) || null
+    );
   }
 
   // Catalog entries matching a free-text search query.
   function matchingRadios(query) {
-    const tokens = String(query || "").toLowerCase().split(/\s+/).filter(Boolean);
+    const tokens = searchTokens(query);
     if (tokens.length === 0) {
       return [];
     }
     return state.radioCatalog.filter((radio) => radioMatchesFilter(radio, tokens));
+  }
+
+  function searchTokens(query) {
+    return String(query || "").toLowerCase().split(/\s+/).filter(Boolean);
   }
 
   // "<Make> <Model>" label for a search suggestion; the driver class is added
@@ -127,15 +169,65 @@ export function createRadioCatalog(ctx) {
     return hasDuplicateLabel ? `${label} (${radio.className})` : label;
   }
 
+  // Fill one suggestion row. The name and the alias note are separate elements
+  // so the narrow sidebar can stack them instead of ellipsising the name away.
+  function fillRadioSearchOption(li, radio, hasDuplicateLabel, alias) {
+    const nameEl = document.createElement("span");
+    nameEl.className = "radio-search-name";
+    nameEl.textContent = radioSearchLabel(radio, hasDuplicateLabel);
+    li.appendChild(nameEl);
+    if (!alias) {
+      return;
+    }
+    const aliasEl = document.createElement("span");
+    aliasEl.className = "radio-search-alias";
+    aliasEl.textContent = `also sold as ${aliasLabel(alias)}`;
+    li.appendChild(aliasEl);
+  }
+
+  // Name the radio the rest of the app is working with. This readout is the
+  // only indication of the current selection now that the make/model dropdowns
+  // are gone, so it renders after every path that assigns state.selectedRadio.
+  function renderSelectedRadio() {
+    const radio = state.selectedRadio;
+    const isEmpty = !radio;
+    dom.radioSelectionEl.classList.toggle("is-empty", isEmpty);
+    if (radio) {
+      dom.radioSelectionNameEl.textContent = radio.isLiveRadio
+        ? `⚡ ${makeModelLabel(radio)}`
+        : makeModelLabel(radio);
+      dom.radioSelectionDriverEl.textContent = `${radio.module}.${radio.className}`;
+      return;
+    }
+    dom.radioSelectionNameEl.textContent = catalogStatusText || NO_RADIO_SELECTED_TEXT;
+    dom.radioSelectionDriverEl.textContent = "";
+  }
+
   function hideRadioSearchResults() {
     searchMatches = [];
     searchActiveIndex = -1;
     dom.radioSearchResultsEl.hidden = true;
     dom.radioSearchResultsEl.innerHTML = "";
     dom.radioSearchEl.setAttribute("aria-expanded", "false");
+    dom.radioSearchEl.removeAttribute("aria-activedescendant");
   }
 
-  // Clear the search box and close its suggestion list (programmatic selections).
+  // Point the combobox at the highlighted suggestion, or at nothing when the
+  // list has none to highlight.
+  function syncRadioSearchActiveDescendant() {
+    if (searchActiveIndex < 0) {
+      dom.radioSearchEl.removeAttribute("aria-activedescendant");
+      return;
+    }
+    dom.radioSearchEl.setAttribute(
+      "aria-activedescendant",
+      `${RADIO_SEARCH_OPTION_ID_PREFIX}${searchActiveIndex}`,
+    );
+  }
+
+  // Clear the search box and close its suggestion list. The box is a way to
+  // change the selection, not a display of it, so it empties after every
+  // selection and the readout above it carries the answer.
   function clearRadioFilter() {
     dom.radioSearchEl.value = "";
     hideRadioSearchResults();
@@ -148,6 +240,7 @@ export function createRadioCatalog(ctx) {
       hideRadioSearchResults();
       return;
     }
+    const tokens = searchTokens(query);
     const matches = matchingRadios(query);
     searchMatches = matches.slice(0, RADIO_SEARCH_MAX_RESULTS);
     searchActiveIndex = searchMatches.length > 0 ? 0 : -1;
@@ -167,9 +260,11 @@ export function createRadioCatalog(ctx) {
       searchMatches.forEach((radio, index) => {
         const li = document.createElement("li");
         li.setAttribute("role", "option");
+        li.id = `${RADIO_SEARCH_OPTION_ID_PREFIX}${index}`;
         li.dataset.index = String(index);
         const hasDuplicateLabel = (labelCounts.get(makeModelLabel(radio)) || 0) > 1;
-        li.textContent = radioSearchLabel(radio, hasDuplicateLabel);
+        fillRadioSearchOption(li, radio, hasDuplicateLabel, matchedAlias(radio, tokens));
+        li.setAttribute("aria-selected", index === searchActiveIndex ? "true" : "false");
         if (index === searchActiveIndex) {
           li.classList.add("is-active");
         }
@@ -185,6 +280,7 @@ export function createRadioCatalog(ctx) {
 
     dom.radioSearchResultsEl.hidden = false;
     dom.radioSearchEl.setAttribute("aria-expanded", "true");
+    syncRadioSearchActiveDescendant();
   }
 
   // Move the keyboard highlight in the suggestion list by delta and keep it in view.
@@ -197,21 +293,20 @@ export function createRadioCatalog(ctx) {
     const items = dom.radioSearchResultsEl.querySelectorAll("li[role='option']");
     items.forEach((li, index) => {
       li.classList.toggle("is-active", index === searchActiveIndex);
+      li.setAttribute("aria-selected", index === searchActiveIndex ? "true" : "false");
     });
+    syncRadioSearchActiveDescendant();
     items[searchActiveIndex]?.scrollIntoView({ block: "nearest" });
   }
 
-  // Apply a suggestion: sync the make/model dropdowns and load the radio.
+  // Apply a suggestion: name it in the readout and load the radio.
   function applyRadioSearchSelection(radio) {
     if (!radio) {
       return;
     }
-    dom.radioSearchEl.value = makeModelLabel(radio);
-    hideRadioSearchResults();
-    dom.radioMakeEl.value = radio.vendor;
-    refreshModelOptions();
-    dom.radioModelEl.value = radio.key;
+    clearRadioFilter();
     state.selectedRadio = radio;
+    renderSelectedRadio();
     trackRadioSelected(radio, "search");
     log.logDebug(
       `RADIO SELECT ${makeModelLabel(radio)} (${radio.module}.${radio.className})`,
@@ -219,7 +314,7 @@ export function createRadioCatalog(ctx) {
     reloadForSelectedRadio();
   }
 
-  // Shared side effects after the selected radio changes via make/model/search.
+  // Shared side effects after the selected radio changes.
   function reloadForSelectedRadio() {
     actions.updateSerialActionState();
     persistSelectedRadioCookie();
@@ -259,55 +354,30 @@ export function createRadioCatalog(ctx) {
       });
   }
 
-  function formatRadioModelOption(radio, hasDuplicateModel) {
-    const modelLabel = radio.isLiveRadio ? `⚡ ${radio.model}` : radio.model;
-    return hasDuplicateModel ? `${modelLabel} (${radio.className})` : modelLabel;
-  }
-
+  // Say why no radio is named yet while the catalog is unavailable ("Loading…",
+  // "Unavailable"), instead of the readout's ordinary empty text.
   function setRadioSelectPlaceholder(label) {
-    const text = String(label || "");
-    for (const selectEl of [dom.radioMakeEl, dom.radioModelEl]) {
-      if (!selectEl) {
-        continue;
-      }
-      selectEl.innerHTML = "";
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = text;
-      selectEl.appendChild(option);
-      selectEl.value = "";
-    }
+    catalogStatusText = String(label || "");
+    renderSelectedRadio();
   }
 
-  // Populate model dropdown for selected vendor and refresh selection state.
-  function refreshModelOptions() {
-    const vendor = dom.radioMakeEl.value;
-    const models = state.radioCatalog.filter((r) => r.vendor === vendor);
-    const modelCounts = new Map();
-    for (const radio of models) {
-      modelCounts.set(radio.model, (modelCounts.get(radio.model) || 0) + 1);
+  // Called once the catalog has loaded: the readout drops the loading text and
+  // the search box gets a placeholder that says how much there is to search.
+  function refreshCatalog() {
+    catalogStatusText = "";
+    const count = state.radioCatalog.length;
+    dom.radioSearchEl.placeholder = count > 0
+      ? `Search ${count} radios…`
+      : "No radio definitions available";
+    if (state.selectedRadio && !state.radioCatalog.includes(state.selectedRadio)) {
+      state.selectedRadio = null;
     }
-    dom.radioModelEl.innerHTML = "";
-
-    for (const radio of models) {
-      const option = document.createElement("option");
-      option.value = radio.key;
-      const hasDuplicateModel = (modelCounts.get(radio.model) || 0) > 1;
-      option.textContent = formatRadioModelOption(radio, hasDuplicateModel);
-      dom.radioModelEl.appendChild(option);
-    }
-
-    const selectedKey = dom.radioModelEl.value || models[0]?.key;
-    state.selectedRadio = models.find((r) => r.key === selectedKey) || null;
+    renderSelectedRadio();
     actions.updateSerialActionState();
-    if (state.selectedRadio) {
-      dom.radioModelEl.value = state.selectedRadio.key;
-      log.logDebug(
-        `RADIO SELECT ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
-      );
-    }
   }
 
+  // Select the catalog entry for a driver without going through the search box
+  // (used when a loaded image identifies its own driver).
   function selectRadioByDriver(moduleName, className) {
     const target = state.radioCatalog.find(
       (r) => r.module === moduleName && r.className === className,
@@ -316,10 +386,8 @@ export function createRadioCatalog(ctx) {
       return false;
     }
     clearRadioFilter();
-    dom.radioMakeEl.value = target.vendor;
-    refreshModelOptions();
-    dom.radioModelEl.value = target.key;
     state.selectedRadio = target;
+    renderSelectedRadio();
     persistSelectedRadioCookie();
     return true;
   }
@@ -341,41 +409,11 @@ export function createRadioCatalog(ctx) {
       return false;
     }
     clearRadioFilter();
-    dom.radioMakeEl.value = fallback.vendor;
-    refreshModelOptions();
-    dom.radioModelEl.value = fallback.key;
     state.selectedRadio = fallback;
+    renderSelectedRadio();
     trackRadioSelected(fallback, "image");
     persistSelectedRadioCookie();
     return true;
-  }
-
-  // Populate make dropdown from the catalog and initialize model options,
-  // preserving the current vendor when it is still present.
-  function refreshMakeOptions() {
-    const previousVendor = dom.radioMakeEl.value;
-    const vendors = uniqueVendors(state.radioCatalog);
-    dom.radioMakeEl.innerHTML = "";
-
-    if (vendors.length === 0) {
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = "No matching radios";
-      dom.radioMakeEl.appendChild(option);
-      dom.radioModelEl.innerHTML = "";
-      state.selectedRadio = null;
-      actions.updateSerialActionState();
-      return;
-    }
-
-    for (const vendor of vendors) {
-      const option = document.createElement("option");
-      option.value = vendor;
-      option.textContent = vendor;
-      dom.radioMakeEl.appendChild(option);
-    }
-    dom.radioMakeEl.value = vendors.includes(previousVendor) ? previousVendor : vendors[0];
-    refreshModelOptions();
   }
 
   async function fetchRadioMetadata(radio) {
@@ -455,35 +493,11 @@ export function createRadioCatalog(ctx) {
       const index = Number(li.dataset.index);
       applyRadioSearchSelection(searchMatches[index]);
     });
-
-    dom.radioMakeEl.addEventListener("change", () => {
-      refreshModelOptions();
-      // A vendor change reports the model it auto-defaulted to, which the user
-      // then usually replaces — so picking a radio through the dropdowns sends
-      // two radio_selected events. Both are real (the driver for the defaulted
-      // model does get loaded), and method separates them: count method="model"
-      // for radios people chose, method="make" only for what they passed
-      // through on the way.
-      trackRadioSelected(state.selectedRadio, "make");
-      reloadForSelectedRadio();
-    });
-
-    dom.radioModelEl.addEventListener("change", () => {
-      const key = dom.radioModelEl.value;
-      state.selectedRadio = state.radioCatalog.find((r) => r.key === key) || null;
-      if (state.selectedRadio) {
-        trackRadioSelected(state.selectedRadio, "model");
-        log.logDebug(
-          `RADIO SELECT ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
-        );
-      }
-      reloadForSelectedRadio();
-    });
   }
 
   return {
     bindEvents,
-    refreshMakeOptions,
+    refreshCatalog,
     restoreSelectedRadioCookie,
     setRadioSelectPlaceholder,
     selectRadioByDetectedImage,
