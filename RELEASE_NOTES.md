@@ -1,5 +1,29 @@
 # Release Notes
 
+## 2026-09-06
+- Picking a radio is now a single search box plus a "Selected radio" readout instead of two dependent dropdowns; the search matches the driver's own aliases as well as make and model, nothing is selected at startup, and the clone buttons read "Load from radio" / "Save to radio" (#135).
+- Clones now call CHIRP's `detect_from_serial` first, so drivers that put the programming-mode handshake there — Baofeng GA-510, TD-H8, AnyTone 778UV, TDM11 — can talk to the radio at all instead of reading nothing (#131).
+- Settings read from an `.img` can now be written straight back: 9 of the 231 upstream test images that carry a settings tree aborted with a validation error before upload, now none do (#132, fixes #34).
+- Cancelling the browser's serial port chooser now reports that it was dismissed instead of dumping an unreadable Python traceback into Debug Output (#133).
+- A CHIRP driver module that cannot be fetched now says why — a CDN 404, an offline network, or a browser without WebAssembly stack switching — instead of the misleading `ModuleNotFoundError` all three previously produced (#136, fixes #100).
+- Repeater imports now read CTCSS from the feed's own perspective, so przemienniki.net tone-access repeaters no longer arrive with the transmit tone missing and the radio silently unable to open the repeater (#137, fixes #103).
+- An RXF repeater entry carrying only one side of the split now imports as simplex instead of a phantom offset computed from a 0 MHz frequency (#138, fixes #102).
+- The runtime reports a crash only when the bootstrap actually failed: a blocked CDN during catalog loading no longer shows `RUNTIME CRASH`, and a genuine interpreter failure is no longer missed (#139, fixes #99).
+- Memories the driver cannot decode are now reported in Debug Output instead of vanishing from the grid with no trace that the channel exists (#140, fixes #82).
+
+## 2026-09-05
+- Editing the grid no longer renumbers channels into consecutive slots: a `Location` is the radio's memory slot again, so uploads to 1-based radios stop failing partway through the clone and sparse codeplugs are no longer silently compacted (#117, fixes #73).
+- Uploads and binary exports now run CHIRP's own name filtering, immutable-field policy and driver validation, showing blocking errors in the grid and non-blocking driver warnings in Debug Output (#123).
+- Repeater imports the selected radio cannot tune are now skipped instead of inserted with a blank frequency, which an upload read as an instruction to erase that channel (#120, fixes #101).
+- Loading an `.img` now leaves the radio, its schema and its image-backed settings consistent, including when the radio selected before the import is reselected (#121, fixes #91).
+- Fixed a radio-selection race where metadata or settings from an abandoned selection could overwrite the radio the user had since switched to (#122, fixes #111).
+- The Puxing PX-888K can clone again: the serial shim's `write()` returned nothing where pyserial returns a byte count, and the driver checks it before its first handshake (#125, fixes #79).
+- Kenwood TH-D72 clones no longer abort before the first block: driver DTR/RTS changes now reach the port, and `setRTS()` accepts pyserial's optional argument (#126, fixes #77).
+- The AnyTone 778UV family can clone again — AnyTone 778UV, Retevis RT95, CRT Micron UV, Midland DBR2500, Yedro YC-M04VUS and their variants — now that `in_waiting` reports the real buffered byte count and `inWaiting()` exists at all (#127, fixes #78).
+- Driver-side baud-rate and framing changes now reach the port instead of being recorded and dropped, fixing the Kenwood TH-D72/D74 switch to 57600 and Icom high-speed clone across 11 driver modules (#128).
+- The port is re-rated to the selected driver's baud rate for every clone, so switching to a faster radio after connecting no longer runs the clone at the old rate with nothing naming the cause (#129, fixes #76).
+- Report Bug is now reachable without first finding and opening the folded Debug Output panel (#119).
+
 ## 2026-08-27
 - Added an IRTS repeater directory query covering Ireland and the UK, with country, band and mode filters loaded from the directory itself and RX/TX honoured from the radio's perspective so the two sides are never programmed reversed (#71).
 - Updated the bundled CHIRP, which adds the Kenwood NX-800 driver among other upstream fixes (#72).
@@ -7,10 +31,16 @@
 ## 2026-08-23
 - Debug Output now starts folded into a compact footer row, expands on demand or automatically when an error occurs, and leaves app-wide progress visible.
 
+## 2026-08-20
+- The unsupported-browser overlay now explains the iOS and iPadOS platform gap instead of telling iPhone and iPad users to install Chrome, Edge or Firefox — every iOS browser is WebKit underneath, so none of them expose Web Serial or WebUSB — and points at the file-based features that do work there (#70).
+- The repeater-query modals are now one shell assembled from reusable field components with per-source configuration, replacing two near-duplicate implementations; the position field keeps coordinates and Maidenhead locator in two-way sync (#69).
+
 ## 2026-08-19
+- Silicon Labs CP2102/CP210x programming cables now work over WebUSB on Chrome for Android, where native Web Serial cannot drive them; the chip was previously named in the UI as the example of an unsupported cable (#67).
 - Browsers that cannot run WebCHIRP fully now grey out the app behind an explanation panel instead of a small sidebar note: it says when no serial transport exists (radio programming needs Web Serial — Chrome, Edge or recent Firefox) and when WebAssembly stack switching is missing so radio drivers cannot load at all (old Firefox — update), shows both on Safari, and offers "Continue anyway" for file-based editing.
 
 ## 2026-08-17
+- Channels imported from a repeater directory now offer a static OpenStreetMap view of the repeater location: a tooltip beside the Location cell on desktop, a modal on tap on mobile (#65, closes #57).
 - Added an adapter loopback test page (`serial-test.html`) with a transport-agnostic suite that bridges TX to RX and verifies every byte comes straight back, and fixed WebUSB chip ports silently delivering nothing when reopened after close (#56).
 - The loopback test page can now file a pre-filled GitHub issue in one tap, carrying the adapter, platform, browser, app version and a failure-first trimmed report, so mobile testers no longer copy/paste results by hand (#58).
 - The CH340 and PL2303 WebUSB drivers no longer silently drop bytes at 115200: bulk IN transfers are now kept queued so the chip's RX FIFO cannot overrun between reads, a loss that previously reported `status: "ok"` with no error anywhere (#59).
