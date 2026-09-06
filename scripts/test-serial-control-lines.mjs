@@ -1,25 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BrowserSerialBridge, createSerialRpcHandler } from "../web/js/serial.js";
+import { makeRecordingPort } from "./test-support/fake-serial.mjs";
 
-// A port that records every setSignals() call, standing in for Web Serial or
-// one of the WebUSB adapter shims.
-function fakePort({ failWith = null } = {}) {
-  const calls = [];
-  return {
-    calls,
-    async setSignals(signals) {
-      if (failWith) {
-        throw new Error(failWith);
-      }
-      calls.push(signals);
-    },
-  };
-}
+// The recording port stands in for Web Serial or one of the WebUSB adapter
+// shims; only its setSignals() record matters here.
 
 test("setSignals asserts only the lines the caller named", async () => {
   const bridge = new BrowserSerialBridge();
-  const port = fakePort();
+  const port = makeRecordingPort();
   bridge.port = port;
 
   await bridge.setSignals(true, false);
@@ -27,7 +16,7 @@ test("setSignals asserts only the lines the caller named", async () => {
   await bridge.setSignals(null, true);
   const res = await bridge.setSignals(null, null);
 
-  assert.deepEqual(port.calls, [
+  assert.deepEqual(port.signals, [
     { dataTerminalReady: true, requestToSend: false },
     { requestToSend: true },
   ]);
@@ -66,7 +55,7 @@ test("setSignals op forwards both lines through the RPC handler", async () => {
 test("a port that cannot change control lines does not fail the clone", async () => {
   const logs = [];
   const bridge = new BrowserSerialBridge();
-  bridge.port = fakePort({ failWith: "setSignals is not supported" });
+  bridge.port = makeRecordingPort({ failSignalsWith: "setSignals is not supported" });
   const handler = createSerialRpcHandler({
     serialBridge: bridge,
     logSerial: (msg) => logs.push(msg),
