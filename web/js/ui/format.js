@@ -151,3 +151,14 @@ export function countryDisplayName(countryCode) {
 export function makeModelLabel(radio) {
   return `${radio.vendor} ${radio.model}`;
 }
+
+// Summarise channels the driver could not decode during a download or image
+// load. Those slots are absent from the grid through no action of the user, so
+// the status line has to say so; the tracebacks stay in Debug Output.
+export function undecodedChannelsNote(unreadableChannels) {
+  const count = Array.isArray(unreadableChannels) ? unreadableChannels.length : 0;
+  if (!count) {
+    return "";
+  }
+  return ` ${count} channel${count === 1 ? "" : "s"} could not be decoded and ${count === 1 ? "is" : "are"} not shown; see Debug Output.`;
+}

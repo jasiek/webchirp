@@ -1,4 +1,10 @@
-import { errorSummary, isAndroidPlatform, isIosPlatform, makeModelLabel } from "./format.js";
+import {
+  errorSummary,
+  isAndroidPlatform,
+  isIosPlatform,
+  makeModelLabel,
+  undecodedChannelsNote,
+} from "./format.js";
 import {
   classifyErrorKind,
   codeplugParams,
@@ -419,7 +425,10 @@ export function createSerialActions(ctx) {
       ctx.table.render();
       ctx.settings.updateViewButtons();
       ctx.settings.render();
-      log.setStatus(`${makeModelLabel(radio)} download complete (${state.currentRows.length} channels).`);
+      log.setStatus(
+        `${makeModelLabel(radio)} download complete (${state.currentRows.length} channels).`
+          + undecodedChannelsNote(result.unreadableChannels),
+      );
       trackCloneOutcome("radio_download_success", radio, startedAt, codeplugParams(state));
       if (result.ident) {
         log.logSerial(`IDENT ${result.ident}`);

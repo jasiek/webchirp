@@ -307,7 +307,7 @@ if _size <= 0:
     raise RuntimeUnsupportedError("Driver does not expose _memsize for offline codeplug test")
 _radio = _radio_cls(memmap.MemoryMapBytes(bytes(_size)))
 _apply_rows_to_radio_instance(_radio, _rows)
-_roundtrip = _radio_rows_from_instance(_radio)
+_roundtrip, _ = _radio_rows_from_instance(_radio)
 _locations = sorted(int(_r.get("Location", 0) or 0) for _r in _roundtrip)
 _powers = {str(_r.get("Location", "")): str(_r.get("Power", "")) for _r in _roundtrip}
 _image = _radio.get_mmap().get_byte_compatible().get_packed()
@@ -349,7 +349,7 @@ if _size <= 0:
     raise RuntimeUnsupportedError("Driver does not expose _memsize for offline codeplug test")
 _radio = _radio_cls(memmap.MemoryMapBytes(bytes(_size)))
 _apply_rows_to_radio_instance(_radio, _rows)
-_roundtrip = _radio_rows_from_instance(_radio)
+_roundtrip, _ = _radio_rows_from_instance(_radio)
 _by_location = {str(_r.get("Location", "")): _r for _r in _roundtrip}
 json.dumps({
     "rowCount": len(_roundtrip),
@@ -476,8 +476,9 @@ _existing.mode = "NFM"
 _radio.set_memory(_existing)
 _image = _radio.get_mmap().get_byte_compatible().get_packed()
 LAST_IMAGE_BY_DRIVER[_driver_cache_key(_module, _class_name)] = bytes(_image)
+_readable_rows, _ = _radio_rows_from_instance(_radio)
 _row = next(
-    _row for _row in _radio_rows_from_instance(_radio)
+    _row for _row in _readable_rows
     if _row["Location"] == "1"
 )
 _rows = [_row]
