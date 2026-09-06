@@ -304,21 +304,30 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }) {
 export function buildPrzemiennikiRows(
   repeaters,
   { createBlankRow, setRowValue, findEnumOption },
-  { qrgPerspective = "repeater" } = {},
+  { perspective = "repeater" } = {},
 ) {
   const rows = [];
   const skipped = [];
+  // RXF's <perspective> labels every rx/tx pair in the feed - frequencies and
+  // CTCSS alike - as either the user's radio's or the repeater's. Under
+  // "radio", rx is what the radio receives; under "repeater", rx is what the
+  // repeater receives, which is what the radio has to transmit.
+  const fromRadio = perspective === "radio";
   for (const repeater of repeaters) {
     const row = createBlankRow();
-    // RXF declares whether receive/transmit are labelled from the repeater's
-    // or the user's radio's perspective. Normalize both into a CHIRP memory's
-    // receive/transmit pair.
-    const receiveFrequency = qrgPerspective === "radio"
+    // Normalize the labelled pair into a CHIRP memory's receive/transmit pair.
+    const receiveFrequency = fromRadio
       ? (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx)
       : (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx);
-    const transmitFrequency = qrgPerspective === "radio"
+    const transmitFrequency = fromRadio
       ? (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx)
       : (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx);
+    // Tones carry the same perspective as the frequencies, so a repeater that
+    // publishes only an access tone (the tone the repeater receives) still has
+    // to reach the radio as rToneFreq plus a Tone mode - map it to cToneFreq
+    // and the radio silently never sends it.
+    const transmitTone = fromRadio ? repeater.ctcssTx : repeater.ctcssRx;
+    const receiveTone = fromRadio ? repeater.ctcssRx : repeater.ctcssTx;
 
     setRowValue(row, "Name", repeater.qra);
     const commentParts = [repeater.qth, repeater.remarks, repeater.link].filter((part) => String(part || "").trim());
@@ -348,15 +357,15 @@ export function buildPrzemiennikiRows(
       }
     }
 
-    if (repeater.ctcssTx) {
+    if (transmitTone) {
       const toneMode = findEnumOption("Tone", ["Tone", "TSQL"], true);
       if (toneMode) {
         setRowValue(row, "Tone", toneMode);
       }
-      setRowValue(row, "rToneFreq", repeater.ctcssTx);
+      setRowValue(row, "rToneFreq", transmitTone);
     }
-    if (repeater.ctcssRx) {
-      setRowValue(row, "cToneFreq", repeater.ctcssRx);
+    if (receiveTone) {
+      setRowValue(row, "cToneFreq", receiveTone);
     }
 
     const modeMappings = {

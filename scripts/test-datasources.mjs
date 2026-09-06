@@ -9,7 +9,7 @@ import {
 import { rowGeo } from "../web/js/row-geo.js";
 
 function rowHooks({ modeOptions = ["FM", "DV", "DMR", "DN"], maxFrequencyMhz = Infinity } = {}) {
-  const columns = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Comment"];
+  const columns = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "cToneFreq", "Mode", "Comment"];
   return {
     createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
     setRowValue: (row, column, value) => {
@@ -97,7 +97,7 @@ test("IRTS radio-perspective frequencies build a usable CHIRP channel", () => {
       latitude: 53.229167,
       longitude: -6.208333,
     },
-  ], rowHooks(), { qrgPerspective: "radio" });
+  ], rowHooks(), { perspective: "radio" });
 
   assert.equal(row.Name, "EI2TRR");
   assert.equal(row.Frequency, "145.600000");
@@ -110,12 +110,85 @@ test("IRTS radio-perspective frequencies build a usable CHIRP channel", () => {
   assert.deepEqual(skipped, []);
 });
 
+test("IRTS radio-perspective tones keep rx as receive and tx as transmit", () => {
+  const { rows: [row] } = buildPrzemiennikiRows([
+    {
+      qra: "EI2TRR",
+      mode: "fm",
+      qrgRx: 145.6,
+      qrgTx: 145.0,
+      ctcssRx: "110.9",
+      ctcssTx: "88.5",
+    },
+  ], rowHooks(), { perspective: "radio" });
+
+  assert.equal(row.Tone, "Tone");
+  assert.equal(row.rToneFreq, "88.5");
+  assert.equal(row.cToneFreq, "110.9");
+});
+
+test("a repeater-perspective access tone becomes the tone the radio transmits", () => {
+  // przemienniki.net labels CTCSS from the repeater's side: type="rx" is the
+  // tone the repeater listens for, so the radio has to transmit it. Mapping it
+  // to cToneFreq leaves Tone blank and the repeater never opens.
+  const { rows: [row] } = buildPrzemiennikiRows([
+    {
+      qra: "SR9WX",
+      mode: "fm",
+      qrgRx: 145.0,
+      qrgTx: 145.6,
+      ctcssRx: "88.5",
+      ctcssTx: "",
+    },
+  ], rowHooks(), { perspective: "repeater" });
+
+  assert.equal(row.Frequency, "145.600000");
+  assert.equal(row.Tone, "Tone");
+  assert.equal(row.rToneFreq, "88.5");
+  assert.equal(row.cToneFreq, "");
+});
+
+test("a repeater-perspective tone pair is swapped in both directions", () => {
+  const { rows: [row] } = buildPrzemiennikiRows([
+    {
+      qra: "SR9WX",
+      mode: "fm",
+      qrgRx: 145.0,
+      qrgTx: 145.6,
+      ctcssRx: "88.5",
+      ctcssTx: "110.9",
+    },
+  ], rowHooks(), { perspective: "repeater" });
+
+  assert.equal(row.rToneFreq, "88.5");
+  assert.equal(row.cToneFreq, "110.9");
+});
+
+test("a repeater-perspective tone the repeater only transmits is not sent by the radio", () => {
+  // Tone-transmitting, carrier-access repeater: nothing to key it with, so the
+  // radio must not be told to send a tone.
+  const { rows: [row] } = buildPrzemiennikiRows([
+    {
+      qra: "SR9WX",
+      mode: "fm",
+      qrgRx: 145.0,
+      qrgTx: 145.6,
+      ctcssRx: "",
+      ctcssTx: "88.5",
+    },
+  ], rowHooks(), { perspective: "repeater" });
+
+  assert.equal(row.Tone, "");
+  assert.equal(row.rToneFreq, "");
+  assert.equal(row.cToneFreq, "88.5");
+});
+
 test("IRTS mode names map to CHIRP's DMR and Fusion values", () => {
   const base = { qra: "EI7TEST", qrgRx: 439.5, qrgTx: 430.5 };
   const { rows, skipped } = buildPrzemiennikiRows(
     [{ ...base, mode: "dmr" }, { ...base, mode: "fusion" }],
     rowHooks(),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
   assert.deepEqual(rows.map((row) => row.Mode), ["DMR", "DN"]);
   assert.deepEqual(skipped, []);
@@ -126,7 +199,7 @@ test("unsupported digital modes are skipped instead of retaining FM or substitut
   const { rows, skipped } = buildPrzemiennikiRows(
     [{ ...base, mode: "dmr" }, { ...base, qra: "EI7FUS", mode: "fusion" }],
     rowHooks({ modeOptions: ["FM", "DIG"] }),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
   assert.deepEqual(rows, []);
   assert.deepEqual(skipped, [
@@ -145,7 +218,7 @@ test("a repeater outside the radio's bands is skipped, not left as a blank frequ
       { qra: "SR70cm", mode: "fm", qrgRx: 438.6, qrgTx: 431.0 },
     ],
     rowHooks({ maxFrequencyMhz: 174 }),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
 
   assert.deepEqual(rows.map((row) => row.Name), ["SR2m"]);
@@ -156,7 +229,7 @@ test("a repeater with no usable frequency at all is skipped", () => {
   const { rows, skipped } = buildPrzemiennikiRows(
     [{ qra: "SR0", mode: "fm" }],
     rowHooks(),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
 
   assert.deepEqual(rows, []);
@@ -169,7 +242,7 @@ test("an out-of-band repeater is reported as frequency, not as an unusable mode"
   const { rows, skipped } = buildPrzemiennikiRows(
     [{ qra: "SRDMR", mode: "dmr", qrgRx: 1298.0, qrgTx: 1270.0 }],
     rowHooks({ modeOptions: ["FM"], maxFrequencyMhz: 470 }),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
 
   assert.deepEqual(rows, []);
