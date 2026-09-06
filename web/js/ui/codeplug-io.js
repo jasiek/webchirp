@@ -1,4 +1,9 @@
-import { base64ToBytes, buildExportFileName, bytesToBase64 } from "./format.js";
+import {
+  base64ToBytes,
+  buildExportFileName,
+  bytesToBase64,
+  undecodedChannelsNote,
+} from "./format.js";
 import {
   classifyErrorKind,
   codeplugParams,
@@ -267,7 +272,8 @@ export function createCodeplugIo(ctx) {
     // before the load.
     trackCodeplugImport("img", source, "replace");
     log.setStatus(
-      `Loaded binary codeplug for ${loaded.vendor || state.selectedRadio.vendor} ${loaded.model || state.selectedRadio.model}.`,
+      `Loaded binary codeplug for ${loaded.vendor || state.selectedRadio.vendor} ${loaded.model || state.selectedRadio.model}.`
+        + undecodedChannelsNote(loaded.unreadableChannels),
     );
   }
 

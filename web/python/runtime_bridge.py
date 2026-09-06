@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import tempfile
+import traceback
 import types
 from typing import Any, Literal, Optional, Sequence
 
@@ -1617,13 +1618,41 @@ def _iter_memory_numbers(radio):
     return range(int(lo), int(hi) + 1)
 
 
-def _radio_rows_from_instance(radio) -> Rows:
-    """Extract channel rows from a radio instance using CHIRP memory API."""
+def _format_channel_numbers(numbers: Sequence[int], limit: int = 8) -> str:
+    """Render channel numbers for a single debug line.
+
+    Capped because a driver that fails on every slot would otherwise emit a
+    line naming hundreds of channels and bury the rest of the debug panel.
+    """
+    shown = ", ".join(str(number) for number in numbers[:limit])
+    remainder = len(numbers) - limit
+    return f"{shown} and {remainder} more" if remainder > 0 else shown
+
+
+def _radio_rows_from_instance(radio) -> tuple[Rows, list[int]]:
+    """Extract channel rows from a radio instance using CHIRP memory API.
+
+    Returns the decoded rows and the numbers the driver refused to decode. A
+    memory that raises is skipped rather than failing the whole download, but
+    it must not vanish without trace: the traceback goes to the debug panel and
+    the number is handed back so callers can mark the slot. Those same numbers
+    are the ones `_apply_rows_to_radio_instance` must never erase, since their
+    absence from the grid reflects a decode failure, not a user deletion.
+    """
     rows: Rows = []
+    unreadable: list[int] = []
+    numbers_by_reason: dict[str, list[int]] = {}
+    trace_by_reason: dict[str, str] = {}
     for number in _iter_memory_numbers(radio):
         try:
             mem = radio.get_memory(number)
-        except Exception:
+        except Exception as exc:
+            reason = str(exc) or exc.__class__.__name__
+            unreadable.append(number)
+            numbers_by_reason.setdefault(reason, []).append(number)
+            # One traceback per distinct failure is enough to diagnose it, and
+            # keeps a driver that raises on every slot from flooding the panel.
+            trace_by_reason.setdefault(reason, traceback.format_exc())
             continue
         if getattr(mem, "empty", False):
             continue
@@ -1631,7 +1660,14 @@ def _radio_rows_from_instance(radio) -> Rows:
         for header, value in zip(CSV_HEADERS, _row_values_for_csv(mem)):
             row[header] = str(value)
         rows.append(row)
-    return rows
+
+    for reason, numbers in numbers_by_reason.items():
+        _log_debug(
+            f"Channels {_format_channel_numbers(numbers)} could not be decoded "
+            f"by the driver and are missing from the channel list: {reason}\n"
+            f"{trace_by_reason[reason]}"
+        )
+    return rows, unreadable
 
 
 def _apply_rows_to_radio_instance(
@@ -1706,12 +1742,9 @@ def _apply_rows_to_radio_instance(
         radio.erase_memory(number)
 
     for reason, numbers in unreadable_erase_slots.items():
-        slots = ", ".join(str(number) for number in numbers[:8])
-        remainder = len(numbers) - 8
-        suffix = f" and {remainder} more" if remainder > 0 else ""
         _log_debug(
-            f"Channels {slots}{suffix} were not erased because their current "
-            f"values could not be checked: {reason}"
+            f"Channels {_format_channel_numbers(numbers)} were not erased "
+            f"because their current values could not be checked: {reason}"
         )
 
 
@@ -2128,7 +2161,7 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
     # the user made in the UI, and upload/export have to re-parse it as such.
     _cache_driver_image(module_name, class_name, radio)
 
-    rows = _radio_rows_from_instance(radio)
+    rows, unreadable = _radio_rows_from_instance(radio)
     csv_text = normalize_rows(rows, module_name, class_name)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
@@ -2136,6 +2169,7 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
         "headers": CSV_HEADERS,
         "csvText": csv_text,
         "settings": settings_result["settings"],
+        "unreadableChannels": unreadable,
     }
 
 
@@ -2320,7 +2354,7 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     module_short = str(base_cls.__module__).rsplit(".", 1)[-1]
     class_name = str(base_cls.__name__)
     _cache_driver_image(module_short, class_name, radio)
-    rows = _radio_rows_from_instance(radio)
+    rows, unreadable = _radio_rows_from_instance(radio)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
         "module": module_short,
@@ -2331,6 +2365,7 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
         "rows": rows,
         "headers": CSV_HEADERS,
         "settings": settings_result["settings"],
+        "unreadableChannels": unreadable,
     }
 
 
