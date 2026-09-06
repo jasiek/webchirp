@@ -12,10 +12,11 @@ Prototype for running parts of [CHIRP](https://github.com/kk7ds/chirp) in the br
 - Browser UI with a CHIRP-inspired **Channels** table and a **Settings** editor,
   switchable with tabs.
 - Python runtime in-browser (Pyodide) running unmodified CHIRP driver code.
-- Radio make/model dropdowns populated from CHIRP driver sources, served from a
-  prebuilt static catalog (`web/radio-catalog.json`) with live enumeration as a
-  fallback.
-- Selection-aware **Download Radio** / **Upload Radio** using the selected CHIRP
+- Radio picked by searching CHIRP's driver catalog — including the alternate
+  vendor/model names a driver is rebadged under — served from a prebuilt static
+  catalog (`web/radio-catalog.json`) with live enumeration as a fallback. The
+  sidebar names the radio in use.
+- Selection-aware **Load from radio** / **Save to radio** using the selected CHIRP
   clone-mode driver (`sync_in`/`sync_out`), with the clone image cached per driver.
 - Radio settings read and validated through the selected driver
   (`get_radio_settings` / `validate_radio_settings`).
@@ -88,10 +89,12 @@ Pyodide synchronous JS bridging can use `SharedArrayBuffer` without warnings.
 
 For radio cloning:
 
-1. Choose `Radio make` and `Radio model` from dropdowns (loaded from CHIRP sources).
+1. Type your radio's make, model or the name it is rebadged under into
+   `Search radios` and pick it from the suggestions. The sidebar's
+   `Selected radio` readout names what the rest of the app will act on.
 2. Click `Connect` (baud is prefilled when available from selected driver).
-3. Click `Download Radio` to read channels into the table.
-4. Edit values and click `Upload Radio` to write back.
+3. Click `Load from radio` to read channels into the table.
+4. Edit values and click `Save to radio` to write back.
 
 ## Command-line codeplug read/write
 
@@ -181,7 +184,7 @@ Live browser serial executes the selected CHIRP clone-mode driver
 (`sync_in`/`sync_out`) through a generalized pyserial-like bridge, and has been
 verified end-to-end (e.g. Baofeng UV-5R). Compatibility with any given radio
 still depends on that driver's expectations and on browser transport limits, so
-treat an untested make/model as unverified.
+treat an untested radio as unverified.
 
 ## Sequence diagram (sketch) of how it all works
 
@@ -208,9 +211,9 @@ sequenceDiagram
     RPC->>PY: list_registered_radios(...)
     PY-->>RPC: radios[]
   end
-  RPC-->>UI: Populate make/model dropdowns
+  RPC-->>UI: Load searchable radio catalog
 
-  U->>UI: Select make/model, click Connect
+  U->>UI: Search for and select a radio, click Connect
   UI->>RPC: serialConnect(baudRate)
   RPC->>PY: webserial_connect(baud)
   PY->>RPC: serial_open(...)
@@ -219,7 +222,7 @@ sequenceDiagram
   S-->>RPC: connected
   RPC-->>UI: connected/status
 
-  U->>UI: Click Download Radio
+  U->>UI: Click Load from radio
   UI->>RPC: downloadSelectedRadio({module, className})
   RPC->>PY: ensure_radio_module(module)
   RPC->>PY: download_selected_radio(module, className)
@@ -239,7 +242,7 @@ sequenceDiagram
   PY-->>RPC: rows + headers + settings
   RPC-->>UI: Populate editable Channels table + Settings editor
 
-  U->>UI: Edit channels/settings, click Upload Radio
+  U->>UI: Edit channels/settings, click Save to radio
   UI->>RPC: validateRowsForUpload({rows, module, className})
   RPC->>PY: validate_rows_for_upload(...)
   PY-->>RPC: valid + issues

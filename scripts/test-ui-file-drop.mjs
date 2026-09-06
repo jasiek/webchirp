@@ -103,6 +103,10 @@ class FakeElement {
     return this.attributes.has(String(name)) ? this.attributes.get(String(name)) : null;
   }
 
+  removeAttribute(name) {
+    this.attributes.delete(String(name));
+  }
+
   appendChild(child) {
     this.children.push(child);
     if (this.tagName === "SELECT" && !this._value) {
@@ -213,6 +217,21 @@ function installFakeDom() {
     importChoiceModalEl: document.querySelector("#import-choice-modal"),
     importChoiceMergeEl: document.querySelector("#import-choice-merge"),
   };
+}
+
+// Pick a radio the way the UI now requires: type into the search box and take
+// the first suggestion. renderRadioSearchResults() pre-highlights it, so Enter
+// alone selects without an ArrowDown first.
+function selectRadioBySearch(query) {
+  const searchEl = globalThis.document.querySelector("#radio-search");
+  searchEl.value = query;
+  searchEl.dispatchEvent({ type: "input" });
+  searchEl.dispatchEvent({
+    type: "keydown",
+    key: "Enter",
+    preventDefault() {},
+    stopPropagation() {},
+  });
 }
 
 // Let every already-resolved promise in the load chain settle.
@@ -337,36 +356,60 @@ test("dropping an .img file loads it through the binary codeplug loader", async 
   assert.match(debugOutputEl.value, /STATUS Loaded binary codeplug for Acme Alpha/);
 });
 
+// Selection gates the serial actions, and an image naming its own driver is a
+// selection like any other. On a fresh session nothing is selected, so a path
+// that populated the readout without re-gating them left Connect, Load and Save
+// disabled against a radio the UI was visibly holding.
+test("an .img load enables the serial actions on a session with nothing selected", async () => {
+  const { window } = installFakeDom();
+  await bootUi({ catalog: [...CATALOG, BETA_RADIO], imageRadio: BETA_RADIO });
+  const connectEl = globalThis.document.querySelector("#serial-connect-toggle");
+  const downloadEl = globalThis.document.querySelector("#radio-download");
+  assert.equal(connectEl.disabled, true);
+  assert.equal(connectEl.title, "Search for and select a radio first");
+
+  await window.emit("drop", dropEvent([fakeFile("beta.img")]));
+  await flushAsync();
+
+  assert.equal(
+    globalThis.document.querySelector("#radio-selection-name").textContent,
+    "Acme Beta",
+  );
+  assert.equal(connectEl.disabled, false);
+  assert.equal(connectEl.title, "");
+  // Clone still waits on an open port, but the radio is no longer the blocker.
+  assert.equal(downloadEl.title, "Connect to a serial port first");
+});
+
 test("reselecting a radio after an .img load refreshes its schema and settings", async () => {
   const { window } = installFakeDom();
   const { calls } = await bootUi({ catalog: [...CATALOG, BETA_RADIO], imageRadio: BETA_RADIO });
-  const radioModelEl = globalThis.document.querySelector("#radio-model");
+  const selectionNameEl = globalThis.document.querySelector("#radio-selection-name");
 
-  // Record Alpha as the last radio fully loaded through the dropdown path.
-  radioModelEl.value = CATALOG[0].key;
-  radioModelEl.dispatchEvent({ type: "change" });
+  // Record Alpha as the last radio fully loaded through the search path.
+  selectRadioBySearch("Acme Alpha");
   await flushAsync();
+  assert.equal(selectionNameEl.textContent, "Acme Alpha");
 
   // Loading an image switches the UI to Beta and applies Beta's schema.
   await window.emit("drop", dropEvent([fakeFile("beta.img")]));
-  assert.equal(radioModelEl.value, BETA_RADIO.key);
+  assert.equal(selectionNameEl.textContent, "Acme Beta");
   assert.equal(calls.metadata.at(-1), BETA_RADIO.module);
 
   // Re-selecting the image's own radio remains a no-op, preserving the
   // image-backed settings rather than replacing them with a blank probe.
   const metadataCallsAfterImage = calls.metadata.length;
   const settingsCallsAfterImage = calls.settings.length;
-  radioModelEl.dispatchEvent({ type: "change" });
+  selectRadioBySearch("Acme Beta");
   await flushAsync();
   assert.equal(calls.metadata.length, metadataCallsAfterImage);
   assert.equal(calls.settings.length, settingsCallsAfterImage);
 
   // Re-selecting Alpha must not be mistaken for a no-op just because it was
-  // the last dropdown-loaded radio before the image changed the active schema.
+  // the last search-loaded radio before the image changed the active schema.
   const metadataCallsBeforeReselect = calls.metadata.length;
   const settingsCallsBeforeReselect = calls.settings.length;
-  radioModelEl.value = CATALOG[0].key;
-  radioModelEl.dispatchEvent({ type: "change" });
+  selectRadioBySearch("Acme Alpha");
   await flushAsync();
 
   assert.equal(calls.metadata.length, metadataCallsBeforeReselect + 1);

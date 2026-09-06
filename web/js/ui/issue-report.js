@@ -58,9 +58,9 @@ function fitDebugExcerpt(lines, { measure, limit, alreadyTrimmed }) {
 // the debug panel — so a report arrives with the diagnostics already attached.
 export function createIssueReporter({ state, log }) {
   function buildIssueUrl() {
-    // Read the selection from state, never from the make/model dropdowns: every
-    // path that sets those also sets state.selectedRadio, so the dropdowns are
-    // a copy that can only drift, never a better answer.
+    // Read the selection from state, never from the sidebar readout: every
+    // path that names a radio there also sets state.selectedRadio, so the
+    // rendered text is a copy that can only drift, never a better answer.
     const radioMake = state.selectedRadio?.vendor || "Not selected";
     const radioModel = state.selectedRadio?.model || "Not selected";
     const lastErrorSummary = log.getLastErrorSummary();
@@ -68,7 +68,7 @@ export function createIssueReporter({ state, log }) {
     const issueTitle = `Bug report: ${radioMake} ${radioModel} - ${bugSummary}`;
     const steps = [
       "1. Open WebCHIRP",
-      "2. Select a radio make/model if relevant",
+      "2. Select a radio if relevant",
       "3. Perform the action that shows the bug",
       "4. Describe what happened",
     ].join("\n");

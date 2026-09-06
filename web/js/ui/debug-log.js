@@ -1,5 +1,6 @@
 import { errorDetails } from "./format.js";
-import { trackEvent } from "./analytics.js";
+import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
+import { captureError } from "../sentry.js";
 
 // The bottom debug panel is the single sink for status text, serial traffic and
 // full error detail. Keeping every write in one module preserves the rule that
@@ -31,13 +32,21 @@ export function createDebugLog({ dom }) {
   }
 
   // Append a timestamped line to the bottom debug console panel.
-  function logDebug(line, { isError = false } = {}) {
+  //
+  // `isError` does two things at once: it reveals the panel and it captures the
+  // line as the Report Bug prefill. `reveal` asks for only the first, for a
+  // line the user must see that is not a defect -- an action they cancelled
+  // themselves. Filing that as the latest error would title their next bug
+  // report after something they chose to do.
+  function logDebug(line, { isError = false, reveal = false } = {}) {
     const stamp = new Date().toISOString();
     const text = `[${stamp}] ${String(line || "")}`;
     const current = dom.debugOutputEl.value ? `${dom.debugOutputEl.value}\n` : "";
     dom.debugOutputEl.value = `${current}${text}`;
     if (isError) {
       captureErrorSummary(line);
+    } else if (reveal) {
+      setExpanded(true);
     }
     // Error capture may have made the textarea measurable by expanding it;
     // scroll afterwards so the triggering line is the one the user sees.
@@ -59,10 +68,37 @@ export function createDebugLog({ dom }) {
   }
 
   // Centralized UI + debug handling for action-level failures.
+  //
+  // Every action-level failure in the app already funnels through here, which
+  // makes it the one place error reporting has to be wired in: a clone that
+  // died on a checksum, a driver import that never resolved and a CSV that
+  // would not parse all arrive with the CHIRP traceback still attached. The
+  // same classification analytics uses is sent as tags, so a kind that is
+  // routine rather than a defect -- a dismissed dialog, an offline lookup --
+  // can be filtered out in Sentry instead of being reported twice under two
+  // different vocabularies.
+  //
+  // Cancellations deliberately do not come through here: reportActionCancelled
+  // below is what a user calling something off reaches, and that is not a bug.
   function reportActionError(action, error) {
     const details = errorDetails(error);
     logError(`${action.toUpperCase()} ERROR\n${details}`);
     setStatus(`${action} failed (see Debug Output).`);
+    captureError(error, {
+      action,
+      tags: { error_kind: classifyErrorKind(error), error_type: errorTypeName(error) },
+    });
+  }
+
+  // Report an action the user called off themselves, such as dismissing the
+  // browser's serial port chooser. It reveals the panel because this app has no
+  // other visible surface for a message -- silence made a dismissed chooser
+  // indistinguishable from a Connect click that never registered -- but it is
+  // not a failure: it carries the plain sentence rather than a traceback, and
+  // stays out of the Report Bug prefill.
+  function reportActionCancelled(action, message) {
+    logDebug(`${action.toUpperCase()} CANCELLED ${message}`, { reveal: true });
+    setStatus(`${action} cancelled.`);
   }
 
   function latestDebugTail(lineCount) {
@@ -125,6 +161,7 @@ export function createDebugLog({ dom }) {
     logSerial,
     setStatus,
     reportActionError,
+    reportActionCancelled,
     latestDebugTail,
     clear,
     copyToClipboard,
