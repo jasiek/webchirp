@@ -1,5 +1,6 @@
 import { errorDetails } from "./format.js";
-import { trackEvent } from "./analytics.js";
+import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
+import { captureError } from "../sentry.js";
 
 // The bottom debug panel is the single sink for status text, serial traffic and
 // full error detail. Keeping every write in one module preserves the rule that
@@ -67,10 +68,26 @@ export function createDebugLog({ dom }) {
   }
 
   // Centralized UI + debug handling for action-level failures.
+  //
+  // Every action-level failure in the app already funnels through here, which
+  // makes it the one place error reporting has to be wired in: a clone that
+  // died on a checksum, a driver import that never resolved and a CSV that
+  // would not parse all arrive with the CHIRP traceback still attached. The
+  // same classification analytics uses is sent as tags, so a kind that is
+  // routine rather than a defect -- a dismissed dialog, an offline lookup --
+  // can be filtered out in Sentry instead of being reported twice under two
+  // different vocabularies.
+  //
+  // Cancellations deliberately do not come through here: reportActionCancelled
+  // below is what a user calling something off reaches, and that is not a bug.
   function reportActionError(action, error) {
     const details = errorDetails(error);
     logError(`${action.toUpperCase()} ERROR\n${details}`);
     setStatus(`${action} failed (see Debug Output).`);
+    captureError(error, {
+      action,
+      tags: { error_kind: classifyErrorKind(error), error_type: errorTypeName(error) },
+    });
   }
 
   // Report an action the user called off themselves, such as dismissing the

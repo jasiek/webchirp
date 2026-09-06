@@ -3,6 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <!--
+      Error reporting. Loaded before anything else so its early-error buffer is
+      in place before another module can throw: this app's most likely failure
+      is that the runtime never starts at all, which happens before app code
+      runs. Like analytics, the module gates itself on the production host and
+      requests nothing from the vendor anywhere else. Do not spell asset paths
+      out in prose here -- build-dist rewrites every occurrence of one, comments
+      included.
+    -->
+    <script type="module" src="./js/sentry.js"></script>
+    <!--
       Analytics. Everything with logic in it lives in the module below, shared
       with about.html: the production-host gate, the vendor loader it injects,
       the launch-context parameters and the PWA install events. The loader is
