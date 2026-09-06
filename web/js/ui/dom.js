@@ -43,7 +43,6 @@ export const REQUIRED_ELEMENTS = {
   // The sidebar readout of which radio the app is currently working with.
   radioSelectionEl: "#radio-selection",
   radioSelectionNameEl: "#radio-selection-name",
-  radioSelectionDriverEl: "#radio-selection-driver",
   serialConnectToggleEl: "#serial-connect-toggle",
   webusbConnectToggleEl: "#serial-connect-webusb",
   radioDownloadEl: "#radio-download",

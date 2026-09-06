@@ -16,7 +16,7 @@ Prototype for running parts of [CHIRP](https://github.com/kk7ds/chirp) in the br
   vendor/model names a driver is rebadged under — served from a prebuilt static
   catalog (`web/radio-catalog.json`) with live enumeration as a fallback. The
   sidebar names the radio in use.
-- Selection-aware **Download Radio** / **Upload Radio** using the selected CHIRP
+- Selection-aware **Load from radio** / **Save to radio** using the selected CHIRP
   clone-mode driver (`sync_in`/`sync_out`), with the clone image cached per driver.
 - Radio settings read and validated through the selected driver
   (`get_radio_settings` / `validate_radio_settings`).
@@ -93,8 +93,8 @@ For radio cloning:
    `Search radios` and pick it from the suggestions. The sidebar's
    `Selected radio` readout names what the rest of the app will act on.
 2. Click `Connect` (baud is prefilled when available from selected driver).
-3. Click `Download Radio` to read channels into the table.
-4. Edit values and click `Upload Radio` to write back.
+3. Click `Load from radio` to read channels into the table.
+4. Edit values and click `Save to radio` to write back.
 
 ## Command-line codeplug read/write
 
@@ -222,7 +222,7 @@ sequenceDiagram
   S-->>RPC: connected
   RPC-->>UI: connected/status
 
-  U->>UI: Click Download Radio
+  U->>UI: Click Load from radio
   UI->>RPC: downloadSelectedRadio({module, className})
   RPC->>PY: ensure_radio_module(module)
   RPC->>PY: download_selected_radio(module, className)
@@ -242,7 +242,7 @@ sequenceDiagram
   PY-->>RPC: rows + headers + settings
   RPC-->>UI: Populate editable Channels table + Settings editor
 
-  U->>UI: Edit channels/settings, click Upload Radio
+  U->>UI: Edit channels/settings, click Save to radio
   UI->>RPC: validateRowsForUpload({rows, module, className})
   RPC->>PY: validate_rows_for_upload(...)
   PY-->>RPC: valid + issues

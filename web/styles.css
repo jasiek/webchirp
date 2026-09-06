@@ -608,16 +608,6 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
-.radio-selection-driver {
-  font-size: 0.72rem;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-
-.radio-selection-driver:empty {
-  display: none;
-}
-
 .radio-selection.is-empty {
   border-left-color: var(--border);
 }

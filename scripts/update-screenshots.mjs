@@ -246,7 +246,7 @@ async function selectScreenshotRadio(cdp, sessionId) {
       return document.querySelector("#radio-selection-name")?.textContent || "";
     })()`
   );
-  if (!selected || selected === "No radio selected") {
+  if (!selected || selected === "No radio model selected") {
     throw new Error(
       `Could not select "${SCREENSHOT_RADIO_QUERY}" through the radio search box.`
     );

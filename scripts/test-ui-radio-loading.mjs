@@ -319,7 +319,6 @@ function installFakeDom() {
     radioSearchResultsEl: document.querySelector("#radio-search-results"),
     radioSelectionEl: document.querySelector("#radio-selection"),
     radioSelectionNameEl: document.querySelector("#radio-selection-name"),
-    radioSelectionDriverEl: document.querySelector("#radio-selection-driver"),
   };
 }
 
@@ -357,7 +356,7 @@ function createDeferred() {
 }
 
 test("the selected-radio readout shows Loading... while CHIRP drivers are loading", async () => {
-  const { radioSelectionNameEl, radioSelectionDriverEl, radioSelectionEl } = installFakeDom();
+  const { radioSelectionNameEl, radioSelectionEl } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
   const radioListDeferred = createDeferred();
   const ui = createUiController();
@@ -387,7 +386,6 @@ test("the selected-radio readout shows Loading... while CHIRP drivers are loadin
   const initPromise = ui.init(true);
 
   assert.equal(radioSelectionNameEl.textContent, "Loading...");
-  assert.equal(radioSelectionDriverEl.textContent, "");
 
   radioListDeferred.resolve({
     radios: [
@@ -414,7 +412,7 @@ test("the selected-radio readout shows Loading... while CHIRP drivers are loadin
 
   // A loaded catalog does not choose for the user: the readout asks for a
   // search instead of naming an arbitrary first-vendor radio.
-  assert.equal(radioSelectionNameEl.textContent, "No radio selected");
+  assert.equal(radioSelectionNameEl.textContent, "No radio model selected");
   assert.ok(radioSelectionEl.classList.contains("is-empty"));
 });
 
@@ -666,12 +664,7 @@ test("reselecting the loaded radio rejects partial loads in either completion or
 });
 
 test("picking a search suggestion names the radio in the readout and loads it once", async () => {
-  const {
-    radioSearchEl,
-    radioSearchResultsEl,
-    radioSelectionNameEl,
-    radioSelectionDriverEl,
-  } = installFakeDom();
+  const { radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
   const metadataCalls = [];
@@ -706,7 +699,6 @@ test("picking a search suggestion names the radio in the readout and loads it on
   await flushMicrotasks();
 
   assert.equal(radioSelectionNameEl.textContent, "FastCo Fast");
-  assert.equal(radioSelectionDriverEl.textContent, "fast.FastRadio");
   // The box is a way to change the selection, not a display of it: it empties
   // once the readout has the answer.
   assert.equal(radioSearchEl.value, "");
@@ -721,7 +713,6 @@ test("picking a search suggestion names the radio in the readout and loads it on
   await flushMicrotasks();
 
   assert.equal(radioSelectionNameEl.textContent, "SlowCo Slow");
-  assert.equal(radioSelectionDriverEl.textContent, "slow.SlowRadio");
   assert.equal(radioSearchEl.value, "");
   assert.equal(metadataCalls.at(-1), "slow");
 });
@@ -790,6 +781,40 @@ test("search finds radios by their alias identities and names the matching alias
   selectRadioBySearch(radioSearchEl, "retevis");
   await flushMicrotasks();
   assert.equal(radioSelectionNameEl.textContent, "Baofeng UV-5R");
+});
+
+// The live-mode marker trails the name in both places that show a radio, so the
+// vendor stays first and the list still aligns down its left edge.
+test("live-mode radios carry their marker after the name, in list and readout", async () => {
+  const { radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installFakeDom();
+  const { createUiController } = await import("../web/js/ui.js");
+  const ui = createUiController();
+
+  ui.setRuntimeApi({
+    listRadios: async () => ({
+      radios: [
+        { vendor: "Acme", model: "Live", module: "live", className: "LiveRadio", key: "live:LiveRadio", isLiveRadio: true },
+        { vendor: "Acme", model: "Clone", module: "clone", className: "CloneRadio", key: "clone:CloneRadio", isLiveRadio: false },
+      ],
+    }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
+    getRadioSettings: async () => EMPTY_SETTINGS,
+    parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
+  });
+
+  await ui.init(true);
+
+  typeRadioSearch(radioSearchEl, "acme");
+  assert.deepEqual(suggestionLines(radioSearchResultsEl), [
+    ["Acme Live ⚡"],
+    ["Acme Clone"],
+  ]);
+
+  selectRadioBySearch(radioSearchEl, "acme live");
+  await flushMicrotasks();
+  assert.equal(radioSelectionNameEl.textContent, "Acme Live ⚡");
 });
 
 // Nothing is selected at startup now, so the serial path has to say "pick a

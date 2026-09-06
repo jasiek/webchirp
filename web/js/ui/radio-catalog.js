@@ -8,7 +8,7 @@ import { radioEventParams, trackEvent } from "./analytics.js";
 
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
-const NO_RADIO_SELECTED_TEXT = "No radio selected";
+const NO_RADIO_SELECTED_TEXT = "No radio model selected";
 // Suggestions are the only way to choose a radio, so each one needs an id for
 // the combobox's aria-activedescendant to point a screen reader at.
 const RADIO_SEARCH_OPTION_ID_PREFIX = "radio-search-option-";
@@ -161,11 +161,17 @@ export function createRadioCatalog(ctx) {
     return String(query || "").toLowerCase().split(/\s+/).filter(Boolean);
   }
 
-  // "<Make> <Model>" label for a search suggestion; the driver class is added
-  // when several catalog entries share the same vendor+model text.
-  function radioSearchLabel(radio, hasDuplicateLabel) {
+  // "<Make> <Model>", with the live-mode marker trailing the name so the
+  // vendor stays first and radios still align down the left edge of the list.
+  function radioDisplayLabel(radio) {
     const base = makeModelLabel(radio);
-    const label = radio.isLiveRadio ? `⚡ ${base}` : base;
+    return radio.isLiveRadio ? `${base} ⚡` : base;
+  }
+
+  // Label for a search suggestion; the driver class is added when several
+  // catalog entries share the same vendor+model text.
+  function radioSearchLabel(radio, hasDuplicateLabel) {
+    const label = radioDisplayLabel(radio);
     return hasDuplicateLabel ? `${label} (${radio.className})` : label;
   }
 
@@ -188,19 +194,17 @@ export function createRadioCatalog(ctx) {
   // Name the radio the rest of the app is working with. This readout is the
   // only indication of the current selection now that the make/model dropdowns
   // are gone, so it renders after every path that assigns state.selectedRadio.
+  // It names the radio the way its owner would; the driver behind it is an
+  // implementation detail that belongs in the debug log, which records it on
+  // every selection.
   function renderSelectedRadio() {
     const radio = state.selectedRadio;
-    const isEmpty = !radio;
-    dom.radioSelectionEl.classList.toggle("is-empty", isEmpty);
-    if (radio) {
-      dom.radioSelectionNameEl.textContent = radio.isLiveRadio
-        ? `⚡ ${makeModelLabel(radio)}`
-        : makeModelLabel(radio);
-      dom.radioSelectionDriverEl.textContent = `${radio.module}.${radio.className}`;
+    dom.radioSelectionEl.classList.toggle("is-empty", !radio);
+    if (!radio) {
+      dom.radioSelectionNameEl.textContent = catalogStatusText || NO_RADIO_SELECTED_TEXT;
       return;
     }
-    dom.radioSelectionNameEl.textContent = catalogStatusText || NO_RADIO_SELECTED_TEXT;
-    dom.radioSelectionDriverEl.textContent = "";
+    dom.radioSelectionNameEl.textContent = radioDisplayLabel(radio);
   }
 
   function hideRadioSearchResults() {

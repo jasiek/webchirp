@@ -127,14 +127,13 @@
             <summary class="left-panel-summary">Serial Bridge</summary>
             <p id="live-radio-support-warning" class="serial-support-warning" hidden>
               Live-mode radios are not supported in this UI at the moment. Select a clone-mode
-              radio to use Connect, Download Radio, and Upload Radio.
+              radio to use Connect, Load from radio, and Save to radio.
             </p>
             <div id="radio-selection" class="radio-selection is-empty">
               <span class="radio-selection-caption">Selected radio</span>
               <strong id="radio-selection-name" class="radio-selection-name" aria-live="polite"
-                >No radio selected</strong
+                >No radio model selected</strong
               >
-              <span id="radio-selection-driver" class="radio-selection-driver"></span>
             </div>
             <label for="radio-search">Search radios</label>
             <div class="radio-search-wrap">
@@ -156,8 +155,8 @@
               <button id="serial-connect-webusb" disabled hidden>Connect via WebUSB</button>
             </div>
             <div class="serial-actions">
-              <button id="radio-download" disabled>Download Radio</button>
-              <button id="radio-upload" disabled>Upload Radio</button>
+              <button id="radio-download" disabled>Load from radio</button>
+              <button id="radio-upload" disabled>Save to radio</button>
             </div>
             <div id="clone-progress" class="clone-progress" hidden>
               <div class="clone-progress-text">
@@ -455,8 +454,8 @@
           <p>
             Every browser on iOS and iPadOS is built on Apple's WebKit engine,
             which offers neither Web Serial nor WebUSB — so installing Chrome,
-            Edge or Firefox here will not help. Connect, Download Radio and
-            Upload Radio cannot work on this device today.
+            Edge or Firefox here will not help. Connect, Load from radio and
+            Save to radio cannot work on this device today.
           </p>
           <p>
             We are working on a workaround so that iOS devices can talk to
@@ -475,8 +474,8 @@
           <h2 id="unsupported-browser-serial-title">This browser cannot program radios</h2>
           <p>
             WebCHIRP talks to radios through Web Serial, or WebUSB as a fallback,
-            and this browser provides neither — so Connect, Download Radio and
-            Upload Radio will not work here.
+            and this browser provides neither — so Connect, Load from radio and
+            Save to radio will not work here.
           </p>
           <p>
             To program a radio, open this page in a browser with
