@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createRuntimeBootstrap, isBootstrapFailure } from "../web/js/runtime-bootstrap.mjs";
+import {
+  createBootstrapCrashReporter,
+  createRuntimeBootstrap,
+  isBootstrapFailure,
+  markBootstrapFailure,
+} from "../web/js/runtime-bootstrap.mjs";
 
 // Regression tests for issue #99: the RPC layer classified a runtime crash by
 // checking whether the pyodide handle was still unset, which misread an ordinary
@@ -151,4 +156,83 @@ test("concurrent callers all see the same bootstrap failure", async () => {
 test("a loadRuntime function is required", () => {
   assert.throws(() => createRuntimeBootstrap({}), /requires a loadRuntime/);
   assert.throws(() => createRuntimeBootstrap(), /requires a loadRuntime/);
+});
+
+// The dedup guard: one report per failed attempt, but never at the cost of
+// swallowing the next attempt's distinct failure.
+
+test("a second, distinct bootstrap failure is reported rather than swallowed", async () => {
+  // The sequence from review of PR #139: loadPyodide fails, the user retries,
+  // and this time the runtime loads but seeding the bridge fails. Two different
+  // faults, so two reports. A boolean latch cleared on success reported only the
+  // first, because a success that could clear it can never be followed by a
+  // failure.
+  const reported = [];
+  const reportCrash = createBootstrapCrashReporter((detail) => reported.push(detail));
+
+  let calls = 0;
+  const bootstrap = createRuntimeBootstrap({
+    loadRuntime: async () => {
+      calls += 1;
+      throw new Error(calls === 1 ? "loadPyodide failed" : "seedPyodideRuntime failed");
+    },
+  });
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const error = await bootstrap.ensure().then(
+      () => null,
+      (rejected) => rejected,
+    );
+    assert.equal(reportCrash(error, error.message), true);
+  }
+
+  assert.deepEqual(reported, ["loadPyodide failed", "seedPyodideRuntime failed"]);
+});
+
+test("every call queued behind one failed attempt reports that failure once", async () => {
+  const reported = [];
+  const reportCrash = createBootstrapCrashReporter((detail) => reported.push(detail));
+
+  const bootstrap = createRuntimeBootstrap({
+    loadRuntime: async () => {
+      await Promise.resolve();
+      throw new Error("boot failed");
+    },
+  });
+
+  const settled = await Promise.allSettled([
+    bootstrap.ensure(),
+    bootstrap.ensure(),
+    bootstrap.ensure(),
+  ]);
+
+  // Each queued caller asks; only the first ask reports, and every ask returns
+  // true so none of them lets the action funnel capture the failure again.
+  for (const result of settled) {
+    assert.equal(reportCrash(result.reason, result.reason.message), true);
+  }
+  assert.deepEqual(reported, ["boot failed"]);
+});
+
+test("the reporter ignores errors that did not come from the bootstrap", () => {
+  const reported = [];
+  const reportCrash = createBootstrapCrashReporter((detail) => reported.push(detail));
+
+  // A blocked driver-index fetch must reach the ordinary action funnel, so the
+  // reporter both declines to report it and declines to claim it as reported.
+  assert.equal(reportCrash(new Error("Failed to fetch"), "Failed to fetch"), false);
+  assert.deepEqual(reported, []);
+});
+
+test("a reportCrash function is required", () => {
+  assert.throws(() => createBootstrapCrashReporter(), /requires a reportCrash/);
+  assert.throws(() => createBootstrapCrashReporter(null), /requires a reportCrash/);
+});
+
+test("marking carries the classification onto a rethrown error", () => {
+  // runtime-rpc.js rethrows a fresh Error out of the runtime; without the mark
+  // the action funnel sees an ordinary failure and captures it a second time.
+  const outgoing = markBootstrapFailure(new Error("RuntimeError: boot failed"));
+  assert.equal(isBootstrapFailure(outgoing), true);
+  assert.equal(isBootstrapFailure(new Error("RuntimeError: boot failed")), false);
 });

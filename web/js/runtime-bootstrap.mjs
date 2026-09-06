@@ -20,11 +20,47 @@ export function isBootstrapFailure(error) {
 }
 
 // Record an error as a bootstrap failure, normalizing non-Error throws so there
-// is always an object identity to key the marker on.
-function markBootstrapFailure(error) {
+// is always an object identity to key the marker on. Exported because the RPC
+// layer rethrows a fresh Error out of the runtime and has to carry the
+// classification onto it, or the failure is captured a second time downstream.
+export function markBootstrapFailure(error) {
   const marked = error instanceof Error ? error : new Error(String(error));
   bootstrapFailures.add(marked);
   return marked;
+}
+
+// Report a bootstrap failure at most once per failed attempt.
+//
+// Deduplication has to key on the failure, not on a latch. A boolean latch
+// cleared on a successful bootstrap can never re-arm: ensure() caches the
+// runtime once it succeeds, so a success is never followed by another failure,
+// and the clear is unreachable in every case that would matter. That let a
+// first loadPyodide failure permanently silence a second, distinct
+// seedPyodideRuntime failure on the retry.
+//
+// Every call queued behind one attempt rejects with the same error object, so
+// error identity is exactly the attempt: it collapses the queue into one report
+// while still reporting the next attempt's different failure. The return value
+// says whether this failure has been reported at all, now or earlier, so the
+// caller can stop the action-level funnel capturing the same crash twice.
+export function createBootstrapCrashReporter(reportCrash) {
+  if (typeof reportCrash !== "function") {
+    throw new Error("createBootstrapCrashReporter requires a reportCrash() function");
+  }
+
+  let lastReported = null;
+
+  return function reportBootstrapCrash(error, detail) {
+    if (!isBootstrapFailure(error)) {
+      return false;
+    }
+    if (error === lastReported) {
+      return true;
+    }
+    lastReported = error;
+    reportCrash(detail);
+    return true;
+  };
 }
 
 // Build the bootstrap gate around a caller-supplied loadRuntime(), which must

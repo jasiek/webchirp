@@ -9,7 +9,11 @@ import {
   findCatalogRadioForImageMetadata,
   loadImageWithDriverFallback,
 } from "./image-metadata.mjs";
-import { createRuntimeBootstrap, isBootstrapFailure } from "./runtime-bootstrap.mjs";
+import {
+  createBootstrapCrashReporter,
+  createRuntimeBootstrap,
+  markBootstrapFailure,
+} from "./runtime-bootstrap.mjs";
 import {
   createBrowserCdnPythonSource,
   DEFAULT_CHIRP_REVISION,
@@ -35,11 +39,6 @@ let radioCatalogCache = null;
 let radioCatalogSource = "";
 let allDriverModulesPromise = null;
 let handleSerialRpc = null;
-// Latches so one broken bootstrap produces one crash report rather than one per
-// queued call. Cleared again on a successful bootstrap, because it is a
-// per-failure guard, not a per-session one: leaving it set meant a spurious
-// early failure permanently silenced the report for a genuine crash later.
-let bootstrapCrashReported = false;
 let debugLog = null;
 let beginProgress = null;
 
@@ -290,8 +289,6 @@ const runtimeBootstrap = createRuntimeBootstrap({
 
 async function ensurePyodide() {
   pyodide = await runtimeBootstrap.ensure();
-  // A working runtime ends the failure episode, so a later crash reports again.
-  bootstrapCrashReported = false;
   return pyodide;
 }
 
@@ -519,6 +516,12 @@ export function createRuntimeRpcClient({
   debugLog = logDebug || null;
   beginProgress = onProgress || null;
 
+  // Null when the host wants no crash reporting, so the failure then falls
+  // through to the ordinary action funnel rather than going unreported.
+  const reportBootstrapCrash = onRuntimeCrash
+    ? createBootstrapCrashReporter(onRuntimeCrash)
+    : null;
+
   function wrapRuntimeMethod(name, handler) {
     return async function invokeRuntimeMethod(payload = {}) {
       try {
@@ -550,14 +553,21 @@ export function createRuntimeRpcClient({
         // fact meant "not assigned yet" -- so a failed driver-index fetch
         // (plain HTTP, no Pyodide involved) was reported as a crash, and a
         // failure seeding the bridge was not reported at all.
-        if (isBootstrapFailure(error) && !bootstrapCrashReported && onRuntimeCrash) {
-          bootstrapCrashReported = true;
-          onRuntimeCrash(detailedError);
-        }
-        if (logDebug) {
+        const reportedAsCrash = reportBootstrapCrash
+          ? reportBootstrapCrash(error, detailedError)
+          : false;
+
+        // The crash line already carries the same detail, so a second RUNTIME
+        // line would only print the traceback twice.
+        if (logDebug && !reportedAsCrash) {
           logDebug(`RUNTIME ERROR ${detailedError}`, { isError: true });
         }
-        throw new Error(detailedError);
+
+        // Carry the classification onto the error leaving the runtime. Without
+        // it the action-level funnel sees an ordinary failure and files a
+        // second Sentry event for the crash just reported above.
+        const outgoing = new Error(detailedError);
+        throw reportedAsCrash ? markBootstrapFailure(outgoing) : outgoing;
       }
     };
   }
