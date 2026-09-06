@@ -3,113 +3,16 @@ import test from "node:test";
 
 import { createRepeaterQuery } from "../web/js/ui/repeater-query.js";
 import { rowGeo } from "../web/js/row-geo.js";
+import { FakeElement, installFakeDom } from "./test-support/fake-dom.mjs";
 
 // The unified query modal is driven directly rather than through
 // createUiController, so each test can assert on exactly what it hands its
 // siblings — which URLs it fetched, which rows it inserted, what it logged.
 // Every field element is built by query-fields.js via document.createElement,
-// so the fake DOM below needs no static markup: a real classList (the modal's
-// open/closed state lives there), a querySelectorAll that understands
-// `input[name="x"]:checked`, and attribute get/set for the aria-label.
-class FakeElement {
-  constructor(tagName = "div") {
-    this.tagName = String(tagName).toUpperCase();
-    this.children = [];
-    this.listeners = new Map();
-    this.attributes = new Map();
-    this.style = {};
-    this.hidden = false;
-    this.type = "";
-    this.name = "";
-    this.title = "";
-    this.id = "";
-    this.className = "";
-    this.checked = false;
-    this.focused = false;
-    this._value = "";
-    this._textContent = "";
-    const classes = new Set();
-    this.classList = {
-      add: (name) => classes.add(name),
-      remove: (name) => classes.delete(name),
-      contains: (name) => classes.has(name),
-      toggle: (name, force) => (force ? classes.add(name) : classes.delete(name)),
-    };
-  }
-
-  get value() {
-    return this._value;
-  }
-
-  set value(next) {
-    this._value = String(next ?? "");
-  }
-
-  get textContent() {
-    return this._textContent;
-  }
-
-  set textContent(next) {
-    this._textContent = String(next ?? "");
-  }
-
-  set innerHTML(next) {
-    this._textContent = String(next ?? "");
-    this.children = [];
-  }
-
-  appendChild(child) {
-    this.children.push(child);
-    return child;
-  }
-
-  addEventListener(type, handler) {
-    const key = String(type);
-    if (!this.listeners.has(key)) {
-      this.listeners.set(key, []);
-    }
-    this.listeners.get(key).push(handler);
-  }
-
-  // Returns the handlers' promises so a test can await an async listener.
-  dispatch(type, event = {}) {
-    const handlers = this.listeners.get(String(type)) || [];
-    return Promise.all(handlers.map((handler) => handler({ type, preventDefault() {}, ...event })));
-  }
-
-  setAttribute(name, val) {
-    this.attributes.set(String(name), String(val));
-  }
-
-  getAttribute(name) {
-    return this.attributes.has(String(name)) ? this.attributes.get(String(name)) : null;
-  }
-
-  // Only the shapes the module and these tests actually query: `input[name="x"]`
-  // with an optional `:checked`. Descends the whole subtree.
-  querySelectorAll(selector) {
-    const match = /^input\[name="([^"]+)"\](:checked)?$/.exec(String(selector));
-    if (!match) {
-      throw new Error(`FakeElement.querySelectorAll cannot handle: ${selector}`);
-    }
-    const [, name, checkedOnly] = match;
-    const found = [];
-    const walk = (node) => {
-      for (const child of node.children) {
-        if (child.tagName === "INPUT" && child.name === name && (!checkedOnly || child.checked)) {
-          found.push(child);
-        }
-        walk(child);
-      }
-    };
-    walk(this);
-    return found;
-  }
-
-  focus() {
-    this.focused = true;
-  }
-}
+// so the shared fake DOM needs no static markup: a real classList (the
+// modal's open/closed state lives there), a querySelectorAll that understands
+// `input[name="x"]:checked` and throws on any shape it cannot match, and
+// attribute get/set for the aria-label.
 
 function descendants(root) {
   const found = [];
@@ -241,27 +144,24 @@ function buildHarness({
   // so D-STAR repeaters are buildable; pass ["FM", "NFM"] for an FM-only radio.
   modeOptions = ["FM", "NFM", "DV"],
 } = {}) {
-  const metas = new Map();
+  // parsePrzemiennikiXml reaches for DOMParser, so it is installed with the
+  // rest of the fake DOM globals.
+  const { document } = installFakeDom({
+    globals: {
+      DOMParser: class {
+        parseFromString(xmlText) {
+          return new FakeXmlDocument(xmlText);
+        }
+      },
+    },
+  });
+  // The meta tag is registered only when a base is provided; an unregistered
+  // non-id selector resolves to null, as an absent tag would.
   if (repeaterApiBase !== undefined) {
-    const meta = new FakeElement("meta");
+    const meta = new FakeElement("meta", document);
     meta.setAttribute("content", String(repeaterApiBase ?? ""));
-    metas.set('meta[name="webchirp-repeater-api-base"]', meta);
+    document.register('meta[name="webchirp-repeater-api-base"]', meta);
   }
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: {
-      createElement: (tagName) => new FakeElement(tagName),
-      querySelector: (selector) => metas.get(String(selector)) || null,
-    },
-  });
-  Object.defineProperty(globalThis, "DOMParser", {
-    configurable: true,
-    value: class {
-      parseFromString(xmlText) {
-        return new FakeXmlDocument(xmlText);
-      }
-    },
-  });
 
   const dom = Object.fromEntries(DOM_KEYS.map((key) => [key, new FakeElement("div")]));
   // The modal starts closed, exactly as index.html ships it.

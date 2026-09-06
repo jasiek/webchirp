@@ -1,79 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { installFakeDom } from "./test-support/fake-dom.mjs";
+
 // The field components build every element themselves via
-// document.createElement, so a fake element class is all the DOM they need —
-// no index.html, no dom.js, no UI controller boot.
-class FakeElement {
-  constructor(tagName = "div") {
-    this.tagName = String(tagName).toUpperCase();
-    this.children = [];
-    this.listeners = new Map();
-    this.attributes = new Map();
-    this.style = {};
-    this.hidden = false;
-    this.type = "";
-    this.name = "";
-    this.title = "";
-    this.id = "";
-    this.className = "";
-    this.checked = false;
-    this.focused = false;
-    this._value = "";
-    this._textContent = "";
-  }
-
-  get value() {
-    return this._value;
-  }
-
-  set value(next) {
-    this._value = String(next ?? "");
-  }
-
-  get textContent() {
-    return this._textContent;
-  }
-
-  set textContent(next) {
-    this._textContent = String(next ?? "");
-  }
-
-  appendChild(child) {
-    this.children.push(child);
-    return child;
-  }
-
-  addEventListener(type, handler) {
-    const key = String(type);
-    if (!this.listeners.has(key)) {
-      this.listeners.set(key, []);
-    }
-    this.listeners.get(key).push(handler);
-  }
-
-  dispatch(type, event = {}) {
-    const handlers = this.listeners.get(String(type)) || [];
-    return Promise.all(handlers.map((handler) => handler({ type, preventDefault() {}, ...event })));
-  }
-
-  setAttribute(name, val) {
-    this.attributes.set(String(name), String(val));
-  }
-
-  getAttribute(name) {
-    return this.attributes.has(String(name)) ? this.attributes.get(String(name)) : null;
-  }
-
-  focus() {
-    this.focused = true;
-  }
-}
-
-Object.defineProperty(globalThis, "document", {
-  configurable: true,
-  value: { createElement: (tagName) => new FakeElement(tagName) },
-});
+// document.createElement, so the shared fake DOM's element class is all they
+// need — no index.html, no dom.js, no UI controller boot.
+installFakeDom();
 
 const {
   createSelectField,

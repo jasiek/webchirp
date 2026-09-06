@@ -161,13 +161,13 @@ export class FakeElement {
   // A <progress> reflects .value to its value attribute, and removing that
   // attribute is what makes the bar indeterminate — the tests observe that
   // through hasAttribute("value"). A <select> with nothing chosen reports its
-  // first option, as the browser does.
+  // first option (a placeholder's "" included), as the browser does.
   get value() {
     if (this.tagName === "PROGRESS") {
       return this.attributes.get("value") ?? "";
     }
     if (this.tagName === "SELECT" && !this._value) {
-      return this.children[0]?.value || "";
+      return this.children[0]?.value ?? "";
     }
     return this._value;
   }
@@ -232,9 +232,6 @@ export class FakeElement {
     child.parentNode?.removeChild(child);
     child.parentNode = this;
     this.children.push(child);
-    if (this.tagName === "SELECT" && !this._value) {
-      this._value = child.value || "";
-    }
     return child;
   }
 
