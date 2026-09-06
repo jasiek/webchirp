@@ -170,7 +170,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
         const { rows, skipped } = buildPrzemiennikiRows(
           parsed.repeaters,
           ctx.table.rowBuilderHooks(),
-          { qrgPerspective: parsed.perspective },
+          { perspective: parsed.perspective },
         );
         for (const entry of skipped) {
           const reason = entry.reason === "frequency"

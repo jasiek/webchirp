@@ -108,6 +108,110 @@ function firstText(parent, selector) {
   return String(parent?.querySelector(selector)?.textContent || "").trim();
 }
 
+// Read an RXF <qrg> body as a frequency in MHz, yielding NaN for anything that
+// is not a usable one. Number("") is 0 rather than NaN, so a plain
+// Number(firstText(...)) turned an absent or empty element into a finite 0 that
+// passed every Number.isFinite guard downstream: it defeated the
+// receive/transmit fallbacks in buildPrzemiennikiRows and turned a one-sided
+// entry into a bogus multi-MHz Duplex/Offset. A literal 0 in the feed is
+// rejected for the same reason -- no repeater works on 0 Hz.
+function parseQrgMhz(text) {
+  const numeric = Number(text || NaN);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : NaN;
+}
+
+// Read an RXF <ctcss> body as a CTCSS frequency, yielding "" for anything that
+// is not one. The element is not always a tone: RepeaterBook publishes "CSQ"
+// for carrier squelch, "Restricted" for a closed repeater, and DTCS codes such
+// as "D023" in the very same field. Those must count as "no tone" rather than
+// be written through, because setRowValue would reject them against the
+// rToneFreq enum and leave the row asserting a tone mode with no tone behind
+// it - a channel that transmits a default 88.5 the directory never mentioned.
+// (Carrying the DTCS codes properly needs the DtcsCode/RxDtcsCode/DtcsPolarity
+// columns and is deliberately out of scope here.)
+function parseCtcssFreq(text) {
+  const value = String(text ?? "").trim();
+  if (!/^\d+(\.\d+)?$/.test(value)) {
+    return "";
+  }
+  return Number(value) > 0 ? value : "";
+}
+
+// Write a normalized transmit/receive CTCSS pair into a row's tone columns.
+//
+// The mode is the part that matters: chirp_common.split_tone_encode reads
+// rToneFreq only under "Tone", reads cToneFreq only under "TSQL", and reads
+// both only under "Cross", so a tone written without the mode that encodes it
+// is silently inert. The branches below mirror chirp_common.split_tone_decode,
+// which is how CHIRP itself turns the same tx/rx pair back into a tmode, and
+// each writes only the field its mode actually encodes.
+//
+// A radio whose valid_tmodes omit the mode a case calls for gets an explicit
+// fallback rather than a half-written row, because valid_cross_modes stays
+// fully populated even when has_cross is false - so the CrossMode options are
+// no evidence that the radio can hold a split pair. The Tone column's own
+// options are.
+function applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, receiveTone) {
+  const toneMode = (mode) => findEnumOption("Tone", [mode], true);
+  const writeTransmitOnly = () => {
+    const mode = toneMode("Tone");
+    if (mode) {
+      setRowValue(row, "Tone", mode);
+      setRowValue(row, "rToneFreq", transmitTone);
+    }
+  };
+  const writeReceiveAsTsql = () => {
+    const mode = toneMode("TSQL");
+    if (mode) {
+      setRowValue(row, "Tone", mode);
+      setRowValue(row, "cToneFreq", receiveTone);
+    }
+  };
+
+  if (!transmitTone && !receiveTone) {
+    return;
+  }
+  if (transmitTone && !receiveTone) {
+    writeTransmitOnly();
+    return;
+  }
+  if (transmitTone === receiveTone) {
+    // Same tone both ways: TSQL transmits it and squelches on it. A radio
+    // without TSQL still has to key the repeater, so it keeps the transmit
+    // half rather than the row losing the tone altogether.
+    if (toneMode("TSQL")) {
+      writeReceiveAsTsql();
+    } else {
+      writeTransmitOnly();
+    }
+    return;
+  }
+
+  // A split pair - including receive-only, which is a split with an empty
+  // transmit half - is expressible only as Cross.
+  const crossMode = toneMode("Cross");
+  const crossValue = findEnumOption("CrossMode", [transmitTone ? "Tone->Tone" : "->Tone"], true);
+  if (crossMode && crossValue) {
+    setRowValue(row, "Tone", crossMode);
+    setRowValue(row, "CrossMode", crossValue);
+    if (transmitTone) {
+      setRowValue(row, "rToneFreq", transmitTone);
+    }
+    setRowValue(row, "cToneFreq", receiveTone);
+    return;
+  }
+  // Without Cross the row can hold one side, so keep the side that decides
+  // whether the channel works at all. With a transmit tone that is the access
+  // tone - drop it and the repeater never opens. With none, TSQL is the only
+  // way to get the advertised receive squelch; it also transmits the tone,
+  // which a repeater that asks for none ignores.
+  if (transmitTone) {
+    writeTransmitOnly();
+  } else {
+    writeReceiveAsTsql();
+  }
+}
+
 function formatFrequencyMhz(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
@@ -168,8 +272,8 @@ export function parsePrzemiennikiXml(xmlText) {
       return {
         qra: firstText(repeaterEl, "qra"),
         mode: firstText(repeaterEl, "mode"),
-        qrgRx: Number(firstText(repeaterEl, 'qrg[type="rx"]')),
-        qrgTx: Number(firstText(repeaterEl, 'qrg[type="tx"]')),
+        qrgRx: parseQrgMhz(firstText(repeaterEl, 'qrg[type="rx"]')),
+        qrgTx: parseQrgMhz(firstText(repeaterEl, 'qrg[type="tx"]')),
         qth: firstText(repeaterEl, "qth"),
         remarks: firstText(repeaterEl, "remarks"),
         link: firstText(repeaterEl, "link"),
@@ -304,21 +408,30 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }) {
 export function buildPrzemiennikiRows(
   repeaters,
   { createBlankRow, setRowValue, findEnumOption },
-  { qrgPerspective = "repeater" } = {},
+  { perspective = "repeater" } = {},
 ) {
   const rows = [];
   const skipped = [];
+  // RXF's <perspective> labels every rx/tx pair in the feed - frequencies and
+  // CTCSS alike - as either the user's radio's or the repeater's. Under
+  // "radio", rx is what the radio receives; under "repeater", rx is what the
+  // repeater receives, which is what the radio has to transmit.
+  const fromRadio = perspective === "radio";
   for (const repeater of repeaters) {
     const row = createBlankRow();
-    // RXF declares whether receive/transmit are labelled from the repeater's
-    // or the user's radio's perspective. Normalize both into a CHIRP memory's
-    // receive/transmit pair.
-    const receiveFrequency = qrgPerspective === "radio"
+    // Normalize the labelled pair into a CHIRP memory's receive/transmit pair.
+    const receiveFrequency = fromRadio
       ? (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx)
       : (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx);
-    const transmitFrequency = qrgPerspective === "radio"
+    const transmitFrequency = fromRadio
       ? (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx)
       : (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx);
+    // Tones carry the same perspective as the frequencies, so a repeater that
+    // publishes only an access tone (the tone the repeater receives) still has
+    // to reach the radio as a transmitted tone - map it to cToneFreq and the
+    // radio silently never sends it.
+    const transmitTone = parseCtcssFreq(fromRadio ? repeater.ctcssTx : repeater.ctcssRx);
+    const receiveTone = parseCtcssFreq(fromRadio ? repeater.ctcssRx : repeater.ctcssTx);
 
     setRowValue(row, "Name", repeater.qra);
     const commentParts = [repeater.qth, repeater.remarks, repeater.link].filter((part) => String(part || "").trim());
@@ -348,16 +461,7 @@ export function buildPrzemiennikiRows(
       }
     }
 
-    if (repeater.ctcssTx) {
-      const toneMode = findEnumOption("Tone", ["Tone", "TSQL"], true);
-      if (toneMode) {
-        setRowValue(row, "Tone", toneMode);
-      }
-      setRowValue(row, "rToneFreq", repeater.ctcssTx);
-    }
-    if (repeater.ctcssRx) {
-      setRowValue(row, "cToneFreq", repeater.ctcssRx);
-    }
+    applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, receiveTone);
 
     const modeMappings = {
       FM: ["FM", "NFM", "FMN"],
