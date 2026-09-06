@@ -534,8 +534,18 @@ const STALE_TEST_CATALOG = [
 
 const EMPTY_SETTINGS = { supported: false, available: false, requiresImage: false, message: "", groups: [] };
 
+// Choosing a radio through the dropdowns takes two steps: a make only lists
+// its models, and the model is what selects a radio and triggers its load.
+// Both dispatch in the same tick, as they would if a user clicked through.
+function selectRadio(radioMakeEl, radioModelEl, vendor, key) {
+  radioMakeEl.value = vendor;
+  radioMakeEl.dispatchEvent({ type: "change" });
+  radioModelEl.value = key;
+  radioModelEl.dispatchEvent({ type: "change" });
+}
+
 test("stale metadata response does not overwrite a newer radio selection", async () => {
-  const { radioMakeEl } = installFakeDom();
+  const { radioMakeEl, radioModelEl } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
   const slowMetadata = createDeferred();
@@ -558,12 +568,10 @@ test("stale metadata response does not overwrite a newer radio selection", async
   await ui.init(true);
 
   // Select the slow radio; its metadata response stays in flight.
-  radioMakeEl.value = "SlowCo";
-  radioMakeEl.dispatchEvent({ type: "change" });
+  selectRadio(radioMakeEl, radioModelEl, "SlowCo", "slow:SlowRadio");
 
   // Move on to the fast radio, whose metadata resolves immediately.
-  radioMakeEl.value = "FastCo";
-  radioMakeEl.dispatchEvent({ type: "change" });
+  selectRadio(radioMakeEl, radioModelEl, "FastCo", "fast:FastRadio");
   await flushMicrotasks();
   assert.ok(tableHeaderTexts(globalThis.document).includes("FastHeader"));
 
@@ -620,11 +628,9 @@ test("reselecting the loaded radio rejects partial loads in either completion or
     // Startup does not mark its default as the last dropdown-loaded radio.
     // Complete Fast -> Alpha first so the final return to Alpha below must
     // take reloadForSelectedRadio()'s no-new-request path from issue #111.
-    radioMakeEl.value = "FastCo";
-    radioMakeEl.dispatchEvent({ type: "change" });
+    selectRadio(radioMakeEl, radioModelEl, "FastCo", "fast:FastRadio");
     await flushMicrotasks();
-    radioMakeEl.value = "Acme";
-    radioMakeEl.dispatchEvent({ type: "change" });
+    selectRadio(radioMakeEl, radioModelEl, "Acme", "alpha:AlphaRadio");
     await flushMicrotasks();
 
     assert.ok(tableHeaderTexts(globalThis.document).includes("alphaHeader"));
@@ -635,11 +641,9 @@ test("reselecting the loaded radio rejects partial loads in either completion or
     // One half of Slow's load resolves before the other. Returning to Alpha
     // must invalidate that work even though Alpha is already the last fully
     // loaded radio, regardless of which half arrived first.
-    radioMakeEl.value = "SlowCo";
-    radioMakeEl.dispatchEvent({ type: "change" });
+    selectRadio(radioMakeEl, radioModelEl, "SlowCo", "slow:SlowRadio");
     await flushMicrotasks();
-    radioMakeEl.value = "Acme";
-    radioMakeEl.dispatchEvent({ type: "change" });
+    selectRadio(radioMakeEl, radioModelEl, "Acme", "alpha:AlphaRadio");
     await flushMicrotasks();
 
     pending.resolve(

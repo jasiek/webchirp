@@ -302,11 +302,15 @@ test("paste preserves read-only column values and matches unpadded numeric enums
   });
 
   await ui.init(true);
-  // The app boots with no radio selected, so pick one the way a user does:
-  // the column metadata this test relies on is the selected driver's.
+  // The app boots with no radio selected, so pick one the way a user does --
+  // a make lists its models, a model chooses the radio. The column metadata
+  // this test relies on is the selected driver's.
   const radioMakeEl = document.querySelector("#radio-make");
+  const radioModelEl = document.querySelector("#radio-model");
   radioMakeEl.value = "Acme";
   radioMakeEl.dispatchEvent({ type: "change" });
+  radioModelEl.value = "one:OneRadio";
+  radioModelEl.dispatchEvent({ type: "change" });
   await flushMicrotasks();
 
   // Header-mapped TSV as produced by Copy (TStep "5.00") plus a

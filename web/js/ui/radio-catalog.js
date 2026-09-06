@@ -15,7 +15,8 @@ const RADIO_SEARCH_MAX_RESULTS = 50;
 // first-time visitor, and every event fired before they touched the picker was
 // attributed to it.
 const NO_MAKE_LABEL = "Select radio make...";
-const NO_MODEL_LABEL = "Select a make first";
+const NO_MAKE_CHOSEN_LABEL = "Select a make first";
+const NO_MODEL_LABEL = "Select radio model...";
 
 // The "nothing chosen" row both dropdowns lead with. Three properties, each
 // load-bearing: the empty value is what lets a select hold "nothing chosen" as
@@ -322,7 +323,7 @@ export function createRadioCatalog(ctx) {
     // No make chosen yet, so there is no model list to offer and no selected
     // radio for the clone buttons or an analytics event to name.
     if (!vendor) {
-      setSelectPlaceholder(dom.radioModelEl, NO_MODEL_LABEL);
+      setSelectPlaceholder(dom.radioModelEl, NO_MAKE_CHOSEN_LABEL);
       state.selectedRadio = null;
       actions.updateSerialActionState();
       return;
@@ -333,6 +334,7 @@ export function createRadioCatalog(ctx) {
       modelCounts.set(radio.model, (modelCounts.get(radio.model) || 0) + 1);
     }
     dom.radioModelEl.innerHTML = "";
+    dom.radioModelEl.appendChild(createPlaceholderOption(NO_MODEL_LABEL));
 
     for (const radio of models) {
       const option = document.createElement("option");
@@ -342,15 +344,16 @@ export function createRadioCatalog(ctx) {
       dom.radioModelEl.appendChild(option);
     }
 
-    const selectedKey = dom.radioModelEl.value || models[0]?.key;
-    state.selectedRadio = models.find((r) => r.key === selectedKey) || null;
+    // Picking a make is not picking a radio. Defaulting to the vendor's first
+    // model is the same invented answer as the boot default one level down:
+    // it loaded a driver the user never asked for, reported it as a selection
+    // and wrote it to the last-radio cookie. The callers that do know which
+    // radio is meant -- the cookie restore, a search suggestion, a detected
+    // image -- set the model value and state.selectedRadio themselves after
+    // calling this.
+    dom.radioModelEl.value = "";
+    state.selectedRadio = null;
     actions.updateSerialActionState();
-    if (state.selectedRadio) {
-      dom.radioModelEl.value = state.selectedRadio.key;
-      log.logDebug(
-        `RADIO SELECT ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
-      );
-    }
   }
 
   function selectRadioByDriver(moduleName, className) {
@@ -505,14 +508,10 @@ export function createRadioCatalog(ctx) {
     });
 
     dom.radioMakeEl.addEventListener("change", () => {
+      // Only the model list changes here; nothing is selected and nothing is
+      // reported. The reload clears the previous radio's metadata and settings
+      // so the editor cannot keep showing a driver that is no longer chosen.
       refreshModelOptions();
-      // A vendor change reports the model it auto-defaulted to, which the user
-      // then usually replaces — so picking a radio through the dropdowns sends
-      // two radio_selected events. Both are real (the driver for the defaulted
-      // model does get loaded), and method separates them: count method="model"
-      // for radios people chose, method="make" only for what they passed
-      // through on the way.
-      trackRadioSelected(state.selectedRadio, "make");
       reloadForSelectedRadio();
     });
 

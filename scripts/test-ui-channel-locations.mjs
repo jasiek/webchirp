@@ -271,11 +271,15 @@ async function bootWithRows(rows, bounds = { min: 0, max: 127 }) {
     parseCsv: async () => ({ headers: HEADERS, rows: rows.map((row) => ({ ...row })), errors: [] }),
   });
   await ui.init(true);
-  // The app boots with no radio selected, so pick one the way a user does:
-  // the column metadata this test relies on is the selected driver's.
+  // The app boots with no radio selected, so pick one the way a user does --
+  // a make lists its models, a model chooses the radio. The column metadata
+  // this test relies on is the selected driver's.
   const radioMakeEl = document.querySelector("#radio-make");
+  const radioModelEl = document.querySelector("#radio-model");
   radioMakeEl.value = "Acme";
   radioMakeEl.dispatchEvent({ type: "change" });
+  radioModelEl.value = "one:OneRadio";
+  radioModelEl.dispatchEvent({ type: "change" });
   await flushMicrotasks();
   const fileInput = document.querySelector("#csv-file");
   fileInput.files = [{ name: "sample.csv", text: async () => "" }];

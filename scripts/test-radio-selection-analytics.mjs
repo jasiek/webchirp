@@ -165,8 +165,29 @@ test("a restored cookie reports radio_restored, never a selection", async () => 
   });
 });
 
+test("choosing a make lists models but selects and reports nothing", async () => {
+  const { catalog, dom, state, events } = await loadCatalog();
+
+  catalog.refreshMakeOptions();
+  catalog.bindEvents();
+
+  dom.radioMakeEl.value = "Baofeng";
+  dom.radioMakeEl.dispatch("change");
+
+  // The vendor's models are offered, with none of them chosen for the user:
+  // defaulting to the first was the boot problem one level down, and it also
+  // wrote that radio to the last-radio cookie.
+  assert.deepEqual(
+    dom.radioModelEl.children.map((option) => option.textContent),
+    ["Select radio model...", "UV-5R"],
+  );
+  assert.equal(dom.radioModelEl.value, "");
+  assert.equal(state.selectedRadio, null);
+  assert.deepEqual(radioEvents(events), []);
+});
+
 test("choosing a model reports radio_selected with its method", async () => {
-  const { catalog, dom, events } = await loadCatalog();
+  const { catalog, dom, state, events } = await loadCatalog();
 
   catalog.refreshMakeOptions();
   catalog.bindEvents();
@@ -177,6 +198,7 @@ test("choosing a model reports radio_selected with its method", async () => {
   dom.radioModelEl.dispatch("change");
 
   const selections = radioEvents(events).filter((event) => event.name === "radio_selected");
-  assert.deepEqual(selections.map((event) => event.params.method), ["make", "model"]);
+  assert.deepEqual(selections.map((event) => event.params.method), ["model"]);
   assert.equal(selections.at(-1).params.radio, "Baofeng UV-5R");
+  assert.equal(state.selectedRadio?.key, "uv5r:BaofengUV5R");
 });
