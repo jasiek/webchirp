@@ -8,10 +8,7 @@ import {
   stripFtdiStatusBytes,
 } from "../web/js/ftdi-webusb.js";
 import { createWebUsbSerial } from "../web/js/webusb-serial.js";
-
-function setNavigator(value) {
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value });
-}
+import { withNavigator } from "./test-support/globals.mjs";
 
 test("ftdiConvertBaudrate matches known libftdi divisor encodings", () => {
   // Well-known FTDI (FT232R/FT-X, 3 MHz clock) divisor values.
@@ -38,9 +35,9 @@ test("isFtdiDevice recognizes the FTDI vendor id", () => {
   assert.ok(!isFtdiDevice(null));
 });
 
-test("WebUSB provider dispatches FTDI devices to the FTDI driver", async () => {
+test("WebUSB provider dispatches FTDI devices to the FTDI driver", async (t) => {
   let requestedOptions = null;
-  setNavigator({
+  withNavigator(t, {
     usb: {
       requestDevice: async (options) => {
         requestedOptions = options;
@@ -63,9 +60,9 @@ test("WebUSB provider dispatches FTDI devices to the FTDI driver", async () => {
   );
 });
 
-test("WebUSB provider dispatches devices without a native driver to the CDC polyfill", async () => {
+test("WebUSB provider dispatches devices without a native driver to the CDC polyfill", async (t) => {
   // An Arduino-style CDC-ACM device: neither FTDI nor Prolific.
-  setNavigator({
+  withNavigator(t, {
     usb: { requestDevice: async () => ({ vendorId: 0x2341, productId: 0x0043 }) },
   });
   let loaded = false;
