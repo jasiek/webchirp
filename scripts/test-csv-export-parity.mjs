@@ -36,6 +36,10 @@ def _reference_csv_export(image_b64):
     for number in range(int(lo), int(hi) + 1):
         try:
             mem = radio.get_memory(number)
+            # Desktop CHIRP augments its grid cache with external properties
+            # before export, so include metadata-backed comments in the oracle.
+            if isinstance(radio, chirp_common.ExternalMemoryProperties):
+                mem = radio.get_memory_extra(mem)
         except Exception:
             continue
         # Specials carry string numbers and never get exported.
