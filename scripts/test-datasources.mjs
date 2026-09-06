@@ -7,43 +7,31 @@ import {
   buildRepeaterEndpoints,
 } from "../web/js/datasources.js";
 import { rowGeo } from "../web/js/row-geo.js";
+import { makeRowHooks } from "./test-support/row-hooks.mjs";
 
 // toneModes/crossModes stand in for the driver's valid_tmodes and
 // valid_cross_modes. They are separate knobs because a real driver can offer a
 // full CrossMode option list while its Tone column has no "Cross" at all —
 // valid_cross_modes defaults to the complete list regardless of has_cross — and
 // the builder has to gate on the Tone column rather than on CrossMode.
+//
+// Options are matched case-sensitively here, on purpose: these tests pin the
+// exact tone-mode strings the builder hands a driver.
 function rowHooks({
   modeOptions = ["FM", "DV", "DMR", "DN"],
   toneModes = ["", "Tone", "TSQL", "DTCS", "Cross"],
   crossModes = ["Tone->Tone", "->Tone", "Tone->", "DTCS->", "->DTCS"],
   maxFrequencyMhz = Infinity,
 } = {}) {
-  const columns = [
-    "Name", "Frequency", "Duplex", "Offset",
-    "Tone", "rToneFreq", "cToneFreq", "CrossMode",
-    "Mode", "Comment",
-  ];
-  return {
-    createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
-    setRowValue: (row, column, value) => {
-      if (!columns.includes(column)) {
-        return;
-      }
-      // normalizeValue keeps the previous value when a frequency falls outside
-      // the driver's valid_bands, and Offset is exempt from that check — the
-      // asymmetry this builder has to notice.
-      if (column === "Frequency" && Number.parseFloat(value) > maxFrequencyMhz) {
-        return;
-      }
-      row[column] = String(value ?? "");
-    },
-    findEnumOption: (column, choices) => {
-      const optionsByColumn = { Mode: modeOptions, Tone: toneModes, CrossMode: crossModes };
-      const options = optionsByColumn[column] || [];
-      return choices.find((choice) => options.includes(choice)) || "";
-    },
-  };
+  return makeRowHooks({
+    columns: [
+      "Name", "Frequency", "Duplex", "Offset",
+      "Tone", "rToneFreq", "cToneFreq", "CrossMode",
+      "Mode", "Comment",
+    ],
+    optionsByColumn: { Mode: modeOptions, Tone: toneModes, CrossMode: crossModes },
+    maxFrequencyMhz,
+  });
 }
 
 // Build one repeater and hand back its row, so a tone case reads as its inputs
