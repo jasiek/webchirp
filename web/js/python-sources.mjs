@@ -2,7 +2,7 @@
 // chirp/ submodule and the committed web/radio-catalog.json must match this
 // revision; scripts/build-catalog.mjs enforces it at catalog build time and
 // the runtime rejects a mismatched static catalog.
-export const DEFAULT_CHIRP_REVISION = "80d93fe5bd51d7ff078c4bbd499f1e7e3c58afd3";
+export const DEFAULT_CHIRP_REVISION = "33a76a6364ea8847f9ab64ce51460cf260a820f2";
 
 const CORE_CHIRP_RELATIVE_FILES = [
   "chirp/__init__.py",
