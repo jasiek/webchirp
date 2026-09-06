@@ -49,9 +49,18 @@ const ALL_FIXTURES = [
 // still writes the values a user actually edited.
 const EDITABLE_IMAGE = "Baofeng_UV-5R.img";
 
-async function readCatalog() {
-  const text = await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8");
-  return JSON.parse(text).radios;
+// Every test here drives the same runtime, and createTestRadioHarness() boots a
+// fresh Pyodide each time it is called -- six WebAssembly runtimes for six
+// tests. One harness for the file keeps that to one, the way
+// test-radio-settings.mjs already does for its sweep.
+let sharedContext = null;
+async function context() {
+  if (!sharedContext) {
+    const harness = await createTestRadioHarness({ repoRoot });
+    const text = await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8");
+    sharedContext = { harness, catalog: JSON.parse(text).radios };
+  }
+  return sharedContext;
 }
 
 async function loadImageFor(harness, catalog, name) {
@@ -85,6 +94,29 @@ function flattenSettings(nodes, prefix = []) {
   return out;
 }
 
+/** Collect names shared by two nodes in the SAME sibling array, at any depth.
+ *
+ * Sibling scope is the whole point: a name lookup only goes wrong when two
+ * children of one container answer to it. Pooling names across levels or
+ * across parents would let this pass on an unrelated coincidence, and keep
+ * passing after the duplication these fixtures pin is gone.
+ */
+function duplicateSiblingNames(nodes, prefix = []) {
+  const out = [];
+  const seen = new Set();
+  for (const node of nodes || []) {
+    const id = String(node.id);
+    if (seen.has(id)) {
+      out.push([...prefix, id].join("."));
+    }
+    seen.add(id);
+    if (node.kind === "group") {
+      out.push(...duplicateSiblingNames(node.children, [...prefix, id]));
+    }
+  }
+  return out;
+}
+
 /** Re-apply a serialized settings tree onto a fresh radio built from the same
  * bytes, which is exactly what the upload and export paths do. */
 async function reapplySettings(harness, match, raw, settings) {
@@ -105,8 +137,7 @@ json.dumps({"valid": _res["valid"], "issues": _res["issues"]})
 }
 
 test("settings survive a read/write cycle for every image that used to refuse one", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const catalog = await readCatalog();
+  const { harness, catalog } = await context();
 
   for (const name of ALL_FIXTURES) {
     const { match, loaded, raw } = await loadImageFor(harness, catalog, name);
@@ -133,8 +164,7 @@ test("settings survive a read/write cycle for every image that used to refuse on
 });
 
 test("a value CHIRP could not initialize serializes as null and is not written back", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const catalog = await readCatalog();
+  const { harness, catalog } = await context();
 
   // ft4 stores '------' in cw_id/passwd, which its own charset rejects, so the
   // value never initializes. Without a fixture that actually carries one, the
@@ -157,8 +187,7 @@ test("a value CHIRP could not initialize serializes as null and is not written b
 });
 
 test("a string CHIRP autopadded past its own charset round-trips unchanged", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const catalog = await readCatalog();
+  const { harness, catalog } = await context();
 
   const { loaded } = await loadImageFor(harness, catalog, AUTOPAD_CHARSET_IMAGES[0]);
   const entry = flattenSettings(loaded.settings).find(
@@ -171,28 +200,20 @@ test("a string CHIRP autopadded past its own charset round-trips unchanged", asy
 });
 
 test("sibling groups that share a name are both reachable when replaying", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const catalog = await readCatalog();
+  const { harness, catalog } = await context();
 
   for (const name of DUPLICATE_GROUP_NAME_IMAGES) {
     const { loaded } = await loadImageFor(harness, catalog, name);
-    const topNames = (loaded.settings || []).map((group) => String(group.id));
-    const nested = (loaded.settings || []).flatMap((group) =>
-      (group.children || []).filter((child) => child.kind === "group").map((child) => String(child.id)),
-    );
-    const duplicated = [...topNames, ...nested].filter(
-      (value, index, all) => all.indexOf(value) !== index,
-    );
+    const duplicated = duplicateSiblingNames(loaded.settings);
     assert.ok(
       duplicated.length > 0,
-      `${name} should still carry the duplicate group name this fixture pins`,
+      `${name} should still carry the duplicate sibling name this fixture pins`,
     );
   }
 });
 
 test("a driver whose get_settings returns a bare list is still addressable", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const catalog = await readCatalog();
+  const { harness, catalog } = await context();
 
   const { match, raw } = await loadImageFor(harness, catalog, LIST_ROOT_IMAGES[0]);
   const shape = await harness.runPythonJson(
@@ -216,8 +237,7 @@ json.dumps({"isRadioSettings": isinstance(_tree, chirp_settings.RadioSettings)})
 });
 
 test("an edited value is still written, and one the driver refuses is still reported", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const catalog = await readCatalog();
+  const { harness, catalog } = await context();
 
   const { match, loaded, raw } = await loadImageFor(harness, catalog, EDITABLE_IMAGE);
   const entries = flattenSettings(loaded.settings);
