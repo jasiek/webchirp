@@ -117,11 +117,18 @@ async function loadCatalog({ cookie = "" } = {}) {
     lastLoadedRadioKey: "",
     currentHeaders: [],
   };
+  // Every refresh records the radio it would have gated the clone buttons on,
+  // so a refresh that ran before the selection landed is visible to a test.
+  const actionStates = [];
   const ctx = {
     dom,
     state,
     log: { logDebug() {} },
-    actions: { updateSerialActionState() {} },
+    actions: {
+      updateSerialActionState() {
+        actionStates.push(state.selectedRadio?.key ?? null);
+      },
+    },
     table: { render() {}, clearInvalidHighlights() {} },
     settings: { clearInvalid() {}, fetchForRadio: async () => ({ groups: [] }), applyLoadedState() {} },
   };
@@ -129,7 +136,7 @@ async function loadCatalog({ cookie = "" } = {}) {
   const { createRadioCatalog } = await import("../web/js/ui/radio-catalog.js");
   const catalog = createRadioCatalog(ctx);
   ctx.catalog = catalog;
-  return { catalog, dom, state, events };
+  return { catalog, dom, state, events, actionStates };
 }
 
 function radioEvents(events) {
@@ -201,4 +208,30 @@ test("choosing a model reports radio_selected with its method", async () => {
   assert.deepEqual(selections.map((event) => event.params.method), ["model"]);
   assert.equal(selections.at(-1).params.radio, "Baofeng UV-5R");
   assert.equal(state.selectedRadio?.key, "uv5r:BaofengUV5R");
+});
+
+test("a detected image refreshes the clone buttons with the radio it selected", async () => {
+  const { catalog, state, events, actionStates } = await loadCatalog();
+
+  catalog.refreshMakeOptions();
+  actionStates.length = 0;
+
+  const selected = catalog.selectRadioByDetectedImage({
+    module: "uv5r",
+    className: "BaofengUV5R",
+    vendor: "Baofeng",
+    model: "UV-5R",
+  });
+
+  assert.equal(selected, true);
+  assert.equal(state.selectedRadio?.key, "uv5r:BaofengUV5R");
+  // The LAST refresh has to see the radio. Populating the model list runs one
+  // with nothing selected, and settings only refresh the buttons for a driver
+  // that has settings -- so a stale refresh here leaves Download and Upload
+  // disabled reading "Select your radio..." against a radio that is selected.
+  assert.equal(actionStates.at(-1), "uv5r:BaofengUV5R");
+  assert.deepEqual(
+    radioEvents(events).map((event) => [event.name, event.params.method]),
+    [["radio_selected", "image"]],
+  );
 });

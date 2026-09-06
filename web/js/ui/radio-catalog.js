@@ -89,15 +89,11 @@ export function createRadioCatalog(ctx) {
     if (!state.radioCatalog.some((r) => r.vendor === make && r.key === key)) {
       return false;
     }
-    clearRadioFilter();
-    dom.radioMakeEl.value = make;
-    refreshModelOptions();
-    dom.radioModelEl.value = key;
-    state.selectedRadio = state.radioCatalog.find((r) => r.key === key) || null;
-    if (!state.selectedRadio) {
+    const restored = state.radioCatalog.find((r) => r.key === key);
+    if (!restored) {
       return false;
     }
-    actions.updateSerialActionState();
+    applySelectedRadio(restored);
     trackRadioRestored(state.selectedRadio);
     log.logDebug(
       `RADIO RESTORE ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
@@ -117,10 +113,10 @@ export function createRadioCatalog(ctx) {
     trackEvent("radio_restored", radioEventParams(radio));
   }
 
-  // Report which radio a user chose and how they got there. Deliberately not
-  // fired from refreshModelOptions(), which also runs at boot and when a vendor
-  // change defaults the model: only the paths below are a user choosing a
-  // radio.
+  // Report which radio a user chose and how they got there. Nothing selects a
+  // radio on the user's behalf any more -- not startup, not a make change --
+  // so every method below is an action someone actually performed: picking a
+  // model, picking a search suggestion, or loading an image that names one.
   function trackRadioSelected(radio, method) {
     if (!radio) {
       return;
@@ -356,6 +352,20 @@ export function createRadioCatalog(ctx) {
     actions.updateSerialActionState();
   }
 
+  // Point both dropdowns at a radio the caller has already identified. The
+  // action-state refresh is the load-bearing part: refreshModelOptions() has
+  // just run one with nothing selected, so without this the clone buttons stay
+  // disabled reading "Select your radio..." against a radio that is selected.
+  function applySelectedRadio(radio) {
+    clearRadioFilter();
+    dom.radioMakeEl.value = radio.vendor;
+    refreshModelOptions();
+    dom.radioModelEl.value = radio.key;
+    state.selectedRadio = radio;
+    actions.updateSerialActionState();
+    persistSelectedRadioCookie();
+  }
+
   function selectRadioByDriver(moduleName, className) {
     const target = state.radioCatalog.find(
       (r) => r.module === moduleName && r.className === className,
@@ -363,12 +373,7 @@ export function createRadioCatalog(ctx) {
     if (!target) {
       return false;
     }
-    clearRadioFilter();
-    dom.radioMakeEl.value = target.vendor;
-    refreshModelOptions();
-    dom.radioModelEl.value = target.key;
-    state.selectedRadio = target;
-    persistSelectedRadioCookie();
+    applySelectedRadio(target);
     return true;
   }
 
@@ -388,13 +393,8 @@ export function createRadioCatalog(ctx) {
     if (!fallback) {
       return false;
     }
-    clearRadioFilter();
-    dom.radioMakeEl.value = fallback.vendor;
-    refreshModelOptions();
-    dom.radioModelEl.value = fallback.key;
-    state.selectedRadio = fallback;
+    applySelectedRadio(fallback);
     trackRadioSelected(fallback, "image");
-    persistSelectedRadioCookie();
     return true;
   }
 
