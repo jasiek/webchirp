@@ -1,3 +1,4 @@
+import { createPortSelectionCancelledError } from "./serial-errors.js";
 import { createWebUsbSerial } from "./webusb-serial.js";
 
 // Parse user-entered hex byte text into a Uint8Array for serial writes.
@@ -166,6 +167,28 @@ export class BrowserSerialBridge {
     throw new Error("Neither Web Serial nor WebUSB is supported in this browser.");
   }
 
+  // Show the browser's chooser and return the port the user picked. Both
+  // providers reject with NotFoundError when the chooser is dismissed without a
+  // selection ("No port selected by the user." on native Web Serial, "No device
+  // selected." on WebUSB); translate that one case into an error the UI can
+  // recognise as a cancellation. Everything else the chooser can raise -- a
+  // SecurityError outside a user gesture, a NotAllowedError from a permissions
+  // policy -- is a real failure and passes through untouched.
+  //
+  // This sits apart from the open() body below on purpose: only the chooser
+  // produces NotFoundError, so translating inside the wider try would risk
+  // relabelling a later failure as a user cancellation.
+  async _requestPort(serial) {
+    try {
+      return await serial.requestPort({});
+    } catch (error) {
+      if (error?.name === "NotFoundError") {
+        throw createPortSelectionCancelledError();
+      }
+      throw error;
+    }
+  }
+
   async open(baudRate) {
     // A live connection requires a writer, not just a port handle. A previous
     // attempt that failed mid-open can leave this.port set with no writer; treat
@@ -189,7 +212,7 @@ export class BrowserSerialBridge {
 
     const serial = await this._ensureSerial();
     try {
-      this.port = await serial.requestPort({});
+      this.port = await this._requestPort(serial);
       const options = { ...DEFAULT_PORT_OPTIONS, baudRate };
       await this.port.open(options);
       this.portOptions = options;
