@@ -8,208 +8,17 @@ import test from "node:test";
 // memories from 1 rather than 0. Editing the grid must therefore leave the
 // slots of untouched channels alone.
 //
-// Self-contained fake DOM, matching scripts/test-ui-channel-cut.mjs.
-class FakeElement {
-  constructor(tagName = "div") {
-    this.tagName = String(tagName).toUpperCase();
-    this.attributes = new Map();
-    this.children = [];
-    this.eventListeners = new Map();
-    this.classList = { add() {}, remove() {}, toggle() {}, contains: () => false };
-    this.dataset = {};
-    this.style = {};
-    this.hidden = false;
-    this.disabled = false;
-    this.readOnly = false;
-    this.type = "";
-    this.title = "";
-    this._value = "";
-    this._textContent = "";
-    this._innerHTML = "";
-  }
-
-  get value() {
-    if (this.tagName === "SELECT" && !this._value) {
-      return this.children[0]?.value || "";
-    }
-    return this._value;
-  }
-
-  set value(next) {
-    this._value = String(next ?? "");
-  }
-
-  get textContent() {
-    return this._textContent;
-  }
-
-  set textContent(next) {
-    this._textContent = String(next ?? "");
-    this.children = [];
-  }
-
-  get innerHTML() {
-    return this._innerHTML;
-  }
-
-  set innerHTML(next) {
-    this._innerHTML = String(next ?? "");
-    this.children = [];
-    this._value = "";
-  }
-
-  setAttribute(name, val) {
-    this.attributes.set(String(name), String(val));
-  }
-
-  getAttribute(name) {
-    return this.attributes.get(String(name)) ?? null;
-  }
-
-  removeAttribute(name) {
-    this.attributes.delete(String(name));
-  }
-
-  appendChild(child) {
-    child.parentNode = this;
-    this.children.push(child);
-    if (this.tagName === "SELECT" && !this._value) {
-      this._value = child.value || "";
-    }
-    return child;
-  }
-
-  // The channel grid delegates cell events to the tbody, so a dispatched event
-  // has to be resolvable back to its cell the same way the browser does it.
-  matches(selector) {
-    if (selector.startsWith(".")) {
-      return this.className === selector.slice(1);
-    }
-    const attribute = selector.match(/^(\w+)\[data-([\w-]+)\]$/);
-    if (attribute) {
-      const [, tag, name] = attribute;
-      return this.tagName === tag.toUpperCase() && this.dataset[name] !== undefined;
-    }
-    return false;
-  }
-
-  closest(selector) {
-    let node = this;
-    while (node) {
-      if (node.matches?.(selector)) {
-        return node;
-      }
-      node = node.parentNode;
-    }
-    return null;
-  }
-
-  addEventListener(type, handler) {
-    const key = String(type);
-    if (!this.eventListeners.has(key)) {
-      this.eventListeners.set(key, []);
-    }
-    this.eventListeners.get(key).push(handler);
-  }
-
-  dispatchEvent(event) {
-    for (const handler of this.eventListeners.get(String(event?.type || "")) || []) {
-      handler(event);
-    }
-  }
-
-  contains() {
-    return false;
-  }
-
-  click() {}
-
-  focus() {}
-
-  querySelector() {
-    return null;
-  }
-
-  querySelectorAll(selector) {
-    if (selector === "tr") {
-      return this.children.filter((child) => child.tagName === "TR");
-    }
-    return [];
-  }
-}
-
-function installFakeDom() {
-  const elements = new Map();
-  const document = {
-    cookie: "",
-    querySelector(selector) {
-      const key = String(selector);
-      if (!elements.has(key)) {
-        elements.set(key, new FakeElement("div"));
-      }
-      return elements.get(key);
-    },
-    querySelectorAll() {
-      return [];
-    },
-    createElement(tagName) {
-      return new FakeElement(tagName);
-    },
-    addEventListener() {},
-  };
-  Object.defineProperty(globalThis, "document", { configurable: true, value: document });
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: { addEventListener() {}, open() {}, getSelection: () => null },
-  });
-  const navigator = { userAgent: "FakeBrowser/1.0", language: "en-US", appVersion: "FakeBrowser/1.0" };
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value: navigator });
-  Object.defineProperty(globalThis, "CSS", {
-    configurable: true,
-    value: { escape: (value) => String(value) },
-  });
-  return { document, navigator };
-}
-
-function createDeferred() {
-  let resolve;
-  const promise = new Promise((nextResolve) => {
-    resolve = nextResolve;
-  });
-  return { promise, resolve };
-}
-
-function flushMicrotasks() {
-  return new Promise((resolve) => setImmediate(resolve));
-}
-
-// The grid renders spacer rows around the windowed channel rows, so the
-// channel rows are the ones carrying a row index.
-function channelRows(document) {
-  const tbody = document.querySelector("#mem-table tbody");
-  return tbody.children.filter((tr) => tr.dataset.rowIdx !== undefined);
-}
-
-function tableNames(document) {
-  return channelRows(document).map((tr) => tr.children[1]?.children[0]?.value ?? "");
-}
-
-// Cell events are delegated to the tbody; dispatch there with the button as
-// the target, which is what bubbling gives the handler in a real browser.
-function clickLocationButton(document, rowIdx) {
-  const tbody = document.querySelector("#mem-table tbody");
-  const button = channelRows(document)[rowIdx].children[0].children[0];
-  tbody.dispatchEvent({
-    type: "click",
-    target: button,
-    shiftKey: false,
-    ctrlKey: false,
-    metaKey: false,
-    preventDefault() {},
-    stopPropagation() {},
-  });
-}
-
+// The fake DOM and grid-driving helpers are shared with
+// scripts/test-ui-channel-cut.mjs via scripts/test-support/fake-dom.mjs.
+import {
+  channelRows,
+  clickLocationButton,
+  flushMicrotasks,
+  importSampleCsv,
+  installFakeDom,
+  selectRadioBySearch,
+  tableNames,
+} from "./test-support/fake-dom.mjs";
 
 // The UV-5R test image's real shape, trimmed: two low channels, then gaps.
 // chirp/tests/images/Baofeng_UV-5R.img fills 37 of 128 slots this way.
@@ -223,18 +32,9 @@ const SPARSE_ROWS = [
 
 const HEADERS = ["Location", "Name", "Frequency"];
 
+// A shift-click on a Location button extends the selection from the anchor.
 function shiftClickLocationButton(document, rowIdx) {
-  const tbody = document.querySelector("#mem-table tbody");
-  const button = channelRows(document)[rowIdx].children[0].children[0];
-  tbody.dispatchEvent({
-    type: "click",
-    target: button,
-    shiftKey: true,
-    ctrlKey: false,
-    metaKey: false,
-    preventDefault() {},
-    stopPropagation() {},
-  });
+  clickLocationButton(document, rowIdx, { shiftKey: true });
 }
 
 function selectedNames(document) {
@@ -245,21 +45,6 @@ function selectedNames(document) {
 
 function tableLocations(document) {
   return channelRows(document).map((tr) => tr.children[0]?.children[0]?.textContent ?? "");
-}
-
-// Pick the stubbed radio the way the UI requires: type into the search box and
-// accept the pre-highlighted first suggestion. Without this no radio is
-// selected, so the driver's column metadata is never fetched.
-function selectStubbedRadio(document, query) {
-  const searchEl = document.querySelector("#radio-search");
-  searchEl.value = query;
-  searchEl.dispatchEvent({ type: "input" });
-  searchEl.dispatchEvent({
-    type: "keydown",
-    key: "Enter",
-    preventDefault() {},
-    stopPropagation() {},
-  });
 }
 
 // Boot the UI with a stubbed runtime whose driver reports `bounds` as the
@@ -282,12 +67,10 @@ async function bootWithRows(rows, bounds = { min: 0, max: 127 }) {
     parseCsv: async () => ({ headers: HEADERS, rows: rows.map((row) => ({ ...row })), errors: [] }),
   });
   await ui.init(true);
-  selectStubbedRadio(document, "Acme One");
+  // Without a selected radio the driver's column metadata is never fetched.
+  selectRadioBySearch(document, "Acme One");
   await flushMicrotasks();
-  const fileInput = document.querySelector("#csv-file");
-  fileInput.files = [{ name: "sample.csv", text: async () => "" }];
-  fileInput.dispatchEvent({ type: "change" });
-  await flushMicrotasks();
+  await importSampleCsv(document);
   return { document, navigator, ui };
 }
 
