@@ -136,3 +136,34 @@ test("losing the port mid-session takes the clone buttons away again", async () 
   await ctx.dom.serialConnectToggleEl.listener();
   assert.equal(ctx.dom.radioDownloadEl.disabled, false);
 });
+
+test("clone buttons stay disabled until a radio is selected", async () => {
+  const createSerialActions = await loadSerialActions();
+  const ctx = makeContext();
+  // The app boots with nothing chosen rather than defaulting to whichever
+  // radio sorts first in the catalog, so this is a state users start in.
+  ctx.state.selectedRadio = null;
+  const serial = createSerialActions(ctx);
+  serial.setSidebarControlsEnabled(true);
+  serial.bindEvents();
+  await ctx.dom.serialConnectToggleEl.listener();
+
+  // An open port is not enough: both clone paths need a driver to run.
+  assert.equal(ctx.dom.radioDownloadEl.disabled, true);
+  assert.equal(ctx.dom.radioUploadEl.disabled, true);
+  assert.equal(ctx.dom.radioDownloadEl.title, "Select your radio make and model first");
+  assert.equal(ctx.dom.radioUploadEl.title, "Select your radio make and model first");
+
+  // Picking a radio with the port already open lights them up.
+  ctx.state.selectedRadio = {
+    vendor: "Baofeng",
+    model: "UV-5R",
+    module: "uv5r",
+    className: "BaofengUV5R",
+  };
+  serial.updateSerialActionState();
+  assert.equal(ctx.dom.radioDownloadEl.disabled, false);
+  assert.equal(ctx.dom.radioUploadEl.disabled, false);
+  assert.equal(ctx.dom.radioDownloadEl.title, "");
+  assert.equal(ctx.dom.radioUploadEl.title, "");
+});

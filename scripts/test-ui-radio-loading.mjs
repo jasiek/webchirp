@@ -386,14 +386,19 @@ test("radio dropdowns show Loading... while CHIRP drivers are loading", async ()
 
   await initPromise;
 
+  // Nothing is preselected: the make list leads with a placeholder and the
+  // model list has nothing to show until a make is picked, so no radio is
+  // credited to a user who has not chosen one.
   assert.deepEqual(
     radioMakeEl.children.map((option) => option.textContent),
-    ["Acme"],
+    ["Select radio make...", "Acme"],
   );
   assert.deepEqual(
     radioModelEl.children.map((option) => option.textContent),
-    ["Alpha", "Beta"],
+    ["Select a make first"],
   );
+  assert.equal(radioMakeEl.value, "");
+  assert.equal(radioModelEl.value, "");
   assert.ok(!radioMakeEl.children.some((option) => option.textContent === "Loading..."));
   assert.ok(!radioModelEl.children.some((option) => option.textContent === "Loading..."));
 });
@@ -438,8 +443,11 @@ test("search box shows narrowing make+model suggestions without touching dropdow
   );
 
   // Typing never narrows the make/model dropdowns themselves.
-  assert.deepEqual(radioMakeEl.children.map((o) => o.textContent), ["Acme", "Baofeng"]);
-  assert.deepEqual(radioModelEl.children.map((o) => o.textContent), ["Alpha", "Beta"]);
+  assert.deepEqual(
+    radioMakeEl.children.map((o) => o.textContent),
+    ["Select radio make...", "Acme", "Baofeng"],
+  );
+  assert.deepEqual(radioModelEl.children.map((o) => o.textContent), ["Select a make first"]);
 
   // No matches shows an inert placeholder row.
   radioSearchEl.value = "nonesuch";

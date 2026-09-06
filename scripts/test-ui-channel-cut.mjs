@@ -302,6 +302,12 @@ test("paste preserves read-only column values and matches unpadded numeric enums
   });
 
   await ui.init(true);
+  // The app boots with no radio selected, so pick one the way a user does:
+  // the column metadata this test relies on is the selected driver's.
+  const radioMakeEl = document.querySelector("#radio-make");
+  radioMakeEl.value = "Acme";
+  radioMakeEl.dispatchEvent({ type: "change" });
+  await flushMicrotasks();
 
   // Header-mapped TSV as produced by Copy (TStep "5.00") plus a
   // spreadsheet-style unpadded value ("12.5") that must match "12.50".

@@ -9,6 +9,14 @@ import { radioEventParams, trackEvent } from "./analytics.js";
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
 
+// Shown while nothing is chosen. The app deliberately boots with no radio
+// selected: the catalog is sorted by vendor, so defaulting to its first entry
+// silently made one radio (Abbree AR-518) the implied choice of every
+// first-time visitor, and every event fired before they touched the picker was
+// attributed to it.
+const NO_MAKE_LABEL = "Select radio make...";
+const NO_MODEL_LABEL = "Select a make first";
+
 // Radio selection: the make/model dropdowns, the free-text search box with its
 // autocomplete list, the "last radio" cookie, and the metadata load that
 // follows a selection. Owns the search-result state; the catalog and the
@@ -72,17 +80,29 @@ export function createRadioCatalog(ctx) {
       return false;
     }
     actions.updateSerialActionState();
-    trackRadioSelected(state.selectedRadio, "restored");
+    trackRadioRestored(state.selectedRadio);
     log.logDebug(
       `RADIO RESTORE ${makeModelLabel(state.selectedRadio)} (${state.selectedRadio.module}.${state.selectedRadio.className})`,
     );
     return true;
   }
 
-  // Report which radio a user landed on and how they got there. Deliberately
-  // not fired from refreshModelOptions(), which also runs at boot and when a
-  // vendor change defaults the model: only the paths below are a user choosing
-  // a radio.
+  // A cookie restore is not a choice. It fires on every load a returning
+  // visitor makes, so counting it as radio_selected weights "which radios do
+  // people have" by visit frequency rather than by user. It is still worth
+  // reporting on its own: it is the only signal for which radio someone keeps
+  // coming back to.
+  function trackRadioRestored(radio) {
+    if (!radio) {
+      return;
+    }
+    trackEvent("radio_restored", radioEventParams(radio));
+  }
+
+  // Report which radio a user chose and how they got there. Deliberately not
+  // fired from refreshModelOptions(), which also runs at boot and when a vendor
+  // change defaults the model: only the paths below are a user choosing a
+  // radio.
   function trackRadioSelected(radio, method) {
     if (!radio) {
       return;
@@ -264,24 +284,37 @@ export function createRadioCatalog(ctx) {
     return hasDuplicateModel ? `${modelLabel} (${radio.className})` : modelLabel;
   }
 
-  function setRadioSelectPlaceholder(label) {
-    const text = String(label || "");
-    for (const selectEl of [dom.radioMakeEl, dom.radioModelEl]) {
-      if (!selectEl) {
-        continue;
-      }
-      selectEl.innerHTML = "";
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = text;
-      selectEl.appendChild(option);
-      selectEl.value = "";
+  // Replace a select's options with a single inert row. The row carries an
+  // empty value so the select can hold "nothing chosen" as a value at all: a
+  // select with no such option always reports its first option instead.
+  function setSelectPlaceholder(selectEl, label) {
+    if (!selectEl) {
+      return;
     }
+    selectEl.innerHTML = "";
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = String(label || "");
+    selectEl.appendChild(option);
+    selectEl.value = "";
+  }
+
+  function setRadioSelectPlaceholder(label) {
+    setSelectPlaceholder(dom.radioMakeEl, label);
+    setSelectPlaceholder(dom.radioModelEl, label);
   }
 
   // Populate model dropdown for selected vendor and refresh selection state.
   function refreshModelOptions() {
     const vendor = dom.radioMakeEl.value;
+    // No make chosen yet, so there is no model list to offer and no selected
+    // radio for the clone buttons or an analytics event to name.
+    if (!vendor) {
+      setSelectPlaceholder(dom.radioModelEl, NO_MODEL_LABEL);
+      state.selectedRadio = null;
+      actions.updateSerialActionState();
+      return;
+    }
     const models = state.radioCatalog.filter((r) => r.vendor === vendor);
     const modelCounts = new Map();
     for (const radio of models) {
@@ -368,13 +401,19 @@ export function createRadioCatalog(ctx) {
       return;
     }
 
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = NO_MAKE_LABEL;
+    dom.radioMakeEl.appendChild(placeholder);
     for (const vendor of vendors) {
       const option = document.createElement("option");
       option.value = vendor;
       option.textContent = vendor;
       dom.radioMakeEl.appendChild(option);
     }
-    dom.radioMakeEl.value = vendors.includes(previousVendor) ? previousVendor : vendors[0];
+    // Nothing is selected unless a vendor was already chosen: the cookie
+    // restore that runs after this is what picks a radio for a returning user.
+    dom.radioMakeEl.value = vendors.includes(previousVendor) ? previousVendor : "";
     refreshModelOptions();
   }
 

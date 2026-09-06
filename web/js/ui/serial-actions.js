@@ -275,14 +275,20 @@ export function createSerialActions(ctx) {
       : "Connect over WebUSB, for use with FTDI, Prolific PL2303, "
         + "WCH CH340/CH341 or Silicon Labs CP2102 adapters";
 
-    // Both clone operations talk to an open port, so neither is offered until
-    // a port has been picked and opened through one of the connect buttons.
-    const cloneAllowed = actionsAllowed && connected;
+    // Both clone operations run a specific driver against an open port, so
+    // neither is offered until a radio has been picked and a port opened
+    // through one of the connect buttons. The app starts with no radio
+    // selected, so the radio half is a state a user really can be in.
+    const radioSelected = Boolean(state.selectedRadio);
+    const cloneAllowed = actionsAllowed && connected && radioSelected;
     const notConnectedTitle = "Connect to a serial port first";
+    const noRadioTitle = "Select your radio make and model first";
 
     dom.radioDownloadEl.disabled = !cloneAllowed;
     if (liveRadioUnsupported) {
       dom.radioDownloadEl.title = "Live-mode radios are not supported in this UI yet";
+    } else if (!radioSelected) {
+      dom.radioDownloadEl.title = noRadioTitle;
     } else {
       dom.radioDownloadEl.title = connected ? "" : notConnectedTitle;
     }
@@ -290,6 +296,10 @@ export function createSerialActions(ctx) {
     dom.radioUploadEl.disabled = !cloneAllowed || ctx.settings.hasInvalidSettings();
     if (liveRadioUnsupported) {
       dom.radioUploadEl.title = "Live-mode radios are not supported in this UI yet";
+      return;
+    }
+    if (!radioSelected) {
+      dom.radioUploadEl.title = noRadioTitle;
       return;
     }
     if (!connected) {
