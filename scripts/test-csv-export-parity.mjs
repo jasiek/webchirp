@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const imagesDir = path.join(repoRoot, "chirp/tests/images");
+import {
+  listRegisteredRadios,
+  readCatalog,
+  readImage,
+  sharedHarness,
+} from "./test-support/chirp.mjs";
+import { chirpImagesDir } from "./test-support/repo-paths.mjs";
 
 // CHIRP's own CSV export, transcribed from chirp/wxui/memedit.py so the
 // comparison is against upstream behaviour and not a restatement of ours. Kept
@@ -151,19 +152,15 @@ function differsOnlyInPower(expected, actual) {
 // needs the driver already imported, so import the whole catalog up front and
 // let CHIRP detect each image the way directory.get_radio_by_image() does.
 async function importEveryDriver(harness) {
-  const text = await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8");
   const modules = Array.from(
-    new Set(JSON.parse(text).radios.map((radio) => radio.module)),
+    new Set((await readCatalog()).map((radio) => radio.module)),
   ).sort();
-  const result = await harness.runPythonJson(
-    'json.dumps({"radios": len(list_registered_radios(json.loads(_mods)))})',
-    { _mods: JSON.stringify(modules) },
-  );
-  assert.ok(result.radios > 400, `expected the driver catalog to load, got ${result.radios}`);
+  const radios = await listRegisteredRadios(harness, modules);
+  assert.ok(radios.length > 400, `expected the driver catalog to load, got ${radios.length}`);
 }
 
 async function listAllImages() {
-  const names = await fs.readdir(imagesDir);
+  const names = await fs.readdir(chirpImagesDir);
   return names.filter((name) => name.toLowerCase().endsWith(".img")).sort();
 }
 
@@ -175,7 +172,7 @@ async function selectedImages() {
 }
 
 test("CSV export is identical to CHIRP's own CSV export", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   await harness.runPythonJson(`${REFERENCE_EXPORT_PY}\njson.dumps({"ready": True})`);
   await importEveryDriver(harness);
 
@@ -186,7 +183,7 @@ test("CSV export is identical to CHIRP's own CSV export", async () => {
   let compared = 0;
 
   for (const name of names) {
-    const raw = await fs.readFile(path.join(imagesDir, name));
+    const raw = await readImage(name);
     let loaded = null;
     try {
       // The app's own read path: detect the driver and hand back grid rows.
@@ -252,7 +249,7 @@ const CSV_HEADER_LINE = [
 ].join(",");
 
 test("importing a CSV does not invent a channel 0", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const csvText = `${CSV_HEADER_LINE}\n`
     + "1,TEST,145.500000,,0.600000,,88.5,88.5,023,NN,023,Tone->Tone,FM,5.00,,5.0W,,,,,\n";
   const parsed = await harness.runPythonJson("json.dumps(parse_csv(_csv))", { _csv: csvText });
@@ -267,7 +264,7 @@ test("importing a CSV does not invent a channel 0", async () => {
 });
 
 test("a DV row keeps the documented column layout", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const csvText = `${CSV_HEADER_LINE}\n`
     + "1,DSTAR,145.500000,,0.600000,,88.5,88.5,023,NN,023,Tone->Tone,DV,5.00,,5.0W,,,,,\n";
   const parsed = await harness.runPythonJson("json.dumps(parse_csv(_csv))", { _csv: csvText });

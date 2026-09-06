@@ -1,29 +1,15 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { listRegisteredRadios, readImage, sharedHarness } from "./test-support/chirp.mjs";
 
 // Drivers that import pyserial at module scope. Without the serial shim in
 // runtime_bridge.py they raise ModuleNotFoundError in Pyodide and silently
 // never register with CHIRP's directory (issue #29).
 const PYSERIAL_DRIVER_MODULES = ["tg_uv2p", "idrp"];
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-let harnessPromise = null;
-
-function getHarness() {
-  if (!harnessPromise) {
-    harnessPromise = createTestRadioHarness({ repoRoot });
-  }
-  return harnessPromise;
-}
-
 test("drivers importing pyserial at module scope import cleanly", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const results = await harness.runPythonJson(
     `
 _out = {}
@@ -43,11 +29,8 @@ json.dumps(_out)
 });
 
 test("TG-UV2+ registers and is listed by list_registered_radios", async () => {
-  const harness = await getHarness();
-  const radios = await harness.runPythonJson(
-    "json.dumps(list_registered_radios(_shim_modules))",
-    { _shim_modules: ["tg_uv2p"] },
-  );
+  const harness = await sharedHarness();
+  const radios = await listRegisteredRadios(harness, ["tg_uv2p"]);
   const tguv2p = radios.find((radio) => radio.key === "tg_uv2p:QuanshengTGUV2P");
   assert.ok(tguv2p, "tg_uv2p:QuanshengTGUV2P missing from registered radios");
   assert.equal(tguv2p.vendor, "Quansheng");
@@ -55,11 +38,8 @@ test("TG-UV2+ registers and is listed by list_registered_radios", async () => {
 });
 
 test("upstream Quansheng TG-UV2+ image loads and detects its driver", async () => {
-  const harness = await getHarness();
-  const imageBytes = await fs.readFile(
-    path.join(repoRoot, "chirp/tests/images/Quansheng_TG-UV2+.img"),
-  );
-  const loaded = await harness.loadCodeplugBinary(imageBytes);
+  const harness = await sharedHarness();
+  const loaded = await harness.loadCodeplugBinary(await readImage("Quansheng_TG-UV2+.img"));
   assert.equal(loaded.module, "tg_uv2p");
   assert.equal(loaded.className, "QuanshengTGUV2P");
   assert.equal(loaded.vendor, "Quansheng");
@@ -68,7 +48,7 @@ test("upstream Quansheng TG-UV2+ image loads and detects its driver", async () =
 });
 
 test("shim Serial refuses construction with a clear error", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const result = await harness.runPythonJson(
     `
 import serial
@@ -89,7 +69,7 @@ json.dumps({"error": _shim_error, "stopbitsTwo": serial.STOPBITS_TWO})
 // treats a falsy count as a failed transfer -- could never clone while the shim
 // returned None (issue #79).
 test("shim pipe write() returns the number of bytes written", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const result = await harness.runPythonJson(
     `
 _pipe = WebSerialPipe()
@@ -108,7 +88,7 @@ json.dumps({
 });
 
 test("puxing_px888k pipewrite accepts the shim pipe", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const result = await harness.runPythonJson(
     `
 _px = importlib.import_module("chirp.drivers.puxing_px888k")
@@ -128,7 +108,7 @@ json.dumps({"error": _pipewrite_error})
 // TypeError before the first block. The lines must also actually reach the
 // transport -- storing a boolean makes every mid-clone toggle inert.
 test("pipe control lines default to asserted and reach the serial bridge", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const before = harness.serialBridge.signalCalls.length;
   const result = await harness.runPythonJson(
     `
@@ -164,7 +144,7 @@ json.dumps({
 // differ between pyserial and Web Serial, and pyserial values with no Web
 // Serial equivalent must be kept for read-back but not guessed at on the port.
 test("pipe baud-rate and framing changes reach the transport", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const before = harness.serialBridge.reconfigureCalls.length;
   const result = await harness.runPythonJson(
     `
