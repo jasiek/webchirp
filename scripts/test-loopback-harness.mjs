@@ -17,6 +17,11 @@ import { Ch340SerialPort } from "../web/js/ch340-webusb.js";
 import { Cp2102SerialPort } from "../web/js/cp2102-webusb.js";
 import { FtdiSerialPort } from "../web/js/ftdi-webusb.js";
 import { Pl2303SerialPort } from "../web/js/pl2303-webusb.js";
+import {
+  PL2303_HX_DESCRIPTOR,
+  cancelledTransfer,
+  deviceDescriptorBytes,
+} from "./test-support/fake-usb.mjs";
 
 // FTDI's two-byte modem/line status header, prepended to every bulk IN packet.
 const FTDI_STATUS_BYTES = [0x01, 0x60];
@@ -30,13 +35,6 @@ const FTDI_STATUS_BYTES = [0x01, 0x60];
  *   swallow          — byte values the line eats (models software flow control)
  *   wedgeAfterIdle   — stop delivering data once the line has gone quiet once
  */
-// Blink surfaces a cancelled transfer as a rejected promise carrying
-// AbortError, not as a result with a status — see CheckFatalTransferStatus in
-// third_party/blink/renderer/modules/webusb/usb_device.cc.
-function cancelledTransfer() {
-  return Object.assign(new Error("The transfer was cancelled."), { name: "AbortError" });
-}
-
 function createWire({ faults = {}, idleWedgeMs = 150 } = {}) {
   let queue = [];
   let closed = false;
@@ -285,19 +283,9 @@ const CHIP_PROFILES = {
   },
 };
 
+// The device descriptor shaped so detectPl2303Type() lands on HX.
 function pl2303DeviceDescriptor() {
-  // 18-byte device descriptor shaped so detectPl2303Type() lands on HX:
-  // bDeviceClass 0x00, bMaxPacketSize0 64, bcdUSB 0x0110, bcdDevice 0x0400.
-  const bytes = new Uint8Array(18);
-  bytes[0] = 18;
-  bytes[1] = 0x01;
-  bytes[2] = 0x10;
-  bytes[3] = 0x01;
-  bytes[4] = 0x00;
-  bytes[7] = 64;
-  bytes[12] = 0x00;
-  bytes[13] = 0x04;
-  return new DataView(bytes.buffer);
+  return new DataView(deviceDescriptorBytes(PL2303_HX_DESCRIPTOR).buffer);
 }
 
 function answerControlIn(chip, setup, length) {
