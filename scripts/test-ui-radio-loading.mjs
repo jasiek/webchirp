@@ -817,6 +817,42 @@ test("live-mode radios carry their marker after the name, in list and readout", 
   assert.equal(radioSelectionNameEl.textContent, "Acme Live ⚡");
 });
 
+// Several catalog entries can share one "<Make> <Model>" name, and the search
+// box empties after a selection — so the readout is the only place left that
+// can say which of them Connect / Load / Save will act on.
+test("the readout names the driver only when two entries share a name", async () => {
+  const { radioSearchEl, radioSelectionNameEl } = installFakeDom();
+  const { createUiController } = await import("../web/js/ui.js");
+  const ui = createUiController();
+
+  ui.setRuntimeApi({
+    listRadios: async () => ({
+      radios: [
+        { vendor: "Acme", model: "Twin", module: "twin_a", className: "TwinARadio", key: "twin_a:TwinARadio", isLiveRadio: false },
+        { vendor: "Acme", model: "Twin", module: "twin_b", className: "TwinBRadio", key: "twin_b:TwinBRadio", isLiveRadio: false },
+        { vendor: "Acme", model: "Only", module: "only", className: "OnlyRadio", key: "only:OnlyRadio", isLiveRadio: false },
+      ],
+    }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
+    getRadioSettings: async () => EMPTY_SETTINGS,
+    parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
+  });
+
+  await ui.init(true);
+
+  // A shared name keeps the class that tells the two entries apart.
+  selectRadioBySearch(radioSearchEl, "twin");
+  await flushMicrotasks();
+  assert.equal(radioSelectionNameEl.textContent, "Acme Twin (TwinARadio)");
+
+  // A name only one entry wears does not need it.
+  selectRadioBySearch(radioSearchEl, "only");
+  await flushMicrotasks();
+  assert.equal(radioSelectionNameEl.textContent, "Acme Only");
+});
+
 // Nothing is selected at startup now, so the serial path has to say "pick a
 // radio" rather than offer buttons that would clone against no driver.
 test("serial and clone actions stay disabled until a radio is selected", async () => {

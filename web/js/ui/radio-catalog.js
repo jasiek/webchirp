@@ -73,10 +73,7 @@ export function createRadioCatalog(ctx) {
     if (!restored) {
       return false;
     }
-    clearRadioFilter();
-    state.selectedRadio = restored;
-    renderSelectedRadio();
-    actions.updateSerialActionState();
+    commitSelectedRadio(restored);
     trackRadioSelected(restored, "restored");
     log.logDebug(
       `RADIO RESTORE ${makeModelLabel(restored)} (${restored.module}.${restored.className})`,
@@ -168,11 +165,22 @@ export function createRadioCatalog(ctx) {
     return radio.isLiveRadio ? `${base} ⚡` : base;
   }
 
-  // Label for a search suggestion; the driver class is added when several
-  // catalog entries share the same vendor+model text.
-  function radioSearchLabel(radio, hasDuplicateLabel) {
+  // Whether another catalog entry wears the same "<Make> <Model>" text. When
+  // one does, the name alone cannot say which driver Connect / Load / Save will
+  // act on, so the class is the only thing that can.
+  function hasAmbiguousLabel(radio) {
+    const label = makeModelLabel(radio);
+    return state.radioCatalog.some(
+      (other) => other.key !== radio.key && makeModelLabel(other) === label,
+    );
+  }
+
+  // How a radio is named anywhere in this module — the suggestion rows and the
+  // persistent readout share it, so the two cannot disagree about which entry
+  // a name refers to.
+  function radioLabel(radio, isAmbiguous) {
     const label = radioDisplayLabel(radio);
-    return hasDuplicateLabel ? `${label} (${radio.className})` : label;
+    return isAmbiguous ? `${label} (${radio.className})` : label;
   }
 
   // Fill one suggestion row. The name and the alias note are separate elements
@@ -180,7 +188,7 @@ export function createRadioCatalog(ctx) {
   function fillRadioSearchOption(li, radio, hasDuplicateLabel, alias) {
     const nameEl = document.createElement("span");
     nameEl.className = "radio-search-name";
-    nameEl.textContent = radioSearchLabel(radio, hasDuplicateLabel);
+    nameEl.textContent = radioLabel(radio, hasDuplicateLabel);
     li.appendChild(nameEl);
     if (!alias) {
       return;
@@ -194,9 +202,9 @@ export function createRadioCatalog(ctx) {
   // Name the radio the rest of the app is working with. This readout is the
   // only indication of the current selection now that the make/model dropdowns
   // are gone, so it renders after every path that assigns state.selectedRadio.
-  // It names the radio the way its owner would; the driver behind it is an
-  // implementation detail that belongs in the debug log, which records it on
-  // every selection.
+  // It names the radio the way its owner would, and the driver class only where
+  // that name is ambiguous — the search box empties after a selection, so this
+  // is the one place left that can resolve two entries sharing a name.
   function renderSelectedRadio() {
     const radio = state.selectedRadio;
     dom.radioSelectionEl.classList.toggle("is-empty", !radio);
@@ -204,7 +212,19 @@ export function createRadioCatalog(ctx) {
       dom.radioSelectionNameEl.textContent = catalogStatusText || NO_RADIO_SELECTED_TEXT;
       return;
     }
-    dom.radioSelectionNameEl.textContent = radioDisplayLabel(radio);
+    dom.radioSelectionNameEl.textContent = radioLabel(radio, hasAmbiguousLabel(radio));
+  }
+
+  // The single way this module adopts a radio. Selection has three entry
+  // points — a suggestion, the cookie, an image naming its own driver — and the
+  // serial actions are gated on there being a radio at all, so a path that
+  // assigned state.selectedRadio without re-gating them left Connect, Load and
+  // Save disabled behind a populated readout.
+  function commitSelectedRadio(radio) {
+    clearRadioFilter();
+    state.selectedRadio = radio;
+    renderSelectedRadio();
+    actions.updateSerialActionState();
   }
 
   function hideRadioSearchResults() {
@@ -308,9 +328,7 @@ export function createRadioCatalog(ctx) {
     if (!radio) {
       return;
     }
-    clearRadioFilter();
-    state.selectedRadio = radio;
-    renderSelectedRadio();
+    commitSelectedRadio(radio);
     trackRadioSelected(radio, "search");
     log.logDebug(
       `RADIO SELECT ${makeModelLabel(radio)} (${radio.module}.${radio.className})`,
@@ -389,9 +407,7 @@ export function createRadioCatalog(ctx) {
     if (!target) {
       return false;
     }
-    clearRadioFilter();
-    state.selectedRadio = target;
-    renderSelectedRadio();
+    commitSelectedRadio(target);
     persistSelectedRadioCookie();
     return true;
   }
@@ -412,9 +428,7 @@ export function createRadioCatalog(ctx) {
     if (!fallback) {
       return false;
     }
-    clearRadioFilter();
-    state.selectedRadio = fallback;
-    renderSelectedRadio();
+    commitSelectedRadio(fallback);
     trackRadioSelected(fallback, "image");
     persistSelectedRadioCookie();
     return true;

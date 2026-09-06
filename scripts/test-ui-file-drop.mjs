@@ -356,6 +356,31 @@ test("dropping an .img file loads it through the binary codeplug loader", async 
   assert.match(debugOutputEl.value, /STATUS Loaded binary codeplug for Acme Alpha/);
 });
 
+// Selection gates the serial actions, and an image naming its own driver is a
+// selection like any other. On a fresh session nothing is selected, so a path
+// that populated the readout without re-gating them left Connect, Load and Save
+// disabled against a radio the UI was visibly holding.
+test("an .img load enables the serial actions on a session with nothing selected", async () => {
+  const { window } = installFakeDom();
+  await bootUi({ catalog: [...CATALOG, BETA_RADIO], imageRadio: BETA_RADIO });
+  const connectEl = globalThis.document.querySelector("#serial-connect-toggle");
+  const downloadEl = globalThis.document.querySelector("#radio-download");
+  assert.equal(connectEl.disabled, true);
+  assert.equal(connectEl.title, "Search for and select a radio first");
+
+  await window.emit("drop", dropEvent([fakeFile("beta.img")]));
+  await flushAsync();
+
+  assert.equal(
+    globalThis.document.querySelector("#radio-selection-name").textContent,
+    "Acme Beta",
+  );
+  assert.equal(connectEl.disabled, false);
+  assert.equal(connectEl.title, "");
+  // Clone still waits on an open port, but the radio is no longer the blocker.
+  assert.equal(downloadEl.title, "Connect to a serial port first");
+});
+
 test("reselecting a radio after an .img load refreshes its schema and settings", async () => {
   const { window } = installFakeDom();
   const { calls } = await bootUi({ catalog: [...CATALOG, BETA_RADIO], imageRadio: BETA_RADIO });
