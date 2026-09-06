@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import {
   findCatalogRadioForImageMetadata,
   isImageDetectionFailure,
   loadImageWithDriverFallback,
 } from "../web/js/image-metadata.mjs";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { ensureModule, imageMetadata, sharedHarness } from "./test-support/chirp.mjs";
 
 // The registered driver class for a Baofeng UV-5R image; the BaofengUV5R base
 // class itself is not directory-registered, so this is what CHIRP detection
@@ -106,8 +104,7 @@ test("returns null for missing metadata or unknown radios", () => {
 });
 
 test("binary image metadata drives radio model selection", async (t) => {
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
 
   // Build a metadata-tagged image without importing any driver. The payload is
   // deliberately garbage: metadata parsing must not require driver code.
@@ -129,10 +126,7 @@ json.dumps({"imageBase64": base64.b64encode(_img).decode("ascii")})
   );
 
   await t.test("reads vendor/model/class from the metadata trailer", async () => {
-    const metadata = await harness.runPythonJson(
-      "json.dumps(read_image_metadata_base64(_image_b64))",
-      { _image_b64: craftedImage.imageBase64 },
-    );
+    const metadata = await imageMetadata(harness, craftedImage.imageBase64);
     assert.equal(metadata.hasMetadata, true);
     assert.equal(metadata.rclass, TEST_RADIO.className);
     assert.equal(metadata.vendor, TEST_RADIO.vendor);
@@ -173,19 +167,10 @@ json.dumps(read_image_metadata_base64(base64.b64encode(_img).decode("ascii")))
   await t.test("metadata selects the driver module to import, then load detects it", async () => {
     // Mirror handleLoadImage: parse metadata, match it against the catalog,
     // import the matched module, then run CHIRP image detection.
-    const metadata = await harness.runPythonJson(
-      "json.dumps(read_image_metadata_base64(_image_b64))",
-      { _image_b64: craftedImage.imageBase64 },
-    );
+    const metadata = await imageMetadata(harness, craftedImage.imageBase64);
     const match = findCatalogRadioForImageMetadata(CATALOG, metadata);
     assert.equal(match?.module, TEST_RADIO.module);
-    await harness.runPythonJson(
-      `
-ensure_radio_module(_sel_module)
-json.dumps({"imported": True})
-      `,
-      { _sel_module: match.module },
-    );
+    await ensureModule(harness, match.module);
 
     // Round-trip through a real exported image so the loaded rows are valid.
     const exported = await harness.exportCodeplugBinary(
@@ -210,10 +195,7 @@ json.dumps({"imported": True})
       "BaofengUV5R",
       [makeTestRow()],
     );
-    const metadata = await harness.runPythonJson(
-      "json.dumps(read_image_metadata_base64(_image_b64))",
-      { _image_b64: exported.imageBase64 },
-    );
+    const metadata = await imageMetadata(harness, exported.imageBase64);
     assert.equal(metadata.rclass, "BaofengUV5R");
     const match = findCatalogRadioForImageMetadata(CATALOG, metadata);
     assert.equal(match?.module, TEST_RADIO.module);

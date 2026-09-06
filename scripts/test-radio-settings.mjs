@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import { listDriverModules } from "../web/js/python-sources.mjs";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { listRegisteredRadios, sharedHarness } from "./test-support/chirp.mjs";
 
 function parseFlagValue(flagName, argv = process.argv.slice(2)) {
   for (let i = 0; i < argv.length; i += 1) {
@@ -30,23 +28,18 @@ function normalizeRadioLabel(radio) {
 }
 
 test("all registered radios finish initial runtime loading", async (t) => {
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const radioFilter = (
     process.env.WEBCHIRP_RADIO_FILTER ||
     parseFlagValue("--radio")
   ).trim().toLowerCase();
 
-  const harness = await createTestRadioHarness({
-    repoRoot,
+  const harness = await sharedHarness({
     chirpDir: parseFlagValue("--chirp-dir"),
     serialMode: "stub",
   });
 
   const moduleNames = await listDriverModules(harness.pythonSource);
-  const radios = await harness.runPythonJson(
-    "json.dumps(list_registered_radios(_radio_catalog_modules))",
-    { _radio_catalog_modules: moduleNames },
-  );
+  const radios = await listRegisteredRadios(harness, moduleNames);
 
   radios.sort((a, b) => {
     const av = `${a.vendor}\u0000${a.model}\u0000${a.variant}\u0000${a.module}\u0000${a.className}`;

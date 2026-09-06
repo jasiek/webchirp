@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { createProgress } from "../web/js/ui/progress.js";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+import { importAllDriverModules, sharedHarness } from "./test-support/chirp.mjs";
 
 // The strip only ever reads/writes textContent, hidden and the <progress> value,
 // so a plain object per element is enough to assert on.
@@ -100,12 +96,12 @@ test("a stale handle cannot update or hide a newer operation's strip", () => {
 });
 
 test("import_all_driver_modules reports progress once per module, failures included", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const calls = [];
-  harness.pyodide.globals.set("_cb", (done, total, name) => calls.push([done, total, name]));
-  harness.pyodide.globals.set("_mods", ["uv5r", "definitely_not_a_driver", "ft60"]);
-  const result = JSON.parse(
-    await harness.pyodide.runPythonAsync("json.dumps(import_all_driver_modules(_mods, _cb))"),
+  const result = await importAllDriverModules(
+    harness,
+    ["uv5r", "definitely_not_a_driver", "ft60"],
+    (done, total, name) => calls.push([done, total, name]),
   );
 
   assert.equal(result.imported, 2);
@@ -121,19 +117,13 @@ test("import_all_driver_modules reports progress once per module, failures inclu
 // Progress is a diagnostic: it must never be able to abort the sweep it reports
 // on, and the argument must stay optional for callers that want no reporting.
 test("import_all_driver_modules survives a throwing progress callback", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  harness.pyodide.globals.set("_bad", () => {
+  const harness = await sharedHarness();
+  const thrown = await importAllDriverModules(harness, ["uv5r", "ft60"], () => {
     throw new Error("progress sink exploded");
   });
-  const thrown = JSON.parse(
-    await harness.pyodide.runPythonAsync(
-      "json.dumps(import_all_driver_modules(['uv5r', 'ft60'], _bad))",
-    ),
-  );
   assert.equal(thrown.imported, 2);
 
-  const omitted = JSON.parse(
-    await harness.pyodide.runPythonAsync("json.dumps(import_all_driver_modules(['uv5r']))"),
-  );
+  // No callback argument at all, so the Python default is what is exercised.
+  const omitted = await importAllDriverModules(harness, ["uv5r"]);
   assert.equal(omitted.imported, 1);
 });
