@@ -153,6 +153,13 @@ LAST_IMAGE_BY_DRIVER = {}
 # variant subclass with a different codeplug layout, so re-parsing the cached
 # bytes with the selected parent class would decode the wrong fields.
 IMAGE_CLASS_BY_DRIVER: dict[str, type] = {}
+# Memory numbers the driver could not decode when this driver key's image was
+# read. Upload and export rebuild a fresh radio from the cached bytes, and a
+# decode failure that was one-shot or instance-local does not repeat on that
+# instance -- so the read-before-erase guard alone would let the slot be erased
+# for being absent from the grid. It was never in the grid to begin with, so it
+# is recorded here at extraction time and subtracted from the erase candidates.
+UNREADABLE_BY_DRIVER: dict[str, set[int]] = {}
 DEFAULT_EXPORT_POWER = "50W"
 # Duplex values CHIRP drivers actually emit. chirp_common has no single
 # constant for these: RadioFeatures defaults valid_duplexes to ["", "+", "-"],
@@ -1492,6 +1499,23 @@ def _cache_driver_image(
     return image
 
 
+def _record_unreadable_channels(
+    module_name: str, class_name: str, numbers: Sequence[int]
+) -> None:
+    """Record which memories failed to decode for this driver key.
+
+    Always overwrites, including with an empty list: a later clean read of the
+    same radio has to drop protection that no longer applies, or a slot stays
+    un-erasable for the rest of the session.
+    """
+    UNREADABLE_BY_DRIVER[_driver_cache_key(module_name, class_name)] = set(numbers)
+
+
+def _protected_channels(module_name: str, class_name: str) -> set[int]:
+    """Return memory numbers that must not be erased for this driver key."""
+    return UNREADABLE_BY_DRIVER.get(_driver_cache_key(module_name, class_name), set())
+
+
 def _cached_image_class(
     module_name: str, class_name: str, radio_cls: type
 ) -> type:
@@ -1640,6 +1664,14 @@ def _iter_memory_numbers(radio):
     return range(int(lo), int(hi) + 1)
 
 
+# Cap on distinct failure groups reported for one operation. Groups are keyed by
+# the driver's own exception text, which a driver is free to make unique per
+# memory by naming the number or the offending value in the message -- so
+# capping the numbers listed per line is not on its own enough to keep a
+# whole-radio failure from burying the debug panel.
+MAX_LOGGED_FAILURE_GROUPS = 5
+
+
 def _format_channel_numbers(numbers: Sequence[int], limit: int = 8) -> str:
     """Render channel numbers for a single debug line.
 
@@ -1649,6 +1681,32 @@ def _format_channel_numbers(numbers: Sequence[int], limit: int = 8) -> str:
     shown = ", ".join(str(number) for number in numbers[:limit])
     remainder = len(numbers) - limit
     return f"{shown} and {remainder} more" if remainder > 0 else shown
+
+
+def _log_grouped_channel_failures(
+    numbers_by_reason: dict[str, list[int]],
+    summary: str,
+    traces_by_reason: Optional[dict[str, str]] = None,
+) -> None:
+    """Report per-channel driver failures to the debug panel, bounded both ways.
+
+    Widest groups are reported first so that truncation drops the long tail of
+    one-off messages rather than the failure that explains the most channels.
+    """
+    ordered = sorted(numbers_by_reason.items(), key=lambda item: (-len(item[1]), item[0]))
+    for reason, numbers in ordered[:MAX_LOGGED_FAILURE_GROUPS]:
+        trace = (traces_by_reason or {}).get(reason, "")
+        _log_debug(
+            f"Channels {_format_channel_numbers(numbers)} {summary}: {reason}"
+            + (f"\n{trace}" if trace else "")
+        )
+    remainder = ordered[MAX_LOGGED_FAILURE_GROUPS:]
+    if remainder:
+        affected = sorted(number for _, numbers in remainder for number in numbers)
+        _log_debug(
+            f"{len(remainder)} further distinct failures are not shown, "
+            f"affecting channels {_format_channel_numbers(affected)}"
+        )
 
 
 def _radio_rows_from_instance(radio) -> tuple[Rows, list[int]]:
@@ -1683,12 +1741,11 @@ def _radio_rows_from_instance(radio) -> tuple[Rows, list[int]]:
             row[header] = str(value)
         rows.append(row)
 
-    for reason, numbers in numbers_by_reason.items():
-        _log_debug(
-            f"Channels {_format_channel_numbers(numbers)} could not be decoded "
-            f"by the driver and are missing from the channel list: {reason}\n"
-            f"{trace_by_reason[reason]}"
-        )
+    _log_grouped_channel_failures(
+        numbers_by_reason,
+        "could not be decoded by the driver and are missing from the channel list",
+        trace_by_reason,
+    )
     return rows, unreadable
 
 
@@ -1743,7 +1800,12 @@ def _apply_rows_to_radio_instance(
         else:
             radio.set_memory(mem)
 
-    for number in sorted(valid_numbers - seen_numbers):
+    # A slot that failed to decode on download was never offered to the user, so
+    # its absence from the rows is not a deletion and must not be treated as one.
+    # A row the user did supply for that number still writes normally: explicit
+    # intent is in seen_numbers and never reaches this loop.
+    protected = _protected_channels(module_name, class_name) - seen_numbers
+    for number in sorted(valid_numbers - seen_numbers - protected):
         # Omitted rows mean erase. Read first so immutable special channels are
         # protected and already-empty slots do not trigger needless writes.
         try:
@@ -1763,11 +1825,16 @@ def _apply_rows_to_radio_instance(
             )
         radio.erase_memory(number)
 
-    for reason, numbers in unreadable_erase_slots.items():
+    if protected:
         _log_debug(
-            f"Channels {_format_channel_numbers(numbers)} were not erased "
-            f"because their current values could not be checked: {reason}"
+            f"Channels {_format_channel_numbers(sorted(protected))} were left "
+            f"untouched because the driver could not decode them when this "
+            f"image was read"
         )
+    _log_grouped_channel_failures(
+        unreadable_erase_slots,
+        "were not erased because their current values could not be checked",
+    )
 
 
 def _ensure_clone_mode_radio(radio_cls):
@@ -2184,6 +2251,7 @@ def _download_selected_radio_sync(module_name: str, class_name: str):
     _cache_driver_image(module_name, class_name, radio)
 
     rows, unreadable = _radio_rows_from_instance(radio)
+    _record_unreadable_channels(module_name, class_name, unreadable)
     csv_text = normalize_rows(rows, module_name, class_name)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
@@ -2377,6 +2445,7 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     class_name = str(base_cls.__name__)
     _cache_driver_image(module_short, class_name, radio)
     rows, unreadable = _radio_rows_from_instance(radio)
+    _record_unreadable_channels(module_short, class_name, unreadable)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
         "module": module_short,
