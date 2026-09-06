@@ -9,16 +9,13 @@ import {
 } from "../web/js/serial-errors.js";
 import { classifyErrorKind, errorTypeName } from "../web/js/ui/analytics.js";
 import { createDebugLog } from "../web/js/ui/debug-log.js";
+import { setNavigator } from "./test-support/globals.mjs";
 
 // Pressing Cancel in the browser's port chooser used to arrive at the UI as a
 // Pyodide traceback, which the app dumped into the Debug Output panel -- so the
 // only signal that the click had done anything at all was an unreadable stack.
 // These cover the outcome end to end: the bridge names it, the runtime keeps it
 // named, and the UI says it in a sentence without filing it as a bug.
-
-function setNavigator(value) {
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value });
-}
 
 // Chrome rejects a dismissed chooser with a DOMException; Node has no
 // DOMException constructor guarantee across versions worth relying on here, so

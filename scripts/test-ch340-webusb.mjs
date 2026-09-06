@@ -7,10 +7,13 @@ import {
   isCh340Device,
 } from "../web/js/ch340-webusb.js";
 import { createWebUsbSerial } from "../web/js/webusb-serial.js";
-
-function setNavigator(value) {
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value });
-}
+import { makeFakeUsbDevice } from "./test-support/fake-usb.mjs";
+import { withNavigator } from "./test-support/globals.mjs";
+import {
+  expectFullPipeline,
+  expectOnePacketPerTransfer,
+  expectStallRecovery,
+} from "./test-support/usb-read-path.mjs";
 
 // Fake USBDevice for a CH340: bulk OUT + bulk IN + interrupt IN (modem status)
 // endpoints, recording every control transfer and answering the version read
@@ -22,31 +25,15 @@ function makeFakeDevice({
 } = {}) {
   const controlIn = [];
   const controlOut = [];
-  const clearHaltCalls = [];
-  const transferInCalls = [];
-  // Transfers the driver has queued that the fake has not answered yet.
-  const outstanding = [];
-  const device = {
+  const fake = makeFakeUsbDevice({
     vendorId: 0x1a86,
     productId: 0x7523,
-    configuration: {
-      interfaces: [
-        {
-          interfaceNumber: 0,
-          alternate: {
-            endpoints: [
-              { type: "bulk", direction: "out", endpointNumber: 1, packetSize: 32 },
-              { type: "bulk", direction: "in", endpointNumber: 2, packetSize: 32 },
-              { type: "interrupt", direction: "in", endpointNumber: 3, packetSize: 8 },
-            ],
-          },
-        },
-      ],
-    },
-    open: async () => {},
-    claimInterface: async () => {},
-    releaseInterface: async () => {},
-    close: async () => {},
+    endpoints: [
+      { type: "bulk", direction: "out", endpointNumber: 1, packetSize: 32 },
+      { type: "bulk", direction: "in", endpointNumber: 2, packetSize: 32 },
+      { type: "interrupt", direction: "in", endpointNumber: 3, packetSize: 8 },
+    ],
+    cancelOnClearHalt,
     controlTransferIn: async (setup, length) => {
       controlIn.push({ ...setup, length });
       if (setup.request === 0x5f) {
@@ -64,41 +51,8 @@ function makeFakeDevice({
       controlOut.push({ request: setup.request, value: setup.value, index: setup.index });
       return { status: "ok" };
     },
-    clearHalt: async (direction, endpoint) => {
-      clearHaltCalls.push({ direction, endpoint });
-      if (cancelOnClearHalt) {
-        // Chromium cancels every transfer outstanding on the interface before
-        // it clears the endpoint, and Blink rejects a cancelled transfer with
-        // AbortError rather than completing it with a status.
-        for (const transfer of outstanding.splice(0)) {
-          transfer.reject(Object.assign(
-            new Error("The transfer was cancelled."),
-            { name: "AbortError" },
-          ));
-        }
-      }
-    },
-    transferIn: async (endpointNumber, length) => {
-      transferInCalls.push({ endpointNumber, length });
-      // Left unanswered until the test delivers a result, the way real hardware
-      // leaves a transfer pending until bytes arrive.
-      return new Promise((resolve, reject) => {
-        outstanding.push({ resolve, reject });
-      });
-    },
-    transferOut: async () => ({ status: "ok" }),
-  };
-  // Answer the oldest unanswered transfer — bulk transfers on one endpoint
-  // complete in the order they were issued.
-  const deliver = (result) => {
-    outstanding.shift()?.resolve(result);
-  };
-  return { device, controlIn, controlOut, clearHaltCalls, transferInCalls, deliver };
-}
-
-// Let the stream's pull run: it is invoked off a microtask and awaits transfers.
-function tick() {
-  return new Promise((resolve) => { setTimeout(resolve, 0); });
+  });
+  return { ...fake, controlIn, controlOut };
 }
 
 test("ch340GetDivisor matches known CH341 prescaler/divisor encodings", () => {
@@ -149,9 +103,9 @@ test("isCh340Device recognizes the CH340/CH341 vendor and product pairs", () => 
   assert.ok(!isCh340Device(null));
 });
 
-test("WebUSB provider dispatches CH340 devices to the CH340 driver", async () => {
+test("WebUSB provider dispatches CH340 devices to the CH340 driver", async (t) => {
   let requestedOptions = null;
-  setNavigator({
+  withNavigator(t, {
     usb: {
       requestDevice: async (options) => {
         requestedOptions = options;
@@ -255,23 +209,12 @@ test("Ch340SerialPort read path clears a stalled IN endpoint and passes raw byte
   // path that keeps the pre-stall queue awaits a cancelled transfer on its next
   // turn and errors the stream for good. This test fails that way if the queue
   // is not retired before the halt is cleared.
-  const { device, clearHaltCalls, deliver } = makeFakeDevice({ cancelOnClearHalt: true });
-  const port = new Ch340SerialPort(device);
-  await port.open({ baudRate: 9600 });
-  const reader = port.readable.getReader();
-  const read = reader.read();
-  await tick();
-
-  deliver({ status: "stall" });
-  await tick();
-
-  deliver({ status: "ok", data: new DataView(new Uint8Array([]).buffer) });
-  await tick();
-  deliver({ status: "ok", data: new DataView(new Uint8Array([0xaa, 0xbb, 0xcc]).buffer) });
-
-  const { value } = await read;
-  assert.deepEqual(clearHaltCalls, [{ direction: "in", endpoint: 2 }]);
-  assert.deepEqual(Array.from(value), [0xaa, 0xbb, 0xcc]);
+  await expectStallRecovery({
+    Port: Ch340SerialPort,
+    fake: makeFakeDevice({ cancelOnClearHalt: true }),
+    endpointNumber: 2,
+    payload: [0xaa, 0xbb, 0xcc],
+  });
 });
 
 test("Ch340SerialPort keeps a full pipeline of bulk IN transfers queued", async () => {
@@ -287,24 +230,7 @@ test("Ch340SerialPort keeps a full pipeline of bulk IN transfers queued", async 
   // is the stream's own high-water mark: 16 transfers are queued up front, and
   // each of the 15 pulls after the first replenishes exactly one. A shallower
   // depth, or the default queue of one, yields a smaller number.
-  const { device, deliver, transferInCalls } = makeFakeDevice();
-  const port = new Ch340SerialPort(device);
-  await port.open({ baudRate: 115200 });
-  // The stream pulls as soon as it is constructed, which primes the queue.
-  await tick();
-
-  assert.equal(transferInCalls.length, 16, "the queue must be primed to full depth");
-
-  for (let i = 0; i < 16; i += 1) {
-    deliver({ status: "ok", data: new DataView(new Uint8Array([i]).buffer) });
-    await tick();
-  }
-
-  assert.equal(
-    transferInCalls.length,
-    31,
-    "16 queued up front plus one replenished per pull, with no reader attached",
-  );
+  await expectFullPipeline({ Port: Ch340SerialPort, fake: makeFakeDevice() });
 });
 
 test("Ch340SerialPort asks for exactly one packet per bulk IN transfer", async () => {
@@ -314,14 +240,10 @@ test("Ch340SerialPort asks for exactly one packet per bulk IN transfer", async (
   // size — measured against a 512-byte request, 32-, 64- and 96-byte replies
   // never arrived at all. Throughput must come from queue depth, not from
   // asking for more bytes per transfer.
-  const { device, transferInCalls } = makeFakeDevice();
-  const port = new Ch340SerialPort(device);
-  await port.open({ baudRate: 115200 });
-  await tick();
-
-  assert.ok(transferInCalls.length > 0, "expected the read path to queue a transfer");
-  for (const call of transferInCalls) {
-    assert.equal(call.endpointNumber, 2);
-    assert.equal(call.length, 32, "bulk IN transfers must request exactly one packet");
-  }
+  await expectOnePacketPerTransfer({
+    Port: Ch340SerialPort,
+    fake: makeFakeDevice(),
+    endpointNumber: 2,
+    packetSize: 32,
+  });
 });

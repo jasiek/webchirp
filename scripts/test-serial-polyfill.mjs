@@ -1,17 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BrowserSerialBridge } from "../web/js/serial.js";
+import { withNavigator } from "./test-support/globals.mjs";
 
-function setNavigator(value) {
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value,
-  });
-}
-
-test("prefers native Web Serial when available", async () => {
+test("prefers native Web Serial when available", async (t) => {
   const nativeSerial = { requestPort: async () => ({}) };
-  setNavigator({ serial: nativeSerial, usb: {} });
+  withNavigator(t, { serial: nativeSerial, usb: {} });
 
   const bridge = new BrowserSerialBridge({
     createWebUsbSerial: () => {
@@ -25,8 +19,8 @@ test("prefers native Web Serial when available", async () => {
   assert.equal(bridge.transport, "webserial");
 });
 
-test("falls back to the WebUSB provider when only WebUSB exists", async () => {
-  setNavigator({ usb: {} });
+test("falls back to the WebUSB provider when only WebUSB exists", async (t) => {
+  withNavigator(t, { usb: {} });
 
   let created = false;
   const webUsbSerial = { requestPort: async () => ({}) };
@@ -44,10 +38,10 @@ test("falls back to the WebUSB provider when only WebUSB exists", async () => {
   assert.equal(bridge.transport, "webusb");
 });
 
-test("forcing webusb uses the WebUSB provider even when native serial exists", async () => {
+test("forcing webusb uses the WebUSB provider even when native serial exists", async (t) => {
   // Mirrors Chrome on Android: native Web Serial is present but cannot drive the
   // adapter, so the user explicitly forces the WebUSB transport.
-  setNavigator({ serial: { requestPort: async () => ({}) }, usb: {} });
+  withNavigator(t, { serial: { requestPort: async () => ({}) }, usb: {} });
 
   const webUsbSerial = { requestPort: async () => ({}) };
   const bridge = new BrowserSerialBridge({ createWebUsbSerial: () => webUsbSerial });
@@ -58,15 +52,15 @@ test("forcing webusb uses the WebUSB provider even when native serial exists", a
   assert.equal(bridge.transport, "webusb");
 });
 
-test("forcing webserial fails when native serial is unavailable", async () => {
-  setNavigator({ usb: {} });
+test("forcing webserial fails when native serial is unavailable", async (t) => {
+  withNavigator(t, { usb: {} });
   const bridge = new BrowserSerialBridge({ createWebUsbSerial: () => ({ requestPort: async () => ({}) }) });
   bridge.setPreferredTransport("webserial");
   await assert.rejects(() => bridge._ensureSerial(), /Native Web Serial is not supported/);
 });
 
-test("a failed open tears down state instead of leaving a half-open port", async () => {
-  setNavigator({ usb: {} });
+test("a failed open tears down state instead of leaving a half-open port", async (t) => {
+  withNavigator(t, { usb: {} });
   const failingPort = {
     open: async () => {
       throw new Error("boom");
@@ -84,8 +78,8 @@ test("a failed open tears down state instead of leaving a half-open port", async
   assert.equal(bridge.writer, null);
 });
 
-test("reports unsupported and refuses to open with no serial transport", async () => {
-  setNavigator({});
+test("reports unsupported and refuses to open with no serial transport", async (t) => {
+  withNavigator(t, {});
 
   const bridge = new BrowserSerialBridge();
   assert.equal(bridge.isSupported(), false);

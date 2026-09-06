@@ -12,17 +12,13 @@ import {
   isCp2102Device,
 } from "../web/js/cp2102-webusb.js";
 import { createWebUsbSerial } from "../web/js/webusb-serial.js";
-
-function setNavigator(value) {
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value });
-}
-
-function bytesOf(data) {
-  if (!data) {
-    return null;
-  }
-  return Array.from(new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength));
-}
+import { bytesOf, makeFakeUsbDevice } from "./test-support/fake-usb.mjs";
+import { withNavigator } from "./test-support/globals.mjs";
+import {
+  expectFullPipeline,
+  expectOnePacketPerTransfer,
+  expectStallRecovery,
+} from "./test-support/usb-read-path.mjs";
 
 // Fake USBDevice for a CP2102: a bulk pair on interface 0, recording every
 // control transfer and answering the part-number and flow-control reads.
@@ -37,35 +33,19 @@ function makeFakeDevice({
 } = {}) {
   const controlIn = [];
   const controlOut = [];
-  const clearHaltCalls = [];
-  const transferInCalls = [];
   const transferOutCalls = [];
   // Results the fake hands back for the next bulk OUT transfers, oldest first;
   // anything past the end of the list is a full, successful write.
   const outResults = [];
-  // Transfers the driver has queued that the fake has not answered yet.
-  const outstanding = [];
-  const device = {
+  const fake = makeFakeUsbDevice({
     vendorId: 0x10c4,
     productId: 0xea60,
-    configuration: {
-      interfaces: [
-        {
-          interfaceNumber,
-          alternate: {
-            endpoints: endpoints || [
-              { type: "bulk", direction: "out", endpointNumber: 1, packetSize: 64 },
-              { type: "bulk", direction: "in", endpointNumber: 1, packetSize: 64 },
-            ],
-          },
-        },
-      ],
-    },
-    open: async () => {},
-    selectConfiguration: async () => {},
-    claimInterface: async () => {},
-    releaseInterface: async () => {},
-    close: async () => {},
+    endpoints: endpoints || [
+      { type: "bulk", direction: "out", endpointNumber: 1, packetSize: 64 },
+      { type: "bulk", direction: "in", endpointNumber: 1, packetSize: 64 },
+    ],
+    interfaceNumber,
+    cancelOnClearHalt,
     controlTransferIn: async (setup, length) => {
       controlIn.push({ ...setup, length });
       if (setup.request === 0xff) { // VENDOR_SPECIFIC / GET_PARTNUM
@@ -93,55 +73,16 @@ function makeFakeDevice({
       });
       return { status: "ok" };
     },
-    clearHalt: async (direction, endpoint) => {
-      clearHaltCalls.push({ direction, endpoint });
-      if (cancelOnClearHalt) {
-        // Chromium cancels every transfer outstanding on the interface before
-        // it clears the endpoint, and Blink rejects a cancelled transfer with
-        // AbortError rather than completing it with a status.
-        for (const transfer of outstanding.splice(0)) {
-          transfer.reject(Object.assign(
-            new Error("The transfer was cancelled."),
-            { name: "AbortError" },
-          ));
-        }
-      }
-    },
-    transferIn: async (endpointNumber, length) => {
-      transferInCalls.push({ endpointNumber, length });
-      // Left unanswered until the test delivers a result, the way real hardware
-      // leaves a transfer pending until bytes arrive.
-      return new Promise((resolve, reject) => {
-        outstanding.push({ resolve, reject });
-      });
-    },
     transferOut: async (endpointNumber, data) => {
-      transferOutCalls.push({ endpointNumber, bytes: Array.from(new Uint8Array(
-        data.buffer || data,
-        data.byteOffset || 0,
-        data.byteLength ?? data.length,
-      )) });
+      transferOutCalls.push({ endpointNumber, bytes: bytesOf(data) });
       const next = outResults.shift();
       if (next) {
         return next;
       }
       return { status: "ok", bytesWritten: data.byteLength ?? data.length };
     },
-  };
-  // Answer the oldest unanswered transfer — bulk transfers on one endpoint
-  // complete in the order they were issued.
-  const deliver = (result) => {
-    outstanding.shift()?.resolve(result);
-  };
-  return {
-    device, controlIn, controlOut, clearHaltCalls, transferInCalls,
-    transferOutCalls, outResults, deliver,
-  };
-}
-
-// Let the stream's pull run: it is invoked off a microtask and awaits transfers.
-function tick() {
-  return new Promise((resolve) => { setTimeout(resolve, 0); });
+  });
+  return { ...fake, controlIn, controlOut, transferOutCalls, outResults };
 }
 
 // The 16-byte GET_FLOW/SET_FLOW block, as four little-endian u32s.
@@ -258,9 +199,9 @@ test("a Silicon Labs device that enumerates as CDC belongs to the polyfill", () 
   assert.ok(hasCdcInterface({ vendorId: 0x10c4, deviceClass: 0x02 }));
 });
 
-test("WebUSB provider dispatches CP2102 devices to the CP2102 driver", async () => {
+test("WebUSB provider dispatches CP2102 devices to the CP2102 driver", async (t) => {
   let requestedOptions = null;
-  setNavigator({
+  withNavigator(t, {
     usb: {
       requestDevice: async (options) => {
         requestedOptions = options;
@@ -285,8 +226,8 @@ test("WebUSB provider dispatches CP2102 devices to the CP2102 driver", async () 
   );
 });
 
-test("WebUSB provider sends a CDC Silicon Labs device to the polyfill", async () => {
-  setNavigator({
+test("WebUSB provider sends a CDC Silicon Labs device to the polyfill", async (t) => {
+  withNavigator(t, {
     usb: {
       requestDevice: async () => ({
         vendorId: 0x10c4,
@@ -501,25 +442,15 @@ test("Cp2102SerialPort read path clears a stalled IN endpoint and passes raw byt
   // rejected promise (AbortError), not as a result carrying a status, so a read
   // path that keeps the pre-stall queue awaits a cancelled transfer on its next
   // turn and errors the stream for good.
-  const { device, clearHaltCalls, deliver } = makeFakeDevice({ cancelOnClearHalt: true });
-  const port = new Cp2102SerialPort(device);
-  await port.open({ baudRate: 9600 });
-  const reader = port.readable.getReader();
-  const read = reader.read();
-  await tick();
-
-  deliver({ status: "stall" });
-  await tick();
-
-  deliver({ status: "ok", data: new DataView(new Uint8Array([]).buffer) });
-  await tick();
-  deliver({ status: "ok", data: new DataView(new Uint8Array([0xec, 0x11, 0x13]).buffer) });
-
-  const { value } = await read;
-  assert.deepEqual(clearHaltCalls, [{ direction: "in", endpoint: 1 }]);
+  //
   // 0xEC is the escape byte event-insertion mode would have eaten, and
   // 0x11/0x13 are what software flow control would have eaten.
-  assert.deepEqual(Array.from(value), [0xec, 0x11, 0x13]);
+  await expectStallRecovery({
+    Port: Cp2102SerialPort,
+    fake: makeFakeDevice({ cancelOnClearHalt: true }),
+    endpointNumber: 1,
+    payload: [0xec, 0x11, 0x13],
+  });
 });
 
 test("Cp2102SerialPort keeps a full pipeline of bulk IN transfers queued", async () => {
@@ -534,24 +465,7 @@ test("Cp2102SerialPort keeps a full pipeline of bulk IN transfers queued", async
   // mark: 16 transfers are queued up front, and each of the 15 pulls after the
   // first replenishes exactly one. A shallower depth, or the default queue of
   // one, yields a smaller number.
-  const { device, deliver, transferInCalls } = makeFakeDevice();
-  const port = new Cp2102SerialPort(device);
-  await port.open({ baudRate: 115200 });
-  // The stream pulls as soon as it is constructed, which primes the queue.
-  await tick();
-
-  assert.equal(transferInCalls.length, 16, "the queue must be primed to full depth");
-
-  for (let i = 0; i < 16; i += 1) {
-    deliver({ status: "ok", data: new DataView(new Uint8Array([i]).buffer) });
-    await tick();
-  }
-
-  assert.equal(
-    transferInCalls.length,
-    31,
-    "16 queued up front plus one replenished per pull, with no reader attached",
-  );
+  await expectFullPipeline({ Port: Cp2102SerialPort, fake: makeFakeDevice() });
 });
 
 test("Cp2102SerialPort asks for exactly one packet per bulk IN transfer", async () => {
@@ -560,16 +474,12 @@ test("Cp2102SerialPort asks for exactly one packet per bulk IN transfer", async 
   // silicon that does not terminate a multi-packet transfer it strands every
   // reply whose length is an exact multiple of the packet size — the shape of
   // a fixed-size CHIRP clone block.
-  const { device, transferInCalls } = makeFakeDevice();
-  const port = new Cp2102SerialPort(device);
-  await port.open({ baudRate: 115200 });
-  await tick();
-
-  assert.ok(transferInCalls.length > 0, "expected the read path to queue a transfer");
-  for (const call of transferInCalls) {
-    assert.equal(call.endpointNumber, 1);
-    assert.equal(call.length, 64, "bulk IN transfers must request exactly one packet");
-  }
+  await expectOnePacketPerTransfer({
+    Port: Cp2102SerialPort,
+    fake: makeFakeDevice(),
+    endpointNumber: 1,
+    packetSize: 64,
+  });
 });
 
 test("Cp2102SerialPort.close() purges the FIFOs and disables the UART", async () => {
