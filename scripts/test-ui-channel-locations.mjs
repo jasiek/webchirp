@@ -140,16 +140,12 @@ class FakeElement {
 
 function installFakeDom() {
   const elements = new Map();
-  const tagFor = (selector) =>
-    selector.includes("select") || selector === "#radio-make" || selector === "#radio-model"
-      ? "select"
-      : "div";
   const document = {
     cookie: "",
     querySelector(selector) {
       const key = String(selector);
       if (!elements.has(key)) {
-        elements.set(key, new FakeElement(tagFor(key)));
+        elements.set(key, new FakeElement("div"));
       }
       return elements.get(key);
     },
@@ -251,6 +247,21 @@ function tableLocations(document) {
   return channelRows(document).map((tr) => tr.children[0]?.children[0]?.textContent ?? "");
 }
 
+// Pick the stubbed radio the way the UI requires: type into the search box and
+// accept the pre-highlighted first suggestion. Without this no radio is
+// selected, so the driver's column metadata is never fetched.
+function selectStubbedRadio(document, query) {
+  const searchEl = document.querySelector("#radio-search");
+  searchEl.value = query;
+  searchEl.dispatchEvent({ type: "input" });
+  searchEl.dispatchEvent({
+    type: "keydown",
+    key: "Enter",
+    preventDefault() {},
+    stopPropagation() {},
+  });
+}
+
 // Boot the UI with a stubbed runtime whose driver reports `bounds` as the
 // Location column's range, then load `rows` through the CSV import path.
 async function bootWithRows(rows, bounds = { min: 0, max: 127 }) {
@@ -271,6 +282,8 @@ async function bootWithRows(rows, bounds = { min: 0, max: 127 }) {
     parseCsv: async () => ({ headers: HEADERS, rows: rows.map((row) => ({ ...row })), errors: [] }),
   });
   await ui.init(true);
+  selectStubbedRadio(document, "Acme One");
+  await flushMicrotasks();
   const fileInput = document.querySelector("#csv-file");
   fileInput.files = [{ name: "sample.csv", text: async () => "" }];
   fileInput.dispatchEvent({ type: "change" });

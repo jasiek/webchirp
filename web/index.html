@@ -127,14 +127,20 @@
             <summary class="left-panel-summary">Serial Bridge</summary>
             <p id="live-radio-support-warning" class="serial-support-warning" hidden>
               Live-mode radios are not supported in this UI at the moment. Select a clone-mode
-              radio to use Connect, Download Radio, and Upload Radio.
+              radio to use this app.
             </p>
+            <div id="radio-selection" class="radio-selection is-empty">
+              <span class="radio-selection-caption">Selected radio</span>
+              <strong id="radio-selection-name" class="radio-selection-name" aria-live="polite"
+                >No radio model selected</strong
+              >
+            </div>
             <label for="radio-search">Search radios</label>
             <div class="radio-search-wrap">
               <input
                 id="radio-search"
                 type="search"
-                placeholder="Type a make or model…"
+                placeholder="Search make, model or alias…"
                 autocomplete="off"
                 role="combobox"
                 aria-expanded="false"
@@ -144,17 +150,13 @@
               />
               <ul id="radio-search-results" class="radio-search-results" role="listbox" hidden></ul>
             </div>
-            <label for="radio-make">Radio make</label>
-            <select id="radio-make" disabled></select>
-            <label for="radio-model">Radio model</label>
-            <select id="radio-model" disabled></select>
             <div class="serial-actions">
               <button id="serial-connect-toggle" disabled>Connect via WebSerial</button>
               <button id="serial-connect-webusb" disabled hidden>Connect via WebUSB</button>
             </div>
             <div class="serial-actions">
-              <button id="radio-download" disabled>Download Radio</button>
-              <button id="radio-upload" disabled>Upload Radio</button>
+              <button id="radio-download" disabled>Load from radio</button>
+              <button id="radio-upload" disabled>Save to radio</button>
             </div>
             <div id="clone-progress" class="clone-progress" hidden>
               <div class="clone-progress-text">
@@ -451,9 +453,8 @@
           <h2 id="unsupported-browser-ios-title">iPhone and iPad are not supported yet</h2>
           <p>
             Every browser on iOS and iPadOS is built on Apple's WebKit engine,
-            which offers neither Web Serial nor WebUSB — so installing Chrome,
-            Edge or Firefox here will not help. Connect, Download Radio and
-            Upload Radio cannot work on this device today.
+            which offers neither Web Serial nor WebUSB - so installing Chrome,
+            Edge or Firefox here will not help.
           </p>
           <p>
             We are working on a workaround so that iOS devices can talk to
@@ -472,8 +473,7 @@
           <h2 id="unsupported-browser-serial-title">This browser cannot program radios</h2>
           <p>
             WebCHIRP talks to radios through Web Serial, or WebUSB as a fallback,
-            and this browser provides neither — so Connect, Download Radio and
-            Upload Radio will not work here.
+            and this browser provides neither. This app won't work with this browser.
           </p>
           <p>
             To program a radio, open this page in a browser with
@@ -494,7 +494,7 @@
             it, so drivers will fail to load and most of the app will not work.
           </p>
           <p>
-            Recent versions of Firefox, Chrome and Edge all support it — if you
+            Recent versions of Firefox, Chrome and Edge all support it - if you
             are on an older Firefox, updating it also adds the Web Serial
             support needed to program radios.
           </p>

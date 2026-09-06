@@ -40,8 +40,9 @@ export const REQUIRED_ELEMENTS = {
   liveRadioSupportWarningEl: "#live-radio-support-warning",
   radioSearchEl: "#radio-search",
   radioSearchResultsEl: "#radio-search-results",
-  radioMakeEl: "#radio-make",
-  radioModelEl: "#radio-model",
+  // The sidebar readout of which radio the app is currently working with.
+  radioSelectionEl: "#radio-selection",
+  radioSelectionNameEl: "#radio-selection-name",
   serialConnectToggleEl: "#serial-connect-toggle",
   webusbConnectToggleEl: "#serial-connect-webusb",
   radioDownloadEl: "#radio-download",
@@ -99,7 +100,7 @@ export const REQUIRED_ELEMENTS = {
 // Resolved with querySelectorAll. Matching nothing is not an error: these are
 // whole-group lookups, not identified elements.
 export const ELEMENT_COLLECTIONS = {
-  sidebarControlEls: ".left-panel select, .left-panel button, .left-panel input",
+  sidebarControlEls: ".left-panel button, .left-panel input",
 };
 
 // Single place where the UI resolves its document elements. Every module
