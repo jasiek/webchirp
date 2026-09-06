@@ -183,6 +183,35 @@ test("a repeater-perspective tone the repeater only transmits is not sent by the
   assert.equal(row.cToneFreq, "88.5");
 });
 
+test("a one-sided entry falls back to its known frequency instead of inventing a split", () => {
+  // parseQrgMhz yields NaN for an absent <qrg>, which is what makes the
+  // receive/transmit fallbacks below reachable at all. When the parser handed
+  // back Number("") === 0 the fallbacks were dead and the missing side was
+  // treated as a real 0 MHz frequency, so a lone 145.6 tx became Duplex "-"
+  // with a 145.600000 offset (radio perspective lost the row outright).
+  for (const perspective of ["repeater", "radio"]) {
+    const { rows: [row], skipped } = buildPrzemiennikiRows(
+      [{ qra: "SRONE", mode: "fm", qrgRx: NaN, qrgTx: 145.6 }],
+      rowHooks(),
+      { perspective },
+    );
+    assert.equal(row.Frequency, "145.600000", perspective);
+    assert.equal(row.Duplex, "", perspective);
+    assert.equal(row.Offset, "0.000000", perspective);
+    assert.deepEqual(skipped, [], perspective);
+  }
+});
+
+test("an entry with neither frequency is skipped rather than written as 0 MHz", () => {
+  const { rows, skipped } = buildPrzemiennikiRows(
+    [{ qra: "SRNONE", mode: "fm", qrgRx: NaN, qrgTx: NaN }],
+    rowHooks(),
+    { perspective: "radio" },
+  );
+  assert.deepEqual(rows, []);
+  assert.deepEqual(skipped, [{ repeater: "SRNONE", reason: "frequency" }]);
+});
+
 test("IRTS mode names map to CHIRP's DMR and Fusion values", () => {
   const base = { qra: "EI7TEST", qrgRx: 439.5, qrgTx: 430.5 };
   const { rows, skipped } = buildPrzemiennikiRows(
