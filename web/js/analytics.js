@@ -71,7 +71,7 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
   {
     parameterName: "method",
     displayName: "Selection method",
-    description: "How a radio came to be selected: search, dropdown, a restored cookie, or detection from a loaded image.",
+    description: "How a radio came to be selected: the model dropdown, a make change defaulting one, the search box, or detection from a loaded image.",
     scope: "EVENT",
   },
   {
