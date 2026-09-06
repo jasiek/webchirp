@@ -9,6 +9,7 @@ import {
   findCatalogRadioForImageMetadata,
   loadImageWithDriverFallback,
 } from "./image-metadata.mjs";
+import { createRuntimeBootstrap, isBootstrapFailure } from "./runtime-bootstrap.mjs";
 import {
   createBrowserCdnPythonSource,
   DEFAULT_CHIRP_REVISION,
@@ -26,7 +27,6 @@ const pythonSource = createBrowserCdnPythonSource({
 });
 
 let pyodide;
-let bootstrapPromise;
 let radioCatalogCache = null;
 // Which path filled radioCatalogCache: "static" (prebuilt file) or "sources"
 // (every driver imported in Pyodide). Reported to callers because the fallback
@@ -35,7 +35,11 @@ let radioCatalogCache = null;
 let radioCatalogSource = "";
 let allDriverModulesPromise = null;
 let handleSerialRpc = null;
-let bootstrapFailed = false;
+// Latches so one broken bootstrap produces one crash report rather than one per
+// queued call. Cleared again on a successful bootstrap, because it is a
+// per-failure guard, not a per-session one: leaving it set meant a spurious
+// early failure permanently silenced the report for a genuine crash later.
+let bootstrapCrashReported = false;
 let debugLog = null;
 let beginProgress = null;
 
@@ -273,16 +277,22 @@ async function loadRadioCatalog() {
 }
 
 // Lazily initialize Pyodide, preload core CHIRP files, and load runtime bridge.
-async function ensurePyodide() {
-  if (!bootstrapPromise) {
-    bootstrapPromise = (async () => {
-      installSerialBridgeGlobals();
-      pyodide = await loadPyodide({ indexURL: PYODIDE_INDEX_URL });
-      await seedPyodideRuntime(pyodide, pythonSource);
-    })();
-  }
+// The handle is returned rather than assigned mid-sequence so that nothing can
+// observe a runtime that loaded but failed to seed.
+const runtimeBootstrap = createRuntimeBootstrap({
+  async loadRuntime() {
+    installSerialBridgeGlobals();
+    const loaded = await loadPyodide({ indexURL: PYODIDE_INDEX_URL });
+    await seedPyodideRuntime(loaded, pythonSource);
+    return loaded;
+  },
+});
 
-  return bootstrapPromise;
+async function ensurePyodide() {
+  pyodide = await runtimeBootstrap.ensure();
+  // A working runtime ends the failure episode, so a later crash reports again.
+  bootstrapCrashReported = false;
+  return pyodide;
 }
 
 async function requirePyodide() {
@@ -535,8 +545,13 @@ export function createRuntimeRpcClient({
           throw createPortSelectionCancelledError();
         }
 
-        if (!bootstrapFailed && !pyodide && onRuntimeCrash) {
-          bootstrapFailed = true;
+        // Only the bootstrap itself is a runtime crash. This used to test the
+        // unset pyodide handle, which stood in for "bootstrap failed" but in
+        // fact meant "not assigned yet" -- so a failed driver-index fetch
+        // (plain HTTP, no Pyodide involved) was reported as a crash, and a
+        // failure seeding the bridge was not reported at all.
+        if (isBootstrapFailure(error) && !bootstrapCrashReported && onRuntimeCrash) {
+          bootstrapCrashReported = true;
           onRuntimeCrash(detailedError);
         }
         if (logDebug) {
