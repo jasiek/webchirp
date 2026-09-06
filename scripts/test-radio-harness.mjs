@@ -507,13 +507,20 @@ export class TestRadioHarness {
     return this;
   }
 
-  async runPythonJson(python, vars = {}) {
+  // Run Python in the seeded runtime and hand back whatever the last
+  // expression evaluates to. Exists so tests that want a bare call -- an
+  // import that is expected to raise, say -- do not have to reach into
+  // harness.pyodide for it. vars are bound as Python globals first.
+  async runPython(python, vars = {}) {
     await this.init();
     for (const [key, value] of Object.entries(vars)) {
       this.pyodide.globals.set(key, value);
     }
-    const jsonText = await this.pyodide.runPythonAsync(python);
-    return JSON.parse(jsonText);
+    return this.pyodide.runPythonAsync(python);
+  }
+
+  async runPythonJson(python, vars = {}) {
+    return JSON.parse(await this.runPython(python, vars));
   }
 
   async getRadioInfo(moduleName, className) {
@@ -639,7 +646,48 @@ json.dumps({
   }
 }
 
+// Booted harnesses by their serializable options, so a test file that asks
+// for the same runtime from several tests gets one boot rather than one per
+// test. Holds the init() promise, not the harness, so concurrent first calls
+// share a single boot too.
+const sharedHarnesses = new Map();
+
+// The cache key: everything that shapes the runtime and can be compared by
+// value. A custom serialBridge is an object identity, so it is never keyed.
+function harnessCacheKey({ repoRoot, chirpDir = "", portPath = "", serialMode = "stub" } = {}) {
+  return JSON.stringify({
+    repoRoot: path.resolve(String(repoRoot || process.cwd())),
+    chirpDir: String(chirpDir || ""),
+    portPath: String(portPath || ""),
+    serialMode: String(serialMode || "stub"),
+  });
+}
+
+// Sharing is the default for two reasons. A Pyodide boot plus the runtime seed
+// costs about 1.3 s, and a file with eight tests was paying that eight times
+// over. And every boot writes the serial_* and fetch_chirp_source callables to
+// globalThis, so the second harness in a process repoints those globals at its
+// own bridge; the first harness's Python keeps the callables it bound at seed
+// time, but anything in JS that reads them afterwards sees the newest bridge.
+// One harness per option set sidesteps both.
+//
+// Pass isolated: true for a fresh boot when a test mutates Python state that a
+// later test in the same file must not see -- importing every driver, say,
+// when the next test asserts that a driver is still absent. A custom
+// serialBridge always gets its own harness, since the bridge is the point.
 export async function createTestRadioHarness(options = {}) {
-  const harness = new TestRadioHarness(options);
-  return harness.init();
+  const { isolated = false, ...harnessOptions } = options;
+  if (isolated || harnessOptions.serialBridge) {
+    return new TestRadioHarness(harnessOptions).init();
+  }
+  const key = harnessCacheKey(harnessOptions);
+  if (!sharedHarnesses.has(key)) {
+    const booting = new TestRadioHarness(harnessOptions).init().catch((error) => {
+      // A failed boot must not be handed to every later caller.
+      sharedHarnesses.delete(key);
+      throw error;
+    });
+    sharedHarnesses.set(key, booting);
+  }
+  return sharedHarnesses.get(key);
 }
