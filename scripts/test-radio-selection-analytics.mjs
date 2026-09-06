@@ -24,12 +24,27 @@ class FakeElement {
     this._textContent = "";
   }
 
+  // Mirrors how a real select resolves its value with nothing assigned: an
+  // explicitly selected option wins, and otherwise the browser falls back to
+  // the first ENABLED option. Returning children[0] regardless -- as this fake
+  // used to -- hides the whole reason the placeholder carries selected as well
+  // as disabled: without that flag a real select would skip the disabled
+  // placeholder and report the first vendor, which is the implicit default
+  // this PR removes.
+  selectedValue() {
+    if (this._value) {
+      return this._value;
+    }
+    const selected = this.children.find((child) => child.selected);
+    if (selected) {
+      return selected.value || "";
+    }
+    return this.children.find((child) => !child.disabled)?.value || "";
+  }
+
   get value() {
-    // Mirrors a real <select>: with nothing explicitly selected it reports its
-    // first option, which is why an unselected state needs a placeholder
-    // option carrying an empty value.
-    if (this.tagName === "SELECT" && !this._value) {
-      return this.children[0]?.value || "";
+    if (this.tagName === "SELECT") {
+      return this.selectedValue();
     }
     return this._value;
   }
