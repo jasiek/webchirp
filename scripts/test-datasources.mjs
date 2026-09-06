@@ -8,8 +8,22 @@ import {
 } from "../web/js/datasources.js";
 import { rowGeo } from "../web/js/row-geo.js";
 
-function rowHooks({ modeOptions = ["FM", "DV", "DMR", "DN"], maxFrequencyMhz = Infinity } = {}) {
-  const columns = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Comment"];
+// toneModes/crossModes stand in for the driver's valid_tmodes and
+// valid_cross_modes. They are separate knobs because a real driver can offer a
+// full CrossMode option list while its Tone column has no "Cross" at all —
+// valid_cross_modes defaults to the complete list regardless of has_cross — and
+// the builder has to gate on the Tone column rather than on CrossMode.
+function rowHooks({
+  modeOptions = ["FM", "DV", "DMR", "DN"],
+  toneModes = ["", "Tone", "TSQL", "DTCS", "Cross"],
+  crossModes = ["Tone->Tone", "->Tone", "Tone->", "DTCS->", "->DTCS"],
+  maxFrequencyMhz = Infinity,
+} = {}) {
+  const columns = [
+    "Name", "Frequency", "Duplex", "Offset",
+    "Tone", "rToneFreq", "cToneFreq", "CrossMode",
+    "Mode", "Comment",
+  ];
   return {
     createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
     setRowValue: (row, column, value) => {
@@ -25,10 +39,22 @@ function rowHooks({ modeOptions = ["FM", "DV", "DMR", "DN"], maxFrequencyMhz = I
       row[column] = String(value ?? "");
     },
     findEnumOption: (column, choices) => {
-      const options = column === "Mode" ? modeOptions : ["Tone", "TSQL"];
+      const optionsByColumn = { Mode: modeOptions, Tone: toneModes, CrossMode: crossModes };
+      const options = optionsByColumn[column] || [];
       return choices.find((choice) => options.includes(choice)) || "";
     },
   };
+}
+
+// Build one repeater and hand back its row, so a tone case reads as its inputs
+// and its expectations rather than as scaffolding.
+function toneRow(repeater, { perspective = "repeater", ...hookOptions } = {}) {
+  const { rows: [row] } = buildPrzemiennikiRows(
+    [{ qra: "SRTEST", mode: "fm", qrgRx: 145.0, qrgTx: 145.6, ...repeater }],
+    rowHooks(hookOptions),
+    { perspective },
+  );
+  return row;
 }
 
 test("buildRepeaterEndpoints derives every remote source URL from a base", () => {
@@ -97,7 +123,7 @@ test("IRTS radio-perspective frequencies build a usable CHIRP channel", () => {
       latitude: 53.229167,
       longitude: -6.208333,
     },
-  ], rowHooks(), { qrgPerspective: "radio" });
+  ], rowHooks(), { perspective: "radio" });
 
   assert.equal(row.Name, "EI2TRR");
   assert.equal(row.Frequency, "145.600000");
@@ -110,22 +136,148 @@ test("IRTS radio-perspective frequencies build a usable CHIRP channel", () => {
   assert.deepEqual(skipped, []);
 });
 
+// The tone cases below assert Tone/CrossMode as well as the frequencies,
+// because a tone the mode does not encode is inert: split_tone_encode reads
+// rToneFreq only under "Tone", cToneFreq only under "TSQL", and both only
+// under "Cross". Feed-relative rx/tx is named per case; "transmit"/"receive"
+// always mean the radio's side.
+
+test("a repeater-perspective access tone becomes the tone the radio transmits", () => {
+  // przemienniki.net labels CTCSS from the repeater's side, so type="rx" is
+  // the tone the repeater listens for and the radio has to send. Reading it as
+  // a receive tone leaves Tone blank and the repeater never opens. 77 of the
+  // 646 live Polish records have exactly this shape.
+  const row = toneRow({ ctcssRx: "88.5", ctcssTx: "" });
+
+  assert.equal(row.Frequency, "145.600000");
+  assert.equal(row.Tone, "Tone");
+  assert.equal(row.rToneFreq, "88.5");
+  assert.equal(row.cToneFreq, "");
+});
+
+test("a repeater-perspective tone the repeater only transmits is received, not sent", () => {
+  // Tone-transmitting, carrier-access repeater (live: SR7W, SR8NP). Only Cross
+  // encodes a receive tone with no transmit tone; cToneFreq alone would leave
+  // Tone blank and the radio would neither send nor squelch on anything.
+  const row = toneRow({ ctcssRx: "", ctcssTx: "88.5" });
+
+  assert.equal(row.Tone, "Cross");
+  assert.equal(row.CrossMode, "->Tone");
+  assert.equal(row.rToneFreq, "");
+  assert.equal(row.cToneFreq, "88.5");
+});
+
+test("a matching tone pair becomes TSQL, which encodes both directions", () => {
+  const row = toneRow({ ctcssRx: "88.5", ctcssTx: "88.5" });
+
+  assert.equal(row.Tone, "TSQL");
+  assert.equal(row.cToneFreq, "88.5");
+});
+
+test("a split repeater-perspective pair becomes Cross with both sides swapped", () => {
+  const row = toneRow({ ctcssRx: "88.5", ctcssTx: "110.9" });
+
+  assert.equal(row.Tone, "Cross");
+  assert.equal(row.CrossMode, "Tone->Tone");
+  assert.equal(row.rToneFreq, "88.5");
+  assert.equal(row.cToneFreq, "110.9");
+});
+
+test("radio-perspective tones keep rx as receive and tx as transmit", () => {
+  const row = toneRow(
+    { ctcssRx: "110.9", ctcssTx: "88.5" },
+    { perspective: "radio" },
+  );
+
+  assert.equal(row.Tone, "Cross");
+  assert.equal(row.CrossMode, "Tone->Tone");
+  assert.equal(row.rToneFreq, "88.5");
+  assert.equal(row.cToneFreq, "110.9");
+});
+
+test("a radio without Cross keeps the access tone rather than the receive tone", () => {
+  // The transmit half decides whether the channel works at all, so a split
+  // pair collapses onto it instead of onto the receive squelch.
+  const row = toneRow(
+    { ctcssRx: "88.5", ctcssTx: "110.9" },
+    { toneModes: ["", "Tone", "TSQL"] },
+  );
+
+  assert.equal(row.Tone, "Tone");
+  assert.equal(row.rToneFreq, "88.5");
+  assert.equal(row.cToneFreq, "");
+});
+
+test("a radio without Cross still gets the receive squelch through TSQL", () => {
+  // Nothing to key this repeater with, so TSQL costs only an unrequested
+  // transmit tone and delivers the squelch the directory advertised.
+  const row = toneRow(
+    { ctcssRx: "", ctcssTx: "88.5" },
+    { toneModes: ["", "Tone", "TSQL"] },
+  );
+
+  assert.equal(row.Tone, "TSQL");
+  assert.equal(row.cToneFreq, "88.5");
+});
+
+test("a full CrossMode list does not imply the radio can hold a split pair", () => {
+  // valid_cross_modes stays fully populated even when has_cross is false, so
+  // the Tone column is the only honest gate.
+  const row = toneRow(
+    { ctcssRx: "88.5", ctcssTx: "110.9" },
+    { toneModes: ["", "Tone", "TSQL"], crossModes: ["Tone->Tone", "->Tone"] },
+  );
+
+  assert.equal(row.Tone, "Tone");
+  assert.equal(row.CrossMode, "");
+});
+
+test("a radio with only TSQL still transmits a matching pair's tone", () => {
+  const row = toneRow(
+    { ctcssRx: "88.5", ctcssTx: "88.5" },
+    { toneModes: ["", "Tone"] },
+  );
+
+  assert.equal(row.Tone, "Tone");
+  assert.equal(row.rToneFreq, "88.5");
+});
+
+test("a non-CTCSS ctcss body is no tone, not a tone mode with a default tone", () => {
+  // RepeaterBook puts "CSQ", "Restricted" and DTCS codes in the same element.
+  // Treating them as tones sets a tone mode whose frequency setRowValue then
+  // rejects, leaving the radio transmitting a default the feed never named.
+  for (const value of ["CSQ", "Restricted", "D023", "0", "  "]) {
+    const row = toneRow({ ctcssRx: value, ctcssTx: "" });
+    assert.equal(row.Tone, "", value);
+    assert.equal(row.rToneFreq, "", value);
+    assert.equal(row.cToneFreq, "", value);
+  }
+});
+
+test("a CSQ on one side leaves the other side as a plain single-direction tone", () => {
+  const row = toneRow({ ctcssRx: "CSQ", ctcssTx: "88.5" });
+
+  assert.equal(row.Tone, "Cross");
+  assert.equal(row.CrossMode, "->Tone");
+  assert.equal(row.cToneFreq, "88.5");
+});
+
 test("a one-sided entry falls back to its known frequency instead of inventing a split", () => {
   // parseQrgMhz yields NaN for an absent <qrg>, which is what makes the
   // receive/transmit fallbacks below reachable at all. When the parser handed
   // back Number("") === 0 the fallbacks were dead and the missing side was
   // treated as a real 0 MHz frequency, so a lone 145.6 tx became Duplex "-"
   // with a 145.600000 offset (radio perspective lost the row outright).
-  for (const qrgPerspective of ["repeater", "radio"]) {
+  for (const perspective of ["repeater", "radio"]) {
     const { rows: [row], skipped } = buildPrzemiennikiRows(
       [{ qra: "SRONE", mode: "fm", qrgRx: NaN, qrgTx: 145.6 }],
       rowHooks(),
-      { qrgPerspective },
+      { perspective },
     );
-    assert.equal(row.Frequency, "145.600000", qrgPerspective);
-    assert.equal(row.Duplex, "", qrgPerspective);
-    assert.equal(row.Offset, "0.000000", qrgPerspective);
-    assert.deepEqual(skipped, [], qrgPerspective);
+    assert.equal(row.Frequency, "145.600000", perspective);
+    assert.equal(row.Duplex, "", perspective);
+    assert.equal(row.Offset, "0.000000", perspective);
+    assert.deepEqual(skipped, [], perspective);
   }
 });
 
@@ -133,7 +285,7 @@ test("an entry with neither frequency is skipped rather than written as 0 MHz", 
   const { rows, skipped } = buildPrzemiennikiRows(
     [{ qra: "SRNONE", mode: "fm", qrgRx: NaN, qrgTx: NaN }],
     rowHooks(),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
   assert.deepEqual(rows, []);
   assert.deepEqual(skipped, [{ repeater: "SRNONE", reason: "frequency" }]);
@@ -144,7 +296,7 @@ test("IRTS mode names map to CHIRP's DMR and Fusion values", () => {
   const { rows, skipped } = buildPrzemiennikiRows(
     [{ ...base, mode: "dmr" }, { ...base, mode: "fusion" }],
     rowHooks(),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
   assert.deepEqual(rows.map((row) => row.Mode), ["DMR", "DN"]);
   assert.deepEqual(skipped, []);
@@ -155,7 +307,7 @@ test("unsupported digital modes are skipped instead of retaining FM or substitut
   const { rows, skipped } = buildPrzemiennikiRows(
     [{ ...base, mode: "dmr" }, { ...base, qra: "EI7FUS", mode: "fusion" }],
     rowHooks({ modeOptions: ["FM", "DIG"] }),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
   assert.deepEqual(rows, []);
   assert.deepEqual(skipped, [
@@ -174,7 +326,7 @@ test("a repeater outside the radio's bands is skipped, not left as a blank frequ
       { qra: "SR70cm", mode: "fm", qrgRx: 438.6, qrgTx: 431.0 },
     ],
     rowHooks({ maxFrequencyMhz: 174 }),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
 
   assert.deepEqual(rows.map((row) => row.Name), ["SR2m"]);
@@ -185,7 +337,7 @@ test("a repeater with no usable frequency at all is skipped", () => {
   const { rows, skipped } = buildPrzemiennikiRows(
     [{ qra: "SR0", mode: "fm" }],
     rowHooks(),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
 
   assert.deepEqual(rows, []);
@@ -198,7 +350,7 @@ test("an out-of-band repeater is reported as frequency, not as an unusable mode"
   const { rows, skipped } = buildPrzemiennikiRows(
     [{ qra: "SRDMR", mode: "dmr", qrgRx: 1298.0, qrgTx: 1270.0 }],
     rowHooks({ modeOptions: ["FM"], maxFrequencyMhz: 470 }),
-    { qrgPerspective: "radio" },
+    { perspective: "radio" },
   );
 
   assert.deepEqual(rows, []);
