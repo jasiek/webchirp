@@ -31,6 +31,13 @@ const POWER_ROUND_TRIP_IMAGES = [
 const SPLIT_DUPLEX_IMAGES = ["Baofeng_UV-5R.img", "Anysecu_WP-9900.img"];
 const MIGRATED_IMAGE_FIXTURES = ["Icom_ID-5100.img", "Icom_ID-51_Plus2.img"];
 const LOSSY_IMMUTABLE_POWER_FIXTURES = ["Retevis_RB618.img", "Retevis_RT647.img"];
+const HISTORICALLY_LOSSY_NO_OP_FIXTURES = [
+  "Icom_ID-51_Plus2.img",
+  "Radioddity_GM-30.img",
+  "Yaesu_FTM-7250D_R.img",
+  "Anysecu_UV-A37.img",
+  "BTECH_GMRS-20V2.img",
+];
 
 async function loadImageFor(harness, catalog, name) {
   const raw = await fs.readFile(path.join(imagesDir, name));
@@ -51,6 +58,37 @@ async function readCatalog() {
   const text = await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8");
   return JSON.parse(text).radios;
 }
+
+test("an unchanged export preserves every visible channel field", async () => {
+  const harness = await createTestRadioHarness({ repoRoot });
+  const catalog = await readCatalog();
+
+  for (const name of HISTORICALLY_LOSSY_NO_OP_FIXTURES) {
+    const { match, loaded } = await loadImageFor(harness, catalog, name);
+    const exported = await harness.exportCodeplugBinary(
+      match.module,
+      match.className,
+      loaded.rows,
+      loaded.settings || [],
+    );
+    const reloaded = await harness.loadCodeplugBinary(exported.image);
+    assert.equal(
+      reloaded.rows.length,
+      loaded.rows.length,
+      `${name} changed the number of visible channels`,
+    );
+
+    // Locations identify radio memories; comparing by location catches added,
+    // removed and changed rows without treating binary padding as channel data.
+    const before = Object.fromEntries(
+      loaded.rows.map((row) => [String(row.Location), row]),
+    );
+    const after = Object.fromEntries(
+      reloaded.rows.map((row) => [String(row.Location), row]),
+    );
+    assert.deepEqual(after, before, `${name} changed visible channel data`);
+  }
+});
 
 test("power levels survive a read/write cycle without dBm truncation", async () => {
   const harness = await createTestRadioHarness({ repoRoot });
