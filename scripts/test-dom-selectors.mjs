@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { ELEMENT_COLLECTIONS, REQUIRED_ELEMENTS } from "../web/js/ui/dom.js";
+import { FakeDocument } from "./test-support/fake-dom.mjs";
 
 // Guards the contract between index.html and web/js/ui/dom.js: every element the
 // UI declares as required must actually exist in the page. Renaming or removing
@@ -89,10 +90,10 @@ test("collection selectors match markup that exists", () => {
 test("queryUiElements reports every missing element at once", async () => {
   const { queryUiElements } = await import("../web/js/ui/dom.js");
   const previousDocument = globalThis.document;
-  globalThis.document = {
-    querySelector: (selector) => (selector === "#radio-search" ? {} : null),
-    querySelectorAll: () => [],
-  };
+  // A page with exactly one of the required elements present.
+  globalThis.document = new FakeDocument({
+    vivify: (selector) => (selector === "#radio-search" ? "input" : null),
+  });
   try {
     assert.throws(
       () => queryUiElements(),

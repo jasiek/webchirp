@@ -54,59 +54,11 @@ test("a driver whose labels are already wattages publishes no duplicates", async
   assert.deepEqual(result.empty, {});
 });
 
-// Minimal element stub: enough for renderHeader() and one row of cell editors.
-// The grid renders every row when clientHeight is not a number, which is the
-// path headless callers take.
-class StubElement {
-  constructor(tagName = "div") {
-    this.tagName = String(tagName).toUpperCase();
-    this.children = [];
-    this.dataset = {};
-    this.style = {};
-    this.classList = { add() {}, remove() {}, toggle() {}, contains: () => false };
-    this.title = "";
-    this.textContent = "";
-    this.value = "";
-    this.type = "";
-    this.disabled = false;
-    this.readOnly = false;
-    this.hidden = false;
-  }
-
-  set innerHTML(_value) {
-    this.children = [];
-  }
-
-  get innerHTML() {
-    return "";
-  }
-
-  appendChild(child) {
-    this.children.push(child);
-    return child;
-  }
-
-  removeChild(child) {
-    this.children = this.children.filter((each) => each !== child);
-    return child;
-  }
-
-  insertBefore(child) {
-    return this.appendChild(child);
-  }
-
-  remove() {}
-
-  setAttribute(name, value) {
-    this[name] = value;
-  }
-
-  addEventListener() {}
-
-  getBoundingClientRect() {
-    return { height: 0 };
-  }
-}
+// The shared fake element is enough for renderHeader() and one row of cell
+// editors. The grid renders every row when clientHeight is not a number, which
+// is the path headless callers take. Imported next to the grid fixtures it
+// serves; the harness tests above need no DOM.
+import { FakeElement as StubElement, installFakeDom } from "./test-support/fake-dom.mjs";
 
 // Spacer rows stand in for the channels outside the window, so a rendered row is
 // found by data-row-idx rather than by position in the tbody.
@@ -115,7 +67,7 @@ function renderedRows(dom) {
 }
 
 function renderGridWithPowerColumn(columns) {
-  globalThis.document = { createElement: (tag) => new StubElement(tag) };
+  installFakeDom();
   const dom = {
     tableHead: new StubElement("thead"),
     tableBody: new StubElement("tbody"),
