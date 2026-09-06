@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { createTestRadioHarness } from "./test-radio-harness.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+import { repoRoot } from "./test-support/repo-paths.mjs";
 
 async function powerColumnFor(harness, module, className) {
   await harness.runPythonJson("ensure_radio_module(_m) or json.dumps({})", { _m: module });

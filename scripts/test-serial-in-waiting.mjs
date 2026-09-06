@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import { BrowserSerialBridge } from "../web/js/serial.js";
 import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { repoRoot } from "./test-support/repo-paths.mjs";
 
 // in_waiting is the one pyserial call a driver can be *silently* wrong about:
 // the shim used to answer a hardcoded 0, and a driver that only reads when
@@ -13,8 +13,6 @@ import { createTestRadioHarness } from "./test-radio-harness.mjs";
 // times on the clone path, so eight catalog entries could not clone. These
 // tests pin both halves: the bridge reports the real buffered count, and the
 // Python shim exposes it under both the modern and the legacy spelling.
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 // ---------------------------------------------------------------------------
 // The JS half: BrowserSerialBridge.inWaiting()
