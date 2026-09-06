@@ -115,42 +115,20 @@ test("a named cancellation still reports a usable error_type", () => {
   assert.equal(errorTypeName(error), PORT_SELECTION_CANCELLED);
 });
 
-class FakeElement {
-  constructor({ hidden = false } = {}) {
-    this.attributes = new Map();
-    this.hidden = hidden;
-    this.disabled = false;
-    this.title = "";
-    this.textContent = "";
-    this.value = "";
-  }
+// Imported next to the fixtures it serves: the bridge and classifier tests
+// above need no DOM at all.
+import { FakeElement as SharedFakeElement, fakeDebugDom } from "./test-support/fake-dom.mjs";
 
+// The serial-actions context below reaches the connect toggle's click handler
+// directly through .listener, so keep exposing the last one bound on top of
+// the shared element's listener list.
+class FakeElement extends SharedFakeElement {
   addEventListener(type, handler) {
+    super.addEventListener(type, handler);
     if (type === "click") {
       this.listener = handler;
     }
   }
-
-  getAttribute(name) {
-    return this.attributes.get(String(name)) ?? null;
-  }
-
-  setAttribute(name, value) {
-    this.attributes.set(String(name), String(value));
-  }
-}
-
-function fakeDebugDom() {
-  const debugToggleEl = new FakeElement();
-  debugToggleEl.setAttribute("aria-expanded", "false");
-  return {
-    debugToggleEl,
-    debugActionsEl: new FakeElement({ hidden: true }),
-    debugOutputContentEl: new FakeElement({ hidden: true }),
-    debugOutputEl: new FakeElement(),
-    debugClearEl: new FakeElement(),
-    debugCopyEl: new FakeElement(),
-  };
 }
 
 test("a cancellation opens the debug panel without becoming the next bug report", () => {

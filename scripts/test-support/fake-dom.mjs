@@ -594,6 +594,23 @@ export function installFakeDom({ vivify, window: windowOverrides = {}, navigator
   return { document, window, navigator, restore };
 }
 
+// The Debug Output panel's elements as createDebugLog expects them, in the
+// folded state index.html ships: the disclosure reads collapsed and both
+// hidden regions are hidden. Shared by every test that drives the panel.
+export function fakeDebugDom() {
+  const debugToggleEl = new FakeElement("button");
+  debugToggleEl.setAttribute("aria-expanded", "false");
+  const hiddenRegion = () => Object.assign(new FakeElement("div"), { hidden: true });
+  return {
+    debugToggleEl,
+    debugActionsEl: hiddenRegion(),
+    debugOutputContentEl: hiddenRegion(),
+    debugOutputEl: new FakeElement("textarea"),
+    debugClearEl: new FakeElement("button"),
+    debugCopyEl: new FakeElement("button"),
+  };
+}
+
 // A promise a test resolves by hand, to hold a runtime call (a clipboard
 // write, a metadata fetch) in flight while asserting on the intermediate UI.
 export function createDeferred() {
