@@ -253,14 +253,36 @@ class ChirpCdnFinder(importlib.abc.MetaPathFinder):
     """Lazy materializer for missing chirp.* modules from jsDelivr."""
 
     def find_spec(self, fullname, path=None, target=None):
-        """Ensure module file exists before regular import resolution proceeds."""
+        """Ensure module file exists before regular import resolution proceeds.
+
+        A failure here is reported rather than swallowed (issue #100). Returning
+        ``None`` handed the import back to ``PathFinder``, whose only verdict is
+        ``ModuleNotFoundError: No module named 'chirp.drivers.x'`` -- which hides
+        every cause that is not "no such module": a jsDelivr 404, an offline
+        network, or the missing JSPI support that makes ``_await_js`` raise on
+        Safari and older Firefox. The traceback goes to the debug panel and the
+        raised ``ImportError`` names the source path, so both surfaces carry the
+        real cause. Raising ``ImportError`` rather than the narrower
+        ``ModuleNotFoundError`` (its subclass) leaves every caller that catches
+        ``ImportError`` unaffected -- which is all of them here, since nothing
+        in the runtime or in CHIRP's importable modules matches the subclass.
+        """
         if fullname != "chirp" and not fullname.startswith("chirp."):
             return None
+        source_relpath = _chirp_source_relpath(fullname)
         try:
             _ensure_chirp_module_file(fullname)
-        except Exception:
-            # Let the normal import machinery raise if still unavailable.
-            return None
+        except Exception as exc:
+            _log_debug(
+                f"IMPORT FAIL {fullname} <- {source_relpath}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            _log_debug(traceback.format_exc())
+            raise ImportError(
+                f"Could not load CHIRP source for {fullname} "
+                f"from {source_relpath}: {exc}",
+                name=fullname,
+            ) from exc
         return None
 
 

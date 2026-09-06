@@ -1,6 +1,7 @@
 import { errorDetails } from "./format.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
 import { captureError } from "../sentry.js";
+import { isBootstrapFailure } from "../runtime-bootstrap.mjs";
 
 // The bottom debug panel is the single sink for status text, serial traffic and
 // full error detail. Keeping every write in one module preserves the rule that
@@ -84,6 +85,14 @@ export function createDebugLog({ dom }) {
     const details = errorDetails(error);
     logError(`${action.toUpperCase()} ERROR\n${details}`);
     setStatus(`${action} failed (see Debug Output).`);
+    // A failed runtime bootstrap has already been captured as a runtime crash,
+    // under a tag this funnel cannot produce. It still reaches here because it
+    // returns through whichever action was in flight, so capturing again would
+    // file one failure as two Sentry events. The log line and the status stay:
+    // the user still needs to see which action died.
+    if (isBootstrapFailure(error)) {
+      return;
+    }
     captureError(error, {
       action,
       tags: { error_kind: classifyErrorKind(error), error_type: errorTypeName(error) },
