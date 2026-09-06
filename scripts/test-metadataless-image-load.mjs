@@ -119,7 +119,14 @@ test("import_all_driver_modules reports unimportable drivers instead of hiding t
     { _mods: ["uv5r", "definitely_not_a_driver"] },
   );
   assert.equal(result.imported, 1);
-  assert.match(result.failed.definitely_not_a_driver, /ModuleNotFoundError/);
+  // Issue #100: the reported reason has to be the one that actually stopped the
+  // import (here: no such source file), not the ModuleNotFoundError that
+  // PathFinder produces once the finder gives up on it.
+  assert.match(result.failed.definitely_not_a_driver, /ImportError/);
+  assert.match(
+    result.failed.definitely_not_a_driver,
+    /\/chirp\/drivers\/definitely_not_a_driver\.py/,
+  );
 });
 
 // Quansheng_UV-K5_egzumer.img is the case where a resolved-but-WRONG match was
