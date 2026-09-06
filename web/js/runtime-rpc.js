@@ -1,6 +1,11 @@
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs";
 import { createCallQueue } from "./call-queue.mjs";
 import {
+  PORT_SELECTION_CANCELLED_MESSAGE,
+  createPortSelectionCancelledError,
+  isPortSelectionCancelled,
+} from "./serial-errors.js";
+import {
   findCatalogRadioForImageMetadata,
   loadImageWithDriverFallback,
 } from "./image-metadata.mjs";
@@ -516,6 +521,19 @@ export function createRuntimeRpcClient({
           (typeof error?.stack === "string" && error.stack) ||
           error?.message ||
           String(error);
+
+        // A dismissed port chooser reaches here as a Python traceback like any
+        // other failure, but it is not one: the user closed a dialog. Report it
+        // as one quiet line and hand the caller the sentence rather than the
+        // traceback, so the UI can say what happened instead of showing a stack
+        // nobody can act on. The name is restored because `new Error` below
+        // would otherwise drop it on the way out of the runtime.
+        if (isPortSelectionCancelled(error)) {
+          if (logDebug) {
+            logDebug(`RUNTIME ${PORT_SELECTION_CANCELLED_MESSAGE}`);
+          }
+          throw createPortSelectionCancelledError();
+        }
 
         if (!bootstrapFailed && !pyodide && onRuntimeCrash) {
           bootstrapFailed = true;

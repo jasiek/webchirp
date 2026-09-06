@@ -7,6 +7,10 @@ import {
   radioEventParams,
   trackEvent,
 } from "./analytics.js";
+import {
+  PORT_SELECTION_CANCELLED_MESSAGE,
+  isPortSelectionCancelled,
+} from "../serial-errors.js";
 import { requireRuntimeApi } from "./state.js";
 
 // Everything on the serial path: connect/disconnect over Web Serial or WebUSB,
@@ -79,6 +83,15 @@ export function createSerialActions(ctx) {
         error_kind: classifyErrorKind(error),
         error_type: errorTypeName(error),
       });
+      // Dismissing the chooser is the one outcome here the user already knows
+      // about, so it gets a sentence rather than the Pyodide traceback the
+      // failure path dumps. It still has to be said out loud: with no visible
+      // status surface in this app, saying nothing left Connect-then-Cancel
+      // looking exactly like a button that does not work.
+      if (isPortSelectionCancelled(error)) {
+        log.reportActionCancelled("Serial connect", PORT_SELECTION_CANCELLED_MESSAGE);
+        return;
+      }
       log.reportActionError("Serial connect", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
