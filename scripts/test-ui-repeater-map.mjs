@@ -3,110 +3,29 @@ import test from "node:test";
 
 import { OSM_ATTRIBUTION, OSM_COPYRIGHT_URL } from "../web/js/staticmap.js";
 import { setRowGeo } from "../web/js/row-geo.js";
+import { FakeElement, installFakeDom } from "./test-support/fake-dom.mjs";
 
-// Enough of a DOM for createRepeaterMap: real class lists (the module opens and
-// closes on "hidden"), a parent chain for closest(), and a focus log so the
-// modal's focus handling is observable.
-class FakeElement {
-  constructor(tagName = "div") {
-    this.tagName = String(tagName).toUpperCase();
-    this.parent = null;
-    this.children = [];
-    this.style = {};
-    this.dataset = {};
-    this.listeners = new Map();
-    this.textContent = "";
-    this.clientWidth = 0;
-    this.offsetHeight = 0;
-    this._classes = new Set();
-    this.classList = {
-      add: (name) => this._classes.add(name),
-      remove: (name) => this._classes.delete(name),
-      contains: (name) => this._classes.has(name),
-      toggle: (name, on) => (on ? this._classes.add(name) : this._classes.delete(name)),
-    };
-  }
+// Every element focus() lands on, in order, so the modal's focus handling is
+// observable.
+const FOCUS_LOG = [];
 
-  get className() {
-    return Array.from(this._classes).join(" ");
-  }
-
-  set className(value) {
-    this._classes = new Set(String(value || "").split(/\s+/).filter(Boolean));
-  }
-
-  set innerHTML(value) {
-    this.children = [];
-    this._innerHTML = String(value ?? "");
-  }
-
-  get innerHTML() {
-    return this._innerHTML || "";
-  }
-
-  appendChild(child) {
-    child.parent = this;
-    this.children.push(child);
-    return child;
-  }
-
-  addEventListener(type, handler) {
-    const key = String(type);
-    if (!this.listeners.has(key)) {
-      this.listeners.set(key, []);
-    }
-    this.listeners.get(key).push(handler);
-  }
-
-  dispatch(type, event = {}) {
-    for (const handler of this.listeners.get(String(type)) || []) {
-      handler({ type, ...event });
-    }
-  }
-
-  matches(selector) {
-    return selector.startsWith(".")
-      ? this._classes.has(selector.slice(1))
-      : this.tagName === selector.toUpperCase();
-  }
-
-  closest(selector) {
-    for (let node = this; node; node = node.parent) {
-      if (node.matches(selector)) {
-        return node;
-      }
-    }
-    return null;
-  }
-
-  contains(other) {
-    for (let node = other; node; node = node.parent) {
-      if (node === this) {
-        return true;
-      }
-    }
-    return false;
-  }
-
+// The shared FakeElement plus what createRepeaterMap needs from layout: the
+// anchor cell's rectangle, which positions the tooltip, and a focus() that
+// records where focus went rather than only flagging the element.
+class MapFakeElement extends FakeElement {
   getBoundingClientRect() {
     return { top: 100, right: 60, bottom: 120, left: 0, width: 60, height: 20 };
   }
 
   focus() {
+    super.focus();
     FOCUS_LOG.push(this);
   }
 }
 
-const FOCUS_LOG = [];
-
-function installFakeDom({ hoverCapable = false } = {}) {
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: { createElement: (tagName) => new FakeElement(tagName) },
-  });
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: {
+function installMapDom({ hoverCapable = false } = {}) {
+  installFakeDom({
+    window: {
       innerWidth: 400,
       innerHeight: 800,
       // "(hover: hover)" picks the surface: the tooltip on desktop, the modal
@@ -133,7 +52,7 @@ function buildFixture() {
     "repeaterMapModalAttributionEl",
     "repeaterMapCloseEl",
   ]) {
-    dom[key] = new FakeElement(key === "repeaterMapCloseEl" ? "button" : "div");
+    dom[key] = new MapFakeElement(key === "repeaterMapCloseEl" ? "button" : "div");
   }
   dom.repeaterMapTooltipEl.classList.add("hidden");
   dom.repeaterMapModalEl.classList.add("hidden");
@@ -148,7 +67,7 @@ function buildFixture() {
   ]) {
     dom.repeaterMapTooltipEl.appendChild(child);
   }
-  const card = dom.repeaterMapModalEl.appendChild(new FakeElement("div"));
+  const card = dom.repeaterMapModalEl.appendChild(new MapFakeElement("div"));
   card.className = "repeater-map-card";
   for (const child of [
     dom.repeaterMapModalCoordsEl,
@@ -159,11 +78,11 @@ function buildFixture() {
     card.appendChild(child);
   }
 
-  const tr = new FakeElement("tr");
+  const tr = new MapFakeElement("tr");
   tr.dataset.rowIdx = "0";
   dom.tableBody.appendChild(tr);
-  const cell = tr.appendChild(new FakeElement("td"));
-  const button = cell.appendChild(new FakeElement("button"));
+  const cell = tr.appendChild(new MapFakeElement("td"));
+  const button = cell.appendChild(new MapFakeElement("button"));
   button.className = "channel-location-button has-geo";
 
   const row = { Location: "0", Name: "GB3KI" };
@@ -172,7 +91,7 @@ function buildFixture() {
 }
 
 async function bootMap(options) {
-  installFakeDom(options);
+  installMapDom(options);
   const fixture = buildFixture();
   const { createRepeaterMap } = await import("../web/js/ui/repeater-map.js");
   const map = createRepeaterMap({ dom: fixture.dom, state: fixture.state });
