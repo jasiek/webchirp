@@ -1726,6 +1726,10 @@ def _radio_rows_from_instance(radio) -> tuple[Rows, list[int]]:
     for number in _iter_memory_numbers(radio):
         try:
             mem = radio.get_memory(number)
+            # CloneModeRadio stores comments outside driver memory in its image
+            # metadata, so mirror desktop CHIRP's post-read augmentation hook.
+            if isinstance(radio, chirp_common.ExternalMemoryProperties):
+                mem = radio.get_memory_extra(mem)
         except Exception as exc:
             reason = str(exc) or exc.__class__.__name__
             unreadable.append(number)
@@ -1779,6 +1783,10 @@ def _apply_rows_to_radio_instance(
         # CHIRP's immutable policy needs the current driver memory, not merely
         # the flattened grid row, before deciding whether a write is allowed.
         existing = radio.get_memory(number)
+        # External properties participate in row equality and immutable-field
+        # validation even though the driver memory itself does not contain them.
+        if isinstance(radio, chirp_common.ExternalMemoryProperties):
+            existing = radio.get_memory_extra(existing)
         vals = [str(row.get(h, "") or "") for h in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
         vals[0] = str(number)
@@ -1797,8 +1805,12 @@ def _apply_rows_to_radio_instance(
             _log_debug(f"Channel {number} validation warning: {warning}")
         if action == "erase":
             radio.erase_memory(number)
+            if isinstance(radio, chirp_common.ExternalMemoryProperties):
+                radio.erase_memory_extra(number)
         else:
             radio.set_memory(mem)
+            if isinstance(radio, chirp_common.ExternalMemoryProperties):
+                radio.set_memory_extra(mem)
 
     # A slot that failed to decode on download was never offered to the user, so
     # its absence from the rows is not a deletion and must not be treated as one.
@@ -1824,6 +1836,8 @@ def _apply_rows_to_radio_instance(
                 f"Channel {number}: {'; '.join(str(error) for error in validation_errors)}"
             )
         radio.erase_memory(number)
+        if isinstance(radio, chirp_common.ExternalMemoryProperties):
+            radio.erase_memory_extra(number)
 
     if protected:
         _log_debug(
@@ -2591,7 +2605,12 @@ def get_radio_column_metadata(module_name: str, class_name: str):
     }
     col["Comment"] = {
         "kind": "text",
-        "editable": bool(rf.has_comment),
+        # Clone-mode radios without native comments use CHIRP's image metadata
+        # hooks, so their comments are just as editable as driver-backed ones.
+        "editable": bool(
+            rf.has_comment
+            or isinstance(radio, chirp_common.ExternalMemoryProperties)
+        ),
     }
     col["URCALL"] = {"kind": "text", "editable": False}
     col["RPT1CALL"] = {"kind": "text", "editable": False}
