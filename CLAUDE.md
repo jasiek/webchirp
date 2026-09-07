@@ -52,6 +52,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - For agent-operated real-radio writes, use `npm run radio:write -- --port <path> --module <driver_module> --class <driver_class> --format json|csv|img --input <file>`.
 - Prefer `--format json` when the workflow needs rows, settings, normalized CSV, and binary image in one file.
 - `--format img` means a CHIRP `.img` clone file and is clone-image only; expect it to fail clearly on radios that do not expose clone-mode image workflows.
+- These commands aren't meant for the end user, they are for testing and development only.
 
 ## UI Expectations
 - Make/model options must be sourced from CHIRP driver sources.
