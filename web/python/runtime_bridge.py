@@ -939,6 +939,30 @@ def _preserve_unedited_immutable_fields(
             setattr(mem, field, getattr(existing, field))
 
 
+def _carry_over_driver_extras(
+    existing: chirp_common.Memory, mem: chirp_common.Memory
+) -> None:
+    """Copy a driver's per-channel extra settings onto a row-rebuilt Memory.
+
+    Rows carry only the columns the grid shows, so a Memory rebuilt from a row
+    has an empty ``extra``. Drivers such as iradio_uv_5118 clear the channel
+    record in set_memory() and then replay ``mem.extra`` over it, so writing a
+    row-built Memory silently resets settings the grid never exposed - Busy
+    Channel Lockout among them. Desktop CHIRP never hits this because it edits
+    the Memory that get_memory() returned, with ``extra`` already attached.
+
+    Extras are only carried over from a populated memory. Drivers routinely
+    return early for an empty slot without attaching ``extra``, and one that
+    does decode is reading unwritten 0xFF padding, so reusing it would invent
+    enabled settings for a channel the user is creating.
+    """
+    if getattr(existing, "empty", False):
+        return
+    extra = getattr(existing, "extra", None)
+    if extra:
+        mem.extra = extra
+
+
 def _prepare_and_validate_memory(
     radio: chirp_common.Radio,
     existing: chirp_common.Memory,
@@ -1054,6 +1078,10 @@ def _prepare_row_change(
 
     if not mem.mode:
         mem.mode = "FM"
+    # The row rebuilt every grid column but not the driver's hidden per-channel
+    # settings, and set_memory() is what consumes them, so restore them before
+    # validating the write rather than after.
+    _carry_over_driver_extras(existing, mem)
     mem, warnings, validation_errors = _prepare_and_validate_memory(
         radio, existing, mem, row
     )
