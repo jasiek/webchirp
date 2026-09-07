@@ -1,22 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { FakeElement } from "./test-support/fake-dom.mjs";
+
 // The clone buttons must stay dead until a serial port has actually been
 // opened: pressing Download with no port only ever produced a runtime error.
 
-class FakeElement {
-  constructor() {
-    this.hidden = false;
-    this.disabled = false;
-    this.title = "";
-    this.textContent = "";
-  }
-
-  addEventListener(type, handler) {
-    if (type === "click") {
-      this.listener = handler;
-    }
-  }
+// Presses the connect toggle and waits for its click handler to finish.
+function pressConnectToggle(ctx) {
+  return ctx.dom.serialConnectToggleEl.dispatch("click");
 }
 
 function makeContext({ hasInvalidSettings = false } = {}) {
@@ -80,14 +72,14 @@ test("clone buttons stay disabled until a serial port is connected", async () =>
   assert.equal(ctx.dom.serialConnectToggleEl.disabled, false);
 
   serial.bindEvents();
-  await ctx.dom.serialConnectToggleEl.listener();
+  await pressConnectToggle(ctx);
   assert.equal(ctx.dom.radioDownloadEl.disabled, false);
   assert.equal(ctx.dom.radioUploadEl.disabled, false);
   assert.equal(ctx.dom.radioDownloadEl.title, "");
   assert.equal(ctx.dom.radioUploadEl.title, "");
 
   // Disconnecting takes them away again.
-  await ctx.dom.serialConnectToggleEl.listener();
+  await pressConnectToggle(ctx);
   assert.equal(ctx.dom.radioDownloadEl.disabled, true);
   assert.equal(ctx.dom.radioUploadEl.disabled, true);
 });
@@ -98,7 +90,7 @@ test("a connected port does not override the other clone-button blocks", async (
   const serial = createSerialActions(ctx);
   serial.setSidebarControlsEnabled(true);
   serial.bindEvents();
-  await ctx.dom.serialConnectToggleEl.listener();
+  await pressConnectToggle(ctx);
 
   assert.equal(ctx.dom.radioDownloadEl.disabled, false);
   assert.equal(ctx.dom.radioUploadEl.disabled, true);
@@ -121,7 +113,7 @@ test("losing the port mid-session takes the clone buttons away again", async () 
   const serial = createSerialActions(ctx);
   serial.setSidebarControlsEnabled(true);
   serial.bindEvents();
-  await ctx.dom.serialConnectToggleEl.listener();
+  await pressConnectToggle(ctx);
   assert.equal(ctx.dom.radioDownloadEl.disabled, false);
 
   // The bridge reports the adapter as gone; it has already closed the port.
@@ -133,6 +125,6 @@ test("losing the port mid-session takes the clone buttons away again", async () 
   assert.equal(ctx.dom.serialConnectToggleEl.textContent, "Connect via WebSerial");
 
   // Reconnecting brings them back.
-  await ctx.dom.serialConnectToggleEl.listener();
+  await pressConnectToggle(ctx);
   assert.equal(ctx.dom.radioDownloadEl.disabled, false);
 });

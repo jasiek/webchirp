@@ -5,12 +5,12 @@ import path from "node:path";
 
 import { CUSTOM_DIMENSIONS } from "../web/js/analytics.js";
 import { parseArgs, planSync, validateDeclarations } from "./ga-dimensions.mjs";
+import { jsDir } from "./test-support/repo-paths.mjs";
 
 // The sync script talks to a live GA property, so the parts worth testing are
 // the plan it builds and the manifest it builds it from. The coverage test at
 // the bottom is the one that earns its keep: a parameter added to a trackEvent
 // call but not declared here is invisible in GA and nothing else would say so.
-const JS_DIR = path.join(process.cwd(), "web", "js");
 
 function existing(parameterName, scope, displayName, description = "") {
   return {
@@ -186,7 +186,7 @@ test("the scanner finds the parameters a call actually sends", () => {
 test("every parameter the app sends is declared as a custom dimension", () => {
   const declared = new Set(CUSTOM_DIMENSIONS.map((dimension) => dimension.parameterName));
   const sent = new Set();
-  for (const file of sourceFiles(JS_DIR)) {
+  for (const file of sourceFiles(jsDir)) {
     for (const name of trackedParams(fs.readFileSync(file, "utf8"))) {
       sent.add(name);
     }

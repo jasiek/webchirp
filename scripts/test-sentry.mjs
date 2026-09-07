@@ -18,6 +18,8 @@ import {
   setContextProvider,
 } from "../web/js/sentry.js";
 import { ANALYTICS_HOSTS } from "../web/js/analytics.js";
+import { makeWindow } from "./test-support/fake-window.mjs";
+import { repoRoot } from "./test-support/repo-paths.mjs";
 
 // Error reporting fails silently by design -- a dropped event looks exactly
 // like a quiet day in the Sentry console -- so the wiring is only ever checked
@@ -27,34 +29,6 @@ import { ANALYTICS_HOSTS } from "../web/js/analytics.js";
 //     unsent, and a rule that quietly stops matching is invisible in the UI.
 //   - The host gate. A fork's Pages site or a dev server reporting into the
 //     shared project buries real user errors under a developer's own branch.
-const ROOT = process.cwd();
-
-// Minimal window stand-in: records listeners so a test can dispatch at them and
-// assert they were removed again, and answers fetch with a version.json.
-function makeWindow({ hostname = "codeplug.org", version = { webchirpSha: "abc123" } } = {}) {
-  const listeners = new Map();
-  return {
-    location: { hostname },
-    addEventListener(type, handler) {
-      const existing = listeners.get(type) || [];
-      existing.push(handler);
-      listeners.set(type, existing);
-    },
-    removeEventListener(type, handler) {
-      listeners.set(type, (listeners.get(type) || []).filter((entry) => entry !== handler));
-    },
-    listenerCount(type) {
-      return (listeners.get(type) || []).length;
-    },
-    dispatch(type, event) {
-      for (const handler of [...(listeners.get(type) || [])]) {
-        handler(event);
-      }
-    },
-    fetch: async () => ({ ok: version !== null, json: async () => version }),
-  };
-}
-
 // Fake SDK namespace with the same surface this module calls.
 function makeSdk() {
   const captured = [];
@@ -80,7 +54,7 @@ function makeSdk() {
 }
 
 test("the SDK URL is pinned to the version declared in package.json", () => {
-  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
   const declared = String(pkg.dependencies?.["@sentry/browser"] || "").replace(/^[^\d]*/, "");
   assert.equal(
     SENTRY_SDK_VERSION,

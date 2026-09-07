@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FtdiSerialPort } from "../web/js/ftdi-webusb.js";
+import { makeFakeUsbDevice, okTransfer } from "./test-support/fake-usb.mjs";
+import { tick } from "./test-support/globals.mjs";
+import {
+  expectFullPipeline,
+  expectOnePacketPerTransfer,
+  expectStallRecovery,
+} from "./test-support/usb-read-path.mjs";
 
-// A fake FTDI USBDevice whose bulk IN transfers stay pending until the test
-// answers them, the way real hardware leaves a transfer outstanding until bytes
-// arrive. A driver that keeps a queue is only observable against a fake that
-// models the queue, so this cannot be a list of pre-baked results.
+// A fake FTDI USBDevice: a bulk pair (plus whatever endpoints the test adds),
+// recording every control write, with bulk IN packets framed the way this
+// chip frames them.
 function makeFakeDevice({
   cancelOnClearHalt = false,
   endpoints = [
@@ -15,75 +21,30 @@ function makeFakeDevice({
   interfaceNumber = 0,
 } = {}) {
   const controlCalls = [];
-  const clearHaltCalls = [];
-  const transferInCalls = [];
   const transferOutCalls = [];
-  const outstanding = [];
-
-  const device = {
+  const fake = makeFakeUsbDevice({
     vendorId: 0x0403,
     productId: 0x6001,
-    configuration: {
-      interfaces: [
-        {
-          interfaceNumber,
-          alternate: { endpoints },
-        },
-      ],
-    },
-    open: async () => {},
-    claimInterface: async () => {},
-    releaseInterface: async () => {},
-    close: async () => {},
+    endpoints,
+    interfaceNumber,
+    cancelOnClearHalt,
     controlTransferOut: async ({ request, value, index }) => {
       controlCalls.push({ request, value, index });
       return { status: "ok" };
-    },
-    clearHalt: async (direction, endpoint) => {
-      clearHaltCalls.push({ direction, endpoint });
-      if (cancelOnClearHalt) {
-        // Chromium cancels every transfer outstanding on the interface before
-        // it clears the endpoint, and Blink rejects a cancelled transfer with
-        // AbortError rather than completing it with a status.
-        for (const transfer of outstanding.splice(0)) {
-          transfer.reject(Object.assign(
-            new Error("The transfer was cancelled."),
-            { name: "AbortError" },
-          ));
-        }
-      }
-    },
-    transferIn: async (endpointNumber, length) => {
-      transferInCalls.push({ endpointNumber, length });
-      return new Promise((resolve, reject) => {
-        outstanding.push({ resolve, reject });
-      });
     },
     transferOut: async (endpointNumber, data) => {
       transferOutCalls.push({ endpointNumber, data });
       return { status: "ok" };
     },
-  };
-
-  // Answer the oldest unanswered transfer — bulk transfers on one endpoint
-  // complete in the order they were issued.
-  const deliver = (result) => {
-    outstanding.shift()?.resolve(result);
-  };
+  });
   // A bulk IN packet as this chip actually sends it: two modem/line status
   // bytes, then whatever payload the wire delivered.
   const deliverPacket = (payload = []) => {
-    deliver({
-      status: "ok",
-      data: new DataView(new Uint8Array([0x01, 0x60, ...payload]).buffer),
-    });
+    fake.deliver(okTransfer([0x01, 0x60, ...payload]));
   };
 
-  return { device, controlCalls, clearHaltCalls, transferInCalls, transferOutCalls, deliver, deliverPacket };
+  return { ...fake, controlCalls, transferOutCalls, deliverPacket };
 }
-
-// Let the stream's pull run between deliveries.
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 test("FtdiSerialPort.open() purges FIFOs and sets the latency timer", async () => {
   const { device, controlCalls } = makeFakeDevice();
@@ -171,24 +132,17 @@ test("FtdiSerialPort read path recovers when clearHalt cancels the queue", async
   // rejected promise (AbortError), not as a result carrying a status, so a read
   // path that keeps the pre-stall queue awaits a cancelled transfer on its next
   // turn and errors the stream for good.
-  const { device, clearHaltCalls, deliver, deliverPacket } = makeFakeDevice({ cancelOnClearHalt: true });
-  const port = new FtdiSerialPort(device);
-  await port.open({ baudRate: 9600 });
-  const reader = port.readable.getReader();
-  const read = reader.read();
-  await tick();
-
-  deliver({ status: "stall" });
-  await tick();
-
+  //
   // Status-only packets must not resolve the pull either (that wedges reads).
-  deliverPacket();
-  await tick();
-  deliverPacket([0xab]);
-
-  const { value } = await read;
-  assert.deepEqual(clearHaltCalls, [{ direction: "in", endpoint: 1 }]);
-  assert.deepEqual(Array.from(value), [0xab]);
+  const fake = makeFakeDevice({ cancelOnClearHalt: true });
+  await expectStallRecovery({
+    Port: FtdiSerialPort,
+    fake,
+    endpointNumber: 1,
+    payload: [0xab],
+    sendPayload: fake.deliverPacket,
+    sendEmpty: () => fake.deliverPacket(),
+  });
 });
 
 test("FtdiSerialPort keeps a full pipeline of bulk IN transfers queued", async () => {
@@ -203,24 +157,8 @@ test("FtdiSerialPort keeps a full pipeline of bulk IN transfers queued", async (
   // is the stream's own high-water mark: 16 transfers are queued up front, and
   // each of the 15 pulls after the first replenishes exactly one. A shallower
   // depth, or the default queue of one, yields a smaller number.
-  const { device, deliverPacket, transferInCalls } = makeFakeDevice();
-  const port = new FtdiSerialPort(device);
-  await port.open({ baudRate: 115200 });
-  // The stream pulls as soon as it is constructed, which primes the queue.
-  await tick();
-
-  assert.equal(transferInCalls.length, 16, "the queue must be primed to full depth");
-
-  for (let i = 0; i < 16; i += 1) {
-    deliverPacket([i]);
-    await tick();
-  }
-
-  assert.equal(
-    transferInCalls.length,
-    31,
-    "16 queued up front plus one replenished per pull, with no reader attached",
-  );
+  const fake = makeFakeDevice();
+  await expectFullPipeline({ Port: FtdiSerialPort, fake, sendPayload: fake.deliverPacket });
 });
 
 test("FtdiSerialPort asks for exactly one packet per bulk IN transfer", async () => {
@@ -228,14 +166,10 @@ test("FtdiSerialPort asks for exactly one packet per bulk IN transfer", async ()
   // request spanning packets comes back with headers buried mid-buffer and
   // stripFtdiStatusBytes would pass all but the first pair off as payload.
   // Throughput has to come from queue depth, not from asking for more bytes.
-  const { device, transferInCalls } = makeFakeDevice();
-  const port = new FtdiSerialPort(device);
-  await port.open({ baudRate: 115200 });
-  await tick();
-
-  assert.ok(transferInCalls.length > 0, "expected the read path to queue a transfer");
-  for (const call of transferInCalls) {
-    assert.equal(call.endpointNumber, 1);
-    assert.equal(call.length, 64, "bulk IN transfers must request exactly one packet");
-  }
+  await expectOnePacketPerTransfer({
+    Port: FtdiSerialPort,
+    fake: makeFakeDevice(),
+    endpointNumber: 1,
+    packetSize: 64,
+  });
 });

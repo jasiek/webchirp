@@ -1,318 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-class FakeClassList {
-  constructor() {
-    this.classes = new Set();
-  }
+import {
+  UI_STUBBED_SELECTORS,
+  createDeferred,
+  flushMicrotasks,
+  installFakeDom,
+  keydownEvent,
+  selectRadioBySearch,
+  typeRadioSearch,
+} from "./test-support/fake-dom.mjs";
 
-  add(...tokens) {
-    tokens.forEach((token) => this.classes.add(String(token)));
-  }
-
-  remove(...tokens) {
-    tokens.forEach((token) => this.classes.delete(String(token)));
-  }
-
-  toggle(token, force) {
-    const key = String(token);
-    if (force === true) {
-      this.classes.add(key);
-      return true;
-    }
-    if (force === false) {
-      this.classes.delete(key);
-      return false;
-    }
-    if (this.classes.has(key)) {
-      this.classes.delete(key);
-      return false;
-    }
-    this.classes.add(key);
-    return true;
-  }
-
-  contains(token) {
-    return this.classes.has(String(token));
-  }
-}
-
-class FakeElement {
-  constructor(tagName, ownerDocument, id = "") {
-    this.tagName = String(tagName || "div").toUpperCase();
-    this.ownerDocument = ownerDocument;
-    this.id = id;
-    this.children = [];
-    this.parentNode = null;
-    this.dataset = {};
-    this.style = {};
-    this.attributes = new Map();
-    this.eventListeners = new Map();
-    this.classList = new FakeClassList();
-    this._innerHTML = "";
-    this._textContent = "";
-    this._value = "";
-    this.disabled = false;
-    this.hidden = false;
-    this.title = "";
-    this.checked = false;
-    this.readOnly = false;
-    this.type = "";
-    this.files = [];
-    this.scrollTop = 0;
-    this.scrollHeight = 0;
-  }
-
-  get innerHTML() {
-    return this._innerHTML;
-  }
-
-  set innerHTML(value) {
-    this._innerHTML = String(value || "");
-    this.children = [];
-    this._textContent = "";
-    this._value = "";
-  }
-
-  get textContent() {
-    if (this.children.length > 0) {
-      return this.children.map((child) => child.textContent).join("");
-    }
-    return this._textContent;
-  }
-
-  set textContent(value) {
-    this._textContent = String(value ?? "");
-    this.children = [];
-    this._innerHTML = "";
-  }
-
-  get value() {
-    if (this.tagName === "SELECT") {
-      if (this._value) {
-        return this._value;
-      }
-      return this.children[0]?.value || "";
-    }
-    return this._value;
-  }
-
-  set value(nextValue) {
-    this._value = String(nextValue ?? "");
-  }
-
-  appendChild(child) {
-    child.parentNode = this;
-    this.children.push(child);
-    if (this.tagName === "SELECT" && !this._value) {
-      this._value = child.value || "";
-    }
-    return child;
-  }
-
-  addEventListener(type, handler) {
-    const key = String(type);
-    if (!this.eventListeners.has(key)) {
-      this.eventListeners.set(key, []);
-    }
-    this.eventListeners.get(key).push(handler);
-  }
-
-  dispatchEvent(event) {
-    const listeners = this.eventListeners.get(String(event?.type || "")) || [];
-    for (const handler of listeners) {
-      handler(event);
-    }
-  }
-
-  setAttribute(name, value) {
-    this.attributes.set(String(name), String(value));
-  }
-
-  getAttribute(name) {
-    return this.attributes.get(String(name)) || null;
-  }
-
-  removeAttribute(name) {
-    this.attributes.delete(String(name));
-  }
-
-  contains(target) {
-    if (target === this) {
-      return true;
-    }
-    return this.children.some((child) => child.contains(target));
-  }
-
-  click() {}
-
-  focus() {}
-
-  scrollIntoView() {}
-
-  matches(selector) {
-    if (selector === "li[role='option']") {
-      return this.tagName === "LI" && this.getAttribute("role") === "option";
-    }
-    return false;
-  }
-
-  closest(selector) {
-    let node = this;
-    while (node) {
-      if (node.matches?.(selector)) {
-        return node;
-      }
-      node = node.parentNode;
-    }
-    return null;
-  }
-
-  querySelectorAll(selector) {
-    if (selector === "tr") {
-      return this.children.filter((child) => child.tagName === "TR");
-    }
-    if (selector === "li[role='option']") {
-      return this.children.filter((child) => child.matches(selector));
-    }
-    return [];
-  }
-
-  querySelector() {
-    return null;
-  }
-}
-
-class FakeDocument {
-  constructor() {
-    this.elements = new Map();
-    this.cookie = "";
-    this.eventListeners = new Map();
-  }
-
-  register(selector, element) {
-    this.elements.set(selector, element);
-    return element;
-  }
-
-  // index.html always provides every element web/js/ui/dom.js requires, so an
-  // unregistered selector stands for markup the test simply does not care
-  // about — not a missing element. Auto-vivify it; tests register the specific
-  // elements they assert on.
-  querySelector(selector) {
-    const key = String(selector);
-    if (!this.elements.has(key)) {
-      this.elements.set(key, new FakeElement("div", this));
-    }
-    return this.elements.get(key);
-  }
-
-  querySelectorAll(selector) {
-    if (selector === ".left-panel select, .left-panel button, .left-panel input") {
-      return Array.from(this.elements.values()).filter((element) =>
-        ["SELECT", "BUTTON", "INPUT"].includes(element.tagName));
-    }
-    return [];
-  }
-
-  createElement(tagName) {
-    return new FakeElement(tagName, this);
-  }
-
-  addEventListener(type, handler) {
-    const key = String(type);
-    if (!this.eventListeners.has(key)) {
-      this.eventListeners.set(key, []);
-    }
-    this.eventListeners.get(key).push(handler);
-  }
-}
-
-function registerElement(document, selector, tagName) {
-  return document.register(selector, new FakeElement(tagName, document, selector.replace(/^#/, "")));
-}
-
-// Elements stubbed with a specific tag name, because the tag is load-bearing
-// somewhere (sidebarControlEls filters on SELECT/BUTTON/INPUT). Anything else
-// the UI queries auto-vivifies as a div. Every entry must still be an element
-// dom.js declares — see the drift check at the bottom of this file.
-const STUBBED_SELECTORS = new Map([
-  ["#mem-table thead", "thead"],
-  ["#mem-table tbody", "tbody"],
-  ["#channel-editor", "div"],
-  ["#settings-editor", "div"],
-  ["#view-channels", "button"],
-  ["#view-settings", "button"],
-  ["#settings-tabs", "div"],
-  ["#settings-summary", "div"],
-  ["#settings-empty", "div"],
-  ["#settings-content", "div"],
-  ["#csv-file", "input"],
-  ["#img-file", "input"],
-  ["#debug-output", "textarea"],
-  ["#report-issue", "button"],
-  ["#live-radio-support-warning", "p"],
-  ["#radio-search", "input"],
-  ["#radio-search-results", "ul"],
-  ["#serial-connect-toggle", "button"],
-  ["#radio-download", "button"],
-  ["#radio-upload", "button"],
-  ["#channel-insert", "button"],
-  ["#channel-remove", "button"],
-  ["#channel-menu-toggle", "button"],
-  ["#channel-menu-popup", "div"],
-  ["#channel-add-gmrs", "button"],
-  ["#channel-add-frs", "button"],
-  ["#channel-add-pmr446", "button"],
-  ["#channel-import-przemienniki", "button"],
-  ["#channel-import-repeaterbook", "button"],
-  ["#channel-import-irts", "button"],
-  ["#repeater-query-form", "form"],
-  ["#repeater-query-cancel", "button"],
-  ["#import-csv", "button"],
-  ["#export-csv", "button"],
-  ["#export-binary", "button"],
-  ["#import-binary", "button"],
-  ["#debug-clear", "button"],
-]);
-
-function installFakeDom() {
-  const document = new FakeDocument();
-
-  for (const [selector, tagName] of STUBBED_SELECTORS) {
-    registerElement(document, selector, tagName);
-  }
-
-  const window = {
-    addEventListener() {},
-    open() {},
-  };
-
-  Object.defineProperty(globalThis, "document", {
-    configurable: true,
-    value: document,
-  });
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: window,
-  });
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: {
-      userAgent: "FakeBrowser/1.0",
-      language: "en-US",
-      appVersion: "FakeBrowser/1.0",
-    },
-  });
-  Object.defineProperty(globalThis, "CSS", {
-    configurable: true,
-    value: { escape: (value) => String(value) },
-  });
-  Object.defineProperty(globalThis, "Node", {
-    configurable: true,
-    value: FakeElement,
-  });
-
+// Installs the shared fake DOM and picks out the radio-search elements these
+// tests read and drive.
+function installUiDom() {
+  const { document } = installFakeDom();
   return {
     document,
     radioSearchEl: document.querySelector("#radio-search"),
@@ -320,23 +22,6 @@ function installFakeDom() {
     radioSelectionEl: document.querySelector("#radio-selection"),
     radioSelectionNameEl: document.querySelector("#radio-selection-name"),
   };
-}
-
-// Selecting a radio is search-only now, so tests drive the search box the way
-// a user does: type, then take a suggestion by keyboard or mouse.
-function typeRadioSearch(radioSearchEl, query) {
-  radioSearchEl.value = query;
-  radioSearchEl.dispatchEvent({ type: "input" });
-}
-
-function noopKeyEvent(key) {
-  return { type: "keydown", key, preventDefault() {}, stopPropagation() {} };
-}
-
-// Type a query and accept the first suggestion, which the list pre-highlights.
-function selectRadioBySearch(radioSearchEl, query) {
-  typeRadioSearch(radioSearchEl, query);
-  radioSearchEl.dispatchEvent(noopKeyEvent("Enter"));
 }
 
 // Each suggestion renders as a name element plus, when the query hit an alias,
@@ -347,16 +32,8 @@ function suggestionLines(radioSearchResultsEl) {
   );
 }
 
-function createDeferred() {
-  let resolve;
-  const promise = new Promise((nextResolve) => {
-    resolve = nextResolve;
-  });
-  return { promise, resolve };
-}
-
 test("the selected-radio readout shows Loading... while CHIRP drivers are loading", async () => {
-  const { radioSelectionNameEl, radioSelectionEl } = installFakeDom();
+  const { radioSelectionNameEl, radioSelectionEl } = installUiDom();
   const { createUiController } = await import("../web/js/ui.js");
   const radioListDeferred = createDeferred();
   const ui = createUiController();
@@ -417,7 +94,7 @@ test("the selected-radio readout shows Loading... while CHIRP drivers are loadin
 });
 
 test("search box shows narrowing make+model suggestions", async () => {
-  const { radioSearchEl, radioSearchResultsEl } = installFakeDom();
+  const { document, radioSearchEl, radioSearchResultsEl } = installUiDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
 
@@ -439,7 +116,7 @@ test("search box shows narrowing make+model suggestions", async () => {
   await ui.init(true);
 
   // A vendor query lists all of that vendor's models as "<Make> <Model>".
-  typeRadioSearch(radioSearchEl, "acme");
+  typeRadioSearch(document, "acme");
   assert.equal(radioSearchResultsEl.hidden, false);
   assert.deepEqual(
     radioSearchResultsEl.children.map((li) => li.textContent),
@@ -447,36 +124,36 @@ test("search box shows narrowing make+model suggestions", async () => {
   );
 
   // A model query narrows the list to the matching radio.
-  typeRadioSearch(radioSearchEl, "uv-5r");
+  typeRadioSearch(document, "uv-5r");
   assert.deepEqual(
     radioSearchResultsEl.children.map((li) => li.textContent),
     ["Baofeng UV-5R"],
   );
 
   // No matches shows an inert placeholder row.
-  typeRadioSearch(radioSearchEl, "nonesuch");
+  typeRadioSearch(document, "nonesuch");
   assert.deepEqual(radioSearchResultsEl.children.map((li) => li.textContent), ["No matching radios"]);
   assert.ok(radioSearchResultsEl.children[0].classList.contains("radio-search-empty"));
 
   // The combobox points a screen reader at the highlighted suggestion, since
   // there is no dropdown left to announce the selection instead.
-  typeRadioSearch(radioSearchEl, "acme");
+  typeRadioSearch(document, "acme");
   assert.equal(radioSearchEl.getAttribute("aria-activedescendant"), "radio-search-option-0");
   assert.equal(radioSearchResultsEl.children[0].getAttribute("aria-selected"), "true");
-  radioSearchEl.dispatchEvent(noopKeyEvent("ArrowDown"));
+  radioSearchEl.dispatchEvent(keydownEvent("ArrowDown"));
   assert.equal(radioSearchEl.getAttribute("aria-activedescendant"), "radio-search-option-1");
   assert.equal(radioSearchResultsEl.children[0].getAttribute("aria-selected"), "false");
   assert.equal(radioSearchResultsEl.children[1].getAttribute("aria-selected"), "true");
 
   // Clearing the box closes the suggestion list.
-  typeRadioSearch(radioSearchEl, "");
+  typeRadioSearch(document, "");
   assert.equal(radioSearchResultsEl.hidden, true);
   assert.equal(radioSearchResultsEl.children.length, 0);
   assert.equal(radioSearchEl.getAttribute("aria-activedescendant"), null);
 });
 
 test("search suggestions disambiguate duplicates, cap results, and close on Escape", async () => {
-  const { radioSearchEl, radioSearchResultsEl } = installFakeDom();
+  const { document, radioSearchEl, radioSearchResultsEl } = installUiDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
 
@@ -525,7 +202,7 @@ test("search suggestions disambiguate duplicates, cap results, and close on Esca
   assert.equal(footer.textContent, "10 more — keep typing to narrow down");
 
   // Escape closes the list without changing the input text.
-  radioSearchEl.dispatchEvent(noopKeyEvent("Escape"));
+  radioSearchEl.dispatchEvent(keydownEvent("Escape"));
   assert.equal(radioSearchResultsEl.hidden, true);
   assert.equal(radioSearchEl.value, "filler");
 });
@@ -535,9 +212,6 @@ function tableHeaderTexts(document) {
   return (headerRow?.children || []).map((th) => th.textContent);
 }
 
-function flushMicrotasks() {
-  return new Promise((resolve) => setImmediate(resolve));
-}
 
 const STALE_TEST_CATALOG = [
   { vendor: "Acme", model: "Alpha", module: "alpha", className: "AlphaRadio", key: "alpha:AlphaRadio", isLiveRadio: false },
@@ -548,7 +222,7 @@ const STALE_TEST_CATALOG = [
 const EMPTY_SETTINGS = { supported: false, available: false, requiresImage: false, message: "", groups: [] };
 
 test("stale metadata response does not overwrite a newer radio selection", async () => {
-  const { radioSearchEl } = installFakeDom();
+  const { document, radioSearchEl } = installUiDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
   const slowMetadata = createDeferred();
@@ -571,10 +245,10 @@ test("stale metadata response does not overwrite a newer radio selection", async
   await ui.init(true);
 
   // Select the slow radio; its metadata response stays in flight.
-  selectRadioBySearch(radioSearchEl, "SlowCo Slow");
+  selectRadioBySearch(document, "SlowCo Slow");
 
   // Move on to the fast radio, whose metadata resolves immediately.
-  selectRadioBySearch(radioSearchEl, "FastCo Fast");
+  selectRadioBySearch(document, "FastCo Fast");
   await flushMicrotasks();
   assert.ok(tableHeaderTexts(globalThis.document).includes("FastHeader"));
 
@@ -598,7 +272,7 @@ test("reselecting the loaded radio rejects partial loads in either completion or
   });
 
   for (const deferredPart of ["metadata", "settings"]) {
-    const { radioSearchEl, radioSelectionNameEl } = installFakeDom();
+    const { document, radioSearchEl, radioSelectionNameEl } = installUiDom();
     const ui = createUiController();
     const pending = createDeferred();
     const metadataCalls = [];
@@ -630,9 +304,9 @@ test("reselecting the loaded radio rejects partial loads in either completion or
     await ui.init(true);
     // Complete Fast -> Alpha first so the final return to Alpha below must
     // take reloadForSelectedRadio()'s no-new-request path from issue #111.
-    selectRadioBySearch(radioSearchEl, "FastCo Fast");
+    selectRadioBySearch(document, "FastCo Fast");
     await flushMicrotasks();
-    selectRadioBySearch(radioSearchEl, "Acme Alpha");
+    selectRadioBySearch(document, "Acme Alpha");
     await flushMicrotasks();
 
     assert.ok(tableHeaderTexts(globalThis.document).includes("alphaHeader"));
@@ -643,9 +317,9 @@ test("reselecting the loaded radio rejects partial loads in either completion or
     // One half of Slow's load resolves before the other. Returning to Alpha
     // must invalidate that work even though Alpha is already the last fully
     // loaded radio, regardless of which half arrived first.
-    selectRadioBySearch(radioSearchEl, "SlowCo Slow");
+    selectRadioBySearch(document, "SlowCo Slow");
     await flushMicrotasks();
-    selectRadioBySearch(radioSearchEl, "Acme Alpha");
+    selectRadioBySearch(document, "Acme Alpha");
     await flushMicrotasks();
 
     pending.resolve(
@@ -664,7 +338,7 @@ test("reselecting the loaded radio rejects partial loads in either completion or
 });
 
 test("picking a search suggestion names the radio in the readout and loads it once", async () => {
-  const { radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installFakeDom();
+  const { document, radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installUiDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
   const metadataCalls = [];
@@ -685,8 +359,8 @@ test("picking a search suggestion names the radio in the readout and loads it on
   const callsAfterInit = metadataCalls.length;
 
   // Typing only opens suggestions; no radio load happens yet.
-  typeRadioSearch(radioSearchEl, "slow");
-  typeRadioSearch(radioSearchEl, "co");
+  typeRadioSearch(document, "slow");
+  typeRadioSearch(document, "co");
   assert.equal(metadataCalls.length, callsAfterInit);
   assert.deepEqual(
     radioSearchResultsEl.children.map((li) => li.textContent),
@@ -694,8 +368,8 @@ test("picking a search suggestion names the radio in the readout and loads it on
   );
 
   // Arrow down highlights the second suggestion; Enter selects it.
-  radioSearchEl.dispatchEvent(noopKeyEvent("ArrowDown"));
-  radioSearchEl.dispatchEvent(noopKeyEvent("Enter"));
+  radioSearchEl.dispatchEvent(keydownEvent("ArrowDown"));
+  radioSearchEl.dispatchEvent(keydownEvent("Enter"));
   await flushMicrotasks();
 
   assert.equal(radioSelectionNameEl.textContent, "FastCo Fast");
@@ -707,7 +381,7 @@ test("picking a search suggestion names the radio in the readout and loads it on
   assert.equal(metadataCalls.at(-1), "fast");
 
   // Clicking a suggestion with the mouse selects it as well.
-  typeRadioSearch(radioSearchEl, "slow");
+  typeRadioSearch(document, "slow");
   const slowItem = radioSearchResultsEl.children[0];
   radioSearchResultsEl.dispatchEvent({ type: "mousedown", target: slowItem, preventDefault() {} });
   await flushMicrotasks();
@@ -722,7 +396,7 @@ test("picking a search suggestion names the radio in the readout and loads it on
 // way an owner of a rebadged radio can find the driver at all, since the
 // catalog lists the entry under its primary vendor only.
 test("search finds radios by their alias identities and names the matching alias", async () => {
-  const { radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installFakeDom();
+  const { document, radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installUiDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
 
@@ -762,23 +436,23 @@ test("search finds radios by their alias identities and names the matching alias
 
   // The alias vendor matches, and the suggestion explains why a Baofeng came
   // back for a Retevis query.
-  typeRadioSearch(radioSearchEl, "retevis");
+  typeRadioSearch(document, "retevis");
   assert.deepEqual(suggestionLines(radioSearchResultsEl), [
     ["Baofeng UV-5R", "also sold as Retevis RT5R"],
   ]);
 
   // Tokens may straddle the primary identity and the alias.
-  typeRadioSearch(radioSearchEl, "rt5r uv-5r");
+  typeRadioSearch(document, "rt5r uv-5r");
   assert.deepEqual(suggestionLines(radioSearchResultsEl), [
     ["Baofeng UV-5R", "also sold as Retevis RT5R"],
   ]);
 
   // A query the radio's own vendor/model answers is not labelled with an alias.
-  typeRadioSearch(radioSearchEl, "baofeng");
+  typeRadioSearch(document, "baofeng");
   assert.deepEqual(suggestionLines(radioSearchResultsEl), [["Baofeng UV-5R"]]);
 
   // Selecting through an alias still commits the driver's own identity.
-  selectRadioBySearch(radioSearchEl, "retevis");
+  selectRadioBySearch(document, "retevis");
   await flushMicrotasks();
   assert.equal(radioSelectionNameEl.textContent, "Baofeng UV-5R");
 });
@@ -786,7 +460,7 @@ test("search finds radios by their alias identities and names the matching alias
 // The live-mode marker trails the name in both places that show a radio, so the
 // vendor stays first and the list still aligns down its left edge.
 test("live-mode radios carry their marker after the name, in list and readout", async () => {
-  const { radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installFakeDom();
+  const { document, radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installUiDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
 
@@ -806,13 +480,13 @@ test("live-mode radios carry their marker after the name, in list and readout", 
 
   await ui.init(true);
 
-  typeRadioSearch(radioSearchEl, "acme");
+  typeRadioSearch(document, "acme");
   assert.deepEqual(suggestionLines(radioSearchResultsEl), [
     ["Acme Live ⚡"],
     ["Acme Clone"],
   ]);
 
-  selectRadioBySearch(radioSearchEl, "acme live");
+  selectRadioBySearch(document, "acme live");
   await flushMicrotasks();
   assert.equal(radioSelectionNameEl.textContent, "Acme Live ⚡");
 });
@@ -821,7 +495,7 @@ test("live-mode radios carry their marker after the name, in list and readout", 
 // box empties after a selection — so the readout is the only place left that
 // can say which of them Connect / Load / Save will act on.
 test("the readout names the driver only when two entries share a name", async () => {
-  const { radioSearchEl, radioSelectionNameEl } = installFakeDom();
+  const { document, radioSearchEl, radioSelectionNameEl } = installUiDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
 
@@ -843,12 +517,12 @@ test("the readout names the driver only when two entries share a name", async ()
   await ui.init(true);
 
   // A shared name keeps the class that tells the two entries apart.
-  selectRadioBySearch(radioSearchEl, "twin");
+  selectRadioBySearch(document, "twin");
   await flushMicrotasks();
   assert.equal(radioSelectionNameEl.textContent, "Acme Twin (TwinARadio)");
 
   // A name only one entry wears does not need it.
-  selectRadioBySearch(radioSearchEl, "only");
+  selectRadioBySearch(document, "only");
   await flushMicrotasks();
   assert.equal(radioSelectionNameEl.textContent, "Acme Only");
 });
@@ -856,7 +530,7 @@ test("the readout names the driver only when two entries share a name", async ()
 // Nothing is selected at startup now, so the serial path has to say "pick a
 // radio" rather than offer buttons that would clone against no driver.
 test("serial and clone actions stay disabled until a radio is selected", async () => {
-  const { radioSearchEl, document } = installFakeDom();
+  const { radioSearchEl, document } = installUiDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
 
@@ -878,7 +552,7 @@ test("serial and clone actions stay disabled until a radio is selected", async (
   assert.equal(downloadEl.disabled, true);
   assert.equal(downloadEl.title, "Search for and select a radio first");
 
-  selectRadioBySearch(radioSearchEl, "Acme Alpha");
+  selectRadioBySearch(document, "Acme Alpha");
   await flushMicrotasks();
 
   assert.equal(connectEl.disabled, false);
@@ -886,13 +560,13 @@ test("serial and clone actions stay disabled until a radio is selected", async (
   assert.equal(downloadEl.title, "Connect to a serial port first");
 });
 
-// This file stubs a DOM for the UI to run against, so it can drift from the
-// real page in a way index.html cannot: a stub for a deleted element keeps the
-// test green while production has nothing there. It happened — the four
-// #serial-transaction / #tx-hex / #rx-bytes / #rx-timeout stubs outlived the
-// debug panel ff5607a removed, and nothing noticed. Pin the stub list to the
-// element contract instead, so a removed id fails here as well as in
-// test-dom-selectors.mjs.
+// The shared fake DOM (scripts/test-support/fake-dom.mjs) stubs a page for the
+// UI to run against, so it can drift from the real page in a way index.html
+// cannot: a stub for a deleted element keeps every UI test green while
+// production has nothing there. It happened — the four #serial-transaction /
+// #tx-hex / #rx-bytes / #rx-timeout stubs outlived the debug panel ff5607a
+// removed, and nothing noticed. Pin the stub list to the element contract
+// instead, so a removed id fails here as well as in test-dom-selectors.mjs.
 test("every stubbed element is one dom.js actually declares", async () => {
   const { REQUIRED_ELEMENTS, ELEMENT_COLLECTIONS } = await import("../web/js/ui/dom.js");
   const declared = new Set([
@@ -900,7 +574,7 @@ test("every stubbed element is one dom.js actually declares", async () => {
     ...Object.values(ELEMENT_COLLECTIONS),
   ]);
 
-  const orphaned = [...STUBBED_SELECTORS.keys()].filter((selector) => !declared.has(selector));
+  const orphaned = [...UI_STUBBED_SELECTORS.keys()].filter((selector) => !declared.has(selector));
   assert.deepEqual(
     orphaned,
     [],

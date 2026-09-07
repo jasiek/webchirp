@@ -4,51 +4,10 @@ import test from "node:test";
 import { createDebugLog } from "../web/js/ui/debug-log.js";
 import { initSentry, resetSentryForTests } from "../web/js/sentry.js";
 import { markBootstrapFailure } from "../web/js/runtime-bootstrap.mjs";
-
-class FakeElement {
-  constructor({ hidden = false } = {}) {
-    this.attributes = new Map();
-    this.hidden = hidden;
-    this.listeners = new Map();
-    this.value = "";
-  }
-
-  addEventListener(type, handler) {
-    this.listeners.set(String(type), handler);
-  }
-
-  click() {
-    this.listeners.get("click")?.();
-  }
-
-  getAttribute(name) {
-    return this.attributes.get(String(name)) ?? null;
-  }
-
-  setAttribute(name, value) {
-    this.attributes.set(String(name), String(value));
-  }
-
-  focus() {}
-
-  select() {}
-}
-
-function fakeDom() {
-  const debugToggleEl = new FakeElement();
-  debugToggleEl.setAttribute("aria-expanded", "false");
-  return {
-    debugToggleEl,
-    debugActionsEl: new FakeElement({ hidden: true }),
-    debugOutputContentEl: new FakeElement({ hidden: true }),
-    debugOutputEl: new FakeElement(),
-    debugClearEl: new FakeElement(),
-    debugCopyEl: new FakeElement(),
-  };
-}
+import { fakeDebugDom } from "./test-support/fake-dom.mjs";
 
 test("debug output is folded initially and toggles both hidden regions together", () => {
-  const dom = fakeDom();
+  const dom = fakeDebugDom();
   const log = createDebugLog({ dom });
   log.bindEvents();
 
@@ -68,7 +27,7 @@ test("debug output is folded initially and toggles both hidden regions together"
 });
 
 test("routine logs stay folded but explicitly reported errors expand the panel", () => {
-  const dom = fakeDom();
+  const dom = fakeDebugDom();
   const log = createDebugLog({ dom });
   log.bindEvents();
 
@@ -101,7 +60,7 @@ test("a delayed clipboard failure reopens a panel collapsed while copying", asyn
   });
 
   try {
-    const dom = fakeDom();
+    const dom = fakeDebugDom();
     const log = createDebugLog({ dom });
     log.bindEvents();
     dom.debugToggleEl.click();
@@ -157,7 +116,7 @@ test("a bootstrap failure returning through an action is captured only once", as
   const sdk = makeSentrySdk();
   await initSentry(makeSentryWindow(), { loadSdk: async () => sdk });
 
-  const log = createDebugLog({ dom: fakeDom() });
+  const log = createDebugLog({ dom: fakeDebugDom() });
 
   // What runtime-rpc.js rethrows once it has already reported the crash.
   const crash = markBootstrapFailure(new Error("RuntimeError: seeding failed"));
@@ -174,7 +133,7 @@ test("an ordinary action failure is still captured by the action funnel", async 
   const sdk = makeSentrySdk();
   await initSentry(makeSentryWindow(), { loadSdk: async () => sdk });
 
-  const log = createDebugLog({ dom: fakeDom() });
+  const log = createDebugLog({ dom: fakeDebugDom() });
   log.reportActionError("Download", new Error("Failed to fetch"));
 
   assert.equal(sdk.captured.length, 1);

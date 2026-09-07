@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSerialRpcHandler } from "../web/js/serial.js";
+import { installFakeDom } from "./test-support/fake-dom.mjs";
 
 test("progress op forwards CHIRP status reports to onProgress", async () => {
   const reports = [];
@@ -26,90 +27,12 @@ test("progress op is a no-op without an onProgress sink", async () => {
   assert.deepEqual(res, { reported: true });
 });
 
-// Minimal DOM stand-in for createUiController: every selector resolves to an
-// element; the <progress> bar mirrors the real element's value-attribute
-// reflection so indeterminate state (no value attribute) is observable.
-class FakeElement {
-  constructor() {
-    this.attributes = new Map();
-    this.children = [];
-    this.classList = { add() {}, remove() {}, toggle() {}, contains: () => false };
-    this.dataset = {};
-    this.style = {};
-    this.hidden = false;
-    this.disabled = false;
-    this.textContent = "";
-    this.innerHTML = "";
-  }
-
-  get value() {
-    return this.attributes.get("value") ?? "";
-  }
-
-  set value(next) {
-    this.attributes.set("value", String(next));
-  }
-
-  setAttribute(name, val) {
-    this.attributes.set(String(name), String(val));
-  }
-
-  getAttribute(name) {
-    return this.attributes.get(String(name)) ?? null;
-  }
-
-  hasAttribute(name) {
-    return this.attributes.has(String(name));
-  }
-
-  removeAttribute(name) {
-    this.attributes.delete(String(name));
-  }
-
-  addEventListener() {}
-
-  appendChild(child) {
-    this.children.push(child);
-    return child;
-  }
-
-  querySelectorAll() {
-    return [];
-  }
-
-  querySelector() {
-    return null;
-  }
-}
-
-function installFakeDom() {
-  const elements = new Map();
-  const document = {
-    cookie: "",
-    querySelector(selector) {
-      const key = String(selector);
-      if (!elements.has(key)) {
-        elements.set(key, new FakeElement());
-      }
-      return elements.get(key);
-    },
-    querySelectorAll() {
-      return [];
-    },
-    createElement() {
-      return new FakeElement();
-    },
-    addEventListener() {},
-  };
-  Object.defineProperty(globalThis, "document", { configurable: true, value: document });
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: { addEventListener() {}, open() {} },
-  });
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: { userAgent: "FakeBrowser/1.0", language: "en-US", appVersion: "FakeBrowser/1.0" },
-  });
+// The shared fake DOM stands in for createUiController: every selector
+// resolves to an element, and #clone-progress-bar is stubbed as a <progress>,
+// whose fake mirrors the real element's value-attribute reflection so
+// indeterminate state (no value attribute) is observable.
+function installProgressDom() {
+  const { document } = installFakeDom();
   return {
     bar: document.querySelector("#clone-progress-bar"),
     label: document.querySelector("#clone-progress-label"),
@@ -118,7 +41,7 @@ function installFakeDom() {
 }
 
 test("determinate-to-indeterminate transition clears the stale percentage", async () => {
-  const { bar, label, percent } = installFakeDom();
+  const { bar, label, percent } = installProgressDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
 

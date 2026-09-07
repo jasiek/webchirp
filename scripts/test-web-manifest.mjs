@@ -3,12 +3,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
+import { htmlPages, webDir } from "./test-support/repo-paths.mjs";
+
 // Guards the home-screen install contract. None of this is exercised by loading
 // the page — a manifest that fails to parse, or an icon entry pointing at a file
 // that was renamed, only shows up when a user tries to install the app and
 // silently gets a browser shortcut instead of a WebAPK.
-const WEB_DIR = path.join(process.cwd(), "web");
-const MANIFEST_PATH = path.join(WEB_DIR, "manifest.webmanifest");
+const MANIFEST_PATH = path.join(webDir, "manifest.webmanifest");
 
 const manifestText = fs.readFileSync(MANIFEST_PATH, "utf8");
 
@@ -55,7 +56,7 @@ test("start_url marks home-screen launches and stays inside scope", () => {
     !startPath.split("/").includes(".."),
     `start_url must not climb out of scope: ${startPath}`,
   );
-  assert.ok(fs.existsSync(path.join(WEB_DIR, startPath)), `start_url is not served: ${startPath}`);
+  assert.ok(fs.existsSync(path.join(webDir, startPath)), `start_url is not served: ${startPath}`);
 
   // A WebAPK launch sends no referrer, so without these params its sessions are
   // indistinguishable from direct browser traffic in analytics.
@@ -73,7 +74,7 @@ test("start_url marks home-screen launches and stays inside scope", () => {
 test("every manifest icon exists at its declared size", () => {
   const manifest = JSON.parse(manifestText);
   for (const icon of manifest.icons) {
-    const iconPath = path.join(WEB_DIR, icon.src);
+    const iconPath = path.join(webDir, icon.src);
     assert.ok(fs.existsSync(iconPath), `missing manifest icon: ${icon.src}`);
     const { width, height } = pngSize(iconPath);
     assert.equal(
@@ -99,14 +100,14 @@ test("manifest carries the icon purposes Android installs need", () => {
 });
 
 test("every page links the manifest and an iOS touch icon", () => {
-  for (const page of ["index.html", "about.html"]) {
-    const html = fs.readFileSync(path.join(WEB_DIR, page), "utf8");
+  for (const page of htmlPages) {
+    const html = fs.readFileSync(path.join(webDir, page), "utf8");
     assert.match(html, /<link rel="manifest" href="\.\/manifest\.webmanifest"/, page);
     // iOS ignores manifest icons entirely and reads apple-touch-icon instead.
     assert.match(html, /<link rel="apple-touch-icon" href="([^"]+)"/, page);
     const [, touchIconSrc] = html.match(/<link rel="apple-touch-icon" href="([^"]+)"/);
     assert.ok(
-      fs.existsSync(path.join(WEB_DIR, touchIconSrc)),
+      fs.existsSync(path.join(webDir, touchIconSrc)),
       `${page} apple-touch-icon is missing: ${touchIconSrc}`,
     );
   }

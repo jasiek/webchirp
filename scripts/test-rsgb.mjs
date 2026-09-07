@@ -20,6 +20,7 @@ import {
   squaresForRadius,
 } from "../web/js/rsgb.js";
 import { rowGeo } from "../web/js/row-geo.js";
+import { makeRowHooks } from "./test-support/row-hooks.mjs";
 
 // Herne Bay: the API places GB3KI at JO01NI, 145.6625 out / 145.0625 in.
 const HERNE_BAY = { latitude: 51.3704, longitude: 1.1289 };
@@ -42,38 +43,18 @@ function record(overrides = {}) {
   };
 }
 
-// Row hooks matching channel-table.js's rowBuilderHooks(), with a column set
-// wide enough to exercise every field the builder writes.
-function rowHooks(options = {}) {
-  const modeOptions = options.modeOptions || ["FM", "NFM", "DV", "DMR", "C4FM", "P25", "NXDN", "M17"];
+// A stand-in radio for the builder, matched case-insensitively as the grid
+// does, with the mode and power lists a test wants to vary.
+function rowHooks({
+  modeOptions = ["FM", "NFM", "DV", "DMR", "C4FM", "P25", "NXDN", "M17"],
   // Low first, as roughly half of CHIRP's drivers order them — so a blank row's
   // options[0] default would be "Low" and an unset Power column shows it.
-  const powerOptions = options.powerOptions || ["Low", "High"];
-  const columns = [
-    "Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Power", "Comment",
-  ];
-  return {
-    createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
-    setRowValue: (row, column, value) => {
-      if (columns.includes(column)) {
-        row[column] = String(value ?? "");
-      }
-    },
-    // Choice order decides, exactly as channel-table.js's findEnumOption does:
-    // the caller's list is a priority ranking, not a set.
-    findEnumOption: (column, choices) => {
-      const options = column === "Tone"
-        ? ["Tone", "TSQL"]
-        : column === "Mode" ? modeOptions : column === "Power" ? powerOptions : [];
-      for (const choice of choices) {
-        const match = options.find((option) => option.toLowerCase() === String(choice).toLowerCase());
-        if (match) {
-          return match;
-        }
-      }
-      return "";
-    },
-  };
+  powerOptions = ["Low", "High"],
+} = {}) {
+  return makeRowHooks({
+    optionsByColumn: { Tone: ["Tone", "TSQL"], Mode: modeOptions, Power: powerOptions },
+    caseInsensitive: true,
+  });
 }
 
 test("encodeMaidenhead round-trips a known repeater square", () => {

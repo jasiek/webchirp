@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
-import { loadPyodide } from "pyodide";
-import {
-  createFilesystemPythonSource,
-  installFetchChirpSourceGlobal,
-  seedPyodideRuntime,
-} from "../web/js/python-sources.mjs";
+
+import { ensureModule, sharedHarness } from "./test-support/chirp.mjs";
 
 const PMR446_FREQS_6DP = [
   "446.006250",
@@ -141,51 +134,8 @@ function makeGmrsRows() {
   ];
 }
 
-function installJsBridgeStubs() {
-  globalThis.serial_open = async () => ({ connected: true, message: "stub open" });
-  globalThis.serial_close = async () => ({ connected: false, message: "stub close" });
-  globalThis.serial_write_hex = async () => ({ written: 0, hex: "" });
-  globalThis.serial_read_hex = async () => ({ read: 0, hex: "", timedOut: true });
-  globalThis.serial_write_bytes = async () => ({ written: 0 });
-  globalThis.serial_read_bytes = async () => [];
-  globalThis.serial_in_waiting = async () => ({ available: 0 });
-  globalThis.serial_log = () => ({ logged: true });
-  globalThis.serial_progress = () => ({ reported: true });
-  globalThis.serial_prepare_clone = async () => ({ prepared: true });
-  globalThis.serial_set_signals = async () => ({ applied: true });
-  globalThis.serial_reconfigure = async () => ({ reconfigured: false });
-  globalThis.serial_reset_buffers = async () => ({ reset: true });
-}
-
-async function pathExists(fullPath) {
-  try {
-    await fs.access(fullPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function resolveChirpPackageDir(inputDir) {
-  const candidate = path.resolve(inputDir);
-  const directInit = path.join(candidate, "__init__.py");
-  const directDrivers = path.join(candidate, "drivers");
-  if ((await pathExists(directInit)) && (await pathExists(directDrivers))) {
-    return candidate;
-  }
-
-  const nested = path.join(candidate, "chirp");
-  const nestedInit = path.join(nested, "__init__.py");
-  const nestedDrivers = path.join(nested, "drivers");
-  if ((await pathExists(nestedInit)) && (await pathExists(nestedDrivers))) {
-    return nested;
-  }
-
-  throw new Error(
-    `Invalid CHIRP source dir: ${candidate}. Expected dir containing __init__.py and drivers/`,
-  );
-}
-
+// An optional --chirp-dir on the command line points the runtime at another
+// CHIRP checkout; the harness falls back to WEBCHIRP_CHIRP_DIR and ./chirp.
 function parseChirpDirArg(argv = process.argv.slice(2)) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = String(argv[i] || "");
@@ -199,46 +149,13 @@ function parseChirpDirArg(argv = process.argv.slice(2)) {
   return "";
 }
 
-async function createLocalPythonSource(repoRoot) {
-  const chirpInputDir =
-    parseChirpDirArg() || process.env.WEBCHIRP_CHIRP_DIR || path.join(repoRoot, "chirp");
-  const chirpPackageDir = await resolveChirpPackageDir(chirpInputDir);
-  const runtimeBridgePath = path.join(repoRoot, "web/python/runtime_bridge.py");
-  return createFilesystemPythonSource({
-    chirpPackageDir,
-    runtimeBridgePath,
-    readText: (fullPath) => fs.readFile(fullPath, "utf8"),
-    readDirNames: async (fullPath) => {
-      const entries = await fs.readdir(fullPath, { withFileTypes: true });
-      return entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
-    },
-    joinPath: (...parts) => path.join(...parts),
-  });
-}
-
-async function runPythonJson(pyodide, python, vars = {}) {
-  for (const [key, value] of Object.entries(vars)) {
-    pyodide.globals.set(key, value);
-  }
-  const jsonText = await pyodide.runPythonAsync(python);
-  return JSON.parse(jsonText);
-}
-
 test("channel list rows are parseable and codeplug-applicable", async (t) => {
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  installJsBridgeStubs();
-  const pythonSource = await createLocalPythonSource(repoRoot);
-  installFetchChirpSourceGlobal(pythonSource);
-
-  const pyodide = await loadPyodide();
-  await seedPyodideRuntime(pyodide, pythonSource);
-  pyodide.globals.set("_sel_module", TEST_RADIO.module);
-  await pyodide.runPythonAsync("ensure_radio_module(_sel_module)");
+  const harness = await sharedHarness({ chirpDir: parseChirpDirArg() });
+  await ensureModule(harness, TEST_RADIO.module);
 
   await t.test("blank Offset values normalize into parseable rows", async () => {
     const rows = makeChannelRows({ offset: "" });
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
 _csv = normalize_rows(_rows, _sel_module, _sel_class)
@@ -273,8 +190,7 @@ json.dumps({
 
   await t.test("UI-style PMR frequencies are parseable from channel list values", async () => {
     const rows = makeChannelRows({ frequencies: PMR446_FREQS_5DP });
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
 _csv = normalize_rows(_rows, _sel_module, _sel_class)
@@ -297,8 +213,7 @@ json.dumps({
 
   await t.test("channel list rows can be applied to a driver codeplug image", async () => {
     const rows = makeChannelRows();
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
 _radio_cls = _import_radio_class(_sel_module, _sel_class)
@@ -339,8 +254,7 @@ json.dumps({
 
   await t.test("GMRS-style rows preserve bandwidth/power/simplex and repeater fields", async () => {
     const rows = makeGmrsRows();
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
 _radio_cls = _import_radio_class(_sel_module, _sel_class)
@@ -380,8 +294,7 @@ json.dumps({
   await t.test("preflight validator returns row+column issues for invalid values", async () => {
     const rows = makeChannelRows();
     rows[2].Frequency = "not-a-freq";
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
 json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
@@ -408,8 +321,7 @@ json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
     const rows = makeChannelRows();
     rows[0].Location = "9000";
     rows[3].Location = rows[2].Location;
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
 json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
@@ -438,8 +350,7 @@ json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
   await t.test("driver validation rejects a globally valid tuning step", async () => {
     const rows = makeChannelRows().slice(0, 1);
     rows[0].TStep = "15.00";
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
 json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
@@ -461,8 +372,7 @@ json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
   });
 
   await t.test("GT-5R immutable TX fields block preflight and the write path", async () => {
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _module = "uv5r"
 _class_name = "RadioddityGT5RRadio"
@@ -517,8 +427,7 @@ json.dumps({"preflight": _preflight, "writeError": _write_error})
   await t.test("the driver's name filter is applied before set_memory", async () => {
     const rows = makeChannelRows().slice(0, 1);
     rows[0].Name = "lower*toolong";
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
 _radio_cls = _import_radio_class(_sel_module, _sel_class)
@@ -540,8 +449,7 @@ json.dumps({"expected": _expected, "stored": _radio.get_memory(1).name})
 
   await t.test("clearing a frequency validates and erases the existing memory", async () => {
     const rows = makeChannelRows().slice(0, 1);
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
 _radio_cls = _import_radio_class(_sel_module, _sel_class)
@@ -572,8 +480,7 @@ json.dumps({
 
   await t.test("binary image export/load roundtrip preserves driver identity", async () => {
     const rows = makeChannelRows();
-    const result = await runPythonJson(
-      pyodide,
+    const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
 _exported = export_image_base64(_sel_module, _sel_class, _rows)
