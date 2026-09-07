@@ -257,3 +257,65 @@ test("an edited value is still written, and one the driver refuses is still repo
     `expected an issue on ${enumEntry.path}, got ${JSON.stringify(result.issues)}`,
   );
 });
+
+// A driver whose set_settings writes every element straight through, paired
+// with a settings byte the driver's own range rejects. uv5r declares `abr` as
+// 0-24 and `timeout` as a 16-entry list, both over a full u8, so a radio that
+// stores anything higher yields a setting CHIRP loaded as uninitialized.
+// Writing that back reaches int(None) in bitwise.py, which aborted the upload
+// of a setting the user never touched. No upstream image carries both halves,
+// so the byte is planted here.
+const UNWRITABLE_BYTE_CASES = [
+  { field: "abr", byte: 255, why: "integer outside the driver's declared 0-24" },
+  { field: "timeout", byte: 0x7f, why: "list index with no matching option" },
+];
+
+/** Plant one byte in a fresh radio, then run the upload path's settings step
+ * against it. Returns what CHIRP refused to load and whether the write stood. */
+async function applyWithPlantedByte(harness, match, raw, field, byte) {
+  return harness.runPythonJson(
+    `
+_r = _import_radio_class(_m, _c)(memmap.MemoryMapBytes(bytes(
+    chirp_common.CloneModeRadio._strip_metadata(base64.b64decode(_b))[0])))
+setattr(_r._memobj.settings, _f, _v)
+_before = int(getattr(_r._memobj.settings, _f))
+_dead = [e.get_name() for e in _r.get_settings().walk()
+         if any(not v.initialized for v in e)]
+_res = _validate_and_apply_radio_settings(
+    _r, _serialize_radio_settings(_r.get_settings()), apply_changes=True)
+json.dumps({"dead": _dead, "valid": _res["valid"], "issues": _res["issues"],
+            "before": _before, "after": int(getattr(_r._memobj.settings, _f))})
+    `,
+    {
+      _m: match.module,
+      _c: match.className,
+      _b: Buffer.from(raw).toString("base64"),
+      _f: field,
+      _v: byte,
+    },
+  );
+}
+
+test("a setting CHIRP could not load does not abort the write for every other one", async () => {
+  const { harness, catalog } = await context();
+  const { match, raw } = await loadImageFor(harness, catalog, EDITABLE_IMAGE);
+
+  for (const { field, byte, why } of UNWRITABLE_BYTE_CASES) {
+    const result = await applyWithPlantedByte(harness, match, raw, field, byte);
+
+    // Without this the rest of the case passes vacuously: the planted byte has
+    // to actually be one the driver refuses to load.
+    assert.ok(
+      result.dead.includes(field),
+      `${field} (${why}) should read back uninitialized, got ${JSON.stringify(result.dead)}`,
+    );
+    assert.equal(
+      result.valid,
+      true,
+      `${field} aborted the write: ${JSON.stringify(result.issues)}`,
+    );
+    // Skipped means skipped. Writing a repaired or zeroed value would silently
+    // change a radio setting the user never asked us to touch.
+    assert.equal(result.after, result.before, `${field} was rewritten while being skipped`);
+  }
+});

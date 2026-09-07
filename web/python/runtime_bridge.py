@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import builtins
+import copy
 import importlib
 import importlib.abc
 import json
@@ -2315,6 +2316,63 @@ def _apply_serialized_settings(
                 )
 
 
+def _settings_child_is_writable(setting: Any) -> bool:
+    """Report whether CHIRP can write every value of one setting back.
+
+    A value is unwritable when it is immutable, or when it never initialized:
+    the driver built it from image content its own validation rejects, so
+    `RadioSettingGroup.__init__` logged the failure and swallowed it
+    (`settings.py:493-504`), leaving `_current` at None. Desktop CHIRP applies
+    the same two-part test in `_remove_dead_settings`
+    (`wxui/settingsedit.py:177-190`), and drops the whole setting when any one
+    of its values fails -- a multi-value setting is written as a unit.
+    """
+    for value in setting:
+        if not bool(getattr(value, "get_mutable", lambda: True)()):
+            return False
+        if not bool(getattr(value, "initialized", True)):
+            return False
+    return True
+
+
+def _remove_settings_child(container: Any, element: Any) -> None:
+    """Detach one child from whichever container shape CHIRP handed us.
+
+    `RadioSettingGroup` deletes by element (`settings.py:591-593`), while a
+    `RadioSettings` root and the bare list `icf520` returns are plain lists.
+    """
+    if isinstance(container, chirp_settings.RadioSettingGroup):
+        del container[element]
+    else:
+        container.remove(element)
+
+
+def _prune_dead_settings(container: Any) -> list[str]:
+    """Drop settings CHIRP cannot write, and report what was dropped.
+
+    Drivers differ in how defensive their `set_settings` is. `uv5r.py:2156`
+    writes every element it is handed straight through
+    (`setattr(obj, setting, element.value)`), so an uninitialized value reaches
+    `int(None)` in `bitwise.py` and aborts the upload -- for a setting the user
+    never touched, on a radio whose byte is merely outside the range the driver
+    declares. Desktop CHIRP never hands those to a driver at all, so neither do
+    we; pruning a copy keeps them in the tree we serialize back to the UI.
+
+    `RadioSetting` subclasses `RadioSettingGroup`, so the isinstance order
+    matters: recursing into a setting would walk its values, not settings.
+    """
+    dropped: list[str] = []
+    for element in _settings_container_children(container):
+        if isinstance(element, chirp_settings.RadioSetting):
+            if _settings_child_is_writable(element):
+                continue
+            _remove_settings_child(container, element)
+            dropped.append(str(element.get_name()))
+        elif isinstance(element, chirp_settings.RadioSettingGroup):
+            dropped.extend(_prune_dead_settings(element))
+    return dropped
+
+
 def _validate_and_apply_radio_settings(radio, serialized_groups, apply_changes=False):
     """Validate serialized settings against a fresh CHIRP settings tree."""
     rf = radio.get_features()
@@ -2327,7 +2385,17 @@ def _validate_and_apply_radio_settings(radio, serialized_groups, apply_changes=F
     if issues:
         return {"valid": False, "issues": issues, "settings": _serialize_radio_settings(settings_tree)}
     if apply_changes:
-        radio.set_settings(settings_tree)
+        # Prune a copy, not the tree itself: the serialized reply below still
+        # has to show the user every setting the radio reported, including the
+        # ones CHIRP declined to load.
+        writable_tree = copy.deepcopy(settings_tree)
+        dropped = _prune_dead_settings(writable_tree)
+        if dropped:
+            _log_debug(
+                "Skipping %d setting(s) CHIRP cannot write: %s"
+                % (len(dropped), ", ".join(dropped))
+            )
+        radio.set_settings(writable_tree)
     return {"valid": True, "issues": [], "settings": _serialize_radio_settings(settings_tree)}
 
 
