@@ -9,6 +9,7 @@
 // always over 4-character squares, never the 6-character square the user is
 // standing in.
 
+import { REPEATER_REQUEST_TIMEOUT_MS, withRequestTimeout } from "./request-timeout.js";
 import { setRowGeo } from "./row-geo.js";
 
 // No CORS proxy is involved: the API sends Access-Control-Allow-Origin: * on
@@ -261,11 +262,21 @@ export function parseRsgbPayload(payload) {
 // Fan out over the squares in parallel and return every record they hold.
 // Squares are disjoint, so the only duplicates this can produce are the ones
 // already in the source data; dedupeRsgbRecords() handles those.
+//
+// Each square carries its own deadline, so the whole fan-out is bounded by one
+// timeout rather than by their sum. A square that times out fails the entire
+// query — the same as any other error here, and deliberately so: a locator
+// square is a geographic tile, so dropping one silently would hand back a
+// result set with an invisible hole in the middle of the search area, and the
+// user would write those channels to a radio believing the missing repeaters
+// simply are not there. A failed query the user can retry is the honest
+// outcome; the error names the square that stalled.
 export async function fetchRsgbRecords({
   squares,
   fetchImpl,
   baseUrl = RSGB_API_BASE,
   onRequest,
+  timeoutMs = REPEATER_REQUEST_TIMEOUT_MS,
 } = {}) {
   const doFetch = fetchImpl || globalThis.fetch;
   if (typeof doFetch !== "function") {
@@ -274,13 +285,18 @@ export async function fetchRsgbRecords({
   const list = Array.from(squares || []);
   const results = await Promise.all(list.map(async (locator) => {
     const url = rsgbLocatorUrl(locator, baseUrl);
-    // Deliberately header-free: adding one would force a CORS preflight, and
-    // the API answers OPTIONS with 405.
-    const response = await doFetch(url);
-    if (!response.ok) {
-      throw new Error(`RSGB query failed for ${locator}: HTTP ${response.status}`);
-    }
-    const records = parseRsgbPayload(await response.json());
+    const records = await withRequestTimeout(`RSGB query for ${locator}`, async (signal) => {
+      // Deliberately header-free: adding one would force a CORS preflight, and
+      // the API answers OPTIONS with 405. The abort signal is not a header, so
+      // the request stays a simple one.
+      const response = await doFetch(url, { signal });
+      if (!response.ok) {
+        throw new Error(`RSGB query failed for ${locator}: HTTP ${response.status}`);
+      }
+      // Read inside the deadline: the response headers arriving is not the same
+      // as the body arriving, and a proxy can stall between the two.
+      return parseRsgbPayload(await response.json());
+    }, timeoutMs);
     if (typeof onRequest === "function") {
       onRequest({ locator, url, count: records.length });
     }

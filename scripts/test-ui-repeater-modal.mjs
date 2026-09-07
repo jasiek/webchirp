@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { REPEATER_REQUEST_TIMEOUT_MS } from "../web/js/request-timeout.js";
 import { createRepeaterQuery } from "../web/js/ui/repeater-query.js";
 import { rowGeo } from "../web/js/row-geo.js";
 import { FakeElement, installFakeDom } from "./test-support/fake-dom.mjs";
@@ -135,6 +136,55 @@ function installFetch(routes) {
     },
   });
   return calls;
+}
+
+// installFetch()'s sibling for the stall case. A route marked `stall` accepts
+// the request and then never answers, which is what a proxy that hangs after
+// the connection looks like from the browser; the promise settles only when the
+// request deadline aborts the signal, rejecting the way a real fetch does.
+// Routes are matched in order, so a stalling catch-all can follow the routes
+// that answer.
+//
+// Not to be confused with installGatedRsgbFetch() below: that one holds a
+// request open until the *test* releases it, so a query can be caught mid-
+// flight; this one is never released at all, so only the deadline can end it.
+function installStalledFetch(routes) {
+  const calls = [];
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: (url, init) => {
+      const text = String(url);
+      calls.push({ url: text, init });
+      const route = routes.find((entry) => text.includes(entry.match));
+      if (!route) {
+        return Promise.reject(new Error(`Unrouted fetch: ${text}`));
+      }
+      if (!route.stall) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => route.body ?? "",
+          json: async () => JSON.parse(route.body ?? "null"),
+        });
+      }
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          // A real fetch rejects with an AbortError DOMException carrying the
+          // platform's own wording — the sentence the deadline replaces.
+          reject(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }));
+        });
+      });
+    },
+  });
+  return calls;
+}
+
+// Let every pending microtask run so the in-flight fetch has actually been
+// issued before the mocked clock is advanced past the deadline. setImmediate is
+// left unmocked by t.mock.timers.enable({ apis: ["setTimeout"] }), so it still
+// yields to the real event loop.
+function flush() {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 function buildHarness({
@@ -922,7 +972,9 @@ test("an RSGB query fans out over the squares and inserts the matching repeaters
     "https://api-beta.rsgb.online/locator/JO01",
   ]);
   // A custom header would force the CORS preflight the API answers with 405.
-  assert.ok(calls.every((call) => call.init === undefined));
+  // The abort signal that bounds the request is not a header, so the request
+  // stays a simple one — init may carry that and nothing else.
+  assert.ok(calls.every((call) => Object.keys(call.init || {}).join() === "signal"));
 
   assert.deepEqual(log.errors, []);
   assert.equal(table.inserted.length, 1);
@@ -1124,4 +1176,111 @@ test("a second submit while a query is in flight is ignored, not duplicated", as
   assert.equal(calls.length, 2, "the second submit must not reach the network");
   assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "the button comes back for the next query");
   assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API");
+});
+
+// --- Request deadline --------------------------------------------------------
+
+// A host that accepts the connection and then answers nothing used to leave the
+// modal stuck on "Querying..." until the browser's own network timeout fired
+// (~300 s in Chrome for a stalled connection), with an empty debug panel. These
+// drive the real deadline over a mocked clock, so they assert the shipped
+// REPEATER_REQUEST_TIMEOUT_MS rather than a value only the test knows.
+
+test("a stalled RSGB request times out and reports a readable error", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { dom, log, table } = buildHarness();
+  installGeolocation(LONDON);
+  const calls = installStalledFetch([{ match: "api-beta.rsgb.online", stall: true }]);
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  const pending = dom.repeaterQueryFormEl.dispatch("submit");
+  await flush();
+
+  assert.ok(calls.length > 0, "the squares are actually in flight");
+  assert.deepEqual(log.errors, [], "nothing is reported while the request is still inside its window");
+
+  t.mock.timers.tick(REPEATER_REQUEST_TIMEOUT_MS);
+  await pending;
+
+  assert.equal(log.errors.length, 1);
+  // The square is named so the debug panel says which request stalled, and the
+  // words "timed out" are what classifyErrorKind() matches on.
+  assert.match(log.errors[0], /^RSGB ETCC query: RSGB query for [A-Z]{2}\d{2} timed out after 10 s: /);
+  assert.deepEqual(table.inserted, []);
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false, "the user keeps their filters to retry with");
+  // The in-flight guard releases on a timeout as it does on any other failure,
+  // so the retry the deadline exists to make possible is actually possible —
+  // a deadline that left the form wedged on "Querying..." would have replaced
+  // one stuck modal with another.
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API");
+});
+
+test("a stalled dictionary request times out instead of leaving the modal opening forever", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { dom, log } = buildHarness();
+  installStalledFetch([{ match: "/meta", stall: true }]);
+
+  const pending = dom.channelImportPrzemiennikiEl.dispatch("click");
+  await flush();
+  assert.deepEqual(log.errors, []);
+
+  t.mock.timers.tick(REPEATER_REQUEST_TIMEOUT_MS);
+  await pending;
+
+  assert.deepEqual(log.errors, [
+    "Przemienniki modal: przemienniki.net dictionary request timed out after 10 s: the server accepted the request but never answered.",
+  ]);
+});
+
+test("a stalled przemienniki query times out with the dictionary already loaded", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { dom, log, table } = buildHarness();
+  // The dictionary answers so the modal opens normally; only the query stalls.
+  installStalledFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "", stall: true },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.deepEqual(log.errors, [], "the dictionary fetch is well inside the deadline");
+
+  const pending = dom.repeaterQueryFormEl.dispatch("submit");
+  await flush();
+  t.mock.timers.tick(REPEATER_REQUEST_TIMEOUT_MS);
+  await pending;
+
+  assert.deepEqual(log.errors, [
+    "Przemienniki query: przemienniki.net query timed out after 10 s: the server accepted the request but never answered.",
+  ]);
+  assert.deepEqual(table.inserted, []);
+});
+
+test("a request answering inside the deadline is unaffected by it", async (t) => {
+  // The deadline must not fire on a query that simply took a moment, and its
+  // timer must be cleared once the request lands — an outstanding timer would
+  // abort the *next* request on a browser that reuses the connection.
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { dom, log, table } = buildHarness();
+  installStalledFetch([
+    { match: "/meta", body: META_JSON },
+    {
+      match: "",
+      body: `
+        <rxf><perspective>radio</perspective><repeaters><repeater>
+          <qra>SR5WA</qra><mode>fm</mode>
+          <qrg type="rx">145.6125</qrg><qrg type="tx">145.0125</qrg>
+          <qth>Warszawa</qth><ctcss type="tx">88.5</ctcss>
+        </repeater></repeaters></rxf>
+      `,
+    },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dom.repeaterQueryFormEl.dispatch("submit");
+  t.mock.timers.tick(REPEATER_REQUEST_TIMEOUT_MS * 2);
+
+  assert.deepEqual(log.errors, []);
+  assert.equal(table.inserted.length, 1);
 });
