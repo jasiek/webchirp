@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { findCatalogRadioForImageMetadata } from "../web/js/image-metadata.mjs";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const imagesDir = path.join(repoRoot, "chirp/tests/images");
+import {
+  ensureModule,
+  imageMetadata,
+  readCatalog,
+  readImage,
+  sharedHarness,
+} from "./test-support/chirp.mjs";
 
 // A grid row carries only the 21 CSV columns, so a Memory rebuilt from one has
 // an empty `extra` -- the per-driver settings the grid never shows (Busy
@@ -31,25 +31,16 @@ const EXTRAS_FIXTURES = [
   { image: "Abbree_AR-730.img", extra: "bcl" },
 ];
 
-async function readCatalog() {
-  const text = await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8");
-  return JSON.parse(text).radios;
-}
-
-// Resolve a fixture to its catalog driver and register the module, which the
-// image-detection path needs before it can name the model.
-async function prepareFixture(harness, catalog, name) {
-  const raw = await fs.readFile(path.join(imagesDir, name));
+// loadImageFor() from test-support loads the fixture as it ships; these tests
+// have to seed a value into it first, so they resolve the driver and then load
+// the seeded bytes rather than the original.
+async function resolveFixture(harness, catalog, name) {
+  const raw = await readImage(name);
   const imageBase64 = raw.toString("base64");
-  const metadata = await harness.runPythonJson(
-    "json.dumps(read_image_metadata_base64(_b))",
-    { _b: imageBase64 },
-  );
+  const metadata = await imageMetadata(harness, raw);
   const match = findCatalogRadioForImageMetadata(catalog, metadata);
   assert.ok(match, `${name} should resolve to a catalog radio`);
-  await harness.runPythonJson("ensure_radio_module(_m) or json.dumps({})", {
-    _m: match.module,
-  });
+  await ensureModule(harness, match.module);
   return { imageBase64, match };
 }
 
@@ -100,17 +91,15 @@ _memory = _radio.get_memory(_location)
 json.dumps({
     "extras": _row_extras_from_memory(_memory),
     "skip": str(getattr(_memory, "skip", "") or ""),
-    "empty": bool(getattr(_memory, "empty", False)),
-    "freq": int(getattr(_memory, "freq", 0) or 0),
 })
 `;
 
 test("editing a visible column preserves driver-specific channel extras", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const catalog = await readCatalog();
 
   for (const { image, extra } of EXTRAS_FIXTURES) {
-    const { imageBase64, match } = await prepareFixture(harness, catalog, image);
+    const { imageBase64, match } = await resolveFixture(harness, catalog, image);
     const seeded = await harness.runPythonJson(SEED_PROBE, {
       _image_b64: imageBase64,
       _module: match.module,
@@ -163,7 +152,7 @@ test("editing a visible column preserves driver-specific channel extras", async 
 });
 
 // The issue was reported against iradio_uv_5118, which has no upstream test
-// image, so build one the way a download would: populate a channel, enable BCL
+// image, so build one the way a download would: populate two channels, set BCL
 // in the driver record, and cache the result for Export Binary to reuse.
 const IRADIO_SETUP = `
 import base64, json
@@ -184,17 +173,23 @@ for _number, _freq in ((1, 146520000), (2, 147000000)):
 # the slot instead of travelling with the channel is visible as a swap.
 _radio._memobj.channels[0].bcl = 1
 _radio._memobj.channels[1].bcl = 0
-_cache_driver_image("iradio_uv_5118", "IradioUV5118", _radio)
+_image = _cache_driver_image("iradio_uv_5118", "IradioUV5118", _radio)
 
 _rows, _unreadable = _radio_rows_from_instance(_radio)
-json.dumps({"rows": _rows})
+json.dumps({"rows": _rows, "imageBase64": base64.b64encode(_image).decode("ascii")})
 `;
 
-// Export the given rows and report what each named channel ended up holding.
+// Export rows against a known base image and report what each named channel
+// ended up holding. export_image_base64() caches the image it produces, so the
+// base is restored first: without that each export would build on the previous
+// one and the cases below would stop being independent.
 const IRADIO_EXPORT = `
 import base64, json
 
 _cls = _import_radio_class("iradio_uv_5118", "IradioUV5118")
+_base = _radio_from_image_bytes(_cls, base64.b64decode(_base_b64))
+_cache_driver_image("iradio_uv_5118", "IradioUV5118", _base)
+
 _exported = export_image_base64(
     "iradio_uv_5118", "IradioUV5118", json.loads(_rows_json), []
 )
@@ -210,40 +205,41 @@ for _number in json.loads(_locations_json):
 json.dumps(_report)
 `;
 
-async function exportIradio(harness, rows, locations) {
+async function exportIradio(harness, base, rows, locations) {
   return harness.runPythonJson(IRADIO_EXPORT, {
+    _base_b64: base,
     _rows_json: JSON.stringify(rows),
     _locations_json: JSON.stringify(locations),
   });
 }
 
 test("iRadio UV-5118 keeps Busy Channel Lockout across an edited export", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const { rows } = await harness.runPythonJson(IRADIO_SETUP);
+  const harness = await sharedHarness();
+  const { rows, imageBase64 } = await harness.runPythonJson(IRADIO_SETUP);
   assert.deepEqual(rows[0].__extra, { bcl: true }, "channel 1 should start with BCL on");
 
   // An untouched export already round-tripped correctly, because a row equal to
   // the driver memory is skipped rather than rewritten. Assert it stays so.
-  const noop = await exportIradio(harness, rows, [1, 2]);
+  const noop = await exportIradio(harness, imageBase64, rows, [1]);
   assert.equal(noop["1"].extras.bcl, true, "an unchanged export cleared BCL");
 
   const edited = rows.map((row) => ({ ...row }));
   edited[0].Frequency = "145.500000";
-  const afterEdit = await exportIradio(harness, edited, [1]);
+  const afterEdit = await exportIradio(harness, imageBase64, edited, [1]);
   assert.equal(afterEdit["1"].extras.bcl, true, "an edited row cleared BCL");
   assert.equal(afterEdit["1"].freq, 145500000, "the edit did not reach the driver");
 });
 
 test("channel extras follow the channel, not the memory slot it sits in", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const { rows } = await harness.runPythonJson(IRADIO_SETUP);
+  const harness = await sharedHarness();
+  const { rows, imageBase64 } = await harness.runPythonJson(IRADIO_SETUP);
 
   // Move Up/Down rotates channels through slots already in use. Each channel
   // must take its own extras along rather than adopt the ones left behind.
   const swapped = rows.map((row) => ({ ...row }));
   swapped[0].Location = "2";
   swapped[1].Location = "1";
-  const afterSwap = await exportIradio(harness, swapped, [1, 2]);
+  const afterSwap = await exportIradio(harness, imageBase64, swapped, [1, 2]);
   assert.equal(afterSwap["1"].freq, 147000000, "the swap did not reach the driver");
   assert.equal(
     afterSwap["1"].extras.bcl,
@@ -260,7 +256,7 @@ test("channel extras follow the channel, not the memory slot it sits in", async 
   // Moving a channel onto a slot that was empty has no destination extras to
   // read at all, so its settings can only come from the row.
   const moved = [{ ...rows[0], Location: "7" }];
-  const afterMove = await exportIradio(harness, moved, [1, 7]);
+  const afterMove = await exportIradio(harness, imageBase64, moved, [1, 7]);
   assert.equal(afterMove["7"].freq, 146520000, "the move did not reach the driver");
   assert.equal(afterMove["7"].extras.bcl, true, "a moved channel lost its BCL");
   assert.ok(afterMove["1"].empty, "the vacated slot should have been erased");
@@ -273,7 +269,7 @@ test("channel extras follow the channel, not the memory slot it sits in", async 
   replacement.Location = "1";
   replacement.Frequency = "433.000000";
   replacement.Mode = "FM";
-  const afterReplace = await exportIradio(harness, [replacement], [1]);
+  const afterReplace = await exportIradio(harness, imageBase64, [replacement], [1]);
   assert.equal(afterReplace["1"].freq, 433000000, "the replacement was not written");
   assert.equal(
     afterReplace["1"].extras.bcl,
