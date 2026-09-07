@@ -508,4 +508,39 @@ json.dumps({
     assert.equal(result.rowCount, rows.length);
     assert.ok(result.size > 0);
   });
+
+  await t.test("offline binary export does not fabricate a downloaded image", async () => {
+    const rows = makeChannelRows();
+    const result = await harness.runPythonJson(
+      `
+_rows = json.loads(_rows_json)
+_key = _driver_cache_key(_sel_module, _sel_class)
+LAST_IMAGE_BY_DRIVER.pop(_key, None)
+IMAGE_CLASS_BY_DRIVER.pop(_key, None)
+_exported = export_image_base64(_sel_module, _sel_class, _rows)
+_settings = get_radio_settings(_sel_module, _sel_class)
+try:
+    _upload_selected_radio_sync(_sel_module, _sel_class, _rows)
+    _upload_error = ""
+except Exception as _exc:
+    _upload_error = str(_exc)
+json.dumps({
+    "exportSize": int(_exported.get("size", 0)),
+    "hasCachedImage": _has_cached_image(_sel_module, _sel_class),
+    "settingsRequiresImage": bool(_settings.get("requiresImage")),
+    "uploadError": _upload_error,
+})
+      `,
+      {
+        _rows_json: JSON.stringify(rows),
+        _sel_module: TEST_RADIO.module,
+        _sel_class: TEST_RADIO.className,
+      },
+    );
+
+    assert.ok(result.exportSize > 0);
+    assert.equal(result.hasCachedImage, false);
+    assert.equal(result.settingsRequiresImage, true);
+    assert.match(result.uploadError, /No cached radio image/);
+  });
 });

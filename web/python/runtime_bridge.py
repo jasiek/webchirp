@@ -2451,6 +2451,7 @@ def export_image_base64(
     _ensure_clone_mode_radio(radio_cls)
     driver_key = _driver_cache_key(module_name, class_name)
     base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
+    had_cached_image = bool(base_image)
     if not base_image:
         memsize = int(getattr(radio_cls, "_memsize", 0) or 0)
         if memsize <= 0:
@@ -2468,7 +2469,14 @@ def export_image_base64(
     )
     if not settings_result["valid"]:
         raise RuntimeUnsupportedError("Radio settings validation failed before export")
-    image_data = _cache_driver_image(module_name, class_name, radio)
+    # An offline export starts from fabricated zero bytes, not from the radio.
+    # Return that file to the user, but do not let it satisfy the upload gate or
+    # expose synthetic radio-wide settings as though they had been downloaded.
+    image_data = (
+        _cache_driver_image(module_name, class_name, radio)
+        if had_cached_image
+        else _image_bytes_from_radio(radio)
+    )
     return {
         "imageBase64": base64.b64encode(image_data).decode("ascii"),
         "size": len(image_data),
