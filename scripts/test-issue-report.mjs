@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import { createIssueReporter } from "../web/js/ui/issue-report.js";
+
+const TEMPLATE_NAME = "radio_bug_report.yml";
+const TEMPLATE = fs.readFileSync(
+  path.join(process.cwd(), ".github", "ISSUE_TEMPLATE", TEMPLATE_NAME),
+  "utf8",
+);
 
 // The debug excerpt is capped at a line count, with a URL-length backstop:
 // GitHub answers an over-long issue-prefill URL with HTTP 414 rather than the
@@ -26,23 +34,37 @@ function makeReporter({ debugLines = [], lastErrorSummary = "" } = {}) {
   return createIssueReporter({ state, log });
 }
 
+// navigator is read-only on globalThis in Node, so swap the whole object for
+// the call and put the original back however the call ends.
+function withNavigator(replacement, run) {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", { value: replacement, configurable: true });
+  try {
+    return run();
+  } finally {
+    Object.defineProperty(globalThis, "navigator", original);
+  }
+}
+
 function stampedLine(index, text) {
   const seconds = String(index % 60).padStart(2, "0");
   const minutes = String(Math.floor(index / 60) % 60).padStart(2, "0");
   return `[2026-07-27T12:${minutes}:${seconds}.123Z] ${text}`;
 }
 
-function actualBehaviorOf(url) {
+// The excerpt now has a field of its own, and the template renders it as a code
+// block, so what comes back is the bare log tail with no fences around it.
+function debugLogOf(url) {
   const params = new URL(url).searchParams;
-  return params.get("actual_behavior");
+  return params.get("debug_log");
 }
 
 test("a long session is cut to the last N lines and says so", () => {
   const debugLines = Array.from({ length: 400 }, (_, index) =>
     stampedLine(index, `SERIAL wrote 64 bytes in frame ${index} of the clone stream`),
   );
-  const body = actualBehaviorOf(makeReporter({ debugLines }).buildIssueUrl());
-  const excerpt = body.split("```")[1].trim().split("\n");
+  const excerpt = debugLogOf(makeReporter({ debugLines }).buildIssueUrl()).split("\n");
+  const body = excerpt.join("\n");
 
   assert.equal(excerpt.length, TAIL_LINES + 1, "N lines plus the trim note");
   assert.match(excerpt[0], /earlier debug lines trimmed/);
@@ -62,7 +84,7 @@ test("one pathological line cannot push the URL past the backstop", () => {
     url.length <= URL_LIMIT,
     `expected URL within ${URL_LIMIT} chars, got ${url.length}`,
   );
-  assert.match(actualBehaviorOf(url), /earlier debug lines trimmed/);
+  assert.match(debugLogOf(url), /earlier debug lines trimmed/);
 });
 
 test("a short log is reported in full, with no truncation note", () => {
@@ -70,7 +92,7 @@ test("a short log is reported in full, with no truncation note", () => {
     stampedLine(1, "STATUS Connected to radio."),
     stampedLine(2, "DOWNLOAD ERROR Traceback: boom"),
   ];
-  const body = actualBehaviorOf(
+  const body = debugLogOf(
     makeReporter({ debugLines, lastErrorSummary: "DOWNLOAD ERROR Traceback: boom" }).buildIssueUrl(),
   );
 
@@ -81,14 +103,51 @@ test("a short log is reported in full, with no truncation note", () => {
 
 test("log stamps are compacted to the time of day", () => {
   const debugLines = [stampedLine(5, "STATUS Ready.")];
-  const body = actualBehaviorOf(makeReporter({ debugLines }).buildIssueUrl());
+  const body = debugLogOf(makeReporter({ debugLines }).buildIssueUrl());
 
   assert.ok(body.includes("[12:00:05] STATUS Ready."), body);
   assert.ok(!body.includes("2026-07-27"), "the date adds no signal to a report");
 });
 
+// A param whose name is not a field id in the template YAML is dropped with no
+// warning, so a renamed or deleted field looks like the report simply arrived
+// half-empty. Pin every name the reporter sends against the form itself.
+test("the URL names a template that exists and only fields it declares", () => {
+  const params = new URL(makeReporter().buildIssueUrl()).searchParams;
+
+  for (const name of params.keys()) {
+    if (name === "template" || name === "title") {
+      continue;
+    }
+    assert.match(TEMPLATE, new RegExp(`^\\s+id: ${name}$`, "m"), `template has no field "${name}"`);
+  }
+  assert.equal(params.get("template"), TEMPLATE_NAME);
+  assert.ok(params.has("debug_log"));
+});
+
+// A classified OS/browser pair loses exactly what triage needs on the platforms
+// that lie about themselves, so the whole string goes across untouched.
+test("the browser user agent rides along verbatim", () => {
+  const userAgent =
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko)"
+    + " Chrome/128.0.6613.99 Mobile Safari/537.36";
+  const params = withNavigator({ userAgent }, () =>
+    new URL(makeReporter().buildIssueUrl()).searchParams);
+
+  assert.equal(params.get("browser_user_agent"), userAgent);
+  assert.ok(!params.has("operating_system"), "the OS dropdown is gone");
+  assert.ok(!params.has("browser_and_version"), "the classified browser field is gone");
+});
+
+test("the excerpt goes in bare, with no fences to double-wrap the rendered block", () => {
+  const debugLines = [stampedLine(1, "STATUS Connected to radio.")];
+  const excerpt = debugLogOf(makeReporter({ debugLines }).buildIssueUrl());
+
+  assert.ok(!excerpt.includes("```"), excerpt);
+});
+
 test("an empty debug panel says so instead of emitting an empty block", () => {
-  const body = actualBehaviorOf(makeReporter().buildIssueUrl());
+  const body = debugLogOf(makeReporter().buildIssueUrl());
 
   assert.ok(body.includes("<no debug logs captured>"));
 });

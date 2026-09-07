@@ -1,4 +1,4 @@
-import { detectBrowserVersion, detectOperatingSystem } from "./format.js";
+import { detectUserAgent } from "./format.js";
 
 const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
 const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
@@ -54,8 +54,10 @@ function fitDebugExcerpt(lines, { measure, limit, alreadyTrimmed }) {
 }
 
 // Pre-fills the GitHub bug-report template with the selected radio, the USB ids
-// seen on the last connect, the browser/OS, the CHIRP revision, and a tail of
-// the debug panel — so a report arrives with the diagnostics already attached.
+// seen on the last connect, the browser user agent, the CHIRP revision, and a
+// tail of
+// the debug panel in its own Debug Log field — so a report arrives with the
+// diagnostics already attached.
 export function createIssueReporter({ state, log }) {
   function buildIssueUrl() {
     // Read the selection from state, never from the sidebar readout: every
@@ -66,22 +68,10 @@ export function createIssueReporter({ state, log }) {
     const lastErrorSummary = log.getLastErrorSummary();
     const bugSummary = lastErrorSummary || "manual report";
     const issueTitle = `Bug report: ${radioMake} ${radioModel} - ${bugSummary}`;
-    const steps = [
-      "1. Open WebCHIRP",
-      "2. Select a radio if relevant",
-      "3. Perform the action that shows the bug",
-      "4. Describe what happened",
-    ].join("\n");
 
+    // The template renders debug_log as a code block already, so the excerpt
+    // goes in bare — fences here would double-wrap it.
     const buildUrl = (debugExcerpt) => {
-      const actualBehavior = [
-        lastErrorSummary || "Manual report with no captured runtime error yet.",
-        "",
-        "Debug output excerpt:",
-        "```",
-        debugExcerpt,
-        "```",
-      ].join("\n");
       const params = new URLSearchParams({
         template: ISSUE_TEMPLATE_NAME,
         title: issueTitle.slice(0, 240),
@@ -89,12 +79,9 @@ export function createIssueReporter({ state, log }) {
         radio_model: radioModel,
         usb_vendor_id: state.lastUsbVendorId || "Unknown / not connected",
         usb_product_id: state.lastUsbProductId || "Unknown / not connected",
-        operating_system: detectOperatingSystem(),
-        browser_and_version: detectBrowserVersion(),
+        browser_user_agent: detectUserAgent(),
         chirp_revision: state.runtimeInfo.chirpRevision || "unknown",
-        steps_to_reproduce: steps,
-        expected_behavior: "The reported action should work without the observed bug.",
-        actual_behavior: actualBehavior,
+        debug_log: debugExcerpt,
       });
       return `${ISSUE_NEW_URL}?${params.toString()}`;
     };
@@ -106,8 +93,8 @@ export function createIssueReporter({ state, log }) {
     const cutByLineCount = available.length > DEBUG_TAIL_LINES;
 
     // The fixed fields alone can overrun the limit on a pathological error
-    // summary, in which case no debug line fits and only the truncation note
-    // survives — the report is still worth filing without the excerpt.
+    // summary in the title, in which case no debug line fits and only the
+    // truncation note survives — the report is still worth filing without it.
     const excerpt = fitDebugExcerpt(available.slice(cutByLineCount ? 1 : 0), {
       measure: (debugExcerpt) => buildUrl(debugExcerpt).length,
       limit: ISSUE_URL_LIMIT,

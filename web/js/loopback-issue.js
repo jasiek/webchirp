@@ -54,10 +54,10 @@ export function fitLoopbackReport(report, { measure, limit }) {
   return [...kept, TAIL_TRIM_NOTE].join("\n");
 }
 
-// detectOperatingSystem() in format.js answers for the app's bug-report
-// dropdown, whose options stop at Linux/macOS/Windows/Other — and Android says
-// "Linux" in its user agent, so a phone would report as a Linux desktop. This
-// page is the one people run on a phone, so it needs the handset named.
+// This template asks for a platform by name rather than a user agent string,
+// and Android says "Linux" in its user agent — so a phone would report as a
+// Linux desktop. This page is the one people run on a phone, so it needs the
+// handset named.
 export function detectPlatform(userAgent) {
   const ua = String(userAgent || "");
   if (/\bAndroid\b/i.test(ua)) {

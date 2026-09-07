@@ -44,24 +44,14 @@ body:
     validations:
       required: true
 
-  - type: dropdown
-    id: operating_system
-    attributes:
-      label: Operating system
-      options:
-        - Linux
-        - macOS
-        - Windows
-        - Other
-    validations:
-      required: true
-
   - type: input
-    id: browser_and_version
+    id: browser_user_agent
     attributes:
-      label: Browser and version
-      description: Include full browser name and version
-      placeholder: Firefox 122.0.1
+      label: Browser User Agent
+      description: >-
+        Filled in automatically by the Report issue link. Otherwise paste the
+        full user agent string, which names the browser, its version and the OS.
+      placeholder: Mozilla/5.0 (X11; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0
     validations:
       required: true
 
@@ -88,16 +78,8 @@ body:
       required: true
 
   - type: textarea
-    id: expected_behavior
+    id: debug_log
     attributes:
-      label: Expected behavior
-    validations:
-      required: true
-
-  - type: textarea
-    id: actual_behavior
-    attributes:
-      label: Actual behavior
-      description: Include relevant messages from Debug Output if available
-    validations:
-      required: true
+      label: Debug Log
+      description: Excerpt from Debug Output, filled in automatically by the Report issue link
+      render: text

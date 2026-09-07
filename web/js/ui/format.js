@@ -71,18 +71,11 @@ export function errorSummary(error) {
   return firstLine || "Unknown error";
 }
 
-export function detectOperatingSystem() {
-  const ua = navigator.userAgent || "";
-  if (/Windows/i.test(ua)) {
-    return "Windows";
-  }
-  if (/Macintosh|Mac OS X/i.test(ua)) {
-    return "macOS";
-  }
-  if (/Linux|X11/i.test(ua)) {
-    return "Linux";
-  }
-  return "Other";
+// The raw user agent, reported verbatim: any classification we do here throws
+// away the one detail a triager may need (Android calls itself Linux, iPadOS
+// calls itself a Mac), and the string is short enough to just hand over.
+export function detectUserAgent() {
+  return navigator.userAgent || "Unknown user agent";
 }
 
 // `userAgent` is passed explicitly by callers outside the app shell (the
