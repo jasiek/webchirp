@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const fixturePath = path.join(repoRoot, "chirp/tests/images/Baofeng_UV-5R.img");
+import { readImage, sharedHarness } from "./test-support/chirp.mjs";
 
 // UV-5R comments live in CloneModeRadio's metadata trailer rather than its
 // channel bytes. Exercise the same read, edit, clear, and erase operations a
@@ -88,8 +82,8 @@ json.dumps({
 `;
 
 test("clone-image metadata comments survive load, edit, clear, and erase", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const raw = await fs.readFile(fixturePath);
+  const harness = await sharedHarness();
+  const raw = await readImage("Baofeng_UV-5R.img");
   const result = await harness.runPythonJson(MEMORY_COMMENT_PROBE, {
     _image_b64: raw.toString("base64"),
   });

@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+import { ensureModule, sharedHarness } from "./test-support/chirp.mjs";
+import { FakeElement, installFakeDom } from "./test-support/fake-dom.mjs";
 
 async function powerColumnFor(harness, module, className) {
-  await harness.runPythonJson("ensure_radio_module(_m) or json.dumps({})", { _m: module });
+  await ensureModule(harness, module);
   const metadata = await harness.runPythonJson(
     "json.dumps(get_radio_column_metadata(_m, _c))",
     { _m: module, _c: className },
@@ -17,7 +14,7 @@ async function powerColumnFor(harness, module, className) {
 }
 
 test("power labels are published with the wattage CHIRP would export", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
 
   // A 50W level is 46.99 dBm. int() truncates it to 46, which converts back to
   // 39.8W and renders "39W"; the labels have to come out of float().
@@ -41,7 +38,7 @@ test("power labels are published with the wattage CHIRP would export", async () 
 });
 
 test("a driver whose labels are already wattages publishes no duplicates", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   const result = await harness.runPythonJson(
     `json.dumps({
          "numeric": _power_level_watts([chirp_common.AutoNamedPowerLevel(5),
@@ -57,59 +54,9 @@ test("a driver whose labels are already wattages publishes no duplicates", async
   assert.deepEqual(result.empty, {});
 });
 
-// Minimal element stub: enough for renderHeader() and one row of cell editors.
-// The grid renders every row when clientHeight is not a number, which is the
-// path headless callers take.
-class StubElement {
-  constructor(tagName = "div") {
-    this.tagName = String(tagName).toUpperCase();
-    this.children = [];
-    this.dataset = {};
-    this.style = {};
-    this.classList = { add() {}, remove() {}, toggle() {}, contains: () => false };
-    this.title = "";
-    this.textContent = "";
-    this.value = "";
-    this.type = "";
-    this.disabled = false;
-    this.readOnly = false;
-    this.hidden = false;
-  }
-
-  set innerHTML(_value) {
-    this.children = [];
-  }
-
-  get innerHTML() {
-    return "";
-  }
-
-  appendChild(child) {
-    this.children.push(child);
-    return child;
-  }
-
-  removeChild(child) {
-    this.children = this.children.filter((each) => each !== child);
-    return child;
-  }
-
-  insertBefore(child) {
-    return this.appendChild(child);
-  }
-
-  remove() {}
-
-  setAttribute(name, value) {
-    this[name] = value;
-  }
-
-  addEventListener() {}
-
-  getBoundingClientRect() {
-    return { height: 0 };
-  }
-}
+// The shared fake element is enough for renderHeader() and one row of cell
+// editors. The grid renders every row when clientHeight is not a number, which
+// is the path headless callers take.
 
 // Spacer rows stand in for the channels outside the window, so a rendered row is
 // found by data-row-idx rather than by position in the tbody.
@@ -118,12 +65,12 @@ function renderedRows(dom) {
 }
 
 function renderGridWithPowerColumn(columns) {
-  globalThis.document = { createElement: (tag) => new StubElement(tag) };
+  installFakeDom();
   const dom = {
-    tableHead: new StubElement("thead"),
-    tableBody: new StubElement("tbody"),
-    tableScrollEl: new StubElement("div"),
-    channelEmptyStateEl: new StubElement("div"),
+    tableHead: new FakeElement("thead"),
+    tableBody: new FakeElement("tbody"),
+    tableScrollEl: new FakeElement("div"),
+    channelEmptyStateEl: new FakeElement("div"),
   };
   const state = {
     currentHeaders: ["Location", "Power"],
@@ -180,7 +127,7 @@ test("no legend without wattages to show", async () => {
 });
 
 test("two levels with the same wattage are both reported", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness();
   // radtel_t18.RB619Radio advertises High and Low, and dBm_to_watts() rounds
   // both to 0.5W. The legend says so rather than hiding one of them.
   const rb619 = await powerColumnFor(harness, "radtel_t18", "RB619Radio");

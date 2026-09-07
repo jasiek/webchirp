@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import { BrowserSerialBridge } from "../web/js/serial.js";
 import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { repoRoot } from "./test-support/repo-paths.mjs";
 
 // in_waiting is the one pyserial call a driver can be *silently* wrong about:
 // the shim used to answer a hardcoded 0, and a driver that only reads when
@@ -14,84 +14,24 @@ import { createTestRadioHarness } from "./test-radio-harness.mjs";
 // tests pin both halves: the bridge reports the real buffered count, and the
 // Python shim exposes it under both the modern and the legacy spelling.
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
 // ---------------------------------------------------------------------------
 // The JS half: BrowserSerialBridge.inWaiting()
 // ---------------------------------------------------------------------------
 
-// A Web Serial-shaped port whose reader delivers exactly the chunks the test
-// pushes, so a test can place bytes on the line at a chosen moment rather than
-// racing a real device.
-function makeFeedablePort() {
-  const pending = [];
-  let deliver = null;
-  let closed = false;
-
-  function push(bytes) {
-    const value = Uint8Array.from(bytes);
-    if (deliver) {
-      const resolve = deliver;
-      deliver = null;
-      resolve({ value, done: false });
-      return;
-    }
-    pending.push(value);
-  }
-
-  const port = {
-    getInfo: () => ({ usbVendorId: 0x0403, usbProductId: 0x6015 }),
-    async open() {},
-    async close() {
-      closed = true;
-    },
-    readable: {
-      getReader: () => ({
-        read() {
-          if (pending.length) {
-            return Promise.resolve({ value: pending.shift(), done: false });
-          }
-          if (closed) {
-            return Promise.resolve({ done: true });
-          }
-          return new Promise((resolve) => {
-            deliver = resolve;
-          });
-        },
-        async cancel() {
-          closed = true;
-          deliver?.({ done: true });
-          deliver = null;
-        },
-        releaseLock() {},
-      }),
-    },
-    writable: { getWriter: () => ({ write: async () => {}, releaseLock() {} }) },
-  };
-  return { port, push };
-}
+import { makeEmitter, makeRecordingPort } from "./test-support/fake-serial.mjs";
+import { withNavigator } from "./test-support/globals.mjs";
 
 // The bridge reaches its transport through navigator, so these tests have to
 // stand one in. Pyodide boots off the real navigator later in this file, so
-// every substitution is undone as its test ends.
-const REAL_NAVIGATOR = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-
+// every substitution is undone as its test ends (withNavigator does that).
+// The recording port's push() places bytes on the line at a chosen moment
+// rather than racing a real device.
 async function openFedBridge(t) {
-  const { port, push } = makeFeedablePort();
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: { serial: { requestPort: async () => port, addEventListener() {}, removeEventListener() {} } },
-  });
-  t.after(() => {
-    if (REAL_NAVIGATOR) {
-      Object.defineProperty(globalThis, "navigator", REAL_NAVIGATOR);
-    } else {
-      delete globalThis.navigator;
-    }
-  });
+  const port = makeRecordingPort();
+  withNavigator(t, { serial: makeEmitter({ requestPort: async () => port }) });
   const bridge = new BrowserSerialBridge();
   await bridge.open(9600);
-  return { bridge, push };
+  return { bridge, push: port.push };
 }
 
 test("inWaiting reports the bridge's real buffered byte count", async (t) => {

@@ -1,6 +1,4 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { sharedHarness } from "./test-support/chirp.mjs";
 
 const DEFAULT_REBOOT_DELAY_MS = 5000;
 
@@ -76,9 +74,7 @@ async function main() {
     ? Math.max(0, rebootDelayOverride)
     : DEFAULT_REBOOT_DELAY_MS;
 
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  const harness = await createTestRadioHarness({
-    repoRoot,
+  const harness = await sharedHarness({
     chirpDir: String(args["chirp-dir"] || ""),
     portPath,
     serialMode: "node",

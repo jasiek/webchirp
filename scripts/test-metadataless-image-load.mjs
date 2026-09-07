@@ -1,18 +1,19 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import {
   findCatalogRadioForImageMetadata,
   isImageDetectionFailure,
 } from "../web/js/image-metadata.mjs";
 import { listDriverModules } from "../web/js/python-sources.mjs";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const imagesDir = path.join(repoRoot, "chirp/tests/images");
+import {
+  ensureModule,
+  imageMetadata,
+  importAllDriverModules,
+  readCatalog,
+  readImage,
+  sharedHarness,
+} from "./test-support/chirp.mjs";
 
 // CHIRP only writes the metadata trailer for images saved as .img by a recent
 // version, so older files identify no driver at all. Detection then falls back
@@ -20,28 +21,23 @@ const imagesDir = path.join(repoRoot, "chirp/tests/images");
 const METADATA_LESS_IMAGE = "Baofeng_UV-3R.img";
 const METADATA_IMAGE = "Baofeng_UV-5R.img";
 
-async function readImage(name) {
-  return new Uint8Array(await fs.readFile(path.join(imagesDir, name)));
-}
+// Tests that assert a driver is NOT yet imported boot their own runtime: the
+// shared one has every driver in it once any test here runs the sweep, and
+// on that runtime the failures below would simply not happen.
+const FRESH_RUNTIME = { isolated: true };
 
 test("image with a metadata trailer needs no full driver import", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const metadata = await harness.runPythonJson(
-    "json.dumps(read_image_metadata_base64(_b))",
-    { _b: Buffer.from(await readImage(METADATA_IMAGE)).toString("base64") },
-  );
+  const harness = await sharedHarness();
+  const metadata = await imageMetadata(harness, await readImage(METADATA_IMAGE));
   assert.equal(metadata.hasMetadata, true);
   assert.equal(metadata.vendor, "Baofeng");
 });
 
 test("metadata-less image is undetectable until every driver is imported", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness(FRESH_RUNTIME);
   const image = await readImage(METADATA_LESS_IMAGE);
 
-  const metadata = await harness.runPythonJson(
-    "json.dumps(read_image_metadata_base64(_b))",
-    { _b: Buffer.from(image).toString("base64") },
-  );
+  const metadata = await imageMetadata(harness, image);
   assert.equal(metadata.hasMetadata, false);
 
   // Without the preload the driver is not registered, so detection fails. This
@@ -51,9 +47,9 @@ test("metadata-less image is undetectable until every driver is imported", async
     /Unable to detect radio from image/,
   );
 
-  const result = await harness.runPythonJson(
-    "json.dumps(import_all_driver_modules(_mods))",
-    { _mods: await listDriverModules(harness.pythonSource) },
+  const result = await importAllDriverModules(
+    harness,
+    await listDriverModules(harness.pythonSource),
   );
   assert.ok(result.registered > 500, `expected many radio classes, got ${result.registered}`);
 
@@ -68,18 +64,14 @@ test("metadata-less image is undetectable until every driver is imported", async
 // TS480_CRadio. Importing a live driver cannot help detection, because
 // get_radio_by_image only considers FileBackedRadio subclasses.
 test("clone image whose metadata resolves to a live-mode driver still loads", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const catalog = JSON.parse(
-    await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8"),
-  ).radios;
+  const harness = await sharedHarness();
+  const catalog = await readCatalog();
 
   const byClassName = catalog.filter((radio) => radio.className === "TS480Radio");
   assert.equal(byClassName.length, 1);
   assert.equal(byClassName[0].isLiveRadio, true, "expected the name clash to be a live radio");
 
-  await harness.runPythonJson("json.dumps(import_all_driver_modules(_mods))", {
-    _mods: await listDriverModules(harness.pythonSource),
-  });
+  await importAllDriverModules(harness, await listDriverModules(harness.pythonSource));
   const loaded = await harness.loadCodeplugBinary(await readImage("Kenwood_TS-480_CloneMode.img"));
   assert.equal(loaded.className, "TS480_CRadio");
   assert.ok(loaded.rows.length > 0, "expected channels to be populated");
@@ -91,7 +83,7 @@ test("clone image whose metadata resolves to a live-mode driver still loads", as
 // Python class and the backstop goes quietly dead, while widening the predicate
 // makes every unrelated image failure cost a sweep before it surfaces.
 test("the retry gate recognises a real detection failure and nothing else", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
+  const harness = await sharedHarness(FRESH_RUNTIME);
   const image = await readImage(METADATA_LESS_IMAGE);
 
   const detectionError = await harness
@@ -113,11 +105,8 @@ test("the retry gate recognises a real detection failure and nothing else", asyn
 });
 
 test("import_all_driver_modules reports unimportable drivers instead of hiding them", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const result = await harness.runPythonJson(
-    "json.dumps(import_all_driver_modules(_mods))",
-    { _mods: ["uv5r", "definitely_not_a_driver"] },
-  );
+  const harness = await sharedHarness();
+  const result = await importAllDriverModules(harness, ["uv5r", "definitely_not_a_driver"]);
   assert.equal(result.imported, 1);
   // Issue #100: the reported reason has to be the one that actually stopped the
   // import (here: no such source file), not the ModuleNotFoundError that
@@ -135,16 +124,13 @@ test("import_all_driver_modules reports unimportable drivers instead of hiding t
 // "Unsupported model Quansheng UV-K5". The right driver lives in a different
 // module and is only reachable when the variant is taken into account.
 test("an image whose driver is distinguished only by variant resolves directly", async () => {
-  const harness = await createTestRadioHarness({ repoRoot });
-  const catalog = JSON.parse(
-    await fs.readFile(path.join(repoRoot, "web/radio-catalog.json"), "utf8"),
-  ).radios;
+  // Fresh runtime: "importing only the resolved module is enough" is only
+  // proven when the rest of the drivers are genuinely absent.
+  const harness = await sharedHarness(FRESH_RUNTIME);
+  const catalog = await readCatalog();
   const image = await readImage("Quansheng_UV-K5_egzumer.img");
 
-  const metadata = await harness.runPythonJson(
-    "json.dumps(read_image_metadata_base64(_b))",
-    { _b: Buffer.from(image).toString("base64") },
-  );
+  const metadata = await imageMetadata(harness, image);
   assert.equal(metadata.variant, "egzumer");
   assert.ok(
     catalog.filter((r) => r.vendor === metadata.vendor && r.model === metadata.model).length > 1,
@@ -156,9 +142,7 @@ test("an image whose driver is distinguished only by variant resolves directly",
   assert.equal(match?.className, "UVK5RadioEgzumer");
 
   // Importing only the resolved module must be enough — no all-drivers sweep.
-  await harness.runPythonJson("json.dumps({'ok': bool(ensure_radio_module(_m))})", {
-    _m: match.module,
-  });
+  await ensureModule(harness, match.module);
   const loaded = await harness.loadCodeplugBinary(image);
   assert.equal(loaded.module, "uvk5_egzumer");
   assert.equal(loaded.className, "UVK5RadioEgzumer");

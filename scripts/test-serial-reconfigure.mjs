@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BrowserSerialBridge, createSerialRpcHandler } from "../web/js/serial.js";
+import { makeEmitter, makeRecordingPort } from "./test-support/fake-serial.mjs";
+import { tick, withNavigator } from "./test-support/globals.mjs";
 
 // CHIRP drivers change the port's baud rate part-way through a clone: thd72
 // jumps to 57600 after the PROGRAM handshake, icf.start_hispeed_clone to 38400,
@@ -9,102 +11,11 @@ import { BrowserSerialBridge, createSerialRpcHandler } from "../web/js/serial.js
 // port and opens it again -- on the same port object, so the permission the
 // user granted survives and no second device picker appears.
 
-function makeEmitter(extra = {}) {
-  const listeners = new Map();
-  return {
-    ...extra,
-    addEventListener(type, fn) {
-      if (!listeners.has(type)) {
-        listeners.set(type, new Set());
-      }
-      listeners.get(type).add(fn);
-    },
-    removeEventListener(type, fn) {
-      listeners.get(type)?.delete(fn);
-    },
-    listenerCount(type) {
-      return listeners.get(type)?.size || 0;
-    },
-  };
-}
-
-function tick() {
-  return new Promise((resolve) => setImmediate(resolve));
-}
-
-// A port that records how it was opened and closed, parks its read loop until
-// cancelled (as a real one does), and can be told to refuse the next open.
-//
-// deliverOnCancel models a chunk the adapter had already completed when the
-// reopen began: a real reader hands it to the pending read() before the
-// cancellation takes effect. deliverOnReopen models the reopened stream having
-// a chunk ready the instant the new loop asks for one. Both are the windows in
-// which a mid-clone reopen can lose bytes.
-function makeFakePort({
-  failOpenWhen = () => null,
-  deliverOnCancel = null,
-  deliverOnReopen = null,
-} = {}) {
-  let releaseRead = () => {};
-  let readers = 0;
-  return {
-    opens: [],
-    closes: 0,
-    signals: [],
-    getInfo: () => ({ usbVendorId: 0x0403, usbProductId: 0x6015 }),
-    async open(options) {
-      const failure = failOpenWhen(options, this.opens.length);
-      this.opens.push({ ...options });
-      if (failure) {
-        throw new Error(failure);
-      }
-    },
-    async close() {
-      this.closes += 1;
-    },
-    async setSignals(signals) {
-      this.signals.push({ ...signals });
-    },
-    readable: {
-      getReader: () => {
-        readers += 1;
-        const reopened = readers > 1;
-        let pendingDelivery = reopened ? deliverOnReopen : null;
-        return {
-          read: () => {
-            if (pendingDelivery) {
-              const value = Uint8Array.from(pendingDelivery);
-              pendingDelivery = null;
-              return Promise.resolve({ value, done: false });
-            }
-            return new Promise((resolve) => {
-              releaseRead = resolve;
-            });
-          },
-          async cancel() {
-            if (!reopened && deliverOnCancel) {
-              releaseRead({ value: Uint8Array.from(deliverOnCancel), done: false });
-              await tick();
-            }
-            releaseRead({ done: true });
-          },
-          releaseLock() {},
-        };
-      },
-    },
-    writable: {
-      getWriter: () => ({ write: async () => {}, releaseLock() {} }),
-    },
-  };
-}
-
-function setNavigator(value) {
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value });
-}
-
-async function openBridge(portOptions = {}) {
-  const port = makeFakePort(portOptions);
-  setNavigator({ serial: makeEmitter({ requestPort: async () => port }) });
+// Open a bridge on a recording port; portOptions are makeRecordingPort's
+// (failOpenWhen, deliverOnCancel, deliverOnReopen model the reopen hazards).
+async function openBridge(t, portOptions = {}) {
+  const port = makeRecordingPort(portOptions);
+  withNavigator(t, { serial: makeEmitter({ requestPort: async () => port }) });
   const bridge = new BrowserSerialBridge();
   const debug = [];
   bridge.onDebug = (msg) => debug.push(msg);
@@ -112,8 +23,8 @@ async function openBridge(portOptions = {}) {
   return { bridge, port, debug };
 }
 
-test("a rate change reopens the same port with the merged options", async () => {
-  const { bridge, port } = await openBridge();
+test("a rate change reopens the same port with the merged options", async (t) => {
+  const { bridge, port } = await openBridge(t);
 
   const res = await bridge.reconfigure({ baudRate: 57600 });
 
@@ -132,8 +43,8 @@ test("a rate change reopens the same port with the merged options", async () => 
   });
 });
 
-test("framing options ride the same reopen as the rate", async () => {
-  const { bridge, port } = await openBridge();
+test("framing options ride the same reopen as the rate", async (t) => {
+  const { bridge, port } = await openBridge(t);
 
   const res = await bridge.reconfigure({ stopBits: 2, parity: "even" });
 
@@ -146,8 +57,8 @@ test("framing options ride the same reopen as the rate", async () => {
 // Drivers assign the rate they are already running at -- tk8180's reset path
 // writes 9600 when 9600 is current, and a probe loop re-asserts its winner.
 // Reopening for that would restart the adapter mid-clone for nothing.
-test("assigning the current settings does not reopen the port", async () => {
-  const { bridge, port } = await openBridge();
+test("assigning the current settings does not reopen the port", async (t) => {
+  const { bridge, port } = await openBridge(t);
 
   const res = await bridge.reconfigure({ baudRate: 9600, parity: "none" });
 
@@ -160,8 +71,8 @@ test("assigning the current settings does not reopen the port", async () => {
 // pyserial changes the rate with TCSANOW, which does not flush the input queue,
 // so bytes received before the switch stay readable. Drivers are written
 // against that: thd72 reads a byte immediately after going to 57600.
-test("bytes buffered before the switch survive the reopen", async () => {
-  const { bridge, debug } = await openBridge();
+test("bytes buffered before the switch survive the reopen", async (t) => {
+  const { bridge, debug } = await openBridge(t);
   bridge.readBuffer = Uint8Array.from([0x06, 0x16]);
 
   await bridge.reconfigure({ baudRate: 57600 });
@@ -176,8 +87,8 @@ test("bytes buffered before the switch survive the reopen", async () => {
 // Closing a port drops DTR/RTS back to the adapter's defaults. thd72 sets the
 // rate and then raises RTS two lines later, so a reopen that forgot the lines
 // would undo whichever of the two came first.
-test("control lines set before the change are re-asserted after it", async () => {
-  const { bridge, port } = await openBridge();
+test("control lines set before the change are re-asserted after it", async (t) => {
+  const { bridge, port } = await openBridge(t);
   await bridge.prepareClone(true, false, 0);
   await bridge.setSignals(null, true);
   port.signals.length = 0;
@@ -187,8 +98,8 @@ test("control lines set before the change are re-asserted after it", async () =>
   assert.deepEqual(port.signals, [{ dataTerminalReady: true, requestToSend: true }]);
 });
 
-test("a port with no known line state is not given one by a reopen", async () => {
-  const { bridge, port } = await openBridge();
+test("a port with no known line state is not given one by a reopen", async (t) => {
+  const { bridge, port } = await openBridge(t);
 
   await bridge.reconfigure({ baudRate: 57600 });
 
@@ -197,8 +108,8 @@ test("a port with no known line state is not given one by a reopen", async () =>
 
 // The port is already closed when the new options are refused, so leaving it
 // that way would strand the session on a port the app still thinks is open.
-test("a refused reopen restores the previous settings and reports the failure", async () => {
-  const { bridge, port } = await openBridge({
+test("a refused reopen restores the previous settings and reports the failure", async (t) => {
+  const { bridge, port } = await openBridge(t, {
     failOpenWhen: (options) => (options.baudRate === 57600 ? "unsupported baud rate" : null),
   });
 
@@ -213,8 +124,8 @@ test("a refused reopen restores the previous settings and reports the failure", 
   assert.equal(bridge.getPortInfo().connected, true);
 });
 
-test("a reopen that cannot be undone leaves no zombie port behind", async () => {
-  const { bridge } = await openBridge({
+test("a reopen that cannot be undone leaves no zombie port behind", async (t) => {
+  const { bridge } = await openBridge(t, {
     failOpenWhen: (options, attempt) => (attempt === 0 ? null : "device is gone"),
   });
 
@@ -268,8 +179,8 @@ test("a failed reconfigure propagates instead of being logged and swallowed", as
 // stop bits, and both land on the port mid-session. The next clone must start
 // from the defaults rather than inherit them, or a radio that never asked for
 // even parity reads every byte through it.
-test("a clone does not inherit the framing the previous clone's driver set", async () => {
-  const { bridge, port } = await openBridge();
+test("a clone does not inherit the framing the previous clone's driver set", async (t) => {
+  const { bridge, port } = await openBridge(t);
   await bridge.reconfigure({ parity: "even", stopBits: 2 });
   assert.equal(port.opens.at(-1).parity, "even");
 
@@ -286,8 +197,8 @@ test("a clone does not inherit the framing the previous clone's driver set", asy
   });
 });
 
-test("a clone at the settings the port already has still does not reopen", async () => {
-  const { bridge, port } = await openBridge();
+test("a clone at the settings the port already has still does not reopen", async (t) => {
+  const { bridge, port } = await openBridge(t);
   const opens = port.opens.length;
 
   const res = await bridge.applyBaudRate(9600);
@@ -299,8 +210,8 @@ test("a clone at the settings the port already has still does not reopen", async
 // The two windows in which the hand-off can lose bytes. Both are ordering bugs
 // rather than transport ones, so they only show up against a port that
 // actually delivers a chunk at the awkward moment.
-test("a chunk arriving as the port closes is not lost by the reopen", async () => {
-  const { bridge } = await openBridge({ deliverOnCancel: [0x41] });
+test("a chunk arriving as the port closes is not lost by the reopen", async (t) => {
+  const { bridge } = await openBridge(t, { deliverOnCancel: [0x41] });
   bridge.readBuffer = Uint8Array.from([0x06]);
 
   await bridge.reconfigure({ baudRate: 57600 });
@@ -310,8 +221,8 @@ test("a chunk arriving as the port closes is not lost by the reopen", async () =
   assert.deepEqual(Array.from(bridge.readBuffer), [0x06, 0x41]);
 });
 
-test("a chunk the reopened stream has ready is not overwritten by the kept bytes", async () => {
-  const { bridge } = await openBridge({ deliverOnReopen: [0x42] });
+test("a chunk the reopened stream has ready is not overwritten by the kept bytes", async (t) => {
+  const { bridge } = await openBridge(t, { deliverOnReopen: [0x42] });
   bridge.readBuffer = Uint8Array.from([0x06]);
 
   await bridge.reconfigure({ baudRate: 57600 });
@@ -325,8 +236,8 @@ test("a chunk the reopened stream has ready is not overwritten by the kept bytes
 // something only a native Web Serial port (or the CDC polyfill) can do. The
 // bridge has to refuse rather than reopen and claim success -- wrong framing
 // corrupts every byte, and the clone would fail on garbage naming nothing.
-test("an adapter that cannot change framing refuses instead of pretending", async () => {
-  const { bridge, port } = await openBridge();
+test("an adapter that cannot change framing refuses instead of pretending", async (t) => {
+  const { bridge, port } = await openBridge(t);
   port.supportsFraming = false;
   const opens = port.opens.length;
 
@@ -337,8 +248,8 @@ test("an adapter that cannot change framing refuses instead of pretending", asyn
   assert.equal(port.opens.length, opens, "the port must not have been reopened");
 });
 
-test("such an adapter still takes a baud-rate change", async () => {
-  const { bridge, port } = await openBridge();
+test("such an adapter still takes a baud-rate change", async (t) => {
+  const { bridge, port } = await openBridge(t);
   port.supportsFraming = false;
 
   const res = await bridge.reconfigure({ baudRate: 57600 });

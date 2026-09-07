@@ -11,6 +11,7 @@ import {
   isRepeaterRecord,
   parseRsgbPayload,
 } from "../web/js/rsgb.js";
+import { makeRowHooks } from "./test-support/row-hooks.mjs";
 
 // Contract tests against the live RSGB/ETCC API. Deliberately NOT part of
 // `npm test` — they need the network and a third party's uptime, so a red run
@@ -212,30 +213,14 @@ test("the default filters return a usable set of repeaters", async () => {
 // CHIRP's drivers use, and the one under which an unset Power column shows
 // "Low". Wide open otherwise, so the corpus is judged on Power alone.
 function permissiveRowHooks() {
-  const columns = ["Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Power", "Comment"];
-  const optionsFor = {
-    Tone: ["Tone", "TSQL"],
-    Mode: ["FM", "NFM", "DV", "DN", "DMR", "P25", "NXDN", "M17", "TETRA"],
-    Power: ["Low", "High"],
-  };
-  return {
-    createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
-    setRowValue: (row, column, value) => {
-      if (columns.includes(column)) {
-        row[column] = String(value ?? "");
-      }
+  return makeRowHooks({
+    optionsByColumn: {
+      Tone: ["Tone", "TSQL"],
+      Mode: ["FM", "NFM", "DV", "DN", "DMR", "P25", "NXDN", "M17", "TETRA"],
+      Power: ["Low", "High"],
     },
-    findEnumOption: (column, choices) => {
-      const options = optionsFor[column] || [];
-      for (const choice of choices) {
-        const match = options.find((option) => option.toLowerCase() === String(choice).toLowerCase());
-        if (match) {
-          return match;
-        }
-      }
-      return "";
-    },
-  };
+    caseInsensitive: true,
+  });
 }
 
 test("every repeater the live API serves builds a channel on High", async () => {

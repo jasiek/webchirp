@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { sharedHarness } from "./test-support/chirp.mjs";
 
 // CHIRP's clone dialog calls rclass.detect_from_serial(pipe) before sync_in().
 // For ga510 and tdh8 that call is where the program handshake is sent -- their
@@ -13,21 +11,12 @@ import { createTestRadioHarness } from "./test-radio-harness.mjs";
 // fix depends on: detection runs, it runs on the pipe the clone then uses, and
 // the class it returns is the one that clones and owns the cached image.
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-let harnessPromise = null;
-
-function getHarness() {
-  if (!harnessPromise) {
-    harnessPromise = createTestRadioHarness({ repoRoot });
-  }
-  return harnessPromise;
-}
-
 // A synthetic driver module registered under chirp.drivers.* so the bridge's
 // normal module/class selection path reaches it. Using a fake driver rather
 // than a real one keeps the test about detection wiring instead of about one
-// radio's wire protocol.
+// radio's wire protocol. It is installed afresh by every probe, under a name
+// no real driver uses, so the file's tests can all run on the shared runtime
+// without one probe's classes or events leaking into the next.
 const INSTALL_FAKE_DRIVER = `
 import sys
 import types
@@ -128,7 +117,7 @@ async function withFakeDriver(harness, python, vars = {}) {
 }
 
 test("detection picks the class and hands it the pipe the clone runs on", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const result = await withFakeDriver(
     harness,
     `
@@ -154,7 +143,7 @@ json.dumps({
 });
 
 test("a driver with nothing to detect clones as the class the user selected", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const result = await withFakeDriver(
     harness,
     `
@@ -172,7 +161,7 @@ json.dumps({
 });
 
 test("a failed detection handshake surfaces instead of cloning blind", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const result = await withFakeDriver(
     harness,
     `
@@ -189,7 +178,7 @@ json.dumps({"outcome": _outcome})
 });
 
 test("download clones as the detected class and upload reuses it", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const result = await withFakeDriver(
     harness,
     `
@@ -221,7 +210,7 @@ json.dumps({
 });
 
 test("a download that cannot be serialized leaves the cached pair alone", async () => {
-  const harness = await getHarness();
+  const harness = await sharedHarness();
   const result = await withFakeDriver(
     harness,
     `

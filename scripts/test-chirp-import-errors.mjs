@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { listRegisteredRadios, sharedHarness } from "./test-support/chirp.mjs";
 
 // Regression test for issue #100: ChirpCdnFinder.find_spec used to catch the
 // error from fetching a driver's source and return None, so the import fell
@@ -30,7 +30,7 @@ function patchPythonGlobals(pyodide, overrides) {
 }
 
 test("a failed CHIRP source fetch names its cause instead of ModuleNotFoundError", async () => {
-  const harness = await createTestRadioHarness({ repoRoot: process.cwd() });
+  const harness = await sharedHarness();
   const pyodide = harness.pyodide;
   const originalFetch = pyodide.globals.get("fetch_chirp_source");
   const logged = [];
@@ -50,7 +50,7 @@ test("a failed CHIRP source fetch names its cause instead of ModuleNotFoundError
 
   try {
     await assert.rejects(
-      pyodide.runPythonAsync('ensure_radio_module("kguv8d")'),
+      harness.runPython('ensure_radio_module("kguv8d")'),
       (error) => {
         const text = String(error?.message || "");
         assert.match(text, /ImportError/);
@@ -80,9 +80,6 @@ test("a failed CHIRP source fetch names its cause instead of ModuleNotFoundError
 
   // The hook still materializes modules once the source is reachable again: a
   // failed import must not poison later ones.
-  const radios = await harness.runPythonJson(
-    "json.dumps(list_registered_radios(_modules))",
-    { _modules: ["kguv8d"] },
-  );
+  const radios = await listRegisteredRadios(harness, ["kguv8d"]);
   assert.ok(radios.length > 0, "expected kguv8d to register after a successful fetch");
 });
