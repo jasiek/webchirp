@@ -60,6 +60,23 @@ export function createRepeaterQuery(ctx) {
   let fieldInstances = [];
   let positionField = null;
   const positionState = { latitudeText: "", longitudeText: "" };
+  // True while a query is awaiting its network round-trip. The submit handler
+  // is async, so without this a second submit re-enters it while the first is
+  // suspended, and both resolved queries insert their rows — every repeater
+  // twice. An RSGB fan-out over 24 squares takes seconds, so the window is
+  // wide enough to hit by double-clicking.
+  let queryInFlight = false;
+  const submitIdleLabel = dom.repeaterQuerySubmitEl.textContent || "Query API";
+
+  // Mark the query busy: the flag is what actually rejects a re-entrant
+  // submit (Enter in a text field submits the form too, not just the button),
+  // while the disabled button and its label are how the user sees why the
+  // second click did nothing.
+  function setQueryBusy(busy) {
+    queryInFlight = busy;
+    dom.repeaterQuerySubmitEl.disabled = busy;
+    dom.repeaterQuerySubmitEl.textContent = busy ? "Querying..." : submitIdleLabel;
+  }
 
   function buildFields(source, loadedOptions) {
     dom.repeaterQueryGridEl.innerHTML = "";
@@ -195,6 +212,10 @@ export function createRepeaterQuery(ctx) {
     });
     dom.repeaterQueryFormEl.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (queryInFlight) {
+        return;
+      }
+      setQueryBusy(true);
       try {
         if (!state.currentHeaders.length) {
           log.setStatus("No channel schema loaded yet.");
@@ -205,6 +226,8 @@ export function createRepeaterQuery(ctx) {
         setModalOpen(false);
       } catch (error) {
         log.reportActionError(`${activeSource.actionLabel} query`, error);
+      } finally {
+        setQueryBusy(false);
       }
     });
   }
