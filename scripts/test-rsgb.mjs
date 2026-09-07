@@ -172,8 +172,10 @@ test("fetchRsgbRecords queries each square without tripping a CORS preflight", a
     "https://api-beta.rsgb.online/locator/JO02",
   ]);
   // Any custom header would force an OPTIONS preflight, which the API answers
-  // with 405 — so the request must carry no init at all.
-  assert.ok(calls.every((call) => call.init === undefined));
+  // with 405 — so the only thing the request may carry is the abort signal
+  // that bounds it, which is not a header and keeps the request simple.
+  assert.ok(calls.every((call) => Object.keys(call.init || {}).join() === "signal"));
+  assert.ok(calls.every((call) => typeof call.init.signal?.addEventListener === "function"));
 });
 
 test("fetchRsgbRecords surfaces a transport failure", async () => {
@@ -184,6 +186,80 @@ test("fetchRsgbRecords surfaces a transport failure", async () => {
     }),
     /HTTP 502/,
   );
+});
+
+// A fetch that accepts the request and then never answers — a proxy or API
+// that hangs after the connection, which is the failure the request deadline
+// exists for. It rejects the way a real fetch does once its signal aborts, so
+// the tests below exercise the abort path rather than a stand-in for it.
+function stallingFetch(seen) {
+  return (url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener("abort", () => {
+      seen.push(String(url));
+      reject(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }));
+    });
+  });
+}
+
+test("a stalled square times out with an error naming what did not answer", async () => {
+  const aborted = [];
+  await assert.rejects(
+    fetchRsgbRecords({ squares: ["JO01"], timeoutMs: 5, fetchImpl: stallingFetch(aborted) }),
+    /RSGB query for JO01 timed out after 5 ms/,
+  );
+  // The deadline aborts the request rather than merely abandoning its promise,
+  // so the connection is released instead of streaming on into nothing.
+  assert.deepEqual(aborted, ["https://api-beta.rsgb.online/locator/JO01"]);
+});
+
+test("the deadline covers the body read, not just the response headers", async () => {
+  // fetch() resolves as soon as the headers arrive, so a host that answers 200
+  // and then stalls mid-body would slip past a deadline that only wrapped the
+  // request.
+  const aborted = [];
+  await assert.rejects(
+    fetchRsgbRecords({
+      squares: ["JO01"],
+      timeoutMs: 5,
+      fetchImpl: async (url, init) => ({
+        ok: true,
+        json: () => new Promise((_resolve, reject) => {
+          init.signal.addEventListener("abort", () => {
+            aborted.push(String(url));
+            reject(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }));
+          });
+        }),
+      }),
+    }),
+    /RSGB query for JO01 timed out after 5 ms/,
+  );
+  assert.deepEqual(aborted, ["https://api-beta.rsgb.online/locator/JO01"]);
+});
+
+test("one stalled square fails the whole query rather than returning a hole in the map", async () => {
+  // The documented fan-out policy: squares are geographic tiles, so silently
+  // dropping one would hand back a result set missing every repeater in a patch
+  // of the search area, with nothing on screen to say so. A failed query the
+  // user can retry is the honest outcome.
+  await assert.rejects(
+    fetchRsgbRecords({
+      squares: ["JO01", "JO02"],
+      timeoutMs: 5,
+      fetchImpl: (url, init) => (url.endsWith("JO01")
+        ? Promise.resolve({ ok: true, json: async () => ({ data: [record()] }) })
+        : stallingFetch([])(url, init)),
+    }),
+    /RSGB query for JO02 timed out after 5 ms/,
+  );
+});
+
+test("a square answering inside the deadline is untouched by it", async () => {
+  const records = await fetchRsgbRecords({
+    squares: ["JO01"],
+    timeoutMs: 5,
+    fetchImpl: async () => ({ ok: true, json: async () => ({ data: [record()] }) }),
+  });
+  assert.equal(records.length, 1);
 });
 
 test("rsgbLocatorUrl normalises the locator and base", () => {
