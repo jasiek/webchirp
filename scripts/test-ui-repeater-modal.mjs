@@ -740,6 +740,32 @@ function installRsgbFetch(bySquare) {
   return calls;
 }
 
+// Like installRsgbFetch, but every response waits on a gate the test opens.
+// That holds a query in flight for as long as the test needs, which is what it
+// takes to land a second submit on the first one — the double-click the
+// in-flight guard exists to absorb.
+function installGatedRsgbFetch(bySquare) {
+  const calls = [];
+  let openGate;
+  const gate = new Promise((resolve) => {
+    openGate = resolve;
+  });
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: async (url, init) => {
+      calls.push({ url: String(url), init });
+      await gate;
+      const square = String(url).split("/").pop();
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: bySquare[square] ?? null }),
+      };
+    },
+  });
+  return { calls, release: () => openGate() };
+}
+
 function repeaterRecord(overrides = {}) {
   return {
     id: 199,
@@ -869,6 +895,9 @@ test("a coordinate-free or ill-formed RSGB query never reaches the network", asy
 
   assert.deepEqual(calls, [], "nothing should have been fetched");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false, "the modal stays open on an error");
+  // Four submits were accepted, so a failed query must release the in-flight
+  // guard rather than leaving the form wedged.
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "a failed query leaves the button usable");
 });
 
 test("an RSGB query fans out over the squares and inserts the matching repeaters", async () => {
@@ -1065,4 +1094,34 @@ test("an RSGB query with no channel schema loaded does nothing", async () => {
   assert.deepEqual(calls, []);
   assert.deepEqual(table.inserted, []);
   assert.ok(log.statuses.includes("No channel schema loaded yet."));
+});
+
+test("a second submit while a query is in flight is ignored, not duplicated", async () => {
+  const { dom, log, table } = buildHarness();
+  installGeolocation(LONDON);
+  const { calls, release } = installGatedRsgbFetch({
+    IO91: [repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ" })],
+    JO01: [repeaterRecord({ id: 2, repeater: "GB3BK", tx: 430900000, rx: 438500000, locator: "JO01AK", band: "70CM" })],
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+
+  // Not awaited: the query is suspended on the gated fetch, exactly as it is
+  // suspended on a real fan-out that takes seconds.
+  const first = dom.repeaterQueryFormEl.dispatch("submit");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true, "the button says the query is running");
+  assert.equal(dom.repeaterQuerySubmitEl.textContent, "Querying...");
+
+  const second = dom.repeaterQueryFormEl.dispatch("submit");
+  release();
+  await Promise.all([first, second]);
+
+  assert.deepEqual(log.errors, []);
+  assert.equal(table.inserted.length, 1, "the second submit must not insert a second copy");
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP", "GB3BK"]);
+  // Two squares for London at 30 km: the second submit fanned out over none.
+  assert.equal(calls.length, 2, "the second submit must not reach the network");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "the button comes back for the next query");
+  assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API");
 });
