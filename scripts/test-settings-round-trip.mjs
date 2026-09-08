@@ -10,7 +10,7 @@ import { loadImageFor, readCatalog, sharedHarness } from "./test-support/chirp.m
 //
 //   * UNINITIALIZED — the driver built a value from image content its own
 //     validation rejects. RadioSettingGroup.__init__ logs and swallows that
-//     (chirp/settings.py:80-90), leaving _current at None, so the value
+//     (chirp/chirp/settings.py:80-90), leaving _current at None, so the value
 //     serializes as null and replaying null reached len(None) in set_value().
 //   * AUTOPAD — RadioSettingValueString.set_value() pads to maxlength before
 //     storing, and retevis_c2 narrows the charset to DTMF digits afterwards, so

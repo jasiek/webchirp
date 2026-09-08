@@ -7,7 +7,7 @@
 // because it suppresses the all-drivers fallback that would have found the
 // right driver. So this must be at least as precise as the detection it front-
 // runs — which compares VENDOR/MODEL/VARIANT across `rclass.ALIASES + [rclass]`
-// (chirp/directory.py) — and must report ambiguity rather than guessing.
+// (chirp/chirp/directory.py) — and must report ambiguity rather than guessing.
 
 function identitiesFor(radio) {
   if (Array.isArray(radio.aliases) && radio.aliases.length > 0) {

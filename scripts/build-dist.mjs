@@ -41,6 +41,8 @@ async function walkFiles(dir) {
   return files;
 }
 
+// Quote a literal reference so it can be embedded in the boundary-anchored
+// matcher below; asset paths contain "." and "-", which are regex syntax.
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -125,6 +127,8 @@ function stronglyConnectedComponents(nodes, edgesOf) {
   const components = [];
   let counter = 0;
 
+  // One depth-first step: assign the node its index, follow its edges, and on
+  // the way back out emit the component it roots, if it roots one.
   function visit(node) {
     index.set(node, counter);
     lowLink.set(node, counter);
@@ -200,8 +204,12 @@ async function main() {
   }
 
   const hashedRelByRel = new Map();
+  // The hashed name an asset has been given, or undefined while it is still
+  // unnamed — which is what leaves a not-yet-processed reference alone.
   const nameOf = (assetRel) => hashedRelByRel.get(assetRel);
 
+  // Write an asset out under its hashed name and drop the unhashed original,
+  // so nothing in dist/ is reachable at a name that carries no digest.
   async function emit(rel, hashedRel, content) {
     await writeFile(path.join(DIST_DIR, hashedRel), content);
     await rm(path.join(DIST_DIR, rel));
