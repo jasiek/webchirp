@@ -5,8 +5,8 @@ import path from "node:path";
 const ROOT = process.cwd();
 const DIST_DIR = path.join(ROOT, "dist");
 const WEB_DIR = path.join(ROOT, "web");
-const HASHED_EXTS = new Set([".js", ".css", ".py"]);
-const REWRITE_EXTS = new Set([".html", ".js", ".css"]);
+const HASHED_EXTS = new Set([".js", ".mjs", ".css", ".py"]);
+const REWRITE_EXTS = new Set([".html", ".js", ".mjs", ".css"]);
 // Assets whose absence is invisible at runtime until a user notices something
 // missing: the manifest and its icons only matter when someone tries to install
 // the app to a home screen, which no test page load exercises.

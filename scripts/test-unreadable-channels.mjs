@@ -24,7 +24,7 @@ const FRESH_RUNTIME = { isolated: true };
 // erased for being absent from the rows. Protection has to come from what the
 // extraction recorded, not from the failure happening to repeat.
 const TRANSIENT_FAILURE_PROBE = `
-import base64, json
+import base64, json, runtime_support
 
 ensure_radio_module("uv5r")
 
@@ -42,8 +42,8 @@ def _failing_get_memory(self, number, *args, **kwargs):
     return _real_get_memory(self, number, *args, **kwargs)
 
 _captured = []
-_real_serial_log = serial_log
-serial_log = lambda message: _captured.append(str(message))
+_real_serial_log = runtime_support.serial_log
+runtime_support.serial_log = lambda message: _captured.append(str(message))
 try:
     _cls.get_memory = _failing_get_memory
     try:
@@ -52,7 +52,7 @@ try:
         _cls.get_memory = _real_get_memory
     _exported = export_image_base64(_module, _class_name, _loaded["rows"], [])
 finally:
-    serial_log = _real_serial_log
+    runtime_support.serial_log = _real_serial_log
 
 # Re-read the exported image with a clean driver: the protected slot has to
 # still be there, carrying the value it had before the failure.
@@ -79,7 +79,7 @@ json.dumps({
 // exception text -- the grouping key -- is unique per channel. Grouping alone
 // would then emit one full traceback per memory.
 const UNIQUE_MESSAGES_PROBE = `
-import base64, json
+import base64, json, runtime_support
 
 ensure_radio_module("uv5r")
 
@@ -93,8 +93,8 @@ def _always_failing_get_memory(self, number, *args, **kwargs):
     raise ValueError("corrupt memory at slot " + str(int(number)))
 
 _captured = []
-_real_serial_log = serial_log
-serial_log = lambda message: _captured.append(str(message))
+_real_serial_log = runtime_support.serial_log
+runtime_support.serial_log = lambda message: _captured.append(str(message))
 try:
     _cls.get_memory = _always_failing_get_memory
     try:
@@ -102,7 +102,7 @@ try:
     finally:
         _cls.get_memory = _real_get_memory
 finally:
-    serial_log = _real_serial_log
+    runtime_support.serial_log = _real_serial_log
 
 json.dumps({
     "maxGroups": MAX_LOGGED_FAILURE_GROUPS,

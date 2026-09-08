@@ -4,6 +4,18 @@
 // the runtime rejects a mismatched static catalog.
 export const DEFAULT_CHIRP_REVISION = "33a76a6364ea8847f9ab64ce51460cf260a820f2";
 
+// Literal asset references let scripts/build-dist.mjs track and hash each
+// sibling while Python imports keep stable names in the virtual filesystem.
+const RUNTIME_MODULE_PATHS = {
+  "runtime_support.py": "./python/runtime_support.py",
+  "runtime_drivers.py": "./python/runtime_drivers.py",
+  "runtime_channels.py": "./python/runtime_channels.py",
+  "runtime_validation.py": "./python/runtime_validation.py",
+  "runtime_serial.py": "./python/runtime_serial.py",
+  "runtime_images.py": "./python/runtime_images.py",
+  "runtime_settings.py": "./python/runtime_settings.py",
+};
+
 const CORE_CHIRP_RELATIVE_FILES = [
   "chirp/__init__.py",
   "chirp/errors.py",
@@ -90,6 +102,16 @@ export function createBrowserCdnPythonSource({
     async fetchRuntimeBridge() {
       return fetchTextImpl(runtimeBridgePath);
     },
+    // Fetch beside the bridge, retaining the build-generated asset basename.
+    async fetchRuntimeModules() {
+      const directory = runtimeBridgePath.slice(0, runtimeBridgePath.lastIndexOf("/") + 1);
+      return Object.fromEntries(await Promise.all(
+        Object.entries(RUNTIME_MODULE_PATHS).map(async ([name, assetPath]) => [
+          name,
+          await fetchTextImpl(directory + assetPath.slice(assetPath.lastIndexOf("/") + 1)),
+        ]),
+      ));
+    },
     async listDriverModules() {
       const indexJson = await fetchJsonImpl(chirpFileIndexUrl);
       return parseDriverModuleNames(indexJson);
@@ -135,6 +157,14 @@ export function createFilesystemPythonSource({
     async fetchRuntimeBridge() {
       return readText(runtimeBridgePath);
     },
+    // Filesystem providers read stable source names beside their entry point.
+    async fetchRuntimeModules() {
+      return Object.fromEntries(await Promise.all(
+        Object.keys(RUNTIME_MODULE_PATHS).map(async (name) => [
+          name, await readText(joinPath(runtimeBridgePath, "..", name)),
+        ]),
+      ));
+    },
     async listDriverModules() {
       const names = await readDirNames(joinPath(chirpPackageDir, "drivers"));
       return names
@@ -157,6 +187,7 @@ export function createFilesystemPythonSource({
 function ensureProvider(sourceProvider) {
   assertMethod(sourceProvider, "fetchChirpSource");
   assertMethod(sourceProvider, "fetchRuntimeBridge");
+  assertMethod(sourceProvider, "fetchRuntimeModules");
   assertMethod(sourceProvider, "listDriverModules");
 }
 
@@ -192,7 +223,14 @@ export async function seedPyodideRuntime(pyodide, sourceProvider) {
     }),
   );
 
-  const runtimePython = await sourceProvider.fetchRuntimeBridge();
+  // Materialize siblings before executing the bridge so normal imports work.
+  const [runtimePython, runtimeModules] = await Promise.all([
+    sourceProvider.fetchRuntimeBridge(),
+    sourceProvider.fetchRuntimeModules(),
+  ]);
+  for (const [name, text] of Object.entries(runtimeModules)) {
+    pyodide.FS.writeFile(`/webchirp_runtime/${name}`, text, { encoding: "utf8" });
+  }
   await pyodide.runPythonAsync(runtimePython);
 }
 

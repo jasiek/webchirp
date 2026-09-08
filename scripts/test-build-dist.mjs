@@ -350,3 +350,21 @@ test("module paths named in comments are canonical and resolve", () => {
     "write module paths from the repo root, and update them when a module moves",
   );
 });
+
+// Production sibling URLs must track Python content through the .mjs loader.
+test("Python sibling changes invalidate the module loader and its importer", async () => {
+  const tree = {
+    ...appTree("export const leaf = 1;\n"),
+    "js/app.js": 'import "./loader.mjs";\n',
+    "js/loader.mjs": 'export const sibling = "./python/runtime_support.py";\n',
+    "python/runtime_support.py": "VALUE = 1\n",
+  };
+  const before = await build(tree);
+  const after = await build({ ...tree, "python/runtime_support.py": "VALUE = 2\n" });
+  const sibling = hashedNameOf(after, "python/runtime_support");
+  const loader = hashedNameOf(after, "js/loader");
+  assert.ok(after.get(loader).toString("utf8").includes(path.basename(sibling)));
+  assert.notEqual(loader, hashedNameOf(before, "js/loader"));
+  assert.notEqual(hashedNameOf(after, "js/app"), hashedNameOf(before, "js/app"));
+  assertNoUrlNamesTwoContents(before, after);
+});

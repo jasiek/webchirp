@@ -12,19 +12,18 @@ import { listRegisteredRadios, sharedHarness } from "./test-support/chirp.mjs";
 // panel that serial_log feeds.
 const FETCH_FAILURE = "Failed to fetch https://cdn.test/chirp/drivers/kguv8d.py: 503";
 
-// Swap the two JS callables the finder reaches through. Both are module-level
-// names in the Pyodide globals namespace runtime_bridge.py was executed in, and
-// Python bound them by value at "from js import ...", so reassigning
-// globalThis would not be seen -- the globals slot is the only handle.
+// Patch the support module that owns JS callables so imported helpers see
+// replacements without relying on entry-point reexports.
 function patchPythonGlobals(pyodide, overrides) {
+  const globals = pyodide.pyimport("runtime_support").__dict__;
   const previous = new Map();
   for (const [name, value] of Object.entries(overrides)) {
-    previous.set(name, pyodide.globals.get(name));
-    pyodide.globals.set(name, value);
+    previous.set(name, globals.get(name));
+    globals.set(name, value);
   }
   return () => {
     for (const [name, value] of previous) {
-      pyodide.globals.set(name, value);
+      globals.set(name, value);
     }
   };
 }
