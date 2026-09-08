@@ -10,7 +10,7 @@ import {
   rowLooksNonEmpty,
   serializeRowsToTsv,
 } from "../clipboard.js";
-import { normalizeValue } from "./channel-values.js";
+import { normalizeCellValue, normalizeValue } from "./channel-values.js";
 import { rowGeo } from "../row-geo.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
 
@@ -267,12 +267,20 @@ export function createChannelTable({ dom, state, log, actions }) {
     return row;
   }
 
+  // A validating writer, not an assignment: the value is checked against the
+  // selected radio's own column metadata and a rejected write leaves the cell
+  // as it was. Returns whether the row now holds what was asked for, so a row
+  // builder can react rather than assume — a rejected enum leaves a valid
+  // looking option behind (a tone the radio's table lacks becomes 67.0 Hz), so
+  // the write is otherwise indistinguishable from a successful one.
   function setRowValueIfPresent(row, column, value) {
     if (!state.currentHeaders.includes(column)) {
-      return;
+      return false;
     }
     const meta = state.radioMetadata.columns?.[column] || {};
-    row[column] = normalizeValue(column, value, meta, row[column], { allowReadOnly: true });
+    const result = normalizeCellValue(column, value, meta, row[column], { allowReadOnly: true });
+    row[column] = result.value;
+    return result.accepted;
   }
 
   function findEnumOption(column, choices, caseInsensitive = false) {

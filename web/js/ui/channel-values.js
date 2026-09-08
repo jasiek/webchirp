@@ -25,14 +25,32 @@ export function inAnyBand(hz, bands) {
   return bands.some(([lo, hi]) => hz >= Number(lo) && hz < Number(hi));
 }
 
-// Coerce and constrain edited cell values according to CHIRP column metadata.
+// Coerce and constrain edited cell values according to CHIRP column metadata,
+// reporting whether the write was accepted as `{ value, accepted }`.
+//
+// `accepted` is false on every path that falls back to `previous` (or to the
+// column's first option) instead of storing something derived from the caller's
+// value: a read-only column, an unparsable or out-of-band frequency, a
+// non-numeric or out-of-range int, an enum value the driver's own option list
+// does not carry. That last one is why this exists: a rejected enum write is
+// invisible in the row, because the fallback is a perfectly valid-looking
+// option — a repeater tone the radio's table lacks became 67.0 Hz under an
+// already-committed Tone mode, a channel that keys nothing (issue #104).
+// Callers that write a value and a mode that encodes it must commit the mode
+// only once the value itself was accepted.
+//
+// Coercions that keep the caller's value are accepted: text trimmed to
+// validChars or maxLength, and an enum matched by numeric value.
+//
 // allowReadOnly lets programmatic row builders (paste, repeater imports) fill
 // columns the grid renders read-only (e.g. TStep on radios with
 // has_tuning_step=False); kind/options validation still applies.
-export function normalizeValue(column, value, meta, previous, { allowReadOnly = false } = {}) {
+export function normalizeCellValue(column, value, meta, previous, { allowReadOnly = false } = {}) {
+  const rejected = (fallback) => ({ value: String(fallback ?? ""), accepted: false });
+  const stored = (out) => ({ value: String(out ?? ""), accepted: true });
   let v = String(value ?? "");
   if (!meta || (meta.editable === false && !allowReadOnly)) {
-    return String(previous ?? v);
+    return rejected(previous ?? v);
   }
 
   if (meta.kind === "text") {
@@ -46,13 +64,13 @@ export function normalizeValue(column, value, meta, previous, { allowReadOnly = 
     if (Number.isFinite(meta.maxLength)) {
       v = v.slice(0, Number(meta.maxLength));
     }
-    return v;
+    return stored(v);
   }
 
   if (meta.kind === "int") {
     const parsed = Number.parseInt(v, 10);
     if (Number.isNaN(parsed)) {
-      return String(previous ?? "");
+      return rejected(previous);
     }
     let out = parsed;
     if (Number.isFinite(meta.min)) {
@@ -61,19 +79,21 @@ export function normalizeValue(column, value, meta, previous, { allowReadOnly = 
     if (Number.isFinite(meta.max)) {
       out = Math.min(out, Number(meta.max));
     }
-    return String(out);
+    // A clamped value is kept, as it always was, but reported as not accepted:
+    // memory 300 stored as 127 is not the memory the caller asked for.
+    return out === parsed ? stored(out) : { value: String(out), accepted: false };
   }
 
   if (meta.kind === "freq") {
     const hz = parseFreqToHz(v);
     if (hz === null) {
-      return String(previous ?? "");
+      return rejected(previous);
     }
     const shouldCheckBands = column !== "Offset";
     if (shouldCheckBands && !inAnyBand(hz, meta.bands || [])) {
-      return String(previous ?? "");
+      return rejected(previous);
     }
-    return v;
+    return stored(v);
   }
 
   if (meta.kind === "enum") {
@@ -87,12 +107,17 @@ export function normalizeValue(column, value, meta, previous, { allowReadOnly = 
         ? options.find((option) => Number.parseFloat(option) === numeric)
         : undefined;
       if (numericMatch !== undefined) {
-        return numericMatch;
+        return stored(numericMatch);
       }
-      return String(previous ?? options[0] ?? "");
+      return rejected(previous ?? options[0]);
     }
-    return v;
+    return stored(v);
   }
 
-  return v;
+  return stored(v);
+}
+
+// The value-only form, for the many call sites that only store the result.
+export function normalizeValue(column, value, meta, previous, options = {}) {
+  return normalizeCellValue(column, value, meta, previous, options).value;
 }
