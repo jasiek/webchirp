@@ -92,6 +92,16 @@ def _row_values_for_csv(mem: chirp_common.Memory) -> list[Any]:
     return mem.to_csv()
 
 
+def _row_text_values(mem: chirp_common.Memory) -> list[str]:
+    """A memory's CSV fields as the text the grid shows, in ``CSV_HEADERS`` order."""
+    return [str(value) for value in _row_values_for_csv(mem)]
+
+
+def _row_from_memory(mem: chirp_common.Memory) -> Row:
+    """Project a memory onto a grid row: CSV header names to text values."""
+    return dict(zip(CSV_HEADERS, _row_text_values(mem)))
+
+
 def get_default_headers() -> dict[str, Any]:
     """Channel columns to show before a radio or codeplug decides them.
 
@@ -111,10 +121,7 @@ def parse_csv(csv_text: str) -> dict[str, Any]:
     for mem in radio.memories:
         if mem.empty:
             continue
-        row: Row = {}
-        for header, value in zip(CSV_HEADERS, _row_values_for_csv(mem)):
-            row[header] = str(value)
-        rows.append(row)
+        rows.append(_row_from_memory(mem))
 
     return {
         "headers": CSV_HEADERS,

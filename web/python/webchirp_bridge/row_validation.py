@@ -21,7 +21,8 @@ from webchirp_bridge.channel_rows import (
     Rows,
     _coerce_csv_vals_for_chirp,
     _memory_from_row_values,
-    _row_values_for_csv,
+    _row_from_memory,
+    _row_text_values,
 )
 from webchirp_bridge.driver_cache import _best_effort_radio_instance, _driver_features
 from webchirp_bridge.power_levels import (
@@ -145,10 +146,7 @@ def _preserve_unedited_immutable_fields(
         "power": "Power",
         "comment": "Comment",
     }
-    existing_row: dict[str, str] = {
-        header: str(value)
-        for header, value in zip(CSV_HEADERS, _row_values_for_csv(existing))
-    }
+    existing_row = _row_from_memory(existing)
     for field in list(getattr(existing, "immutable", None) or []):
         header = field_headers.get(field)
         if header and str(row.get(header, "") or "") == existing_row[header]:
@@ -234,7 +232,7 @@ def _memory_row_changed(
 def _row_matches_memory(row: Row, memory: chirp_common.Memory) -> bool:
     """Compare a grid row at exactly the fidelity exposed by the grid."""
     row_values = [str(row.get(header, "") or "") for header in CSV_HEADERS]
-    memory_values = [str(value) for value in _row_values_for_csv(memory)]
+    memory_values = _row_text_values(memory)
     return row_values == memory_values
 
 

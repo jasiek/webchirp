@@ -19,13 +19,12 @@ from chirp import chirp_common
 from webchirp_bridge.channel_rows import (
     CSV_HEADERS,
     ROW_EXTRA_KEY,
-    Row,
     Rows,
     _apply_row_extras,
     _coerce_csv_vals_for_chirp,
     _memory_from_row_values,
     _row_extras_from_memory,
-    _row_values_for_csv,
+    _row_from_memory,
 )
 from webchirp_bridge.driver_cache import _protected_channels
 from webchirp_bridge.jsbridge import _log_debug
@@ -122,9 +121,7 @@ def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int
             continue
         if getattr(mem, "empty", False):
             continue
-        row: Row = {}
-        for header, value in zip(CSV_HEADERS, _row_values_for_csv(mem)):
-            row[header] = str(value)
+        row = _row_from_memory(mem)
         extras = _row_extras_from_memory(mem)
         if extras:
             row[ROW_EXTRA_KEY] = extras
