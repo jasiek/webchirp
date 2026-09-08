@@ -13,7 +13,7 @@ from typing import Any, Iterable, Optional
 from chirp import chirp_common
 
 from webchirp_bridge.channel_rows import CSV_HEADERS
-from webchirp_bridge.driver_cache import _import_radio_class
+from webchirp_bridge.driver_cache import _blank_radio_instance, _import_radio_class
 from webchirp_bridge.power_levels import _power_level_watts
 
 
@@ -34,10 +34,7 @@ def _radio_supports_dv(rf: Any) -> bool:
 def get_radio_column_metadata(module_name: str, class_name: str) -> dict[str, Any]:
     """Build CHIRP-derived column editability/options metadata for the UI."""
     radio_cls = _import_radio_class(module_name, class_name)
-    try:
-        radio = radio_cls(None)
-    except Exception:
-        radio = radio_cls("")
+    radio = _blank_radio_instance(radio_cls)
     rf = radio.get_features()
     lo, hi = rf.memory_bounds
 

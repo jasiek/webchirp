@@ -25,10 +25,7 @@ from webchirp_bridge.channel_rows import (
     _row_text_values,
 )
 from webchirp_bridge.driver_cache import _best_effort_radio_instance, _driver_features
-from webchirp_bridge.power_levels import (
-    _power_levels_by_label,
-    _valid_power_levels_for_driver,
-)
+from webchirp_bridge.power_levels import _level_map_for_radio
 
 
 # One invalid cell reported by the upload preflight: which row, which column,
@@ -290,10 +287,7 @@ def validate_rows_for_upload(
         if module_name and class_name
         else None
     )
-    levels = list(radio.get_features().valid_power_levels or []) if radio else []
-    level_map = _power_levels_by_label(
-        levels or _valid_power_levels_for_driver(module_name, class_name)
-    )
+    level_map = _level_map_for_radio(radio, module_name, class_name)
     # Location is checked here as well as in _apply_rows_to_radio_instance,
     # because that one raises partway through a clone: the radio is already
     # open and some memories written. Preflight is the only place a bad

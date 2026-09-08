@@ -43,6 +43,20 @@ IMAGE_CLASS_BY_DRIVER: dict[str, type] = {}
 UNREADABLE_BY_DRIVER: dict[str, set[int]] = {}
 
 
+def _blank_radio_instance(radio_cls: type[chirp_common.Radio]) -> chirp_common.Radio:
+    """Instantiate a driver with no image, the way CHIRP's model picker does.
+
+    radio_cls(None) is the documented blank constructor, but a few drivers
+    only accept a path-like argument and fail on None; the empty string is the
+    fallback that gets those to a usable blank state (FINDINGS:
+    blank-instances-misreport-state).
+    """
+    try:
+        return radio_cls(None)
+    except Exception:
+        return radio_cls("")
+
+
 def _driver_features(module_name: str, class_name: str) -> Optional[chirp_common.RadioFeatures]:
     """Return a driver's RadioFeatures, preferring the cached image.
 
@@ -197,12 +211,6 @@ def _best_effort_radio_instance(
     driver_key = _driver_cache_key(module_name, class_name)
     base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
 
-    def _fallback_constructor() -> chirp_common.Radio:
-        try:
-            return radio_cls(None)
-        except Exception:
-            return radio_cls("")
-
     if base_image is not None:
         radio = _radio_from_image_bytes(
             _cached_image_class(module_name, class_name, radio_cls), base_image
@@ -216,9 +224,9 @@ def _best_effort_radio_instance(
                 "No cached radio image for this model. Download from radio first."
             )
         else:
-            radio = _fallback_constructor()
+            radio = _blank_radio_instance(radio_cls)
     else:
-        radio = _fallback_constructor()
+        radio = _blank_radio_instance(radio_cls)
 
     radio.status_fn = _make_status_logger()
     return radio

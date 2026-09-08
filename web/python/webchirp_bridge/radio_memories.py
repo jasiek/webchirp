@@ -28,10 +28,7 @@ from webchirp_bridge.channel_rows import (
 )
 from webchirp_bridge.driver_cache import _protected_channels
 from webchirp_bridge.jsbridge import _log_debug
-from webchirp_bridge.power_levels import (
-    _power_levels_by_label,
-    _valid_power_levels_for_driver,
-)
+from webchirp_bridge.power_levels import _level_map_for_radio
 from webchirp_bridge.row_validation import _immutable_policy_errors, _prepare_row_change
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
@@ -143,10 +140,7 @@ def _apply_rows_to_radio_instance(
         radio_cls = radio.__class__
         module_name = module_name or str(getattr(radio_cls, "__module__", "")).split(".")[-1]
         class_name = class_name or str(getattr(radio_cls, "__name__", ""))
-    level_map = _power_levels_by_label(
-        list(radio.get_features().valid_power_levels or [])
-        or _valid_power_levels_for_driver(module_name, class_name)
-    )
+    level_map = _level_map_for_radio(radio, module_name, class_name)
     valid_numbers = set(_iter_memory_numbers(radio))
     seen_numbers = set()
     unreadable_erase_slots: dict[str, list[int]] = {}

@@ -79,6 +79,19 @@ def _power_levels_by_label(levels: Iterable[Any]) -> dict[str, Any]:
     return mapped
 
 
+def _level_map_for_radio(radio: Any, module_name: str, class_name: str) -> dict[str, Any]:
+    """Index the power levels a radio instance advertises, or its driver's if none.
+
+    A parsed image can advertise levels a blank instance does not (Rt98Radio),
+    so the instance wins; the driver lookup only fills in for a radio that
+    reports nothing, or for a preflight that runs before any instance exists.
+    """
+    levels = list(radio.get_features().valid_power_levels or []) if radio else []
+    return _power_levels_by_label(
+        levels or _valid_power_levels_for_driver(module_name, class_name)
+    )
+
+
 def _resolve_power_level(power_text: Any, level_map: dict[str, Any]) -> Any:
     """Resolve row power text to the driver's own PowerLevel object."""
     text = str(power_text or "").strip()
