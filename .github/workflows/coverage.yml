@@ -1,0 +1,82 @@
+# Runs the checks and the full test suite under coverage, and publishes the
+# result where GitHub can show it: a table in the run's job summary, and
+# js.lcov / python.lcov / summary.json as a downloadable artifact.
+#
+# This is also the only workflow that runs on pull requests -- pages.yml tests
+# on master because it gates a deploy, which is too late to learn a branch is
+# broken.
+#
+# Tracking works without any third-party service. Each master run uploads its
+# summary.json; a pull request downloads the last successful one and reports the
+# change against it, so the summary says whether the branch moved coverage and
+# in which direction. The floors in coverage-floors.json are the hard part of
+# that: they fail the run when coverage drops, and a PR that improves coverage
+# raises them in the same commit, so git log over that one file is the trend.
+name: Coverage
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Reading the previous run's artifact for the baseline delta.
+  actions: read
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The Pyodide tests seed CHIRP from the submodule and read its test
+          # images; without it most of the suite cannot run at all.
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+      - run: npm ci
+
+      # Best effort: a first run on a new branch, an expired artifact, or a
+      # master history with no coverage run yet all leave no baseline, and the
+      # report simply omits the delta column.
+      - name: Fetch master coverage baseline
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --workflow coverage.yml --branch master --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$run_id" ]; then
+            gh run download "$run_id" --name coverage --dir baseline
+          fi
+
+      # check:syntax, check:types, check:python, then the whole suite under
+      # coverage. Same test files npm test runs, measured rather than repeated.
+      - name: Test with coverage
+        env:
+          # Ignored when the file is absent, which is the no-baseline case.
+          WEBCHIRP_COVERAGE_BASELINE: baseline/summary.json
+        run: npm run test:ci
+
+      # Written whether or not the floors were met, so a failing run still
+      # explains itself on the summary page instead of only in the log.
+      - name: Publish job summary
+        if: always()
+        run: cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: warn

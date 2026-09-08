@@ -7,6 +7,7 @@ import {
   installFetchChirpSourceGlobal,
   seedPyodideRuntime,
 } from "../web/js/python-sources.mjs";
+import { startPythonCoverage } from "./test-support/python-coverage.mjs";
 
 function decodeBase64ToBytes(base64Text) {
   return Uint8Array.from(Buffer.from(String(base64Text || ""), "base64"));
@@ -503,6 +504,10 @@ export class TestRadioHarness {
     installSerialGlobals(this.serialBridge);
 
     this.pyodide = await loadPyodide();
+    // Before the seed, not after: the bridge's module-level code only counts
+    // as executed if the tracer is already running when it is imported. A
+    // no-op unless WEBCHIRP_PY_COVERAGE names an output directory.
+    await startPythonCoverage(this.pyodide);
     await seedPyodideRuntime(this.pyodide, this.pythonSource);
     return this;
   }
