@@ -10,8 +10,6 @@ settings before serializing it, the same way an upload would.
 from __future__ import annotations
 
 import base64
-import os
-import tempfile
 from typing import Any, Optional, Sequence
 
 from chirp import (
@@ -34,6 +32,7 @@ from webchirp_bridge.driver_cache import (
     _import_radio_class,
     _radio_from_image_bytes,
     _record_unreadable_channels,
+    _temp_image_path,
 )
 from webchirp_bridge.jsbridge import _make_status_logger
 from webchirp_bridge.radio_memories import (
@@ -161,21 +160,11 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     """Load a CHIRP .img payload, detect driver, and return rows + radio identity."""
     raw_image = _decode_image_b64(image_b64)
 
-    with tempfile.NamedTemporaryFile(
-        mode="wb", suffix=".img", prefix="webchirp-", delete=False
-    ) as f:
-        image_path = f.name
-        f.write(raw_image)
-
-    try:
-        radio = directory.get_radio_by_image(image_path)
-    except Exception as exc:
-        raise ImageDetectionError(f"Unable to detect radio from image: {exc}") from exc
-    finally:
+    with _temp_image_path(raw_image, prefix="webchirp-") as image_path:
         try:
-            os.unlink(image_path)
-        except Exception:
-            pass
+            radio = directory.get_radio_by_image(image_path)
+        except Exception as exc:
+            raise ImageDetectionError(f"Unable to detect radio from image: {exc}") from exc
 
     if not isinstance(radio, chirp_common.CloneModeRadio):
         raise RuntimeUnsupportedError("Loaded image is not a clone-mode CHIRP image")

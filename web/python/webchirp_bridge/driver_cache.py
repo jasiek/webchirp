@@ -14,9 +14,10 @@ state live here too.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
-from typing import Optional, Sequence
+from typing import Iterator, Optional, Sequence
 
 from chirp import (
     chirp_common,
@@ -134,6 +135,30 @@ def _cached_image_class(
     )
 
 
+@contextlib.contextmanager
+def _temp_image_path(
+    data: Optional[bytes] = None, prefix: str = "webchirp-cache-"
+) -> Iterator[str]:
+    """A throwaway .img path for CHIRP to read or write, removed on exit.
+
+    CHIRP only parses bytes through a driver's own loader (``radio_cls(path)``),
+    detects a radio (``get_radio_by_image``) or serializes (``save_mmap``) via a
+    file path, so every image that passes through the runtime takes this
+    detour. ``data`` seeds the file when CHIRP is the one reading it.
+    """
+    with tempfile.NamedTemporaryFile(
+        mode="wb", suffix=".img", prefix=prefix, delete=False
+    ) as image_file:
+        image_path = image_file.name
+        if data is not None:
+            image_file.write(bytes(data))
+    try:
+        yield image_path
+    finally:
+        with contextlib.suppress(Exception):
+            os.unlink(image_path)
+
+
 def _radio_from_image_bytes(
     radio_cls: type[chirp_common.Radio], image_bytes: bytes
 ) -> chirp_common.Radio:
@@ -142,18 +167,8 @@ def _radio_from_image_bytes(
     This keeps reconstruction paired with ``_image_bytes_from_radio`` and lets
     each driver apply its normal file parsing and metadata handling.
     """
-    with tempfile.NamedTemporaryFile(
-        mode="wb", suffix=".img", prefix="webchirp-cache-", delete=False
-    ) as image_file:
-        image_path = image_file.name
-        image_file.write(bytes(image_bytes))
-    try:
+    with _temp_image_path(image_bytes) as image_path:
         return radio_cls(image_path)
-    finally:
-        try:
-            os.unlink(image_path)
-        except Exception:
-            pass
 
 
 def _image_bytes_from_radio(radio: chirp_common.Radio) -> bytes:
@@ -162,19 +177,10 @@ def _image_bytes_from_radio(radio: chirp_common.Radio) -> bytes:
     Icom's ``get_mmap`` may flip high bits for clone transport, while
     ``save_mmap`` writes the internal file representation expected on reload.
     """
-    with tempfile.NamedTemporaryFile(
-        suffix=".img", prefix="webchirp-cache-", delete=False
-    ) as image_file:
-        image_path = image_file.name
-    try:
+    with _temp_image_path() as image_path:
         radio.save_mmap(image_path)
         with open(image_path, "rb") as image_file:
             return image_file.read()
-    finally:
-        try:
-            os.unlink(image_path)
-        except Exception:
-            pass
 
 
 def _has_cached_image(module_name: str, class_name: str) -> bool:
