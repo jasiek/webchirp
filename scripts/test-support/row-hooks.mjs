@@ -24,6 +24,12 @@ export const REPEATER_COLUMNS = [
 //                     normalizeValue keeps the previous value when a frequency
 //                     falls outside valid_bands (Offset is exempt from that
 //                     check, which is the asymmetry some builders must notice).
+//
+// setRowValue reports acceptance exactly as channel-table.js's does: false when
+// the column is absent, the frequency is out of band, or the value is not one
+// of the column's options. A column with no options listed is not an enum, so
+// anything can be written to it — matching normalizeValue, which only validates
+// against a non-empty option list.
 export function makeRowHooks({
   columns = REPEATER_COLUMNS,
   optionsByColumn = {},
@@ -37,12 +43,22 @@ export function makeRowHooks({
     createBlankRow: () => Object.fromEntries(columns.map((column) => [column, ""])),
     setRowValue: (row, column, value) => {
       if (!columns.includes(column)) {
-        return;
+        return false;
       }
       if (column === "Frequency" && Number.parseFloat(value) > maxFrequencyMhz) {
-        return;
+        return false;
+      }
+      const options = optionsByColumn[column];
+      if (Array.isArray(options) && options.length > 0
+          && !options.some((option) => sameOption(option, value))) {
+        // As in the grid: a rejected enum leaves a valid-looking value behind
+        // (the driver's first option), so only the return value tells a caller
+        // its write did not take.
+        row[column] = String(options[0]);
+        return false;
       }
       row[column] = String(value ?? "");
+      return true;
     },
     // Choice order decides, exactly as channel-table.js's findEnumOption does:
     // the first choice the column offers wins, whatever its position there.
