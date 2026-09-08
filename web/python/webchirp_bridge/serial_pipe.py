@@ -11,7 +11,7 @@ loopback-probe entry points, which do not go through a driver at all.
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import TYPE_CHECKING
 
 from js import (
     serial_close,
@@ -28,6 +28,9 @@ from js import (
 )
 
 from webchirp_bridge.jsbridge import _await_js, _js_to_py, _log_debug
+
+if TYPE_CHECKING:
+    from typing import Any, Optional
 
 
 DEFAULT_SERIAL_PIPE_TIMEOUT = 1.2
@@ -132,9 +135,7 @@ class WebSerialPipe:
     def read(self, count: int = 1) -> bytes:
         """Read up to count bytes from JS serial bridge with timeout semantics."""
         timeout_ms = max(1, int(float(self.timeout) * 1000))
-        data = _await_js(serial_read_bytes(int(count), timeout_ms))
-        if hasattr(data, "to_py"):
-            data = data.to_py()
+        data = _js_to_py(_await_js(serial_read_bytes(int(count), timeout_ms)))
         return bytes((int(x) & 0xFF) for x in data)
 
     def flush(self) -> None:

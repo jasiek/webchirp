@@ -11,13 +11,15 @@ shows the user -- the debug panel (``_log_debug``) and the progress strip
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable
+from typing import TYPE_CHECKING
 
 from js import (
     serial_log,
     serial_progress,
 )
 
+if TYPE_CHECKING:
+    from typing import Any, Callable
 
 try:
     from pyodide.ffi import run_sync as pyodide_run_sync

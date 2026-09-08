@@ -53,6 +53,9 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   the canonical form is anchored away from that and is checked by
   `test-build-dist.mjs`, which also fails when a rename leaves a path behind.
 - Python functions must have type signatures.
+- An import used only in annotations goes under `if TYPE_CHECKING:` so it adds no
+  runtime dependency; every module has `from __future__ import annotations`, which is
+  what makes that safe. Type radio-shaped parameters with the CHIRP class, not `Any`.
 - Avoid context pollution by spawning sub-agents when appropriate.
   - Use sub-agent sandboxing when a read-only task is to be executed.
   - Use sub-agents to produce a summary for a commit message.

@@ -10,7 +10,7 @@ under ``ROW_EXTRA_KEY`` and are applied to memories here as well.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING
 
 from chirp import (
     chirp_common,
@@ -27,22 +27,24 @@ from webchirp_bridge.power_levels import (
 )
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
+if TYPE_CHECKING:
+    from typing import Any, Optional, Sequence
 
-# A channel as it crosses the JS/Python boundary: one JSON object per channel,
-# keyed by CSV header name (``CSV_HEADERS`` below, from
-# ``chirp_common.Memory.CSV_FORMAT``) with text values — "Location": "25",
-# "Frequency": "443.000000", "Duplex": "+". It is the grid's row, serialized by
-# ``setRowsJsonGlobal()`` in ``web/js/runtime-rpc.js`` and parsed here with
-# ``json.loads``, so every value a header names is a string.
-#
-# The value type is ``Any`` rather than ``str`` because a row may also carry
-# non-header keys the editor rides along on it — currently the ``__geo``
-# sidecar (``web/js/row-geo.js``), an object, which is why the type cannot
-# promise ``str`` for arbitrary keys. Nothing in the runtime reads those: every
-# consumer projects a row through ``CSV_HEADERS`` and ignores the rest, which is
-# what keeps the sidecar out of a codeplug.
-Row = dict[str, Any]
-Rows = list[Row]
+    # A channel as it crosses the JS/Python boundary: one JSON object per channel,
+    # keyed by CSV header name (``CSV_HEADERS`` below, from
+    # ``chirp_common.Memory.CSV_FORMAT``) with text values — "Location": "25",
+    # "Frequency": "443.000000", "Duplex": "+". It is the grid's row, serialized by
+    # ``setRowsJsonGlobal()`` in ``web/js/runtime-rpc.js`` and parsed here with
+    # ``json.loads``, so every value a header names is a string.
+    #
+    # The value type is ``Any`` rather than ``str`` because a row may also carry
+    # non-header keys the editor rides along on it — currently the ``__geo``
+    # sidecar (``web/js/row-geo.js``), an object, which is why the type cannot
+    # promise ``str`` for arbitrary keys. Nothing in the runtime reads those: every
+    # consumer projects a row through ``CSV_HEADERS`` and ignores the rest, which is
+    # what keeps the sidecar out of a codeplug.
+    Row = dict[str, Any]
+    Rows = list[Row]
 
 # Driver extras ride on channel rows under a key that is not a CSV header, the
 # same way repeater coordinates do in web/js/row-geo.js. Everything that
@@ -92,6 +94,16 @@ def _row_values_for_csv(mem: chirp_common.Memory) -> list[Any]:
     return mem.to_csv()
 
 
+def _row_text_values(mem: chirp_common.Memory) -> list[str]:
+    """A memory's CSV fields as the text the grid shows, in ``CSV_HEADERS`` order."""
+    return [str(value) for value in _row_values_for_csv(mem)]
+
+
+def _row_from_memory(mem: chirp_common.Memory) -> Row:
+    """Project a memory onto a grid row: CSV header names to text values."""
+    return dict(zip(CSV_HEADERS, _row_text_values(mem)))
+
+
 def get_default_headers() -> dict[str, Any]:
     """Channel columns to show before a radio or codeplug decides them.
 
@@ -111,10 +123,7 @@ def parse_csv(csv_text: str) -> dict[str, Any]:
     for mem in radio.memories:
         if mem.empty:
             continue
-        row: Row = {}
-        for header, value in zip(CSV_HEADERS, _row_values_for_csv(mem)):
-            row[header] = str(value)
-        rows.append(row)
+        rows.append(_row_from_memory(mem))
 
     return {
         "headers": CSV_HEADERS,
@@ -146,7 +155,7 @@ def _row_int(text: Any, fallback: int, label: str) -> int:
 
 
 def _memory_from_row_values(
-    vals: Sequence[Any], level_map: Optional[dict[str, Any]] = None
+    vals: Sequence[Any], level_map: Optional[dict[str, chirp_common.PowerLevel]] = None
 ) -> chirp_common.Memory:
     """Build a Memory from row values, inverting chirp_common.Memory.to_csv().
 

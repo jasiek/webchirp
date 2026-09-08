@@ -12,30 +12,33 @@ driver that fails on hundreds of channels would otherwise bury it.
 from __future__ import annotations
 
 import traceback
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING
 
 from chirp import chirp_common
 
 from webchirp_bridge.channel_rows import (
     CSV_HEADERS,
     ROW_EXTRA_KEY,
-    Row,
-    Rows,
     _apply_row_extras,
     _coerce_csv_vals_for_chirp,
     _memory_from_row_values,
     _row_extras_from_memory,
-    _row_values_for_csv,
+    _row_from_memory,
 )
-from webchirp_bridge.driver_cache import _protected_channels
+from webchirp_bridge.driver_cache import (
+    _cache_driver_image,
+    _protected_channels,
+    _record_unreadable_channels,
+)
 from webchirp_bridge.jsbridge import _log_debug
-from webchirp_bridge.power_levels import (
-    _power_levels_by_label,
-    _valid_power_levels_for_driver,
-)
+from webchirp_bridge.power_levels import _level_map_for_radio
+from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.row_validation import _immutable_policy_errors, _prepare_row_change
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
+if TYPE_CHECKING:
+    from typing import Any, Optional, Sequence
+    from webchirp_bridge.channel_rows import Rows
 
 def _iter_memory_numbers(radio: chirp_common.Radio) -> range:
     """Return numeric memory range for the active radio model."""
@@ -91,6 +94,27 @@ def _log_grouped_channel_failures(
         )
 
 
+def _read_memory(radio: chirp_common.Radio, number: int) -> chirp_common.Memory:
+    """Read one memory as CHIRP's editor sees it, external properties included.
+
+    Clone-mode radios keep comments outside driver memory, in the image
+    metadata; get_memory_extra is the post-read hook desktop CHIRP applies
+    so they appear on the memory like any other field. Raises whatever the
+    driver raises, so callers decide how a decode failure is recorded.
+    """
+    mem = radio.get_memory(number)
+    if isinstance(radio, chirp_common.ExternalMemoryProperties):
+        mem = radio.get_memory_extra(mem)
+    return mem
+
+
+def _erase_memory(radio: chirp_common.Radio, number: int) -> None:
+    """Erase one memory together with the external properties stored beside it."""
+    radio.erase_memory(number)
+    if isinstance(radio, chirp_common.ExternalMemoryProperties):
+        radio.erase_memory_extra(number)
+
+
 def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int]]:
     """Extract channel rows from a radio instance using CHIRP memory API.
 
@@ -107,11 +131,7 @@ def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int
     trace_by_reason: dict[str, str] = {}
     for number in _iter_memory_numbers(radio):
         try:
-            mem = radio.get_memory(number)
-            # CloneModeRadio stores comments outside driver memory in its image
-            # metadata, so mirror desktop CHIRP's post-read augmentation hook.
-            if isinstance(radio, chirp_common.ExternalMemoryProperties):
-                mem = radio.get_memory_extra(mem)
+            mem = _read_memory(radio, number)
         except Exception as exc:
             reason = str(exc) or exc.__class__.__name__
             unreadable.append(number)
@@ -122,9 +142,7 @@ def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int
             continue
         if getattr(mem, "empty", False):
             continue
-        row: Row = {}
-        for header, value in zip(CSV_HEADERS, _row_values_for_csv(mem)):
-            row[header] = str(value)
+        row = _row_from_memory(mem)
         extras = _row_extras_from_memory(mem)
         if extras:
             row[ROW_EXTRA_KEY] = extras
@@ -138,6 +156,28 @@ def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int
     return rows, unreadable
 
 
+def _read_radio_payload(
+    module_name: str, class_name: str, radio: chirp_common.Radio
+) -> dict[str, Any]:
+    """Everything a freshly read radio hands the grid, plus the state it leaves.
+
+    The serial download and the image load differ only in how they obtained the
+    radio; from here on both cache its image under the driver key, extract the
+    rows, record the slots that would not decode so a later upload leaves them
+    alone, and serialize the radio-wide settings read-only.
+    """
+    _cache_driver_image(module_name, class_name, radio)
+    rows, unreadable = _radio_rows_from_instance(radio)
+    _record_unreadable_channels(module_name, class_name, unreadable)
+    settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
+    return {
+        "rows": rows,
+        "headers": CSV_HEADERS,
+        "settings": settings_result["settings"],
+        "unreadableChannels": unreadable,
+    }
+
+
 def _apply_rows_to_radio_instance(
     radio: chirp_common.Radio, rows: Rows, module_name: str = "", class_name: str = ""
 ) -> None:
@@ -146,10 +186,7 @@ def _apply_rows_to_radio_instance(
         radio_cls = radio.__class__
         module_name = module_name or str(getattr(radio_cls, "__module__", "")).split(".")[-1]
         class_name = class_name or str(getattr(radio_cls, "__name__", ""))
-    level_map = _power_levels_by_label(
-        list(radio.get_features().valid_power_levels or [])
-        or _valid_power_levels_for_driver(module_name, class_name)
-    )
+    level_map = _level_map_for_radio(radio, module_name, class_name)
     valid_numbers = set(_iter_memory_numbers(radio))
     seen_numbers = set()
     unreadable_erase_slots: dict[str, list[int]] = {}
@@ -167,11 +204,9 @@ def _apply_rows_to_radio_instance(
         seen_numbers.add(number)
         # CHIRP's immutable policy needs the current driver memory, not merely
         # the flattened grid row, before deciding whether a write is allowed.
-        existing = radio.get_memory(number)
         # External properties participate in row equality and immutable-field
         # validation even though the driver memory itself does not contain them.
-        if isinstance(radio, chirp_common.ExternalMemoryProperties):
-            existing = radio.get_memory_extra(existing)
+        existing = _read_memory(radio, number)
         vals = [str(row.get(h, "") or "") for h in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
         vals[0] = str(number)
@@ -189,9 +224,7 @@ def _apply_rows_to_radio_instance(
         for warning in warnings:
             _log_debug(f"Channel {number} validation warning: {warning}")
         if action == "erase":
-            radio.erase_memory(number)
-            if isinstance(radio, chirp_common.ExternalMemoryProperties):
-                radio.erase_memory_extra(number)
+            _erase_memory(radio, number)
         else:
             radio.set_memory(mem)
             _apply_row_extras(radio, number, row)
@@ -221,9 +254,7 @@ def _apply_rows_to_radio_instance(
             raise RuntimeUnsupportedError(
                 f"Channel {number}: {'; '.join(str(error) for error in validation_errors)}"
             )
-        radio.erase_memory(number)
-        if isinstance(radio, chirp_common.ExternalMemoryProperties):
-            radio.erase_memory_extra(number)
+        _erase_memory(radio, number)
 
     if protected:
         _log_debug(
