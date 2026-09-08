@@ -14,9 +14,10 @@ state live here too.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING
 
 from chirp import (
     chirp_common,
@@ -26,6 +27,8 @@ from chirp import (
 from webchirp_bridge.jsbridge import _make_status_logger
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
+if TYPE_CHECKING:
+    from typing import Iterator, Optional, Sequence
 
 LAST_IMAGE_BY_DRIVER = {}
 # Which class actually produced/parses LAST_IMAGE_BY_DRIVER[key]. Serial
@@ -40,6 +43,20 @@ IMAGE_CLASS_BY_DRIVER: dict[str, type] = {}
 # for being absent from the grid. It was never in the grid to begin with, so it
 # is recorded here at extraction time and subtracted from the erase candidates.
 UNREADABLE_BY_DRIVER: dict[str, set[int]] = {}
+
+
+def _blank_radio_instance(radio_cls: type[chirp_common.Radio]) -> chirp_common.Radio:
+    """Instantiate a driver with no image, the way CHIRP's model picker does.
+
+    radio_cls(None) is the documented blank constructor, but a few drivers
+    only accept a path-like argument and fail on None; the empty string is the
+    fallback that gets those to a usable blank state (FINDINGS:
+    blank-instances-misreport-state).
+    """
+    try:
+        return radio_cls(None)
+    except Exception:
+        return radio_cls("")
 
 
 def _driver_features(module_name: str, class_name: str) -> Optional[chirp_common.RadioFeatures]:
@@ -121,8 +138,8 @@ def _protected_channels(module_name: str, class_name: str) -> set[int]:
 
 
 def _cached_image_class(
-    module_name: str, class_name: str, radio_cls: type
-) -> type:
+    module_name: str, class_name: str, radio_cls: type[chirp_common.Radio]
+) -> type[chirp_common.Radio]:
     """Return the class that should re-parse this driver key's cached image.
 
     Falls back to the selected class when nothing has been cached under this
@@ -134,6 +151,30 @@ def _cached_image_class(
     )
 
 
+@contextlib.contextmanager
+def _temp_image_path(
+    data: Optional[bytes] = None, prefix: str = "webchirp-cache-"
+) -> Iterator[str]:
+    """A throwaway .img path for CHIRP to read or write, removed on exit.
+
+    CHIRP only parses bytes through a driver's own loader (``radio_cls(path)``),
+    detects a radio (``get_radio_by_image``) or serializes (``save_mmap``) via a
+    file path, so every image that passes through the runtime takes this
+    detour. ``data`` seeds the file when CHIRP is the one reading it.
+    """
+    with tempfile.NamedTemporaryFile(
+        mode="wb", suffix=".img", prefix=prefix, delete=False
+    ) as image_file:
+        image_path = image_file.name
+        if data is not None:
+            image_file.write(bytes(data))
+    try:
+        yield image_path
+    finally:
+        with contextlib.suppress(Exception):
+            os.unlink(image_path)
+
+
 def _radio_from_image_bytes(
     radio_cls: type[chirp_common.Radio], image_bytes: bytes
 ) -> chirp_common.Radio:
@@ -142,18 +183,8 @@ def _radio_from_image_bytes(
     This keeps reconstruction paired with ``_image_bytes_from_radio`` and lets
     each driver apply its normal file parsing and metadata handling.
     """
-    with tempfile.NamedTemporaryFile(
-        mode="wb", suffix=".img", prefix="webchirp-cache-", delete=False
-    ) as image_file:
-        image_path = image_file.name
-        image_file.write(bytes(image_bytes))
-    try:
+    with _temp_image_path(image_bytes) as image_path:
         return radio_cls(image_path)
-    finally:
-        try:
-            os.unlink(image_path)
-        except Exception:
-            pass
 
 
 def _image_bytes_from_radio(radio: chirp_common.Radio) -> bytes:
@@ -162,19 +193,10 @@ def _image_bytes_from_radio(radio: chirp_common.Radio) -> bytes:
     Icom's ``get_mmap`` may flip high bits for clone transport, while
     ``save_mmap`` writes the internal file representation expected on reload.
     """
-    with tempfile.NamedTemporaryFile(
-        suffix=".img", prefix="webchirp-cache-", delete=False
-    ) as image_file:
-        image_path = image_file.name
-    try:
+    with _temp_image_path() as image_path:
         radio.save_mmap(image_path)
         with open(image_path, "rb") as image_file:
             return image_file.read()
-    finally:
-        try:
-            os.unlink(image_path)
-        except Exception:
-            pass
 
 
 def _has_cached_image(module_name: str, class_name: str) -> bool:
@@ -191,12 +213,6 @@ def _best_effort_radio_instance(
     driver_key = _driver_cache_key(module_name, class_name)
     base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
 
-    def _fallback_constructor() -> chirp_common.Radio:
-        try:
-            return radio_cls(None)
-        except Exception:
-            return radio_cls("")
-
     if base_image is not None:
         radio = _radio_from_image_bytes(
             _cached_image_class(module_name, class_name, radio_cls), base_image
@@ -210,9 +226,9 @@ def _best_effort_radio_instance(
                 "No cached radio image for this model. Download from radio first."
             )
         else:
-            radio = _fallback_constructor()
+            radio = _blank_radio_instance(radio_cls)
     else:
-        radio = _fallback_constructor()
+        radio = _blank_radio_instance(radio_cls)
 
     radio.status_fn = _make_status_logger()
     return radio

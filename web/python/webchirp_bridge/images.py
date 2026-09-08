@@ -10,16 +10,13 @@ settings before serializing it, the same way an upload would.
 from __future__ import annotations
 
 import base64
-import os
-import tempfile
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING
 
 from chirp import (
     chirp_common,
     directory,
 )
 
-from webchirp_bridge.channel_rows import CSV_HEADERS, Rows
 from webchirp_bridge.clone import (
     _ensure_clone_mode_radio,
     _new_serial_pipe,
@@ -33,15 +30,31 @@ from webchirp_bridge.driver_cache import (
     _image_bytes_from_radio,
     _import_radio_class,
     _radio_from_image_bytes,
-    _record_unreadable_channels,
+    _temp_image_path,
 )
 from webchirp_bridge.jsbridge import _make_status_logger
 from webchirp_bridge.radio_memories import (
     _apply_rows_to_radio_instance,
-    _radio_rows_from_instance,
+    _read_radio_payload,
 )
 from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.runtime_errors import ImageDetectionError, RuntimeUnsupportedError
+
+if TYPE_CHECKING:
+    from typing import Any, Optional, Sequence
+    from webchirp_bridge.channel_rows import Rows
+
+def _decode_image_b64(image_b64: str) -> bytes:
+    """Decode an image the browser sent as base64, refusing a malformed payload."""
+    try:
+        return base64.b64decode(str(image_b64 or ""), validate=True)
+    except Exception as exc:
+        raise RuntimeUnsupportedError("Invalid image base64 payload") from exc
+
+
+def _image_payload(image: bytes) -> dict[str, Any]:
+    """The two fields every image-returning reply shares: base64 text and byte size."""
+    return {"imageBase64": base64.b64encode(bytes(image)).decode("ascii"), "size": len(image)}
 
 
 def get_cached_image_base64(module_name: str, class_name: str) -> dict[str, Any]:
@@ -52,20 +65,14 @@ def get_cached_image_base64(module_name: str, class_name: str) -> dict[str, Any]
         raise RuntimeUnsupportedError(
             "No cached radio image for this model. Download from radio first."
         )
-    return {
-        "imageBase64": base64.b64encode(bytes(image)).decode("ascii"),
-        "size": len(image),
-    }
+    return _image_payload(image)
 
 
 def upload_image_base64(module_name: str, class_name: str, image_b64: str) -> dict[str, Any]:
     """Upload an explicit full-image payload through the selected clone driver."""
     radio_cls = _import_radio_class(module_name, class_name)
     _ensure_clone_mode_radio(radio_cls)
-    try:
-        raw_image = base64.b64decode(str(image_b64 or ""), validate=True)
-    except Exception as exc:
-        raise RuntimeUnsupportedError("Invalid image base64 payload") from exc
+    raw_image = _decode_image_b64(image_b64)
 
     radio = _radio_from_image_bytes(radio_cls, raw_image)
     radio.status_fn = _make_status_logger()
@@ -117,8 +124,7 @@ def export_image_base64(
         else _image_bytes_from_radio(radio)
     )
     return {
-        "imageBase64": base64.b64encode(image_data).decode("ascii"),
-        "size": len(image_data),
+        **_image_payload(image_data),
         "vendor": str(getattr(radio_cls, "VENDOR", "")),
         "model": str(getattr(radio_cls, "MODEL", "")),
         "variant": str(getattr(radio_cls, "VARIANT", "")),
@@ -128,10 +134,7 @@ def export_image_base64(
 
 def read_image_metadata_base64(image_b64: str) -> dict[str, Any]:
     """Parse the CHIRP metadata trailer from a .img payload without importing drivers."""
-    try:
-        raw_image = base64.b64decode(str(image_b64 or ""), validate=True)
-    except Exception as exc:
-        raise RuntimeUnsupportedError("Invalid image base64 payload") from exc
+    raw_image = _decode_image_b64(image_b64)
 
     _, metadata = chirp_common.CloneModeRadio._strip_metadata(raw_image)
     if not metadata:
@@ -156,26 +159,13 @@ def read_image_metadata_base64(image_b64: str) -> dict[str, Any]:
 
 def load_image_base64(image_b64: str) -> dict[str, Any]:
     """Load a CHIRP .img payload, detect driver, and return rows + radio identity."""
-    try:
-        raw_image = base64.b64decode(str(image_b64 or ""), validate=True)
-    except Exception as exc:
-        raise RuntimeUnsupportedError("Invalid image base64 payload") from exc
+    raw_image = _decode_image_b64(image_b64)
 
-    with tempfile.NamedTemporaryFile(
-        mode="wb", suffix=".img", prefix="webchirp-", delete=False
-    ) as f:
-        image_path = f.name
-        f.write(raw_image)
-
-    try:
-        radio = directory.get_radio_by_image(image_path)
-    except Exception as exc:
-        raise ImageDetectionError(f"Unable to detect radio from image: {exc}") from exc
-    finally:
+    with _temp_image_path(raw_image, prefix="webchirp-") as image_path:
         try:
-            os.unlink(image_path)
-        except Exception:
-            pass
+            radio = directory.get_radio_by_image(image_path)
+        except Exception as exc:
+            raise ImageDetectionError(f"Unable to detect radio from image: {exc}") from exc
 
     if not isinstance(radio, chirp_common.CloneModeRadio):
         raise RuntimeUnsupportedError("Loaded image is not a clone-mode CHIRP image")
@@ -183,18 +173,11 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     base_cls = getattr(radio.__class__, "_orig_rclass", radio.__class__)
     module_short = str(base_cls.__module__).rsplit(".", 1)[-1]
     class_name = str(base_cls.__name__)
-    _cache_driver_image(module_short, class_name, radio)
-    rows, unreadable = _radio_rows_from_instance(radio)
-    _record_unreadable_channels(module_short, class_name, unreadable)
-    settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
         "module": module_short,
         "className": class_name,
         "vendor": str(getattr(radio.__class__, "VENDOR", "")),
         "model": str(getattr(radio.__class__, "MODEL", "")),
         "variant": str(getattr(radio.__class__, "VARIANT", "")),
-        "rows": rows,
-        "headers": CSV_HEADERS,
-        "settings": settings_result["settings"],
-        "unreadableChannels": unreadable,
+        **_read_radio_payload(module_short, class_name, radio),
     }

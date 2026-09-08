@@ -11,30 +11,61 @@ preflight and the upload can never disagree about what a row means.
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, Optional
+from typing import TYPE_CHECKING
 
 from chirp import chirp_common
 
 from webchirp_bridge.channel_rows import (
     CSV_HEADERS,
-    Row,
-    Rows,
     _coerce_csv_vals_for_chirp,
     _memory_from_row_values,
-    _row_values_for_csv,
+    _row_from_memory,
+    _row_text_values,
 )
 from webchirp_bridge.driver_cache import _best_effort_radio_instance, _driver_features
-from webchirp_bridge.power_levels import (
-    _power_levels_by_label,
-    _valid_power_levels_for_driver,
-)
+from webchirp_bridge.power_levels import _level_map_for_radio
 
+if TYPE_CHECKING:
+    from typing import Any, Literal, Optional
+    from webchirp_bridge.channel_rows import Row, Rows
 
-# One invalid cell reported by the upload preflight: which row, which column,
-# and CHIRP's own message for it.
-ValidationIssue = dict[str, Any]
-ValidationMessage = str | Exception
-RowChangeAction = Literal["skip", "erase", "set"]
+    # One invalid cell reported by the upload preflight: which row, which column,
+    # and CHIRP's own message for it.
+    ValidationIssue = dict[str, Any]
+    ValidationMessage = str | Exception
+    RowChangeAction = Literal["skip", "erase", "set"]
+
+# CHIRP Memory attribute -> the grid column (CSV header) that shows it, in
+# Memory.CSV_FORMAT order. Every translation between the driver's field
+# names and the grid's columns reads this one table, so a field listed here is
+# detected as a change, kept when immutable and reported in the right cell all
+# at once; the three copies this replaced could each drift on their own.
+MEMORY_FIELD_HEADERS: dict[str, str] = {
+    "name": "Name",
+    "freq": "Frequency",
+    "duplex": "Duplex",
+    "offset": "Offset",
+    "tmode": "Tone",
+    "rtone": "rToneFreq",
+    "ctone": "cToneFreq",
+    "dtcs": "DtcsCode",
+    "dtcs_polarity": "DtcsPolarity",
+    "rx_dtcs": "RxDtcsCode",
+    "cross_mode": "CrossMode",
+    "mode": "Mode",
+    "tuning_step": "TStep",
+    "skip": "Skip",
+    "power": "Power",
+    "comment": "Comment",
+}
+# Fields an immutable-field error can name that are not grid fields: number
+# is the row's Location, and empty has no column, so it lands on Frequency,
+# the cell that defines whether a channel exists.
+_ERROR_FIELD_COLUMNS: dict[str, str] = {
+    **MEMORY_FIELD_HEADERS,
+    "number": "Location",
+    "empty": "Frequency",
+}
 
 
 def _infer_csv_error_column(error_text: str) -> str:
@@ -127,30 +158,9 @@ def _preserve_unedited_immutable_fields(
     reconstruct (notably fixed power levels). Comparing the source row avoids
     turning an edit to another column into an accidental immutable-field edit.
     """
-    field_headers: dict[str, str] = {
-        "name": "Name",
-        "freq": "Frequency",
-        "duplex": "Duplex",
-        "offset": "Offset",
-        "tmode": "Tone",
-        "rtone": "rToneFreq",
-        "ctone": "cToneFreq",
-        "dtcs": "DtcsCode",
-        "dtcs_polarity": "DtcsPolarity",
-        "rx_dtcs": "RxDtcsCode",
-        "cross_mode": "CrossMode",
-        "mode": "Mode",
-        "tuning_step": "TStep",
-        "skip": "Skip",
-        "power": "Power",
-        "comment": "Comment",
-    }
-    existing_row: dict[str, str] = {
-        header: str(value)
-        for header, value in zip(CSV_HEADERS, _row_values_for_csv(existing))
-    }
+    existing_row = _row_from_memory(existing)
     for field in list(getattr(existing, "immutable", None) or []):
-        header = field_headers.get(field)
+        header = MEMORY_FIELD_HEADERS.get(field)
         if header and str(row.get(header, "") or "") == existing_row[header]:
             setattr(mem, field, getattr(existing, field))
 
@@ -197,25 +207,7 @@ def _memory_row_changed(
     existing: chirp_common.Memory, new: chirp_common.Memory
 ) -> bool:
     """Return whether any field represented by the channel grid changed."""
-    fields = (
-        "name",
-        "freq",
-        "duplex",
-        "offset",
-        "tmode",
-        "rtone",
-        "ctone",
-        "dtcs",
-        "dtcs_polarity",
-        "rx_dtcs",
-        "cross_mode",
-        "mode",
-        "tuning_step",
-        "skip",
-        "power",
-        "comment",
-        "empty",
-    )
+    fields = (*MEMORY_FIELD_HEADERS, "empty")
     for field in fields:
         existing_value = getattr(existing, field)
         new_value = getattr(new, field)
@@ -234,7 +226,7 @@ def _memory_row_changed(
 def _row_matches_memory(row: Row, memory: chirp_common.Memory) -> bool:
     """Compare a grid row at exactly the fidelity exposed by the grid."""
     row_values = [str(row.get(header, "") or "") for header in CSV_HEADERS]
-    memory_values = [str(value) for value in _row_values_for_csv(memory)]
+    memory_values = _row_text_values(memory)
     return row_values == memory_values
 
 
@@ -283,27 +275,13 @@ def _validation_column(message: ValidationMessage) -> str:
     text = str(message or "")
     match = re.search(r"Field ([A-Za-z_]+) is not mutable", text)
     if match:
-        return {
-            "number": "Location",
-            "name": "Name",
-            "freq": "Frequency",
-            "duplex": "Duplex",
-            "offset": "Offset",
-            "tmode": "Tone",
-            "rtone": "rToneFreq",
-            "ctone": "cToneFreq",
-            "dtcs": "DtcsCode",
-            "dtcs_polarity": "DtcsPolarity",
-            "rx_dtcs": "RxDtcsCode",
-            "cross_mode": "CrossMode",
-            "mode": "Mode",
-            "tuning_step": "TStep",
-            "skip": "Skip",
-            "power": "Power",
-            "comment": "Comment",
-            "empty": "Frequency",
-        }.get(match.group(1), "")
+        return _ERROR_FIELD_COLUMNS.get(match.group(1), "")
     return _infer_csv_error_column(text)
+
+
+def _issue(row_index: int, column: str, message: ValidationMessage) -> ValidationIssue:
+    """One preflight finding: the row, the grid column to mark, and the message."""
+    return {"rowIndex": int(row_index), "column": column, "message": str(message)}
 
 
 def validate_rows_for_upload(
@@ -315,10 +293,7 @@ def validate_rows_for_upload(
         if module_name and class_name
         else None
     )
-    levels = list(radio.get_features().valid_power_levels or []) if radio else []
-    level_map = _power_levels_by_label(
-        levels or _valid_power_levels_for_driver(module_name, class_name)
-    )
+    level_map = _level_map_for_radio(radio, module_name, class_name)
     # Location is checked here as well as in _apply_rows_to_radio_instance,
     # because that one raises partway through a clone: the radio is already
     # open and some memories written. Preflight is the only place a bad
@@ -339,25 +314,21 @@ def validate_rows_for_upload(
         if location is not None:
             if bounds and not (bounds[0] <= location <= bounds[1]):
                 issues.append(
-                    {
-                        "rowIndex": int(row_index),
-                        "column": "Location",
-                        "message": (
-                            f"Channel Location {location} is outside radio "
-                            f"memory bounds {bounds[0]}-{bounds[1]}"
-                        ),
-                    }
+                    _issue(
+                        row_index,
+                        "Location",
+                        f"Channel Location {location} is outside radio "
+                        f"memory bounds {bounds[0]}-{bounds[1]}",
+                    )
                 )
             elif location in seen_locations:
                 issues.append(
-                    {
-                        "rowIndex": int(row_index),
-                        "column": "Location",
-                        "message": (
-                            f"Channel Location {location} is already used by "
-                            f"row {seen_locations[location] + 1}"
-                        ),
-                    }
+                    _issue(
+                        row_index,
+                        "Location",
+                        f"Channel Location {location} is already used by "
+                        f"row {seen_locations[location] + 1}",
+                    )
                 )
             else:
                 seen_locations[location] = row_index
@@ -365,13 +336,7 @@ def validate_rows_for_upload(
             mem = _memory_from_row_values(vals, level_map)
         except Exception as exc:
             error_text = str(exc)
-            issues.append(
-                {
-                    "rowIndex": int(row_index),
-                    "column": _infer_csv_error_column(error_text),
-                    "message": error_text,
-                }
-            )
+            issues.append(_issue(row_index, _infer_csv_error_column(error_text), error_text))
             continue
 
         if (
@@ -391,19 +356,7 @@ def validate_rows_for_upload(
             row_warnings: list[str] = []
             row_errors: list[ValidationMessage] = [exc]
         for message in row_errors:
-            issues.append(
-                {
-                    "rowIndex": int(row_index),
-                    "column": _validation_column(message),
-                    "message": str(message),
-                }
-            )
+            issues.append(_issue(row_index, _validation_column(message), message))
         for message in row_warnings:
-            warnings.append(
-                {
-                    "rowIndex": int(row_index),
-                    "column": _validation_column(message),
-                    "message": str(message),
-                }
-            )
+            warnings.append(_issue(row_index, _validation_column(message), message))
     return {"valid": len(issues) == 0, "issues": issues, "warnings": warnings}

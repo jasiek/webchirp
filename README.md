@@ -1,6 +1,6 @@
 # webchirp 📻
 
-Prototype for running parts of [CHIRP](https://github.com/kk7ds/chirp) in the browser with a CHIRP-like UI.
+Web-based CPS for amateur transceivers which runs [CHIRP](https://chirp.danplanet.com)'s drivers in a browser and uses WebSerial to communicate.
 
 # This is live and running on [codeplug.org](https://codeplug.org)
 
