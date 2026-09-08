@@ -216,8 +216,7 @@ function renderMarkdown(summary, jsFiles, pythonFiles, floors, failures, baselin
     "",
     `${gate}`,
     "",
-    baseline ? "Change in brackets is against the last successful master run." : "",
-    baseline ? "" : null,
+    ...(baseline ? ["Change in brackets is against the last successful master run.", ""] : []),
     "| scope | lines | branches | functions | files |",
     "| --- | ---: | ---: | ---: | ---: |",
     `| JavaScript (\`web/**\`) `
@@ -256,9 +255,7 @@ function renderMarkdown(summary, jsFiles, pythonFiles, floors, failures, baselin
       + "instrumentable at all: it is executed as a string rather than imported, so "
       + "CPython compiles it as `<exec>` and coverage cannot map it to a file._",
     "",
-  ]
-    .filter((line) => line !== null)
-    .join("\n");
+  ].join("\n");
 }
 
 // --- baseline ---------------------------------------------------------------
@@ -310,11 +307,20 @@ function checkFloors(summary, floors) {
     .map(([label, actual, floor]) => `${label}: ${actual.toFixed(2)}% is below the ${floor}% floor`);
 }
 
-// Raise the floors to just under what was measured. Rounded down to one
-// decimal so an unrelated change that shifts coverage by a hair does not fail
-// the next run.
+// How far below the measured value a floor is set. Coverage is not
+// deterministic across runs: the same commit measured 81.04% then 80.94% of JS
+// branches, roughly three branches out of 2605, because some of what the suite
+// exercises is timing-dependent (test-driver-import-race.mjs races two imports
+// on purpose, and async ordering decides which arm of a few guards runs). A
+// floor set at the last measurement therefore fails intermittently on an
+// unchanged branch. Half a point absorbs that jitter and still catches a real
+// regression, which moves coverage by whole points, not tenths.
+const FLOOR_TOLERANCE_POINTS = 0.5;
+
+// Set the floors below what was measured, by the tolerance above, rounded down
+// to one decimal.
 function updateFloors(summary) {
-  const down = (value) => Math.floor(value * 10) / 10;
+  const down = (value) => Math.floor((value - FLOOR_TOLERANCE_POINTS) * 10) / 10;
   const next = {
     js: {
       lines: down(summary.js.lines.percent),

@@ -1,10 +1,10 @@
 {
   "js": {
-    "lines": 83.1,
-    "branches": 81,
-    "functions": 80.2
+    "lines": 82.6,
+    "branches": 80.4,
+    "functions": 79.7
   },
   "python": {
-    "lines": 85.4
+    "lines": 84.9
   }
 }
