@@ -151,40 +151,50 @@ function parseCtcssFreq(text) {
 // fully populated even when has_cross is false - so the CrossMode options are
 // no evidence that the radio can hold a split pair. The Tone column's own
 // options are.
+//
+// Every tone is written before the mode that encodes it, and the mode is
+// committed only once setRowValue reports the tone was accepted. The driver's
+// tone table is an enum, and a rejected enum write is invisible: it leaves the
+// column's first option behind, typically 67.0, so a directory tone the radio
+// cannot produce would otherwise reach the grid as a plausible-looking tone
+// under a committed tone mode - a channel that keys nothing (issue #104).
+//
+// Returns false when the repeater's *access* tone - the one the radio has to
+// transmit for the repeater to open - could not be written, so the caller can
+// leave the repeater out rather than insert a channel that can never work it.
+// A receive-only tone that cannot be written costs the squelch and nothing
+// else, so it returns true with the tone columns left alone.
 function applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, receiveTone) {
   const toneMode = (mode) => findEnumOption("Tone", [mode], true);
   const writeTransmitOnly = () => {
     const mode = toneMode("Tone");
-    if (mode) {
-      setRowValue(row, "Tone", mode);
-      setRowValue(row, "rToneFreq", transmitTone);
+    if (!mode || !setRowValue(row, "rToneFreq", transmitTone)) {
+      return false;
     }
+    setRowValue(row, "Tone", mode);
+    return true;
   };
   const writeReceiveAsTsql = () => {
     const mode = toneMode("TSQL");
-    if (mode) {
-      setRowValue(row, "Tone", mode);
-      setRowValue(row, "cToneFreq", receiveTone);
+    if (!mode || !setRowValue(row, "cToneFreq", receiveTone)) {
+      return false;
     }
+    setRowValue(row, "Tone", mode);
+    return true;
   };
 
   if (!transmitTone && !receiveTone) {
-    return;
+    return true;
   }
   if (transmitTone && !receiveTone) {
-    writeTransmitOnly();
-    return;
+    return writeTransmitOnly();
   }
   if (transmitTone === receiveTone) {
     // Same tone both ways: TSQL transmits it and squelches on it. A radio
-    // without TSQL still has to key the repeater, so it keeps the transmit
-    // half rather than the row losing the tone altogether.
-    if (toneMode("TSQL")) {
-      writeReceiveAsTsql();
-    } else {
-      writeTransmitOnly();
-    }
-    return;
+    // without TSQL - or one whose TSQL write does not take - still has to key
+    // the repeater, so it keeps the transmit half rather than the row losing
+    // the tone altogether.
+    return writeReceiveAsTsql() || writeTransmitOnly();
   }
 
   // A split pair - including receive-only, which is a split with an empty
@@ -192,13 +202,15 @@ function applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, recei
   const crossMode = toneMode("Cross");
   const crossValue = findEnumOption("CrossMode", [transmitTone ? "Tone->Tone" : "->Tone"], true);
   if (crossMode && crossValue) {
-    setRowValue(row, "Tone", crossMode);
-    setRowValue(row, "CrossMode", crossValue);
-    if (transmitTone) {
-      setRowValue(row, "rToneFreq", transmitTone);
+    // Both halves have to land before Cross is committed: a Cross row missing
+    // one of them encodes the fallback tone on that side, which is worse than
+    // falling back to the one side the radio can hold.
+    const transmitOk = !transmitTone || setRowValue(row, "rToneFreq", transmitTone);
+    if (transmitOk && setRowValue(row, "cToneFreq", receiveTone)) {
+      setRowValue(row, "Tone", crossMode);
+      setRowValue(row, "CrossMode", crossValue);
+      return true;
     }
-    setRowValue(row, "cToneFreq", receiveTone);
-    return;
   }
   // Without Cross the row can hold one side, so keep the side that decides
   // whether the channel works at all. With a transmit tone that is the access
@@ -206,10 +218,10 @@ function applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, recei
   // way to get the advertised receive squelch; it also transmits the tone,
   // which a repeater that asks for none ignores.
   if (transmitTone) {
-    writeTransmitOnly();
-  } else {
-    writeReceiveAsTsql();
+    return writeTransmitOnly();
   }
+  writeReceiveAsTsql();
+  return true;
 }
 
 function formatFrequencyMhz(value) {
@@ -402,9 +414,11 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }) {
 
 // Returns `{ rows, skipped }`. A repeater the selected radio cannot express is
 // left out rather than written as something it is not, and `skipped` carries a
-// reason per record — "frequency" (outside the driver's valid_bands) or "mode"
-// (the radio advertises no Mode the repeater can be worked in) — so the caller
-// can say which and why. Same contract as buildRsgbRows in web/js/rsgb.js.
+// reason per record — "frequency" (outside the driver's valid_bands), "mode"
+// (the radio advertises no Mode the repeater can be worked in) or "tone" (the
+// radio's tone table has no such CTCSS access tone, so it could never open the
+// repeater) — so the caller can say which and why. Same contract as
+// buildRsgbRows in web/js/rsgb.js.
 export function buildPrzemiennikiRows(
   repeaters,
   { createBlankRow, setRowValue, findEnumOption },
@@ -461,7 +475,10 @@ export function buildPrzemiennikiRows(
       }
     }
 
-    applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, receiveTone);
+    if (!applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, receiveTone)) {
+      skipped.push({ repeater: String(repeater.qra || "").trim(), reason: "tone", tone: transmitTone });
+      continue;
+    }
 
     const modeMappings = {
       FM: ["FM", "NFM", "FMN"],

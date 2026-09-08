@@ -21,6 +21,11 @@ function rowHooks({
   modeOptions = ["FM", "DV", "DMR", "DN"],
   toneModes = ["", "Tone", "TSQL", "DTCS", "Cross"],
   crossModes = ["Tone->Tone", "->Tone", "Tone->", "DTCS->", "->DTCS"],
+  // The driver's CTCSS table. null means every tone is accepted, which is what
+  // the cases that are about tone *modes* want; a list stands in for a radio
+  // whose table lacks a directory tone, and the first entry is the value a
+  // refused write leaves behind.
+  toneFreqs = null,
   maxFrequencyMhz = Infinity,
 } = {}) {
   return makeRowHooks({
@@ -29,20 +34,28 @@ function rowHooks({
       "Tone", "rToneFreq", "cToneFreq", "CrossMode",
       "Mode", "Comment",
     ],
-    optionsByColumn: { Mode: modeOptions, Tone: toneModes, CrossMode: crossModes },
+    optionsByColumn: {
+      Mode: modeOptions,
+      Tone: toneModes,
+      CrossMode: crossModes,
+      ...(toneFreqs ? { rToneFreq: toneFreqs, cToneFreq: toneFreqs } : {}),
+    },
     maxFrequencyMhz,
   });
 }
 
 // Build one repeater and hand back its row, so a tone case reads as its inputs
 // and its expectations rather than as scaffolding.
-function toneRow(repeater, { perspective = "repeater", ...hookOptions } = {}) {
-  const { rows: [row] } = buildPrzemiennikiRows(
+function toneResult(repeater, { perspective = "repeater", ...hookOptions } = {}) {
+  return buildPrzemiennikiRows(
     [{ qra: "SRTEST", mode: "fm", qrgRx: 145.0, qrgTx: 145.6, ...repeater }],
     rowHooks(hookOptions),
     { perspective },
   );
-  return row;
+}
+
+function toneRow(repeater, options = {}) {
+  return toneResult(repeater, options).rows[0];
 }
 
 test("buildRepeaterEndpoints derives every remote source URL from a base", () => {
@@ -248,6 +261,70 @@ test("a CSQ on one side leaves the other side as a plain single-direction tone",
   assert.equal(row.Tone, "Cross");
   assert.equal(row.CrossMode, "->Tone");
   assert.equal(row.cToneFreq, "88.5");
+});
+
+// A tone the driver's table does not carry is the dangerous case, because the
+// rejected write is invisible in the row: the enum fallback leaves the first
+// tone in the list (67.0 on nearly every driver) behind a tone mode that was
+// already committed, so the channel looks programmed and keys nothing. The
+// mode has to follow the tone, not lead it (issue #104).
+const TONE_TABLE = ["67.0", "88.5", "110.9", "127.3"];
+
+test("an access tone the radio's table lacks is skipped, not written as 67.0", () => {
+  const { rows, skipped } = toneResult(
+    { ctcssRx: "141.3", ctcssTx: "" },
+    { toneFreqs: TONE_TABLE },
+  );
+
+  assert.deepEqual(rows, []);
+  assert.deepEqual(skipped, [{ repeater: "SRTEST", reason: "tone", tone: "141.3" }]);
+});
+
+test("a matching pair the radio's table lacks is skipped rather than half-written", () => {
+  // TSQL is refused and the Tone fallback is refused for the same reason, so
+  // there is no tone mode left that can key the repeater.
+  const { rows, skipped } = toneResult(
+    { ctcssRx: "141.3", ctcssTx: "141.3" },
+    { toneFreqs: TONE_TABLE },
+  );
+
+  assert.deepEqual(rows, []);
+  assert.deepEqual(skipped, [{ repeater: "SRTEST", reason: "tone", tone: "141.3" }]);
+});
+
+test("a receive tone the radio's table lacks costs the squelch, not the channel", () => {
+  // Nothing has to be transmitted to open this repeater, so the row is worth
+  // keeping - but it must not claim a tone mode it cannot honour.
+  const { rows, skipped } = toneResult(
+    { ctcssRx: "", ctcssTx: "141.3" },
+    { toneFreqs: TONE_TABLE },
+  );
+
+  assert.deepEqual(skipped, []);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].Tone, "");
+  assert.equal(rows[0].CrossMode, "");
+});
+
+test("a split pair with one unwritable half keeps the access tone, not a broken Cross", () => {
+  // Cross would encode the fallback 67.0 as the receive tone, so the row falls
+  // back to the transmit half the radio can actually hold.
+  const { rows, skipped } = toneResult(
+    { ctcssRx: "88.5", ctcssTx: "141.3" },
+    { toneFreqs: TONE_TABLE },
+  );
+
+  assert.deepEqual(skipped, []);
+  assert.equal(rows[0].Tone, "Tone");
+  assert.equal(rows[0].rToneFreq, "88.5");
+  assert.equal(rows[0].CrossMode, "");
+});
+
+test("a tone the radio's table does carry is still written", () => {
+  const row = toneRow({ ctcssRx: "110.9", ctcssTx: "" }, { toneFreqs: TONE_TABLE });
+
+  assert.equal(row.Tone, "Tone");
+  assert.equal(row.rToneFreq, "110.9");
 });
 
 test("a one-sided entry falls back to its known frequency instead of inventing a split", () => {

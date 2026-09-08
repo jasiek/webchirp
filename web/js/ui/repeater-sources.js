@@ -62,11 +62,28 @@ export function createRepeaterSources(ctx, { endpoints }) {
     const counts = {
       frequency: skipped.filter((entry) => entry.reason === "frequency").length,
       mode: skipped.filter((entry) => entry.reason === "mode").length,
+      tone: skipped.filter((entry) => entry.reason === "tone").length,
     };
     return [
       counts.frequency > 0 ? `${counts.frequency} outside its frequency range` : "",
       counts.mode > 0 ? `${counts.mode} in a mode it cannot use` : "",
+      counts.tone > 0 ? `${counts.tone} needing a tone it cannot send` : "",
     ].filter((part) => part.length > 0).join(", ");
+  }
+
+  // The debug line spells out what the status line only counts. Tone carries
+  // the frequency the directory published, because "141.3 not in the radio's
+  // tone table" is the whole diagnosis.
+  function skippedReason(entry) {
+    if (entry.reason === "frequency") {
+      return "frequency not supported by the selected radio";
+    }
+    if (entry.reason === "tone") {
+      return `${entry.tone || "access"} Hz tone not in the selected radio's tone table`;
+    }
+    // RSGB names no mode when none of a repeater's modes map, so the word
+    // "mode" stands in for the one the other sources report.
+    return `${entry.mode || entry.reason} not supported by the selected radio`;
   }
 
   function normalized(values) {
@@ -187,10 +204,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
           { perspective: parsed.perspective },
         );
         for (const entry of skipped) {
-          const reason = entry.reason === "frequency"
-            ? "frequency not supported by the selected radio"
-            : `${entry.mode || "unknown mode"} not supported by the selected radio`;
-          log.logDebug(`${actionLabel.toUpperCase()} SKIPPED ${entry.repeater} (${reason})`);
+          log.logDebug(`${actionLabel.toUpperCase()} SKIPPED ${entry.repeater} (${skippedReason(entry)})`);
         }
         ctx.table.insertRowsAtSelectionOrEnd(rows, insertLabel);
         // result_count is the point of this event: a query that returns
@@ -349,7 +363,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
         // as something they are not; a shorter list than the match count needs
         // saying out loud, or it reads as results going missing.
         for (const entry of skipped) {
-          log.logDebug(`RSGB SKIPPED ${entry.repeater} (${entry.reason} not supported by the selected radio)`);
+          log.logDebug(`RSGB SKIPPED ${entry.repeater} (${skippedReason(entry)})`);
         }
         ctx.table.insertRowsAtSelectionOrEnd(rows, "RSGB ETCC");
         // result_count is the point of this event: a query that returns

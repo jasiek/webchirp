@@ -486,6 +486,9 @@ function findRsgbMode(findEnumOption, record, preferredModes = []) {
 //   - "mode": the radio advertises no Mode the repeater can be worked in — a
 //     D-STAR-only repeater on an FM-only set. Writing NFM there produces a
 //     channel that cannot work the repeater whose name it carries.
+//   - "tone": the radio's tone table has no such CTCSS frequency (or it offers
+//     no tone mode at all), so the access tone cannot be sent and the repeater
+//     never opens. `tone` carries the frequency the directory published.
 //
 // `modes` is the query's own mode selection, so a D-STAR search gets the DV
 // side of a mixed A/D repeater rather than its analogue one.
@@ -526,13 +529,23 @@ export function buildRsgbRows(entries, { createBlankRow, setRowValue, findEnumOp
     }
 
     // ctcss is in Hz with 0 standing for "no tone", not for 0 Hz.
+    //
+    // The tone goes in before the mode that encodes it, and the mode is
+    // committed only once setRowValue says the tone itself was accepted. A
+    // driver whose tone table lacks the directory's value — a reduced table,
+    // or a mistyped record — otherwise takes the enum fallback and lands on
+    // the first tone in the list, so the row would claim Tone 67.0 Hz and key
+    // nothing (issue #104). Without its access tone the channel cannot work
+    // the repeater at all, so the record is left out with a reason rather than
+    // inserted as something it is not.
     const ctcss = Number(record?.ctcss);
     if (Number.isFinite(ctcss) && ctcss > 0) {
       const toneMode = findEnumOption("Tone", ["Tone", "TSQL"], true);
-      if (toneMode) {
-        setRowValue(row, "Tone", toneMode);
+      if (!toneMode || !setRowValue(row, "rToneFreq", ctcss.toFixed(1))) {
+        skipped.push({ repeater: name, reason: "tone", tone: ctcss.toFixed(1) });
+        continue;
       }
-      setRowValue(row, "rToneFreq", ctcss.toFixed(1));
+      setRowValue(row, "Tone", toneMode);
     }
 
     setRowValue(row, "Mode", mode);

@@ -50,9 +50,20 @@ function rowHooks({
   // Low first, as roughly half of CHIRP's drivers order them — so a blank row's
   // options[0] default would be "Low" and an unset Power column shows it.
   powerOptions = ["Low", "High"],
+  toneModes = ["Tone", "TSQL"],
+  // The driver's CTCSS table. null accepts any tone, which is what every case
+  // that is not about the table wants; a list stands in for a radio whose
+  // table lacks the directory's tone, and its first entry is what a refused
+  // write leaves in the cell.
+  toneFreqs = null,
 } = {}) {
   return makeRowHooks({
-    optionsByColumn: { Tone: ["Tone", "TSQL"], Mode: modeOptions, Power: powerOptions },
+    optionsByColumn: {
+      Tone: toneModes,
+      Mode: modeOptions,
+      Power: powerOptions,
+      ...(toneFreqs ? { rToneFreq: toneFreqs } : {}),
+    },
     caseInsensitive: true,
   });
 }
@@ -484,6 +495,44 @@ test("buildRsgbRows treats ctcss 0 as no tone", () => {
   assert.equal(row.Mode, "DV");
 });
 
+// A CTCSS frequency the driver's table does not carry cannot be written, and
+// the rejected enum write is invisible: it leaves the column's first option
+// (67.0 on nearly every driver) behind a Tone mode that was already committed,
+// so the channel looks programmed and opens nothing. The repeater is left out
+// with a reason instead, exactly as an untunable frequency is (issue #104).
+test("a tone outside the radio's table drops the repeater instead of writing 67.0", () => {
+  const offTable = record({ ctcss: 141.3 });
+  const { rows, skipped } = buildRsgbRows(
+    filterRsgbRecords([offTable], { ...HERNE_BAY, radiusKm: 30 }),
+    rowHooks({ toneFreqs: ["67.0", "88.5", "103.5", "110.9"] }),
+  );
+
+  assert.deepEqual(rows, []);
+  // The published tone rides along, so the debug line can name it.
+  assert.deepEqual(skipped, [{ repeater: "GB3KI", reason: "tone", tone: "141.3" }]);
+});
+
+test("a radio with no tone mode at all cannot carry a tone-access repeater", () => {
+  const { rows, skipped } = buildRsgbRows(
+    filterRsgbRecords([record()], { ...HERNE_BAY, radiusKm: 30 }),
+    rowHooks({ toneModes: [""] }),
+  );
+
+  assert.deepEqual(rows, []);
+  assert.deepEqual(skipped, [{ repeater: "GB3KI", reason: "tone", tone: "103.5" }]);
+});
+
+test("a tone the radio's table carries is written under a committed tone mode", () => {
+  const { rows, skipped } = buildRsgbRows(
+    filterRsgbRecords([record()], { ...HERNE_BAY, radiusKm: 30 }),
+    rowHooks({ toneFreqs: ["67.0", "88.5", "103.5", "110.9"] }),
+  );
+
+  assert.deepEqual(skipped, []);
+  assert.equal(rows[0].Tone, "Tone");
+  assert.equal(rows[0].rToneFreq, "103.5");
+});
+
 test("with no mode asked for, analogue wins and bandwidth picks the width", () => {
   const hooks = rowHooks();
   const mixed = filterRsgbRecords([record({ modeCodes: ["A", "M:3"] })], { ...HERNE_BAY, radiusKm: 30 });
@@ -551,12 +600,14 @@ test("a repeater the radio cannot tune is dropped, not inserted half-built", () 
   assert.equal(entries.length, 2, "the filter is not what excludes it");
 
   const handheld = rowHooks();
-  // A radio whose Frequency column rejects anything above 470 MHz.
+  // A radio whose Frequency column rejects anything above 470 MHz, reporting
+  // the refusal the way the grid does.
   handheld.setRowValue = (row, column, value) => {
     if (column === "Frequency" && Number.parseFloat(value) > 470) {
-      return;
+      return false;
     }
     row[column] = String(value ?? "");
+    return true;
   };
   const { rows, skipped } = buildRsgbRows(entries, handheld);
   assert.deepEqual(rows.map((row) => row.Name), ["GB3KI"]);

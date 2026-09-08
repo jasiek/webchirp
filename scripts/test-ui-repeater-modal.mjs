@@ -193,6 +193,10 @@ function buildHarness({
   // What the stand-in radio's Mode column advertises. The default set has DV,
   // so D-STAR repeaters are buildable; pass ["FM", "NFM"] for an FM-only radio.
   modeOptions = ["FM", "NFM", "DV"],
+  // The driver's CTCSS table. null means "accepts any tone", which is what
+  // every test that is not about tones wants; a list stands in for a radio
+  // whose table is missing the directory's tone.
+  toneOptions = null,
 } = {}) {
   // parsePrzemiennikiXml reaches for DOMParser, so it is installed with the
   // rest of the fake DOM globals.
@@ -233,16 +237,26 @@ function buildHarness({
       insertRowsAtSelectionOrEnd: (rows, label) => table.inserted.push({ rows, label }),
       rowBuilderHooks: () => ({
         createBlankRow: () => Object.fromEntries(headers.map((column) => [column, ""])),
+        // Returns whether the write took, as channel-table.js's does.
         setRowValue: (row, column, value) => {
           if (!headers.includes(column)) {
-            return;
+            return false;
           }
           // Stands in for a 2m/70cm radio: the grid refuses a frequency the
           // driver cannot tune and leaves the previous value in place.
           if (column === "Frequency" && Number.parseFloat(value) > 470) {
-            return;
+            return false;
+          }
+          // A tone outside the driver's table is refused the way the grid
+          // refuses it: the first option is left in the cell, so only the
+          // return value says the write did not take.
+          if (toneOptions && (column === "rToneFreq" || column === "cToneFreq")
+              && !toneOptions.includes(String(value))) {
+            row[column] = String(toneOptions[0]);
+            return false;
           }
           row[column] = String(value ?? "");
+          return true;
         },
         // Choice order decides, as channel-table.js's findEnumOption does, and
         // a radio that advertises none of the choices answers with "".
@@ -1044,6 +1058,35 @@ test("a repeater in an unusable mode is reported separately from an untunable on
   assert.ok(log.debug.some((line) => /SKIPPED GB7DS \(mode not supported/.test(line)));
   assert.ok(
     log.statuses.some((line) => /skipped 1 in a mode it cannot use/.test(line)),
+    `status lines were: ${log.statuses.join(" | ")}`,
+  );
+});
+
+test("a repeater whose tone the radio cannot send is reported, not written as 67.0", async () => {
+  // The rejected tone write leaves the driver's first tone in the cell, so an
+  // unreported skip here would look like a perfectly good 67.0 Hz channel that
+  // never opens the repeater (issue #104).
+  const { dom, log, table } = buildHarness({ toneOptions: ["67.0", "88.5", "110.9"] });
+  installGeolocation(LONDON);
+  installRsgbFetch({
+    IO91: [
+      repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ", ctcss: 110.9 }),
+      repeaterRecord({ id: 2, repeater: "GB3TN", tx: 145737500, rx: 145137500, locator: "IO91VJ", ctcss: 141.3 }),
+    ],
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
+  assert.equal(table.inserted[0].rows[0].rToneFreq, "110.9");
+  assert.ok(
+    log.debug.some((line) => /SKIPPED GB3TN \(141\.3 Hz tone not in the selected radio's tone table\)/.test(line)),
+    `debug lines were: ${log.debug.join(" | ")}`,
+  );
+  assert.ok(
+    log.statuses.some((line) => /skipped 1 needing a tone it cannot send/.test(line)),
     `status lines were: ${log.statuses.join(" | ")}`,
   );
 });
