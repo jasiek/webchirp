@@ -107,13 +107,6 @@ def _power_label_map_for_radio(module_name: str, class_name: str) -> tuple[dict[
     """Map a selected driver's power labels to CSV power specs."""
     return _power_label_map_from_features(_driver_features(module_name, class_name))
 
-
-def _normalize_power_value(value: Any, power_map: dict[str, str], default_power: str) -> str:
-    """Return a CHIRP-parseable power value or blank if unavailable."""
-    text = str(value or "").strip()
-    fallback = default_power or DEFAULT_EXPORT_POWER
-    if not text:
-        return fallback
     if text in power_map:
         return power_map[text]
     try:
