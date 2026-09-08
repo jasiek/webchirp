@@ -20,7 +20,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { parseLcov } from "./coverage-lcov.mjs";
+import { isJsCodeLine, parseLcov } from "./coverage-lcov.mjs";
 import { repoRoot } from "./test-support/repo-paths.mjs";
 
 const COVERAGE_DIR = path.join(repoRoot, "coverage");
@@ -86,22 +86,6 @@ export function changedLinesFromDiff(diff) {
 }
 
 // --- deciding what counts ---------------------------------------------------
-
-// Node's lcov emits a DA record for every physical line, comments and blanks
-// included (see FINDINGS.md, v8-line-coverage-counts-comments-and-blanks), so a
-// changed comment inside an uncovered function would be reported as an
-// uncovered line. This drops the obvious non-code so the count means something.
-// It is a heuristic -- it cannot see a comment marker inside a string literal --
-// and it only ever removes lines from the report, so its failure mode is
-// understating the work, not inventing it. Python needs none of this: its lcov
-// comes from coverage.py, whose DA records are executable statements already.
-export function isJsCodeLine(sourceLine) {
-  const trimmed = String(sourceLine || "").trim();
-  if (trimmed === "") {
-    return false;
-  }
-  return !/^(\/\/|\/\*|\*\/|\*)/.test(trimmed);
-}
 
 function readSourceLines(repoRelativePath) {
   const full = path.join(repoRoot, repoRelativePath);

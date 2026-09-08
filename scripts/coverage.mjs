@@ -12,6 +12,9 @@
 //   summary.json   machine-readable totals, uploaded so a later run can diff
 //   summary.md     the GitHub Actions job summary
 //
+// For which lines rather than how many, scripts/coverage-report.mjs turns the
+// same lcov into an annotated source view (npm run coverage:report).
+//
 // Usage:
 //   npm run coverage                       measure, report, fail below the floors
 //   npm run coverage -- --update-floors    rewrite coverage-floors.json to match

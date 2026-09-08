@@ -93,6 +93,13 @@ jobs:
           COVERAGE_DIFF_BASE: origin/${{ github.event.pull_request.base.ref }}
         run: npm run coverage:patch
 
+      # The line-by-line view, into the same artifact. GitHub will not render
+      # it in place, but it downloads as one self-contained file that opens
+      # from disk with no network access.
+      - name: Build the line-by-line report
+        if: always()
+        run: npm run coverage:report
+
       # Written whether or not the floors were met, so a failing run still
       # explains itself on the summary page instead of only in the log.
       - name: Publish job summary

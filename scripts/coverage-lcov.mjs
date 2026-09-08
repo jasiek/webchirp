@@ -47,3 +47,19 @@ export function parseLcov(text) {
   }
   return files;
 }
+
+// Node's lcov emits a DA record for every physical line, comments and blanks
+// included (FINDINGS.md, v8-line-coverage-counts-comments-and-blanks), so a
+// comment inside an untested function is reported as an uncovered line. Callers
+// use this to tell real gaps from prose. It is a heuristic -- it cannot see a
+// comment marker inside a string literal -- and it only ever moves a line out
+// of the count, so its failure mode is understating a gap, not inventing one.
+// Python needs none of this: its lcov comes from coverage.py, whose DA records
+// are executable statements already.
+export function isJsCodeLine(sourceLine) {
+  const trimmed = String(sourceLine || "").trim();
+  if (trimmed === "") {
+    return false;
+  }
+  return !/^(\/\/|\/\*|\*\/|\*)/.test(trimmed);
+}

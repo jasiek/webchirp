@@ -6,10 +6,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { isJsCodeLine } from "./coverage-lcov.mjs";
 import {
   changedLinesFromDiff,
   classifyChangedLines,
-  isJsCodeLine,
   percent,
   renderMarkdown,
   toRanges,
