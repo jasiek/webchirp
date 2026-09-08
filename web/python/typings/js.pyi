@@ -1,4 +1,4 @@
-"""The JS globals Pyodide exposes to ``runtime_bridge`` as the ``js`` module.
+"""The JS globals Pyodide exposes to ``webchirp_bridge`` as the ``js`` module.
 
 These are not Python functions: each is a browser-side function installed on
 ``globalThis`` by ``web/js/runtime-rpc.js`` before the runtime boots, reached

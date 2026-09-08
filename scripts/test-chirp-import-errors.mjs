@@ -12,41 +12,54 @@ import { listRegisteredRadios, sharedHarness } from "./test-support/chirp.mjs";
 // panel that serial_log feeds.
 const FETCH_FAILURE = "Failed to fetch https://cdn.test/chirp/drivers/kguv8d.py: 503";
 
-// Swap the two JS callables the finder reaches through. Both are module-level
-// names in the Pyodide globals namespace runtime_bridge.py was executed in, and
-// Python bound them by value at "from js import ...", so reassigning
-// globalThis would not be seen -- the globals slot is the only handle.
-function patchPythonGlobals(pyodide, overrides) {
+// Swap a JS callable a bridge module reaches through. Python bound it by value
+// at "from js import ..." inside the owning module, so neither reassigning
+// globalThis nor the flattened copy in pyodide.globals (which runtime_bridge.py
+// exports from the module, not the other way round) would be seen -- the
+// module attribute is the only handle. Which module owns the name is part of
+// what this pins: the finder in chirp_loader fetches, and logs through
+// jsbridge's _log_debug.
+function patchPythonModule(pyodide, moduleName, overrides) {
+  const module = pyodide.pyimport(moduleName);
   const previous = new Map();
   for (const [name, value] of Object.entries(overrides)) {
-    previous.set(name, pyodide.globals.get(name));
-    pyodide.globals.set(name, value);
+    previous.set(name, module[name]);
+    module[name] = value;
   }
   return () => {
     for (const [name, value] of previous) {
-      pyodide.globals.set(name, value);
+      module[name] = value;
     }
+    module.destroy();
   };
 }
 
 test("a failed CHIRP source fetch names its cause instead of ModuleNotFoundError", async () => {
   const harness = await sharedHarness();
   const pyodide = harness.pyodide;
-  const originalFetch = pyodide.globals.get("fetch_chirp_source");
+  const loader = pyodide.pyimport("webchirp_bridge.chirp_loader");
+  const originalFetch = loader.fetch_chirp_source;
+  loader.destroy();
   const logged = [];
 
-  const restore = patchPythonGlobals(pyodide, {
+  const restoreFetch = patchPythonModule(pyodide, "webchirp_bridge.chirp_loader", {
     fetch_chirp_source: async (sourcePath) => {
       if (String(sourcePath).includes("kguv8d")) {
         throw new Error(FETCH_FAILURE);
       }
       return originalFetch(sourcePath);
     },
+  });
+  const restoreLog = patchPythonModule(pyodide, "webchirp_bridge.jsbridge", {
     serial_log: (message) => {
       logged.push(String(message || ""));
       return { logged: true };
     },
   });
+  const restore = () => {
+    restoreLog();
+    restoreFetch();
+  };
 
   try {
     await assert.rejects(

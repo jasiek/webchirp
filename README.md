@@ -99,7 +99,7 @@ For radio cloning:
 ## Command-line codeplug read/write
 
 You can read or write a real-radio codeplug from the command line using the same
-runtime bridge (`web/python/runtime_bridge.py`) and local CHIRP source loading
+runtime bridge (`web/python/webchirp_bridge/`) and local CHIRP source loading
 path used by the Node tests. This is the intended agent-facing CLI for scripted
 radio access.
 
@@ -163,7 +163,8 @@ wrong one still echoes perfectly. The same cases run against fake hardware in
 - Main-thread runtime RPC client + Pyodide bootstrap: `web/js/runtime-rpc.js`
   (runs on the main thread — there is no Web Worker).
 - Python source providers: `web/js/python-sources.mjs`.
-- Versioned Python runtime code: `web/python/runtime_bridge.py`.
+- Versioned Python runtime code: the `web/python/webchirp_bridge/` package, executed
+  into Pyodide's globals by the `web/python/runtime_bridge.py` entry point.
 - Browser runtime loads CHIRP source files into Pyodide from jsDelivr (revision-pinned).
 - Command-line runtime can load CHIRP source files from a local directory:
   - `WEBCHIRP_CHIRP_DIR=/path/to/chirp npm run test:channels`
@@ -195,7 +196,7 @@ sequenceDiagram
   participant UI as ui.js
   participant RPC as runtime-rpc.js
   participant SRC as python-sources.mjs
-  participant PY as runtime_bridge.py<br/>(Pyodide)
+  participant PY as webchirp_bridge<br/>(Pyodide)
   participant S as serial.js<br/>(Web Serial / WebUSB)
   participant R as Radio
 

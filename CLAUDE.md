@@ -11,7 +11,17 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   repeater directory: its form is assembled per source from the field
   components in `query-fields.js` (which build their own DOM), driven by the
   per-source configs in `repeater-sources.js`.
-- `web/python/runtime_bridge.py`: Versioned Python runtime logic (no embedded Python in JS files).
+- `web/python/runtime_bridge.py`: Entry point of the Python runtime. It is executed (not
+  imported) into Pyodide's globals and flattens the `webchirp_bridge` package into that
+  namespace, which is what every RPC expression and test snippet evaluates in.
+- `web/python/webchirp_bridge/`: The runtime logic, one module per concern —
+  `chirp_loader` (lazy CHIRP import hook, driver enumeration), `serial_pipe`
+  (pyserial stand-in over Web Serial), `clone` (download/upload sessions),
+  `driver_cache` (cached clone image and radios built from it), `channel_rows`,
+  `power_levels`, `row_validation`, `radio_memories`, `radio_settings`,
+  `column_metadata`, `images`, plus `jsbridge` (JS-boundary helpers) and
+  `runtime_errors`. `__init__.py` only installs the shims CHIRP needs before import.
+  No embedded Python in JS files.
 - `chirp/`: Upstream CHIRP source as a git submodule.
 
 ### UI module conventions
@@ -27,7 +37,11 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Query document elements in `web/js/ui/dom.js`, not in feature modules.
 
 ## Rules for Agents
-- Keep Python and JavaScript separated. Put runtime Python code in `web/python/*.py`.
+- Keep Python and JavaScript separated. Put runtime Python code in
+  `web/python/webchirp_bridge/*.py`; a new module must be listed in `RUNTIME_PYTHON_FILES`
+  (`web/js/python-sources.mjs`) so it is seeded into Pyodide, and in `BRIDGE_MODULES`
+  (`web/python/runtime_bridge.py`) so its names reach the RPC namespace. The module
+  graph must stay acyclic; call across modules by importing, never through the globals.
 - Prefer generic, parameterized flows based on selected CHIRP driver/module/class.
 - Do not reintroduce radio-specific RPC methods when generic selected-radio methods can be used.
 - Preserve debug visibility: full errors/tracebacks should be logged to the bottom debug panel.
