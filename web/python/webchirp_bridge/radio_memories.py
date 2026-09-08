@@ -92,6 +92,27 @@ def _log_grouped_channel_failures(
         )
 
 
+def _read_memory(radio: chirp_common.Radio, number: int) -> chirp_common.Memory:
+    """Read one memory as CHIRP's editor sees it, external properties included.
+
+    Clone-mode radios keep comments outside driver memory, in the image
+    metadata; get_memory_extra is the post-read hook desktop CHIRP applies
+    so they appear on the memory like any other field. Raises whatever the
+    driver raises, so callers decide how a decode failure is recorded.
+    """
+    mem = radio.get_memory(number)
+    if isinstance(radio, chirp_common.ExternalMemoryProperties):
+        mem = radio.get_memory_extra(mem)
+    return mem
+
+
+def _erase_memory(radio: chirp_common.Radio, number: int) -> None:
+    """Erase one memory together with the external properties stored beside it."""
+    radio.erase_memory(number)
+    if isinstance(radio, chirp_common.ExternalMemoryProperties):
+        radio.erase_memory_extra(number)
+
+
 def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int]]:
     """Extract channel rows from a radio instance using CHIRP memory API.
 
@@ -108,11 +129,7 @@ def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int
     trace_by_reason: dict[str, str] = {}
     for number in _iter_memory_numbers(radio):
         try:
-            mem = radio.get_memory(number)
-            # CloneModeRadio stores comments outside driver memory in its image
-            # metadata, so mirror desktop CHIRP's post-read augmentation hook.
-            if isinstance(radio, chirp_common.ExternalMemoryProperties):
-                mem = radio.get_memory_extra(mem)
+            mem = _read_memory(radio, number)
         except Exception as exc:
             reason = str(exc) or exc.__class__.__name__
             unreadable.append(number)
@@ -185,11 +202,9 @@ def _apply_rows_to_radio_instance(
         seen_numbers.add(number)
         # CHIRP's immutable policy needs the current driver memory, not merely
         # the flattened grid row, before deciding whether a write is allowed.
-        existing = radio.get_memory(number)
         # External properties participate in row equality and immutable-field
         # validation even though the driver memory itself does not contain them.
-        if isinstance(radio, chirp_common.ExternalMemoryProperties):
-            existing = radio.get_memory_extra(existing)
+        existing = _read_memory(radio, number)
         vals = [str(row.get(h, "") or "") for h in CSV_HEADERS]
         vals = _coerce_csv_vals_for_chirp(vals)
         vals[0] = str(number)
@@ -207,9 +222,7 @@ def _apply_rows_to_radio_instance(
         for warning in warnings:
             _log_debug(f"Channel {number} validation warning: {warning}")
         if action == "erase":
-            radio.erase_memory(number)
-            if isinstance(radio, chirp_common.ExternalMemoryProperties):
-                radio.erase_memory_extra(number)
+            _erase_memory(radio, number)
         else:
             radio.set_memory(mem)
             _apply_row_extras(radio, number, row)
@@ -239,9 +252,7 @@ def _apply_rows_to_radio_instance(
             raise RuntimeUnsupportedError(
                 f"Channel {number}: {'; '.join(str(error) for error in validation_errors)}"
             )
-        radio.erase_memory(number)
-        if isinstance(radio, chirp_common.ExternalMemoryProperties):
-            radio.erase_memory_extra(number)
+        _erase_memory(radio, number)
 
     if protected:
         _log_debug(
