@@ -37,7 +37,7 @@ from webchirp_bridge.row_validation import _immutable_policy_errors, _prepare_ro
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
 
-def _iter_memory_numbers(radio):
+def _iter_memory_numbers(radio: chirp_common.Radio) -> range:
     """Return numeric memory range for the active radio model."""
     rf = radio.get_features()
     if not hasattr(rf, "memory_bounds") or not rf.memory_bounds:
@@ -91,7 +91,7 @@ def _log_grouped_channel_failures(
         )
 
 
-def _radio_rows_from_instance(radio) -> tuple[Rows, list[int]]:
+def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int]]:
     """Extract channel rows from a radio instance using CHIRP memory API.
 
     Returns the decoded rows and the numbers the driver refused to decode. A
@@ -139,7 +139,7 @@ def _radio_rows_from_instance(radio) -> tuple[Rows, list[int]]:
 
 
 def _apply_rows_to_radio_instance(
-    radio, rows: Rows, module_name: str = "", class_name: str = ""
+    radio: chirp_common.Radio, rows: Rows, module_name: str = "", class_name: str = ""
 ) -> None:
     """Validate editable rows, then apply them to a radio instance."""
     if radio and (not module_name or not class_name):

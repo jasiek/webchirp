@@ -35,7 +35,7 @@ from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 from webchirp_bridge.serial_pipe import WebSerialPipe, _serial_pipe_timeout_seconds
 
 
-def _ensure_clone_mode_radio(radio_cls):
+def _ensure_clone_mode_radio(radio_cls: type) -> None:
     """Enforce clone-mode driver requirement for live serial workflows."""
     if not issubclass(radio_cls, chirp_common.CloneModeRadio):
         raise RuntimeUnsupportedError(
@@ -149,7 +149,7 @@ def _prepare_clone_session(radio_cls: Any) -> None:
     )
 
 
-def _download_selected_radio_sync(module_name: str, class_name: str):
+def _download_selected_radio_sync(module_name: str, class_name: str) -> dict[str, Any]:
     """Run selected driver's sync_in and return rows + cached image state."""
     radio_cls = _import_radio_class(module_name, class_name)
     _ensure_clone_mode_radio(radio_cls)

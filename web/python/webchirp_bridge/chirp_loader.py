@@ -16,6 +16,8 @@ import importlib.abc
 import os
 import sys
 import traceback
+import types
+from typing import Any, Callable, Iterable, Optional, Sequence
 
 from chirp import (
     chirp_common,
@@ -61,7 +63,12 @@ def _ensure_chirp_module_file(fullname: str) -> None:
 class ChirpCdnFinder(importlib.abc.MetaPathFinder):
     """Lazy materializer for missing chirp.* modules from jsDelivr."""
 
-    def find_spec(self, fullname, path=None, target=None):
+    def find_spec(
+        self,
+        fullname: str,
+        path: Optional[Sequence[str]] = None,
+        target: Optional[types.ModuleType] = None,
+    ) -> None:
         """Ensure module file exists before regular import resolution proceeds.
 
         A failure here is reported rather than swallowed (issue #100). Returning
@@ -120,7 +127,10 @@ import chirp.drivers  # noqa: E402, F401
 _install_chirp_import_hook()
 
 
-def import_all_driver_modules(module_short_names, progress_cb=None):
+def import_all_driver_modules(
+    module_short_names: Iterable[Any],
+    progress_cb: Optional[Callable[[int, int, str], Any]] = None,
+) -> dict[str, Any]:
     """Import every driver so CHIRP can detect images that carry no metadata.
 
     Detection walks ``directory.DRV_TO_RADIO`` and calls each driver's
@@ -157,7 +167,7 @@ def import_all_driver_modules(module_short_names, progress_cb=None):
     }
 
 
-def list_registered_radios(module_short_names):
+def list_registered_radios(module_short_names: Iterable[Any]) -> list[dict[str, Any]]:
     """Import drivers and return radios from CHIRP's registration directory."""
     loaded_modules = set()
     for name in module_short_names or []:

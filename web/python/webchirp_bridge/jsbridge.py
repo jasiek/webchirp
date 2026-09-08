@@ -11,6 +11,7 @@ shows the user -- the debug panel (``_log_debug``) and the progress strip
 from __future__ import annotations
 
 import asyncio
+from typing import Any, Callable
 
 from js import (
     serial_log,
@@ -24,7 +25,7 @@ except Exception:
     pyodide_run_sync = None
 
 
-def _log_debug(message) -> None:
+def _log_debug(message: Any) -> None:
     """Send a diagnostic line to the browser debug panel without ever raising."""
     try:
         serial_log(str(message))
@@ -32,14 +33,14 @@ def _log_debug(message) -> None:
         pass  # Diagnostics must never break the operation being diagnosed.
 
 
-def _js_to_py(value):
+def _js_to_py(value: Any) -> Any:
     """Convert a JsProxy to a native Python object when possible."""
     if hasattr(value, "to_py"):
         return value.to_py()
     return value
 
 
-def _await_js(awaitable):
+def _await_js(awaitable: Any) -> Any:
     """Synchronously wait for a JS Promise from Python code paths."""
     if pyodide_run_sync:
         return pyodide_run_sync(awaitable)
@@ -52,7 +53,7 @@ def _await_js(awaitable):
     )
 
 
-def _make_status_logger():
+def _make_status_logger() -> Callable[[Any], None]:
     """Build a status callback that forwards CHIRP reports to the UI progress display.
 
     Drivers report one status per transferred block; forwarding each report to
@@ -64,7 +65,7 @@ def _make_status_logger():
     """
     last_msg = None
 
-    def _status_to_log(status):
+    def _status_to_log(status: Any) -> None:
         nonlocal last_msg
         msg = str(getattr(status, "msg", "") or "")
         cur = getattr(status, "cur", None)

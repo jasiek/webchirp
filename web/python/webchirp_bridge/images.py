@@ -44,7 +44,7 @@ from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.runtime_errors import ImageDetectionError, RuntimeUnsupportedError
 
 
-def get_cached_image_base64(module_name: str, class_name: str):
+def get_cached_image_base64(module_name: str, class_name: str) -> dict[str, Any]:
     """Return cached clone image bytes for a driver as base64 text."""
     driver_key = _driver_cache_key(module_name, class_name)
     image = LAST_IMAGE_BY_DRIVER.get(driver_key)
@@ -58,7 +58,7 @@ def get_cached_image_base64(module_name: str, class_name: str):
     }
 
 
-def upload_image_base64(module_name: str, class_name: str, image_b64: str):
+def upload_image_base64(module_name: str, class_name: str, image_b64: str) -> dict[str, Any]:
     """Upload an explicit full-image payload through the selected clone driver."""
     radio_cls = _import_radio_class(module_name, class_name)
     _ensure_clone_mode_radio(radio_cls)
@@ -126,7 +126,7 @@ def export_image_base64(
     }
 
 
-def read_image_metadata_base64(image_b64: str):
+def read_image_metadata_base64(image_b64: str) -> dict[str, Any]:
     """Parse the CHIRP metadata trailer from a .img payload without importing drivers."""
     try:
         raw_image = base64.b64decode(str(image_b64 or ""), validate=True)

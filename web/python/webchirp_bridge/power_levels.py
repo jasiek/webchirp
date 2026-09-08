@@ -11,6 +11,8 @@ the mapping.
 
 from __future__ import annotations
 
+from typing import Any, Iterable, Optional
+
 from chirp import chirp_common
 
 from webchirp_bridge.driver_cache import _driver_features
@@ -20,7 +22,7 @@ from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 DEFAULT_EXPORT_POWER = "50W"
 
 
-def _watts_label(level):
+def _watts_label(level: Any) -> str:
     """Format a power level's wattage the way CHIRP writes power into a CSV.
 
     ``float()``, not ``int()``: ``PowerLevel.__int__`` truncates the dBm, so a
@@ -31,7 +33,7 @@ def _watts_label(level):
     )
 
 
-def _power_label_map_from_features(rf):
+def _power_label_map_from_features(rf: Any) -> tuple[dict[str, str], str]:
     """Map radio power labels (e.g., High) to CSV power specs (e.g., 50W)."""
     levels = (getattr(rf, "valid_power_levels", None) or []) if rf else []
 
@@ -49,13 +51,13 @@ def _power_label_map_from_features(rf):
     return mapped, default_power
 
 
-def _valid_power_levels_for_driver(module_name: str, class_name: str):
+def _valid_power_levels_for_driver(module_name: str, class_name: str) -> list[Any]:
     """Return a driver's own PowerLevel objects, or an empty list if unavailable."""
     rf = _driver_features(module_name, class_name)
     return list(getattr(rf, "valid_power_levels", None) or []) if rf else []
 
 
-def _power_levels_by_label(levels):
+def _power_levels_by_label(levels: Iterable[Any]) -> dict[str, Any]:
     """Index a driver's PowerLevel objects by every label they round-trip as.
 
     Rows carry power as text: `Memory.to_csv()` writes the driver's own label
@@ -77,7 +79,7 @@ def _power_levels_by_label(levels):
     return mapped
 
 
-def _resolve_power_level(power_text, level_map):
+def _resolve_power_level(power_text: Any, level_map: dict[str, Any]) -> Any:
     """Resolve row power text to the driver's own PowerLevel object."""
     text = str(power_text or "").strip()
     # Memory.to_csv() renders an unset power as "%s" % None, so a channel that
@@ -101,12 +103,12 @@ def _resolve_power_level(power_text, level_map):
     )
 
 
-def _power_label_map_for_radio(module_name: str, class_name: str):
+def _power_label_map_for_radio(module_name: str, class_name: str) -> tuple[dict[str, str], str]:
     """Map a selected driver's power labels to CSV power specs."""
     return _power_label_map_from_features(_driver_features(module_name, class_name))
 
 
-def _normalize_power_value(value, power_map, default_power):
+def _normalize_power_value(value: Any, power_map: dict[str, str], default_power: str) -> str:
     """Return a CHIRP-parseable power value or blank if unavailable."""
     text = str(value or "").strip()
     fallback = default_power or DEFAULT_EXPORT_POWER
@@ -121,7 +123,7 @@ def _normalize_power_value(value, power_map, default_power):
         return fallback
 
 
-def _csv_export_power_text(value, power_map):
+def _csv_export_power_text(value: Any, power_map: dict[str, str]) -> str:
     """Return the Power text CHIRP's CSV export would write for a row value.
 
     CHIRP's CSV driver stores every level in watts, and its parser reads only
@@ -141,7 +143,7 @@ def _csv_export_power_text(value, power_map):
     return text
 
 
-def _power_level_watts(levels):
+def _power_level_watts(levels: Optional[Iterable[Any]]) -> dict[str, str]:
     """Map each advertised power level's label to its wattage.
 
     Driver labels carry no wattage — "L3" and "Mid1" say nothing on their own —

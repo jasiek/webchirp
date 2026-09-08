@@ -10,7 +10,7 @@ under ``ROW_EXTRA_KEY`` and are applied to memories here as well.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional, Sequence
 
 from chirp import (
     chirp_common,
@@ -60,7 +60,7 @@ CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
 DUPLEX_VALUES = ("", "+", "-", "split", "off")
 
 
-def _blank_csv_radio(max_memory: int = 999):
+def _blank_csv_radio(max_memory: int = 999) -> CSVRadio:
     """Return an empty generic CSV radio.
 
     ``CSVRadio(None)`` seeds a default channel 0 at 146.010000/50W, and
@@ -74,7 +74,7 @@ def _blank_csv_radio(max_memory: int = 999):
     return radio
 
 
-def _row_values_for_csv(mem) -> list[Any]:
+def _row_values_for_csv(mem: chirp_common.Memory) -> list[Any]:
     """Return ``CSV_FORMAT``-aligned values for a memory.
 
     ``DVMemory.to_csv()`` upstream still emits a pre-RxDtcsCode/CrossMode/Power
@@ -92,7 +92,7 @@ def _row_values_for_csv(mem) -> list[Any]:
     return mem.to_csv()
 
 
-def get_default_headers():
+def get_default_headers() -> dict[str, Any]:
     """Channel columns to show before a radio or codeplug decides them.
 
     The editor starts with no channels, and CHIRP's CSV driver refuses to
@@ -123,7 +123,7 @@ def parse_csv(csv_text: str) -> dict[str, Any]:
     }
 
 
-def _row_float(text, fallback, label):
+def _row_float(text: Any, fallback: float, label: str) -> float:
     """Parse an optional float row field, keeping the Memory default if blank."""
     value = str(text or "").strip()
     if not value:
@@ -134,7 +134,7 @@ def _row_float(text, fallback, label):
         raise RuntimeUnsupportedError(f"{label} is not a valid number")
 
 
-def _row_int(text, fallback, label):
+def _row_int(text: Any, fallback: int, label: str) -> int:
     """Parse an optional integer row field, keeping the Memory default if blank."""
     value = str(text or "").strip()
     if not value:
@@ -145,7 +145,9 @@ def _row_int(text, fallback, label):
         raise RuntimeUnsupportedError(f"{label} is not a valid number")
 
 
-def _memory_from_row_values(vals, level_map=None):
+def _memory_from_row_values(
+    vals: Sequence[Any], level_map: Optional[dict[str, Any]] = None
+) -> chirp_common.Memory:
     """Build a Memory from row values, inverting chirp_common.Memory.to_csv().
 
     chirp_common.Memory.really_from_csv() looks like the natural inverse, but it
@@ -216,7 +218,7 @@ def _memory_from_row_values(vals, level_map=None):
     return mem
 
 
-def _coerce_csv_vals_for_chirp(vals):
+def _coerce_csv_vals_for_chirp(vals: Sequence[Any]) -> list[Any]:
     """Patch CSV fields CHIRP treats as required numerics."""
     out = list(vals)
     freq_idx = CSV_HEADERS.index("Frequency")
@@ -228,7 +230,7 @@ def _coerce_csv_vals_for_chirp(vals):
     return out
 
 
-def _csv_text_for_memories(memories, src_features):
+def _csv_text_for_memories(memories: Sequence[chirp_common.Memory], src_features: Any) -> str:
     """Render memories as CSV exactly the way CHIRP's own export does.
 
     CHIRP exports by pushing each memory through ``import_logic.import_mem()``

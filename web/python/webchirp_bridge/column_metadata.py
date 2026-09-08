@@ -8,6 +8,8 @@ ever runs.
 
 from __future__ import annotations
 
+from typing import Any, Iterable, Optional
+
 from chirp import chirp_common
 
 from webchirp_bridge.channel_rows import CSV_HEADERS
@@ -18,18 +20,18 @@ from webchirp_bridge.power_levels import _power_level_watts
 DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
 
 
-def _mk_enum(values):
+def _mk_enum(values: Optional[Iterable[Any]]) -> list[str]:
     """Normalize CHIRP value lists into string enums for UI metadata."""
     return [str(v) for v in values] if values else []
 
 
-def _radio_supports_dv(rf):
+def _radio_supports_dv(rf: Any) -> bool:
     """Detect whether a radio's mode capabilities include D-STAR DV mode."""
     modes = {str(mode) for mode in (rf.valid_modes or [])}
     return "DV" in modes
 
 
-def get_radio_column_metadata(module_name: str, class_name: str):
+def get_radio_column_metadata(module_name: str, class_name: str) -> dict[str, Any]:
     """Build CHIRP-derived column editability/options metadata for the UI."""
     radio_cls = _import_radio_class(module_name, class_name)
     try:

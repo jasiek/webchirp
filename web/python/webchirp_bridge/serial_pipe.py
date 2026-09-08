@@ -62,19 +62,19 @@ def _web_serial_framing(table: dict, value: Any) -> Any:
     return table.get(value)
 
 
-async def webserial_connect(baudrate: int):
+async def webserial_connect(baudrate: int) -> Any:
     """Open serial transport via JS bridge and return normalized result."""
     result = await serial_open(int(baudrate))
     return _js_to_py(result)
 
 
-async def webserial_disconnect():
+async def webserial_disconnect() -> Any:
     """Close serial transport via JS bridge and return normalized result."""
     result = await serial_close()
     return _js_to_py(result)
 
 
-async def webserial_txrx_hex(tx_hex: str, rx_bytes: int, timeout_ms: int):
+async def webserial_txrx_hex(tx_hex: str, rx_bytes: int, timeout_ms: int) -> dict[str, Any]:
     """Send a hex payload and read a fixed-size response via JS bridge."""
     tx_result = await serial_write_hex(tx_hex)
     rx_result = await serial_read_hex(int(rx_bytes), int(timeout_ms))
@@ -129,7 +129,7 @@ class WebSerialPipe:
         _await_js(serial_write_bytes(list(payload)))
         return len(payload)
 
-    def read(self, count=1):
+    def read(self, count: int = 1) -> bytes:
         """Read up to count bytes from JS serial bridge with timeout semantics."""
         timeout_ms = max(1, int(float(self.timeout) * 1000))
         data = _await_js(serial_read_bytes(int(count), timeout_ms))
@@ -137,23 +137,23 @@ class WebSerialPipe:
             data = data.to_py()
         return bytes((int(x) & 0xFF) for x in data)
 
-    def flush(self):
+    def flush(self) -> None:
         """Pyserial compatibility no-op."""
         return
 
-    def reset_input_buffer(self):
+    def reset_input_buffer(self) -> None:
         """Clear pending inbound serial bytes in bridge buffers."""
         _await_js(serial_reset_buffers())
 
-    def reset_output_buffer(self):
+    def reset_output_buffer(self) -> None:
         """Pyserial compatibility no-op for write buffering."""
         return
 
-    def flushInput(self):
+    def flushInput(self) -> None:
         """Legacy pyserial alias for reset_input_buffer()."""
         self.reset_input_buffer()
 
-    def flushOutput(self):
+    def flushOutput(self) -> None:
         """Legacy pyserial alias for reset_output_buffer()."""
         self.reset_output_buffer()
 
@@ -177,7 +177,7 @@ class WebSerialPipe:
         """Legacy pyserial spelling of in_waiting, still called by anytone778uv."""
         return self.in_waiting
 
-    def close(self):
+    def close(self) -> None:
         """Pyserial compatibility no-op; UI owns port lifecycle."""
         return
 
@@ -302,12 +302,12 @@ class WebSerialPipe:
         except Exception as exc:
             _log_debug(f"Serial control lines not applied (DTR/RTS): {exc}")
 
-    def log(self, msg):
+    def log(self, msg: Any) -> None:
         """Forward driver log/status text to the browser debug console."""
         serial_log(str(msg))
 
 
-def _serial_pipe_timeout_seconds():
+def _serial_pipe_timeout_seconds() -> float:
     """Resolve serial read timeout with optional env override."""
     raw = os.environ.get("WEBCHIRP_SERIAL_TIMEOUT_S", "")
     if not raw:

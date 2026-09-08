@@ -12,7 +12,7 @@ than guessing from a blank instance.
 from __future__ import annotations
 
 import copy
-from typing import Any, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence
 
 from chirp import (
     chirp_common,
@@ -27,7 +27,9 @@ from webchirp_bridge.driver_cache import (
 from webchirp_bridge.jsbridge import _log_debug
 
 
-def _settings_unavailable_payload(message: str, requires_image=False, error_text=""):
+def _settings_unavailable_payload(
+    message: str, requires_image: bool = False, error_text: str = ""
+) -> dict[str, Any]:
     """Standard payload when radio-wide settings cannot currently be loaded."""
     return {
         "supported": False,
@@ -39,12 +41,12 @@ def _settings_unavailable_payload(message: str, requires_image=False, error_text
     }
 
 
-def _setting_path(parts):
+def _setting_path(parts: Iterable[Any]) -> list[str]:
     """Normalize a settings path list into a JSON-safe list of strings."""
     return [str(part) for part in parts]
 
 
-def _serialize_setting_value(value):
+def _serialize_setting_value(value: Any) -> dict[str, Any]:
     """Convert a CHIRP RadioSettingValue into UI-friendly JSON metadata."""
     current = value.get_value() if value.initialized else None
     data = {
@@ -97,7 +99,7 @@ def _serialize_setting_value(value):
     return data
 
 
-def _serialize_setting_node(node, path_parts):
+def _serialize_setting_node(node: Any, path_parts: list[Any]) -> dict[str, Any]:
     """Serialize a CHIRP settings tree node for browser rendering."""
     if isinstance(node, chirp_settings.RadioSetting):
         raw_values = node.value if isinstance(node.value, list) else [node.value]
@@ -134,7 +136,7 @@ def _serialize_setting_node(node, path_parts):
     }
 
 
-def _serialize_radio_settings(settings_tree):
+def _serialize_radio_settings(settings_tree: Iterable[Any]) -> list[dict[str, Any]]:
     """Serialize the top-level RadioSettings collection."""
     return [_serialize_setting_node(group, []) for group in settings_tree]
 
@@ -369,7 +371,11 @@ def _prune_dead_settings(container: Any) -> list[str]:
     return dropped
 
 
-def _validate_and_apply_radio_settings(radio, serialized_groups, apply_changes=False):
+def _validate_and_apply_radio_settings(
+    radio: chirp_common.Radio,
+    serialized_groups: Sequence[dict[str, Any]],
+    apply_changes: bool = False,
+) -> dict[str, Any]:
     """Validate serialized settings against a fresh CHIRP settings tree."""
     rf = radio.get_features()
     if not bool(getattr(rf, "has_settings", False)):
@@ -395,7 +401,7 @@ def _validate_and_apply_radio_settings(radio, serialized_groups, apply_changes=F
     return {"valid": True, "issues": [], "settings": _serialize_radio_settings(settings_tree)}
 
 
-def get_radio_settings(module_name: str, class_name: str):
+def get_radio_settings(module_name: str, class_name: str) -> dict[str, Any]:
     """Build CHIRP settings-group metadata for the UI when supported."""
     radio_cls = _import_radio_class(module_name, class_name)
     if issubclass(radio_cls, chirp_common.CloneModeRadio) and not _has_cached_image(
@@ -429,7 +435,9 @@ def get_radio_settings(module_name: str, class_name: str):
     }
 
 
-def validate_radio_settings(module_name: str, class_name: str, settings_groups):
+def validate_radio_settings(
+    module_name: str, class_name: str, settings_groups: Sequence[dict[str, Any]]
+) -> dict[str, Any]:
     """Validate serialized radio settings using CHIRP's typed value objects."""
     radio_cls = _import_radio_class(module_name, class_name)
     if issubclass(radio_cls, chirp_common.CloneModeRadio) and not _has_cached_image(

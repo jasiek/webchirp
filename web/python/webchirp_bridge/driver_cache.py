@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from typing import Sequence
+from typing import Optional, Sequence
 
 from chirp import (
     chirp_common,
@@ -42,7 +42,7 @@ IMAGE_CLASS_BY_DRIVER: dict[str, type] = {}
 UNREADABLE_BY_DRIVER: dict[str, set[int]] = {}
 
 
-def _driver_features(module_name: str, class_name: str):
+def _driver_features(module_name: str, class_name: str) -> Optional[chirp_common.RadioFeatures]:
     """Return a driver's RadioFeatures, preferring the cached image.
 
     Some drivers read their capabilities out of the codeplug: ``Rt98Radio``
@@ -183,13 +183,15 @@ def _has_cached_image(module_name: str, class_name: str) -> bool:
     return driver_key in LAST_IMAGE_BY_DRIVER
 
 
-def _best_effort_radio_instance(module_name: str, class_name: str, require_cached=False):
+def _best_effort_radio_instance(
+    module_name: str, class_name: str, require_cached: bool = False
+) -> chirp_common.Radio:
     """Instantiate a radio with cached data when available, otherwise best-effort blank state."""
     radio_cls = _import_radio_class(module_name, class_name)
     driver_key = _driver_cache_key(module_name, class_name)
     base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
 
-    def _fallback_constructor():
+    def _fallback_constructor() -> chirp_common.Radio:
         try:
             return radio_cls(None)
         except Exception:

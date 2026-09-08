@@ -15,6 +15,7 @@ from __future__ import annotations
 import builtins
 import sys
 import types
+from typing import Any
 
 
 def _install_gettext_builtins() -> None:
@@ -79,7 +80,7 @@ def _install_pyserial_shim() -> None:
     class Serial:
         """Unusable port stand-in: this runtime drives radios via WebSerialPipe."""
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             raise SerialException(
                 "pyserial is unavailable in the browser runtime; "
                 "radio I/O goes through the Web Serial bridge"
