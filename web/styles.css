@@ -1379,10 +1379,17 @@ button:disabled {
 /* Let the table take its natural width so all 17 column headers stay
    readable; it scrolls horizontally inside .mem-table-scroll when the
    window is narrower (previously table-layout: fixed compressed every
-   column to fit, overlapping the header text). */
+   column to fit, overlapping the header text).
+
+   Natural width and nothing more: a min-width of 100% here used to stretch the
+   grid across the pane, and auto table layout hands that slack back to every
+   column in proportion, which put it straight back between each value and the
+   divider to its right -- the columns fitInputColumnWidths()
+   (web/js/ui/channel-table.js) had just measured. So the grid now ends where
+   its contents end, and a window wider than the channel list simply shows
+   page behind it. */
 #mem-table {
   width: max-content;
-  min-width: 100%;
   border-collapse: collapse;
   background: var(--surface);
   border: 1px solid var(--border);

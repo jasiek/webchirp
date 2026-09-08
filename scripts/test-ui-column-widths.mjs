@@ -1,25 +1,68 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// The channel grid takes its natural width from its editors, so a text input
-// left at the browser's 20-character default made every text column ~150px
-// wide whatever it held -- with seventeen columns that overflowed the desktop
-// window with space no value was using. createCellEditor() now sizes each
-// input from the CHIRP column metadata (columnCharBudget() in
-// web/js/ui/channel-table.js); these tests pin that mapping, since a
-// regression to a fixed width is invisible to every other assertion here.
+// The channel grid takes its natural width from its cells, and an <input> is
+// the one editor whose width has nothing to do with the value inside it: the
+// browser sizes it from the size attribute -- twenty average characters by
+// default, plus a one-character surcharge -- and cannot see the text at all.
+// Seventeen such columns is what made the desktop grid overflow with space no
+// value was using. fitInputColumnWidths() (web/js/ui/channel-table.js) measures
+// the values instead and gives each input column the result as a floor. These
+// tests pin that: nothing else here would notice a regression to a fixed width.
 import {
   channelRows,
   flushMicrotasks,
+  importSampleCsv,
   installFakeDom,
   selectRadioBySearch,
 } from "./test-support/fake-dom.mjs";
 
-const HEADERS = ["Location", "Name", "Frequency", "Offset", "Duplex", "Comment"];
+const HEADERS = ["Location", "Name", "Frequency", "Duplex", "Comment"];
 
-// A headless grid with one channel row rendered, for the driver metadata given.
-async function renderGrid(columns) {
-  const { document } = installFakeDom();
+// The stub font: every character this wide, and 2px of padding each side of an
+// input. Widths below are therefore characters * 7 + 4, which is what makes the
+// expected numbers readable rather than magic.
+const CHAR_PX = 7;
+const INPUT_PADDING_PX = 4;
+
+function expectedWidth(text) {
+  return `${text.length * CHAR_PX + INPUT_PADDING_PX}px`;
+}
+
+// installFakeDom() has no layout and no canvas, which is how the grid tells a
+// headless caller apart from a browser. Give it just enough of both to measure
+// with: a font whose metrics are trivial, and cells whose (zero-sized) boxes
+// leave the editor's own padding as the only chrome around the text.
+function installMeasurableDom() {
+  const fake = installFakeDom({
+    window: {
+      getComputedStyle: () => ({
+        fontStyle: "normal",
+        fontWeight: "400",
+        fontSize: "14px",
+        fontFamily: "Stub",
+        paddingLeft: "2px",
+        paddingRight: "2px",
+      }),
+    },
+  });
+  const createElement = fake.document.createElement.bind(fake.document);
+  fake.document.createElement = (tagName) => {
+    const element = createElement(tagName);
+    if (String(tagName).toLowerCase() === "canvas") {
+      element.getContext = () => ({
+        font: "",
+        measureText: (text) => ({ width: String(text).length * CHAR_PX }),
+      });
+    }
+    return element;
+  };
+  return fake;
+}
+
+// A grid holding the given rows, with the driver metadata given.
+async function renderGrid(rows, columns = {}) {
+  const { document } = installMeasurableDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
   ui.setRuntimeApi({
@@ -32,68 +75,96 @@ async function renderGrid(columns) {
     getDefaultHeaders: async () => ({ headers: HEADERS }),
     getRadioMetadata: async () => ({ headers: HEADERS, columns }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
-    parseCsv: async () => ({ headers: HEADERS, rows: [], errors: [] }),
+    parseCsv: async () => ({ headers: HEADERS, rows, errors: [] }),
   });
 
   await ui.init(true);
   // Without a selected radio the driver's column metadata is never fetched.
   selectRadioBySearch(document, "Acme One");
   await flushMicrotasks();
-  // The grid starts empty, so add the row whose editors are measured.
-  document.querySelector("#channel-insert").dispatchEvent({ type: "click" });
-  await flushMicrotasks();
-
+  // The grid starts empty; the stubbed parser returns `rows` whatever the file.
+  await importSampleCsv(document);
   return document;
 }
 
-// Sizes for one rendered channel row, keyed by column. Selects carry no size:
-// a select is already exactly as wide as the widest option its driver offers.
-async function editorSizes(columns) {
-  const row = channelRows(await renderGrid(columns))[0];
+// The floor each header cell carries, keyed by column. Only input columns get
+// one: a select is already as wide as the widest option it may have to show,
+// and the Location button prints its slot number as ordinary text the browser
+// can measure by itself.
+function columnFloors(document) {
+  const header = document.querySelector("#mem-table thead").children[0];
   return Object.fromEntries(
-    row.children.map((td) => [td.dataset.column, td.children[0]?.size]),
+    header.children.map((th, idx) => [HEADERS[idx], th.style.minWidth]),
   );
 }
 
-test("text editors are sized from the column metadata, not the browser default", async () => {
-  const sizes = await editorSizes({
-    Name: { kind: "text", editable: true, maxLength: 7 },
-    Frequency: { kind: "freq", editable: true, bands: [] },
-    Offset: { kind: "freq", editable: true, bands: [] },
-    Duplex: { kind: "enum", editable: true, options: ["", "-", "+", "split"] },
-    Comment: { kind: "text", editable: true },
-  });
+test("input columns are measured against the values they hold", async () => {
+  const document = await renderGrid(
+    [
+      { Location: "0", Name: "SR5E", Frequency: "439.375000", Duplex: "-", Comment: "Warszawa" },
+      { Location: "1", Name: "SR5KPN", Frequency: "438.200000", Duplex: "-", Comment: "Piaseczno" },
+    ],
+    { Duplex: { kind: "enum", editable: true, options: ["", "-", "+", "split"] } },
+  );
 
-  // A length-limited field asks for exactly its limit.
-  assert.equal(sizes.Name, 7);
-  // A frequency asks for the ten characters of "145.787500".
-  assert.equal(sizes.Frequency, 10);
-  assert.equal(sizes.Offset, 10);
-  // Free text has no natural width, so it gets the readable default.
-  assert.equal(sizes.Comment, 12);
-  // Selects size themselves from their options; nothing overrides that.
-  assert.equal(sizes.Duplex, undefined);
+  const floors = columnFloors(document);
+  // The widest value in the column, not the widest the driver would allow.
+  assert.equal(floors.Name, expectedWidth("SR5KPN"));
+  assert.equal(floors.Frequency, expectedWidth("439.375000"));
+  assert.equal(floors.Comment, expectedWidth("Piaseczno"));
+  // A select sizes itself, so nothing is imposed on it.
+  assert.equal(floors.Duplex, undefined);
+  assert.equal(floors.Location, undefined);
+
+  // The inputs ask the browser for nothing, which is what leaves the floors
+  // above in charge of the column.
+  const row = channelRows(document)[0];
+  assert.deepEqual(
+    row.children.filter((td) => td.children[0]?.tagName === "INPUT").map((td) => td.children[0].size),
+    [1, 1, 1],
+  );
 });
 
-test("a driver's own limits set the column width, within bounds", async () => {
-  const sizes = await editorSizes({
-    // A radio with no name field at all reports a zero length: the column
-    // shrinks to its header rather than reserving room for a value that
-    // cannot exist. A size of zero is not a legal input width, hence the 1.
-    Name: { kind: "text", editable: false, maxLength: 0 },
-    // A generous limit is capped, so one roomy driver cannot blow the column
-    // back out; a longer value still scrolls inside the input.
-    Comment: { kind: "text", editable: true, maxLength: 64 },
-  });
+test("a long value is capped, and an empty column asks for nothing", async () => {
+  const document = await renderGrid([
+    { Location: "0", Name: "", Frequency: "146.520000", Comment: "x".repeat(40) },
+  ]);
 
-  assert.equal(sizes.Name, 1);
-  assert.equal(sizes.Comment, 12);
+  const floors = columnFloors(document);
+  // Sixteen characters is the ceiling; the rest scrolls inside the input.
+  assert.equal(floors.Comment, expectedWidth("x".repeat(16)));
+  // A column with nothing in it falls back to its header, which the browser
+  // applies on top of this floor.
+  assert.equal(floors.Name, expectedWidth(""));
+});
+
+test("editing a cell refits its column, in both directions", async () => {
+  const document = await renderGrid([
+    { Location: "0", Name: "SR5E", Frequency: "146.520000", Comment: "" },
+  ]);
+  const header = document.querySelector("#mem-table thead").children[0];
+  const commentIdx = HEADERS.indexOf("Comment");
+  const editor = channelRows(document)[0].children[commentIdx].children[0];
+
+  // A typed value is one the browser never laid out, so the refit has to
+  // happen when the edit commits rather than at the next render.
+  editor.value = "Konstancin";
+  document.querySelector("#mem-table tbody").dispatchEvent({
+    type: "focusout",
+    target: editor,
+  });
+  assert.equal(header.children[commentIdx].style.minWidth, expectedWidth("Konstancin"));
+
+  editor.value = "";
+  document.querySelector("#mem-table tbody").dispatchEvent({
+    type: "focusout",
+    target: editor,
+  });
+  assert.equal(header.children[commentIdx].style.minWidth, expectedWidth(""));
 });
 
 test("the Location header is abbreviated without renaming the column", async () => {
-  const document = await renderGrid({
-    Name: { kind: "text", editable: true, maxLength: 7 },
-  });
+  const document = await renderGrid([{ Location: "0", Name: "SR5E" }]);
   const header = document.querySelector("#mem-table thead").children[0];
   const location = header.children[0];
 
@@ -111,6 +182,5 @@ test("the Location header is abbreviated without renaming the column", async () 
 
   // The label is display only: rows, and the cells bound to them, are still
   // keyed by CHIRP's own column name.
-  const row = channelRows(document)[0];
-  assert.equal(row.children[0].dataset.column, "Location");
+  assert.equal(channelRows(document)[0].children[0].dataset.column, "Location");
 });

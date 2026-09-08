@@ -43,13 +43,10 @@ export function createChannelTable({ dom, state, log, actions }) {
   const OVERSCAN_ROWS = 8;
   const ESTIMATED_ROW_HEIGHT = 30;
 
-  // Visible character budgets for the grid's text editors; see
-  // columnCharBudget(). A frequency is the ten characters of "145.787500"; free
-  // text has no natural width, so it gets a budget that reads comfortably and
-  // still lets all seventeen columns fit a desktop window, and that doubles as
-  // the cap on any length limit a driver declares.
-  const FREQ_COLUMN_CHARS = 10;
-  const TEXT_COLUMN_CHARS = 12;
+  // Ceiling for a measured column width, in characters, so one long comment
+  // cannot hand its column a third of the window; the value still scrolls
+  // inside its input.
+  const MAX_COLUMN_CHARS = 16;
 
   // Headers the grid abbreviates, keyed by CHIRP's own column name. "Location"
   // is what CHIRP calls a channel's memory slot, and it stays the key that rows,
@@ -723,25 +720,6 @@ export function createChannelTable({ dom, state, log, actions }) {
     return entries.length ? `Driver power levels: ${entries.join(", ")}` : "";
   }
 
-  // How many characters wide a column's text editor should be. The grid takes
-  // its natural width from its editors (see web/styles.css), so an <input> left
-  // at the browser's 20-character default claims ~150px whatever it holds --
-  // seventeen of those is what made the desktop grid overflow with columns far
-  // wider than their contents. Derive the width from the CHIRP column metadata
-  // instead: a length-limited field asks for exactly its limit (0 for a radio
-  // that has no such field at all, so the header alone sizes the column), a
-  // frequency for the digits it prints, and free text for a readable default.
-  // The cap keeps a generous driver limit from blowing the column back out; a
-  // longer value still scrolls inside the input.
-  function columnCharBudget(column) {
-    const meta = state.radioMetadata.columns?.[column] || {};
-    const maxLength = Number(meta.maxLength);
-    if (Number.isFinite(maxLength) && maxLength >= 0) {
-      return Math.max(1, Math.min(maxLength, TEXT_COLUMN_CHARS));
-    }
-    return meta.kind === "freq" ? FREQ_COLUMN_CHARS : TEXT_COLUMN_CHARS;
-  }
-
   // Create a table cell editor (input/select) from the CHIRP column metadata.
   // Structure only — kind, options and read-only state depend on the column,
   // never on a row — so the element stays valid for any row until the schema
@@ -787,7 +765,11 @@ export function createChannelTable({ dom, state, log, actions }) {
 
     const input = document.createElement("input");
     input.type = "text";
-    input.size = columnCharBudget(column);
+    // The narrowest the browser will make it, so the column's width comes from
+    // fitInputColumnWidths() below rather than from this control. Left at the
+    // default it would claim twenty average characters plus a one-character
+    // surcharge, whatever the channel actually holds.
+    input.size = 1;
     input.readOnly = readOnly;
     input.disabled = readOnly;
     if (Number.isFinite(meta.maxLength)) {
@@ -928,6 +910,94 @@ export function createChannelTable({ dom, state, log, actions }) {
       headerRow.appendChild(th);
     });
     dom.tableHead.appendChild(headerRow);
+  }
+
+  // --- Column widths ------------------------------------------------------
+  // A column ends up as wide as the widest thing the browser can see in it, and
+  // for most columns that is the right answer already: the Location button
+  // prints its slot number as ordinary text, and a select is as wide as the
+  // longest option it may have to display. An <input> is the exception -- its
+  // width comes from the size attribute, which buys N *average* characters plus
+  // a one-character surcharge, and the browser cannot see the value inside it
+  // at all. So those columns are measured here instead and given the result as
+  // a floor on their header cell.
+  //
+  // The measuring is done with a canvas rather than by letting the browser size
+  // a hidden copy of each value, because the grid is virtualized: only the rows
+  // overlapping the viewport exist (see grid-cost-is-option-lists), so anything
+  // the browser could measure would cover the visible window and the columns
+  // would resize as the user scrolled. state.currentRows holds them all.
+  let textMeasureContext;
+
+  function measureTextWidth(text, font) {
+    if (textMeasureContext === undefined) {
+      textMeasureContext = document.createElement("canvas").getContext?.("2d") || null;
+    }
+    if (!textMeasureContext) {
+      return 0;
+    }
+    textMeasureContext.font = font;
+    return textMeasureContext.measureText(text).width;
+  }
+
+  // What a column needs on top of its text: the cell's padding and border, plus
+  // the editor's own padding. Read off the rendered grid rather than hardcoded,
+  // so it follows web/styles.css instead of restating it. Null when there is no
+  // layout to read, which is every headless caller.
+  function editorChromeWidth(td, editor) {
+    const style = globalThis.window?.getComputedStyle?.(editor);
+    const cellBox = td.getBoundingClientRect?.();
+    const editorBox = editor.getBoundingClientRect?.();
+    if (!style || !cellBox || !editorBox) {
+      return null;
+    }
+    const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    return Math.max(0, cellBox.width - editorBox.width) + padding;
+  }
+
+  function editorFont(editor) {
+    const style = globalThis.window?.getComputedStyle?.(editor);
+    return style ? `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}` : "";
+  }
+
+  // Give every input column a floor matching the widest value it holds. Called
+  // when the rows change, never from the scroll-driven window update, so it
+  // costs one pass over the channel list per edit rather than one per frame.
+  // The browser keeps applying its own floors on top, so a column never comes
+  // out narrower than its own header.
+  function fitInputColumnWidths() {
+    const headerCells = dom.tableHead.children?.[0]?.children;
+    const sampleRow = rowElements[0];
+    if (!headerCells || !sampleRow) {
+      return;
+    }
+    let font = "";
+    let chrome = null;
+    let cap = 0;
+    renderedColumns.forEach((column, columnIdx) => {
+      const th = headerCells[columnIdx];
+      const td = sampleRow.children[columnIdx];
+      const editor = td?.children?.[0];
+      if (!th || editor?.tagName !== "INPUT") {
+        return;
+      }
+      if (!font) {
+        font = editorFont(editor);
+        chrome = editorChromeWidth(td, editor);
+        cap = font ? measureTextWidth("0".repeat(MAX_COLUMN_CHARS), font) : 0;
+      }
+      if (!font || chrome === null) {
+        return;
+      }
+      let widest = 0;
+      for (const row of state.currentRows) {
+        const width = measureTextWidth(String(row[column] ?? ""), font);
+        if (width > widest) {
+          widest = width;
+        }
+      }
+      th.style.minWidth = `${Math.ceil(Math.min(widest, cap) + chrome)}px`;
+    });
   }
 
   function discardRowElements() {
@@ -1100,6 +1170,8 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
     renderEmptyState();
     renderRowWindow();
+    // After the window, which is what puts the editors this measures on screen.
+    fitInputColumnWidths();
   }
 
   // Record per-cell issues reported by the upload preflight. Returns how many
@@ -1151,6 +1223,9 @@ export function createChannelTable({ dom, state, log, actions }) {
     const next = normalizeValue(column, editor.value, meta, row[column]);
     row[column] = next;
     editor.value = next;
+    // A typed value the browser never saw: refit, or the column keeps the width
+    // it had before this channel was named.
+    fitInputColumnWidths();
   }
 
   // One listener per event type for the whole grid, instead of three per cell.
