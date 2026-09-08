@@ -11,10 +11,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { repoRoot } from "./test-support/repo-paths.mjs";
+import { repoRoot, webDir } from "./test-support/repo-paths.mjs";
 import { withTempDir } from "./test-support/temp-dir.mjs";
 
 const SCRIPT = path.join(repoRoot, "scripts", "build-dist.mjs");
@@ -225,5 +226,67 @@ test("references are matched on path boundaries, not as substrings", async () =>
   assert.ok(
     uiLeaf.includes(path.basename(hashedNameOf(emitted, "js/leaf"))),
     "../leaf.js must resolve to js/leaf.js, not to js/ui/leaf.js",
+  );
+});
+
+// A path-shaped token naming a source file, anchored the same way build-dist.mjs
+// anchors a reference so the two agree on what counts as one.
+const PROSE_PATH_RE =
+  /(?<![\w./-])([A-Za-z0-9_-]+(?:\/[A-Za-z0-9_.-]+)+\.(?:js|mjs|py|css))(?![\w-])/g;
+
+// Best-effort comment text on one line: what follows "//", block-comment bodies
+// and HTML comments. Over-inclusive by design — a path in code is canonical too
+// or the build would not resolve it.
+function proseOn(line) {
+  let prose = "";
+  const slash = line.indexOf("//");
+  if (slash >= 0 && !/["'`]\s*$/.test(line.slice(0, slash))) {
+    prose += line.slice(slash);
+  }
+  if (/^\s*[*]/.test(line) || line.includes("/*") || line.includes("<!--")) {
+    prose += line;
+  }
+  return prose;
+}
+
+function sourceFiles(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "__pycache__" || entry.name === "typings") {
+      continue;
+    }
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...sourceFiles(full));
+    } else if (/\.(js|css|html)$/.test(entry.name)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+// The convention the boundary rule exists to make safe. A module path in prose is
+// written from the repo root ("web/js/ui/format.js"), never dist-relative
+// ("./js/ui/format.js", which the build cannot tell from a real import and does
+// rewrite) and never partial ("ui/format.js", which resolves from nowhere).
+// Requiring it to resolve is also what catches a path left behind by a rename.
+test("module paths named in comments are canonical and resolve", () => {
+  const offenders = [];
+  for (const file of sourceFiles(webDir)) {
+    const rel = path.relative(repoRoot, file);
+    readFileSync(file, "utf8")
+      .split("\n")
+      .forEach((line, i) => {
+        for (const [, token] of proseOn(line).matchAll(PROSE_PATH_RE)) {
+          if (!existsSync(path.join(repoRoot, token))) {
+            offenders.push(`${rel}:${i + 1} names ${token}`);
+          }
+        }
+      });
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "write module paths from the repo root, and update them when a module moves",
   );
 });

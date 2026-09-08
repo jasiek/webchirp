@@ -1,6 +1,6 @@
 // Sentry error reporting.
 //
-// Shaped deliberately like js/analytics.js, and for the same reasons: the
+// Shaped deliberately like web/js/analytics.js, and for the same reasons: the
 // production-host gate, the vendor loader and the redaction rules all live in
 // one module, so no feature module has to know whether reporting is switched on
 // or what it is allowed to send. Loaded with type="module", so it runs after

@@ -1,7 +1,7 @@
 // RSGB/ETCC UK repeater directory (https://api-beta.rsgb.online).
 //
 // Everything here is pure: locator maths, the square fan-out plan, dedup,
-// filtering and row construction. The UI module (web/js/ui/rsgb-query.js) owns
+// filtering and row construction. The UI module (web/js/ui/repeater-query.js) owns
 // the modal and supplies the fetch. See FINDINGS.md **rsgb-etcc-api-shape** for
 // the API's behaviour; the two rules that shape this file are that a lookup
 // reports "nothing" as HTTP 200 with {"data":null} rather than an error, and

@@ -34,7 +34,7 @@ const FIELD_FACTORIES = {
 };
 
 // Online repeater directory imports. One modal serves every source: each
-// source config (ui/repeater-sources.js) declares its fields, and the grid is
+// source config (web/js/ui/repeater-sources.js) declares its fields, and the grid is
 // rebuilt from them on every open — which is also the reset policy: filters
 // always come back at their per-source defaults, so the modal always opens in
 // the state it documents (a once-ticked "include off-air" cannot silently
