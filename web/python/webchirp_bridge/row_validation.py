@@ -37,6 +37,38 @@ ValidationIssue = dict[str, Any]
 ValidationMessage = str | Exception
 RowChangeAction = Literal["skip", "erase", "set"]
 
+# CHIRP Memory attribute -> the grid column (CSV header) that shows it, in
+# Memory.CSV_FORMAT order. Every translation between the driver's field
+# names and the grid's columns reads this one table, so a field listed here is
+# detected as a change, kept when immutable and reported in the right cell all
+# at once; the three copies this replaced could each drift on their own.
+MEMORY_FIELD_HEADERS: dict[str, str] = {
+    "name": "Name",
+    "freq": "Frequency",
+    "duplex": "Duplex",
+    "offset": "Offset",
+    "tmode": "Tone",
+    "rtone": "rToneFreq",
+    "ctone": "cToneFreq",
+    "dtcs": "DtcsCode",
+    "dtcs_polarity": "DtcsPolarity",
+    "rx_dtcs": "RxDtcsCode",
+    "cross_mode": "CrossMode",
+    "mode": "Mode",
+    "tuning_step": "TStep",
+    "skip": "Skip",
+    "power": "Power",
+    "comment": "Comment",
+}
+# Fields an immutable-field error can name that are not grid fields: number
+# is the row's Location, and empty has no column, so it lands on Frequency,
+# the cell that defines whether a channel exists.
+_ERROR_FIELD_COLUMNS: dict[str, str] = {
+    **MEMORY_FIELD_HEADERS,
+    "number": "Location",
+    "empty": "Frequency",
+}
+
 
 def _infer_csv_error_column(error_text: str) -> str:
     """Best-effort mapping from CHIRP parse error text to CSV column name."""
@@ -128,27 +160,9 @@ def _preserve_unedited_immutable_fields(
     reconstruct (notably fixed power levels). Comparing the source row avoids
     turning an edit to another column into an accidental immutable-field edit.
     """
-    field_headers: dict[str, str] = {
-        "name": "Name",
-        "freq": "Frequency",
-        "duplex": "Duplex",
-        "offset": "Offset",
-        "tmode": "Tone",
-        "rtone": "rToneFreq",
-        "ctone": "cToneFreq",
-        "dtcs": "DtcsCode",
-        "dtcs_polarity": "DtcsPolarity",
-        "rx_dtcs": "RxDtcsCode",
-        "cross_mode": "CrossMode",
-        "mode": "Mode",
-        "tuning_step": "TStep",
-        "skip": "Skip",
-        "power": "Power",
-        "comment": "Comment",
-    }
     existing_row = _row_from_memory(existing)
     for field in list(getattr(existing, "immutable", None) or []):
-        header = field_headers.get(field)
+        header = MEMORY_FIELD_HEADERS.get(field)
         if header and str(row.get(header, "") or "") == existing_row[header]:
             setattr(mem, field, getattr(existing, field))
 
@@ -195,25 +209,7 @@ def _memory_row_changed(
     existing: chirp_common.Memory, new: chirp_common.Memory
 ) -> bool:
     """Return whether any field represented by the channel grid changed."""
-    fields = (
-        "name",
-        "freq",
-        "duplex",
-        "offset",
-        "tmode",
-        "rtone",
-        "ctone",
-        "dtcs",
-        "dtcs_polarity",
-        "rx_dtcs",
-        "cross_mode",
-        "mode",
-        "tuning_step",
-        "skip",
-        "power",
-        "comment",
-        "empty",
-    )
+    fields = (*MEMORY_FIELD_HEADERS, "empty")
     for field in fields:
         existing_value = getattr(existing, field)
         new_value = getattr(new, field)
@@ -281,26 +277,7 @@ def _validation_column(message: ValidationMessage) -> str:
     text = str(message or "")
     match = re.search(r"Field ([A-Za-z_]+) is not mutable", text)
     if match:
-        return {
-            "number": "Location",
-            "name": "Name",
-            "freq": "Frequency",
-            "duplex": "Duplex",
-            "offset": "Offset",
-            "tmode": "Tone",
-            "rtone": "rToneFreq",
-            "ctone": "cToneFreq",
-            "dtcs": "DtcsCode",
-            "dtcs_polarity": "DtcsPolarity",
-            "rx_dtcs": "RxDtcsCode",
-            "cross_mode": "CrossMode",
-            "mode": "Mode",
-            "tuning_step": "TStep",
-            "skip": "Skip",
-            "power": "Power",
-            "comment": "Comment",
-            "empty": "Frequency",
-        }.get(match.group(1), "")
+        return _ERROR_FIELD_COLUMNS.get(match.group(1), "")
     return _infer_csv_error_column(text)
 
 
