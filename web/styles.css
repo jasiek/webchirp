@@ -1382,10 +1382,13 @@ button:disabled {
   border: 1px solid var(--border);
 }
 
+/* Less horizontal than vertical padding: the cell borders already separate the
+   columns, and across seventeen of them the symmetric padding cost more width
+   than the values it framed. */
 #mem-table th,
 #mem-table td {
   border: 1px solid var(--border);
-  padding: 0.35rem;
+  padding: 0.35rem 0.25rem;
   font-size: 0.85rem;
   white-space: nowrap;
 }
@@ -1421,13 +1424,14 @@ button:disabled {
   opacity: 1;
 }
 
-/* With natural table sizing, editors set the column width floor; keep the
-   auto-indexed Location column compact. */
-#mem-table td input,
-#mem-table td select {
-  min-width: 6rem;
-}
-
+/* With natural table sizing the editors are what give each column its width,
+   so they must ask for no more than their own contents: a select is already as
+   wide as the widest option its driver publishes, and an input is sized by the
+   size attribute columnCharBudget() derives from the column metadata in
+   web/js/ui/channel-table.js. A blanket min-width here flattened all of that to
+   one width, so a two-character Duplex or Skip column was as wide as a
+   frequency and the desktop grid scrolled sideways for space it was not using.
+   Keep the auto-indexed Location column compact. */
 #mem-table td:first-child,
 #mem-table th:first-child {
   min-width: 2.75rem;

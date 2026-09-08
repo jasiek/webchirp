@@ -43,6 +43,14 @@ export function createChannelTable({ dom, state, log, actions }) {
   const OVERSCAN_ROWS = 8;
   const ESTIMATED_ROW_HEIGHT = 30;
 
+  // Visible character budgets for the grid's text editors; see
+  // columnCharBudget(). A frequency is the ten characters of "145.787500"; free
+  // text has no natural width, so it gets a budget that reads comfortably and
+  // still lets all seventeen columns fit a desktop window, and that doubles as
+  // the cap on any length limit a driver declares.
+  const FREQ_COLUMN_CHARS = 10;
+  const TEXT_COLUMN_CHARS = 12;
+
   // The schema the current row elements were built for; a change to either
   // invalidates every editor.
   let renderedColumns = [];
@@ -707,6 +715,25 @@ export function createChannelTable({ dom, state, log, actions }) {
     return entries.length ? `Driver power levels: ${entries.join(", ")}` : "";
   }
 
+  // How many characters wide a column's text editor should be. The grid takes
+  // its natural width from its editors (see web/styles.css), so an <input> left
+  // at the browser's 20-character default claims ~150px whatever it holds --
+  // seventeen of those is what made the desktop grid overflow with columns far
+  // wider than their contents. Derive the width from the CHIRP column metadata
+  // instead: a length-limited field asks for exactly its limit (0 for a radio
+  // that has no such field at all, so the header alone sizes the column), a
+  // frequency for the digits it prints, and free text for a readable default.
+  // The cap keeps a generous driver limit from blowing the column back out; a
+  // longer value still scrolls inside the input.
+  function columnCharBudget(column) {
+    const meta = state.radioMetadata.columns?.[column] || {};
+    const maxLength = Number(meta.maxLength);
+    if (Number.isFinite(maxLength) && maxLength >= 0) {
+      return Math.max(1, Math.min(maxLength, TEXT_COLUMN_CHARS));
+    }
+    return meta.kind === "freq" ? FREQ_COLUMN_CHARS : TEXT_COLUMN_CHARS;
+  }
+
   // Create a table cell editor (input/select) from the CHIRP column metadata.
   // Structure only — kind, options and read-only state depend on the column,
   // never on a row — so the element stays valid for any row until the schema
@@ -752,6 +779,7 @@ export function createChannelTable({ dom, state, log, actions }) {
 
     const input = document.createElement("input");
     input.type = "text";
+    input.size = columnCharBudget(column);
     input.readOnly = readOnly;
     input.disabled = readOnly;
     if (Number.isFinite(meta.maxLength)) {
