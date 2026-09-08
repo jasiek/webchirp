@@ -41,9 +41,47 @@ def _settings_unavailable_payload(
     }
 
 
+SETTINGS_NEED_IMAGE_MESSAGE = (
+    "Download from radio or load a codeplug image to edit radio-wide settings."
+)
+SETTINGS_NEED_STATE_MESSAGE = (
+    "Radio-wide settings are unavailable until this driver's backing state is loaded."
+)
+
+
+def _settings_validation_payload(
+    result: Optional[dict[str, Any]] = None,
+    *,
+    requires_image: bool = False,
+    message: str = "",
+    error_text: str = "",
+) -> dict[str, Any]:
+    """The validate_radio_settings reply.
+
+    result is the outcome of _validate_and_apply_radio_settings when the
+    settings could be checked; without it the reply says why they could not,
+    and reports the payload as valid so an unavailable panel never blocks an
+    upload of channels alone.
+    """
+    return {
+        "valid": bool(result["valid"]) if result is not None else True,
+        "issues": result["issues"] if result is not None else [],
+        "settings": result["settings"] if result is not None else [],
+        "available": result is not None,
+        "requiresImage": bool(requires_image),
+        "message": str(message or ""),
+        "error": str(error_text or ""),
+    }
+
+
 def _setting_path(parts: Iterable[Any]) -> list[str]:
     """Normalize a settings path list into a JSON-safe list of strings."""
     return [str(part) for part in parts]
+
+
+def _setting_issue(path: Sequence[Any], value_index: int, message: Any) -> dict[str, Any]:
+    """One settings finding: the setting's path, which of its values, and why."""
+    return {"path": _setting_path(path), "valueIndex": int(value_index), "message": str(message)}
 
 
 def _serialize_setting_value(value: Any) -> dict[str, Any]:
@@ -242,11 +280,9 @@ def _apply_serialized_settings(
         actual_child = _match_serialized_child(actual_children, child_id, position)
         if actual_child is None:
             issues.append(
-                {
-                    "path": _setting_path(prefix + [child_id]),
-                    "valueIndex": 0,
-                    "message": "Setting is not available for this radio image.",
-                }
+                _setting_issue(
+                    prefix + [child_id], 0, "Setting is not available for this radio image."
+                )
             )
             continue
 
@@ -257,11 +293,7 @@ def _apply_serialized_settings(
 
         if not isinstance(actual_child, chirp_settings.RadioSetting):
             issues.append(
-                {
-                    "path": _setting_path(path),
-                    "valueIndex": 0,
-                    "message": "Payload expected a setting but CHIRP returned a group.",
-                }
+                _setting_issue(path, 0, "Payload expected a setting but CHIRP returned a group.")
             )
             continue
 
@@ -291,26 +323,14 @@ def _apply_serialized_settings(
             # reports a malformed payload rather than a driver quirk.
             next_value = value_payload.get("current")
             if next_value is None:
-                issues.append(
-                    {
-                        "path": _setting_path(path),
-                        "valueIndex": int(value_index),
-                        "message": "Setting has no value to write.",
-                    }
-                )
+                issues.append(_setting_issue(path, value_index, "Setting has no value to write."))
                 continue
             if _serialized_value_matches(target, next_value):
                 continue
             try:
                 target.set_value(next_value)
             except Exception as exc:
-                issues.append(
-                    {
-                        "path": _setting_path(path),
-                        "valueIndex": int(value_index),
-                        "message": str(exc),
-                    }
-                )
+                issues.append(_setting_issue(path, value_index, exc))
 
 
 def _settings_child_is_writable(setting: Any) -> bool:
@@ -407,10 +427,7 @@ def get_radio_settings(module_name: str, class_name: str) -> dict[str, Any]:
     if issubclass(radio_cls, chirp_common.CloneModeRadio) and not _has_cached_image(
         module_name, class_name
     ):
-        return _settings_unavailable_payload(
-            "Download from radio or load a codeplug image to edit radio-wide settings.",
-            requires_image=True,
-        )
+        return _settings_unavailable_payload(SETTINGS_NEED_IMAGE_MESSAGE, requires_image=True)
 
     radio = _best_effort_radio_instance(module_name, class_name)
     rf = radio.get_features()
@@ -421,10 +438,7 @@ def get_radio_settings(module_name: str, class_name: str) -> dict[str, Any]:
     try:
         settings_tree = radio.get_settings()
     except Exception as exc:
-        return _settings_unavailable_payload(
-            "Radio-wide settings are unavailable until this driver's backing state is loaded.",
-            error_text=str(exc),
-        )
+        return _settings_unavailable_payload(SETTINGS_NEED_STATE_MESSAGE, error_text=str(exc))
     return {
         "supported": True,
         "available": True,
@@ -443,34 +457,14 @@ def validate_radio_settings(
     if issubclass(radio_cls, chirp_common.CloneModeRadio) and not _has_cached_image(
         module_name, class_name
     ):
-        return {
-            "valid": True,
-            "issues": [],
-            "settings": [],
-            "available": False,
-            "requiresImage": True,
-            "message": "Download from radio or load a codeplug image to edit radio-wide settings.",
-            "error": "",
-        }
+        return _settings_validation_payload(
+            requires_image=True, message=SETTINGS_NEED_IMAGE_MESSAGE
+        )
     radio = _best_effort_radio_instance(module_name, class_name, require_cached=False)
     try:
         result = _validate_and_apply_radio_settings(radio, settings_groups or [], apply_changes=False)
     except Exception as exc:
-        return {
-            "valid": True,
-            "issues": [],
-            "settings": [],
-            "available": False,
-            "requiresImage": False,
-            "message": "Radio-wide settings are unavailable until this driver's backing state is loaded.",
-            "error": str(exc),
-        }
-    return {
-        "valid": bool(result["valid"]),
-        "issues": result["issues"],
-        "settings": result["settings"],
-        "available": True,
-        "requiresImage": False,
-        "message": "",
-        "error": "",
-    }
+        return _settings_validation_payload(
+            message=SETTINGS_NEED_STATE_MESSAGE, error_text=str(exc)
+        )
+    return _settings_validation_payload(result)

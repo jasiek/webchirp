@@ -278,6 +278,11 @@ def _validation_column(message: ValidationMessage) -> str:
     return _infer_csv_error_column(text)
 
 
+def _issue(row_index: int, column: str, message: ValidationMessage) -> ValidationIssue:
+    """One preflight finding: the row, the grid column to mark, and the message."""
+    return {"rowIndex": int(row_index), "column": column, "message": str(message)}
+
+
 def validate_rows_for_upload(
     rows: Rows, module_name: str = "", class_name: str = ""
 ) -> dict[str, Any]:
@@ -308,25 +313,21 @@ def validate_rows_for_upload(
         if location is not None:
             if bounds and not (bounds[0] <= location <= bounds[1]):
                 issues.append(
-                    {
-                        "rowIndex": int(row_index),
-                        "column": "Location",
-                        "message": (
-                            f"Channel Location {location} is outside radio "
-                            f"memory bounds {bounds[0]}-{bounds[1]}"
-                        ),
-                    }
+                    _issue(
+                        row_index,
+                        "Location",
+                        f"Channel Location {location} is outside radio "
+                        f"memory bounds {bounds[0]}-{bounds[1]}",
+                    )
                 )
             elif location in seen_locations:
                 issues.append(
-                    {
-                        "rowIndex": int(row_index),
-                        "column": "Location",
-                        "message": (
-                            f"Channel Location {location} is already used by "
-                            f"row {seen_locations[location] + 1}"
-                        ),
-                    }
+                    _issue(
+                        row_index,
+                        "Location",
+                        f"Channel Location {location} is already used by "
+                        f"row {seen_locations[location] + 1}",
+                    )
                 )
             else:
                 seen_locations[location] = row_index
@@ -334,13 +335,7 @@ def validate_rows_for_upload(
             mem = _memory_from_row_values(vals, level_map)
         except Exception as exc:
             error_text = str(exc)
-            issues.append(
-                {
-                    "rowIndex": int(row_index),
-                    "column": _infer_csv_error_column(error_text),
-                    "message": error_text,
-                }
-            )
+            issues.append(_issue(row_index, _infer_csv_error_column(error_text), error_text))
             continue
 
         if (
@@ -360,19 +355,7 @@ def validate_rows_for_upload(
             row_warnings: list[str] = []
             row_errors: list[ValidationMessage] = [exc]
         for message in row_errors:
-            issues.append(
-                {
-                    "rowIndex": int(row_index),
-                    "column": _validation_column(message),
-                    "message": str(message),
-                }
-            )
+            issues.append(_issue(row_index, _validation_column(message), message))
         for message in row_warnings:
-            warnings.append(
-                {
-                    "rowIndex": int(row_index),
-                    "column": _validation_column(message),
-                    "message": str(message),
-                }
-            )
+            warnings.append(_issue(row_index, _validation_column(message), message))
     return {"valid": len(issues) == 0, "issues": issues, "warnings": warnings}
