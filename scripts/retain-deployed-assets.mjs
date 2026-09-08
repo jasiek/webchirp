@@ -120,7 +120,9 @@ async function main() {
       continue; // ignore traversal attempts from a hostile manifest
     }
     if (existsSync(target)) {
-      continue; // current build already provides this exact content
+      // Since issue #114 a hashed name is derived from the bytes actually
+      // emitted under it, so an identical path really is identical content.
+      continue;
     }
     const res = await fetch(`${baseUrl}/${assetPath}`, { redirect: "follow" });
     if (!res.ok) {
@@ -128,11 +130,12 @@ async function main() {
       continue;
     }
     const body = Buffer.from(await res.arrayBuffer());
-    // Note: the filename hash cannot be re-verified against the content —
-    // build-dist.mjs hashes files BEFORE rewriting asset references inside
-    // them, so the served bytes intentionally differ from the name's digest.
-    // The res.ok check above is the integrity gate; Pages returns real 404s
-    // (no SPA fallback), so a miss can't smuggle an error page in here.
+    // The res.ok check is the integrity gate; Pages returns real 404s (no SPA
+    // fallback), so a miss can't smuggle an error page in here. Re-deriving the
+    // name from the bytes would be tighter but is not sound as a gate: members
+    // of an import cycle are named after a digest of the whole group rather
+    // than their own bytes (see build-dist.mjs), so a legitimate asset could
+    // fail the check.
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, body);
     retained[assetPath] = firstSeen;
