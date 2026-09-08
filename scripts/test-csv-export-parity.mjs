@@ -10,7 +10,7 @@ import {
 } from "./test-support/chirp.mjs";
 import { chirpImagesDir } from "./test-support/repo-paths.mjs";
 
-// CHIRP's own CSV export, transcribed from chirp/wxui/memedit.py so the
+// CHIRP's own CSV export, transcribed from chirp/chirp/wxui/memedit.py so the
 // comparison is against upstream behaviour and not a restatement of ours. Kept
 // in the test rather than the runtime because nothing in the app needs a second
 // export implementation.

@@ -814,7 +814,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (locationButton) {
       locationButton.setAttribute("aria-pressed", isSelected ? "true" : "false");
       // Rows imported from a repeater directory carry coordinates; mark their
-      // Location cell so the map affordance (ui/repeater-map.js) is visible.
+      // Location cell so the map affordance (web/js/ui/repeater-map.js) is visible.
       locationButton.classList.toggle("has-geo", Boolean(rowGeo(row)));
     }
   }

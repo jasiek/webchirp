@@ -22,7 +22,7 @@ import { countryDisplayName, flagEmojiFromCountryCode } from "./format.js";
 import { trackEvent } from "./analytics.js";
 
 // Per-source configuration for the shared repeater-query modal
-// (ui/repeater-query.js). Each source declares which fields its form contains,
+// (web/js/ui/repeater-query.js). Each source declares which fields its form contains,
 // how its filter options are obtained, and how a query actually runs — the
 // flows differ at the root and stay per-source here: przemienniki.net,
 // RepeaterBook and IRTS take the filter as query parameters (via the configured

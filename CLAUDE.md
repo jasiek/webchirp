@@ -32,6 +32,12 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Do not reintroduce radio-specific RPC methods when generic selected-radio methods can be used.
 - Preserve debug visibility: full errors/tracebacks should be logged to the bottom debug panel.
 - Newly added functions need a comment as to what they do and why.
+- Name other modules in comments by their canonical repo-root path
+  (`web/js/ui/format.js`), never dist-relative (`./js/ui/format.js`) and never
+  partial (`ui/format.js`). `build-dist.mjs` matches references textually, so a
+  comment spelled exactly like a real import is rewritten into the built file;
+  the canonical form is anchored away from that and is checked by
+  `test-build-dist.mjs`, which also fails when a rename leaves a path behind.
 - Python functions must have type signatures.
 - Avoid context pollution by spawning sub-agents when appropriate.
   - Use sub-agent sandboxing when a read-only task is to be executed.

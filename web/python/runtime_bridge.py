@@ -445,7 +445,7 @@ def _blank_csv_radio(max_memory: int = 999):
     ``CSVRadio._load()`` — unlike ``load()`` — never calls ``_blank()``, so that
     channel survives ``load_from()`` and lands in whatever we parse or export.
     CHIRP's own CSV export erases it explicitly for the same reason
-    (``chirp/wxui/memedit.py``).
+    (``chirp/chirp/wxui/memedit.py``).
     """
     radio = CSVRadio(None, max_memory=max(0, int(max_memory)))
     radio.erase_memory(0)
@@ -760,7 +760,7 @@ def _csv_text_for_memories(memories, src_features):
     """Render memories as CSV exactly the way CHIRP's own export does.
 
     CHIRP exports by pushing each memory through ``import_logic.import_mem()``
-    into a ``generic_csv.CSVRadio`` and saving that (``chirp/wxui/memedit.py``).
+    into a ``generic_csv.CSVRadio`` and saving that (``chirp/chirp/wxui/memedit.py``).
     That step fills in columns the CSV format carries but the source radio may
     not track separately — it copies rtone into ctone for radios with a single
     tone, and dtcs into rx_dtcs for radios without separate codes — so skipping
@@ -1973,7 +1973,7 @@ def _detect_radio_class(
 ) -> type[chirp_common.Radio]:
     """Let the driver talk to the radio and say which class really matches.
 
-    CHIRP's clone dialog runs this before sync_in() (chirp/wxui/clone.py), and
+    CHIRP's clone dialog runs this before sync_in() (chirp/chirp/wxui/clone.py), and
     for several driver families it is not merely a variant lookup: ga510 and
     tdh8 send the program handshake from here and their download paths
     deliberately do not repeat it, so a clone that skips detection gets no
@@ -2282,7 +2282,8 @@ def _apply_serialized_settings(
             # (`settings.py:80-90`), leaving `_current` at None. It serializes
             # as null, and replaying null reaches `len(None)` inside
             # set_value(). Desktop CHIRP strips these before applying
-            # (`wxui/settingsedit.py:177-190`); skipping them is the same rule.
+            # (`chirp/chirp/wxui/settingsedit.py:177-190`); skipping them is
+            # the same rule.
             if not bool(getattr(target, "initialized", True)):
                 continue
             # Past that guard the live value exists, so a null in the payload
@@ -2324,8 +2325,9 @@ def _settings_child_is_writable(setting: Any) -> bool:
     `RadioSettingGroup.__init__` logged the failure and swallowed it
     (`settings.py:493-504`), leaving `_current` at None. Desktop CHIRP applies
     the same two-part test in `_remove_dead_settings`
-    (`wxui/settingsedit.py:177-190`), and drops the whole setting when any one
-    of its values fails -- a multi-value setting is written as a unit.
+    (`chirp/chirp/wxui/settingsedit.py:177-190`), and drops the whole setting
+    when any one of its values fails -- a multi-value setting is written as a
+    unit.
     """
     for value in setting:
         if not bool(getattr(value, "get_mutable", lambda: True)()):
