@@ -21,6 +21,7 @@ import {
   radioEventParams,
   trackEvent,
 } from "./ui/analytics.js";
+import { FLOWS, OUTCOMES, recordFlow } from "./ui/metrics.js";
 import { captureError, setContextProvider } from "./sentry.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
@@ -218,19 +219,32 @@ export function createUiController() {
       );
       settings.render();
       serial.setSidebarControlsEnabled(true);
-      trackEvent("app_ready", {
-        duration_ms: Date.now() - startedAt,
-        // "sources" means the prebuilt catalog was missing or stale and every
-        // driver had to be imported in Pyodide first — a much slower start.
-        catalog_source: catalogResponse.source || "unknown",
-      });
+      const readyMs = Date.now() - startedAt;
+      // "sources" means the prebuilt catalog was missing or stale and every
+      // driver had to be imported in Pyodide first — a much slower start.
+      const catalogSource = catalogResponse.source || "unknown";
+      trackEvent("app_ready", { duration_ms: readyMs, catalog_source: catalogSource });
+      recordFlow(FLOWS.APP_START, OUTCOMES.OK, { catalog_source: catalogSource }, readyMs);
     } catch (error) {
       catalog.setRadioSelectPlaceholder("Unavailable");
+      const failedMs = Date.now() - startedAt;
+      const errorKind = classifyErrorKind(error);
+      const errorType = errorTypeName(error);
       trackEvent("app_init_failed", {
-        duration_ms: Date.now() - startedAt,
-        error_kind: classifyErrorKind(error),
-        error_type: errorTypeName(error),
+        duration_ms: failedMs,
+        error_kind: errorKind,
+        error_type: errorType,
       });
+      // The startup flow is the one whose failures can leave nothing else
+      // behind: if the runtime never boots there is no session to read in GA,
+      // and often no error either, so the share of starts that never reach
+      // ready is the only thing that says anything is wrong.
+      recordFlow(
+        FLOWS.APP_START,
+        OUTCOMES.FAILED,
+        { error_kind: errorKind, error_type: errorType },
+        failedMs,
+      );
       log.reportActionError("Initialization", error);
       log.setStatus("Initialization failed; sidebar controls remain disabled.");
     }
@@ -254,6 +268,7 @@ export function createUiController() {
     onRuntimeCrash(message) {
       log.logError(`RUNTIME CRASH ${message}`);
       captureError(message, { action: "Runtime", tags: { error_kind: "runtime_crash" } });
+      recordFlow(FLOWS.RUNTIME, OUTCOMES.CRASHED, { error_kind: "runtime_crash" });
     },
   };
 }

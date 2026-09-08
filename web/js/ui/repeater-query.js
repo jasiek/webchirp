@@ -1,6 +1,7 @@
 import { DEFAULT_REPEATER_API_BASE, buildRepeaterEndpoints } from "../datasources.js";
 import { encodeMaidenhead } from "../rsgb.js";
-import { classifyErrorKind, trackEvent } from "./analytics.js";
+import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
+import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
 import { createRepeaterSources } from "./repeater-sources.js";
 import {
   createCheckboxField,
@@ -223,8 +224,19 @@ export function createRepeaterQuery(ctx) {
           return;
         }
         await activeSource.runQuery(collectValues());
+        recordFlow(FLOWS.REPEATER_QUERY, OUTCOMES.OK, { repeater_source: activeSource.key });
         setModalOpen(false);
       } catch (error) {
+        // The only place a failed directory lookup is reported at all: the
+        // repeater_import event fires on success, so until now a proxy that
+        // started returning errors looked exactly like nobody running a query.
+        // Every source shares this one handler, so one call site covers all of
+        // them.
+        recordFlow(FLOWS.REPEATER_QUERY, OUTCOMES.FAILED, {
+          repeater_source: activeSource.key,
+          error_kind: classifyErrorKind(error),
+          error_type: errorTypeName(error),
+        });
         log.reportActionError(`${activeSource.actionLabel} query`, error);
       } finally {
         setQueryBusy(false);

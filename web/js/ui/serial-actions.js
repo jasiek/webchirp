@@ -13,6 +13,7 @@ import {
   radioEventParams,
   trackEvent,
 } from "./analytics.js";
+import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
 import {
   PORT_SELECTION_CANCELLED_MESSAGE,
   isPortSelectionCancelled,
@@ -26,6 +27,16 @@ const NO_RADIO_SELECTED_TITLE = "Search for and select a radio first";
 // the enabled/visible state of the sidebar's radio actions, the clone progress
 // bar, and the download/upload clone operations with their preflight. Owns the
 // connection and capability state.
+// Which flow and outcome each clone event stands for. Keyed by the GA event
+// name rather than derived from it, so "radio_download_success" is still one
+// grep away from every place it is reported.
+const CLONE_FLOW_OUTCOMES = Object.freeze({
+  radio_download_success: { flow: FLOWS.RADIO_DOWNLOAD, outcome: OUTCOMES.OK },
+  radio_download_failure: { flow: FLOWS.RADIO_DOWNLOAD, outcome: OUTCOMES.FAILED },
+  radio_upload_success: { flow: FLOWS.RADIO_UPLOAD, outcome: OUTCOMES.OK },
+  radio_upload_failure: { flow: FLOWS.RADIO_UPLOAD, outcome: OUTCOMES.FAILED },
+});
+
 export function createSerialActions(ctx) {
   const { dom, state, log, actions } = ctx;
 
@@ -84,13 +95,24 @@ export function createSerialActions(ctx) {
         ...radioEventParams(state.selectedRadio),
         transport: transport || "unknown",
       });
+      recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.OK, {
+        ...radioEventParams(state.selectedRadio),
+        transport: transport || "unknown",
+      });
     } catch (error) {
       // A user who closes the browser's port picker lands here too; error_kind
       // separates that from an adapter the browser could not open.
+      const errorKind = classifyErrorKind(error);
+      const errorType = errorTypeName(error);
       trackEvent("serial_connect_failed", {
         ...radioEventParams(state.selectedRadio),
-        error_kind: classifyErrorKind(error),
-        error_type: errorTypeName(error),
+        error_kind: errorKind,
+        error_type: errorType,
+      });
+      recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.FAILED, {
+        ...radioEventParams(state.selectedRadio),
+        error_kind: errorKind,
+        error_type: errorType,
       });
       // Dismissing the chooser is the one outcome here the user already knows
       // about, so it gets a sentence rather than the Pyodide traceback the
@@ -324,11 +346,27 @@ export function createSerialActions(ctx) {
   // Report how a clone ended. The attempt events on their own only count who
   // pressed the button; pairing them with an outcome is what turns the reports
   // into a per-driver record of which radios actually work in the browser.
+  //
+  // The same outcome goes to Sentry as a flow metric. GA answers this over
+  // days, from a property someone has to go and read; the metric answers it as
+  // a rate a dashboard can watch and an alert can fire on, which is what a
+  // driver that breaks in a new browser release needs.
   function trackCloneOutcome(eventName, radio, startedAt, params = {}) {
+    const durationMs = Date.now() - startedAt;
     trackRadioEvent(eventName, radio, {
-      duration_ms: Date.now() - startedAt,
+      duration_ms: durationMs,
       ...params,
     });
+    const dimensions = CLONE_FLOW_OUTCOMES[eventName];
+    if (!radio || !dimensions) {
+      return;
+    }
+    recordFlow(
+      dimensions.flow,
+      dimensions.outcome,
+      { ...radioEventParams(radio), ...params },
+      durationMs,
+    );
   }
 
   function cloneFailureParams(error, stage) {
@@ -461,10 +499,16 @@ export function createSerialActions(ctx) {
       const preflight = await runUploadPreflight();
       if (!preflight.valid) {
         const count = Array.isArray(preflight.issues) ? preflight.issues.length : 0;
+        const blockedColumn = firstIssueColumn(preflight.issues);
         trackRadioEvent("upload_blocked_preflight", radio, {
           ...codeplugParams(state),
           issue_count: count,
-          first_column: firstIssueColumn(preflight.issues),
+          first_column: blockedColumn,
+        });
+        recordFlow(FLOWS.RADIO_UPLOAD, OUTCOMES.BLOCKED, {
+          ...radioEventParams(radio),
+          ...codeplugParams(state),
+          first_column: blockedColumn,
         });
         log.setStatus(
           count > 0

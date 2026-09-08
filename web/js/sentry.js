@@ -109,6 +109,80 @@ export function scrubText(value) {
   return out;
 }
 
+// Metric attribute keys this app is allowed to send, and the whole of what
+// makes metrics safe to send at all. An error message is free-form text the
+// SCRUB_RULES above have to chase; a metric attribute is a value we chose to
+// attach, so the honest control is a list of the keys rather than a filter on
+// their contents. This is the job CUSTOM_DIMENSIONS does in
+// web/js/analytics.js -- one declared vocabulary, reviewed as a unit -- minus
+// the vendor registration, which Sentry does not require.
+//
+// Every key here is a CHIRP driver identifier, a fixed enum, or a bucketed
+// count. Nothing read out of a codeplug belongs on the list.
+export const METRIC_ATTRIBUTES = Object.freeze([
+  // Which flow, and how it ended. These two are on every metric; the rest
+  // narrow a broken flow down to a cause.
+  "flow",
+  "outcome",
+  // Which radio, so a failure rate can be read per driver rather than in
+  // aggregate -- the difference between "clones fail" and "clones fail on this
+  // one model".
+  "radio",
+  "radio_module",
+  "radio_class",
+  // Why it broke.
+  "error_kind",
+  "error_type",
+  "stage",
+  "first_column",
+  // What it was working on or over.
+  "transport",
+  "format",
+  "import_source",
+  "codeplug_source",
+  "channel_count_bucket",
+  "catalog_source",
+  "repeater_source",
+]);
+
+// The SDK stamps its own attributes on every metric before beforeSendMetric
+// runs -- sentry.release, sentry.environment, sentry.sdk.* -- and those are
+// what tie a metric back to the build that produced it, so they survive the
+// filter. Its user.id, user.email and user.name are stamped by the very same
+// code and are deliberately not exempt: they are empty today only because this
+// app never calls setUser, and a filter that leans on that is one call site
+// away from being wrong.
+const SDK_ATTRIBUTE_PREFIX = "sentry.";
+
+// Drop every attribute not on the list above, then scrub the strings that
+// remain. The scrub is defence in depth rather than the control: an allowed key
+// whose value was built from a caught error could still carry a frequency.
+export function scrubMetricAttributes(attributes) {
+  const out = {};
+  for (const [key, value] of Object.entries(attributes || {})) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    if (!METRIC_ATTRIBUTES.includes(key) && !key.startsWith(SDK_ATTRIBUTE_PREFIX)) {
+      continue;
+    }
+    out[key] = typeof value === "string" ? scrubText(value) : value;
+  }
+  return out;
+}
+
+// The last gate every metric passes through, and the counterpart to
+// scrubEvent(). It has to exist separately because Sentry runs metrics down a
+// pipeline of their own: beforeSend is never called for them, so none of the
+// redaction above would otherwise apply.
+export function scrubMetric(metric) {
+  if (!metric || typeof metric !== "object") {
+    return metric;
+  }
+  metric.attributes = scrubMetricAttributes(metric.attributes);
+  return metric;
+}
+
 // Redact a breadcrumb in place. Breadcrumb data carries fetch URLs, so it needs
 // the same treatment as a message body.
 function scrubBreadcrumb(crumb) {
@@ -159,7 +233,10 @@ let sdk = null;
 // small but it is the one that matters: Pyodide boots from a CDN behind a
 // WebAssembly feature check, so "the app never started" is precisely the class
 // of failure that happens before any of our code is ready to report it.
+// Metrics recorded in the same window, kept apart from the captures above
+// only because they are replayed through a different SDK call.
 const pendingCaptures = [];
+const pendingMetrics = [];
 const MAX_PENDING = 10;
 
 // Tags stamped onto every event, supplied by the UI so this module does not
@@ -170,6 +247,16 @@ let contextProvider = () => ({});
 
 export function setContextProvider(provider) {
   contextProvider = typeof provider === "function" ? provider : () => ({});
+}
+
+// Read the UI's context without letting it fail the report it was meant to
+// enrich. A provider that throws costs the tags, not the event or the metric.
+function safeContext() {
+  try {
+    return contextProvider() || {};
+  } catch {
+    return {};
+  }
 }
 
 // Whether this copy of the app is the one allowed to report. Reads the live
@@ -247,6 +334,53 @@ export function captureError(error, context = {}) {
   }
 }
 
+// The metric kinds this app records, each mapped to the SDK call that emits it.
+// Counters answer "how often", distributions answer "how long". Gauges are
+// deliberately absent: a gauge samples a level over time, and a page that lives
+// for one clone session has no level worth sampling.
+const METRIC_EMITTERS = Object.freeze({
+  count: (metrics, name, value, options) => metrics.count(name, value, options),
+  distribution: (metrics, name, value, options) => metrics.distribution(name, value, options),
+});
+
+// Hand one metric to the SDK with its attributes filtered. Context from the UI
+// is merged underneath the caller's, so an attribute set explicitly at the call
+// site still wins -- the same precedence beforeSend gives tags.
+function sendMetric(name, { type, value, unit, attributes } = {}) {
+  const emit = METRIC_EMITTERS[type];
+  // A kind nobody wired up, or a CDN build without the metrics namespace. Both
+  // are silent: a missing metric must not become a thrown error.
+  if (!emit || !sdk.metrics) {
+    return;
+  }
+  emit(sdk.metrics, String(name), Number(value), {
+    unit,
+    attributes: scrubMetricAttributes({ ...safeContext(), ...attributes }),
+  });
+}
+
+// Record one operational metric. Metrics sit alongside captureError() rather
+// than replacing it, and answer a different question: an error says one session
+// broke and hands you the stack, a metric says what share of sessions break and
+// is the thing a dashboard can group by driver or by flow.
+//
+// Buffered like a capture when the SDK has not landed yet, and never throws --
+// telemetry must not be able to fail the operation it is reporting on.
+export function captureMetric(name, metric = {}) {
+  try {
+    if (!sdk) {
+      if (pendingMetrics.length < MAX_PENDING) {
+        pendingMetrics.push([name, metric]);
+      }
+      return false;
+    }
+    sendMetric(name, metric);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Catch unhandled failures raised before the SDK is ready, and replay them once
 // it is. These listeners are removed the moment the SDK's own global handlers
 // take over, so nothing is reported twice.
@@ -276,6 +410,17 @@ function drainPendingCaptures() {
   }
 }
 
+function drainPendingMetrics() {
+  const queued = pendingMetrics.splice(0, pendingMetrics.length);
+  for (const [name, metric] of queued) {
+    try {
+      sendMetric(name, metric);
+    } catch {
+      // One malformed metric must not strand the rest of the queue.
+    }
+  }
+}
+
 // Options handed to Sentry.init. Split out so a test can assert on them without
 // standing up the real SDK.
 export function initOptions(release) {
@@ -290,6 +435,16 @@ export function initOptions(release) {
     // browser app whose slow part is a CDN download nobody can act on.
     tracesSampleRate: 0,
     maxBreadcrumbs: 30,
+    // Metrics default to on in the SDK; set explicitly for the same reason
+    // sendDefaultPii is, because it is a decision rather than an inherited
+    // default. Nothing is sent until a captureMetric() call site asks for it.
+    enableMetrics: true,
+    // Structured logs default to on too. Nothing calls Sentry.logger today, so
+    // this changes nothing now -- it is here so that wiring up a console
+    // logging integration later cannot quietly start shipping the debug panel's
+    // tracebacks, the same content beforeBreadcrumb drops, down a pipeline that
+    // neither beforeSend nor beforeSendMetric polices.
+    enableLogs: false,
     ignoreErrors: [...IGNORE_ERRORS],
     denyUrls: [...DENY_URLS],
     // Console breadcrumbs are dropped wholesale rather than redacted: the debug
@@ -301,13 +456,13 @@ export function initOptions(release) {
     // redacted -- including events the SDK raised on its own, which never went
     // through captureError().
     beforeSend: (event) => {
-      try {
-        event.tags = { ...stringTags(contextProvider()), ...(event.tags || {}) };
-      } catch {
-        // A provider that throws costs the tags, not the report.
-      }
+      event.tags = { ...stringTags(safeContext()), ...(event.tags || {}) };
       return scrubEvent(event);
     },
+    // Metrics never pass through beforeSend, so the allowlist has to be applied
+    // on their own way out. This runs after the SDK has added its own
+    // attributes, which is what makes it the last word on what leaves.
+    beforeSendMetric: (metric) => scrubMetric(metric),
   };
 }
 
@@ -333,11 +488,13 @@ export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) }
     // The CDN is blocked, offline, or serving something unusable. The app is
     // unaffected; it simply reports nothing.
     pendingCaptures.length = 0;
+    pendingMetrics.length = 0;
     return null;
   } finally {
     stopBuffering();
   }
   drainPendingCaptures();
+  drainPendingMetrics();
   return sdk;
 }
 
@@ -346,6 +503,7 @@ export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) }
 export function resetSentryForTests() {
   sdk = null;
   pendingCaptures.length = 0;
+  pendingMetrics.length = 0;
   contextProvider = () => ({});
 }
 
