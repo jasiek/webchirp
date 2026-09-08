@@ -25,7 +25,7 @@ from chirp import (
 )
 from js import fetch_chirp_source
 
-from webchirp_bridge.jsbridge import _await_js, _log_debug
+from webchirp_bridge.jsbridge import _await_js, _js_to_py, _log_debug
 
 
 def _chirp_source_relpath(fullname: str) -> str:
@@ -52,9 +52,7 @@ def _ensure_chirp_module_file(fullname: str) -> None:
     if os.path.exists(runtime_path):
         return
     source_relpath = _chirp_source_relpath(fullname)
-    source = _await_js(fetch_chirp_source(source_relpath))
-    if hasattr(source, "to_py"):
-        source = source.to_py()
+    source = _js_to_py(_await_js(fetch_chirp_source(source_relpath)))
     os.makedirs(os.path.dirname(runtime_path), exist_ok=True)
     with open(runtime_path, "w", encoding="utf-8") as f:
         f.write(str(source))

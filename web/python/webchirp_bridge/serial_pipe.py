@@ -132,9 +132,7 @@ class WebSerialPipe:
     def read(self, count: int = 1) -> bytes:
         """Read up to count bytes from JS serial bridge with timeout semantics."""
         timeout_ms = max(1, int(float(self.timeout) * 1000))
-        data = _await_js(serial_read_bytes(int(count), timeout_ms))
-        if hasattr(data, "to_py"):
-            data = data.to_py()
+        data = _js_to_py(_await_js(serial_read_bytes(int(count), timeout_ms)))
         return bytes((int(x) & 0xFF) for x in data)
 
     def flush(self) -> None:
