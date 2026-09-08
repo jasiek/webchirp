@@ -25,9 +25,33 @@ import {
 const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/";
 const CHIRP_REVISION = DEFAULT_CHIRP_REVISION;
 
+// Where the browser fetches each runtime Python file from, keyed the way
+// RUNTIME_PYTHON_FILES (web/js/python-sources.mjs) names them. The literals
+// live in this .js file because scripts/build-dist.mjs rewrites references to
+// their hashed names in .js files and copies .mjs files verbatim; the provider
+// refuses to construct if a listed file has no URL here, and
+// scripts/test-build-dist.mjs checks the pairing statically.
+const RUNTIME_PYTHON_URLS = Object.freeze({
+  "runtime_bridge.py": "./python/runtime_bridge.py",
+  "webchirp_bridge/__init__.py": "./python/webchirp_bridge/__init__.py",
+  "webchirp_bridge/channel_rows.py": "./python/webchirp_bridge/channel_rows.py",
+  "webchirp_bridge/chirp_loader.py": "./python/webchirp_bridge/chirp_loader.py",
+  "webchirp_bridge/clone.py": "./python/webchirp_bridge/clone.py",
+  "webchirp_bridge/column_metadata.py": "./python/webchirp_bridge/column_metadata.py",
+  "webchirp_bridge/driver_cache.py": "./python/webchirp_bridge/driver_cache.py",
+  "webchirp_bridge/images.py": "./python/webchirp_bridge/images.py",
+  "webchirp_bridge/jsbridge.py": "./python/webchirp_bridge/jsbridge.py",
+  "webchirp_bridge/power_levels.py": "./python/webchirp_bridge/power_levels.py",
+  "webchirp_bridge/radio_memories.py": "./python/webchirp_bridge/radio_memories.py",
+  "webchirp_bridge/radio_settings.py": "./python/webchirp_bridge/radio_settings.py",
+  "webchirp_bridge/row_validation.py": "./python/webchirp_bridge/row_validation.py",
+  "webchirp_bridge/runtime_errors.py": "./python/webchirp_bridge/runtime_errors.py",
+  "webchirp_bridge/serial_pipe.py": "./python/webchirp_bridge/serial_pipe.py",
+});
+
 const pythonSource = createBrowserCdnPythonSource({
   chirpRevision: CHIRP_REVISION,
-  runtimeBridgePath: "./python/runtime_bridge.py",
+  runtimeFileUrls: RUNTIME_PYTHON_URLS,
 });
 
 let pyodide;

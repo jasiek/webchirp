@@ -9,7 +9,9 @@ import { readImage, sharedHarness } from "./test-support/chirp.mjs";
 // user deleted this channel" and erased the slot on the radio.
 const FIXTURE_IMAGE = "Baofeng_UV-5R.img";
 
-// Both probes monkeypatch the driver class and the runtime's serial_log, and
+// Both probes monkeypatch the driver class and the runtime's serial_log -- on
+// the jsbridge module that owns it, since _log_debug resolves the name there
+// and the flattened global is only a copy -- and
 // what this file tests is the state a failed decode leaves behind -- the
 // per-driver unreadable record and the cached image. Each probe lifts its
 // patches in a finally and starts from a clean load, so sharing would work
@@ -42,8 +44,8 @@ def _failing_get_memory(self, number, *args, **kwargs):
     return _real_get_memory(self, number, *args, **kwargs)
 
 _captured = []
-_real_serial_log = serial_log
-serial_log = lambda message: _captured.append(str(message))
+_real_serial_log = jsbridge.serial_log
+jsbridge.serial_log = lambda message: _captured.append(str(message))
 try:
     _cls.get_memory = _failing_get_memory
     try:
@@ -52,7 +54,7 @@ try:
         _cls.get_memory = _real_get_memory
     _exported = export_image_base64(_module, _class_name, _loaded["rows"], [])
 finally:
-    serial_log = _real_serial_log
+    jsbridge.serial_log = _real_serial_log
 
 # Re-read the exported image with a clean driver: the protected slot has to
 # still be there, carrying the value it had before the failure.
@@ -93,8 +95,8 @@ def _always_failing_get_memory(self, number, *args, **kwargs):
     raise ValueError("corrupt memory at slot " + str(int(number)))
 
 _captured = []
-_real_serial_log = serial_log
-serial_log = lambda message: _captured.append(str(message))
+_real_serial_log = jsbridge.serial_log
+jsbridge.serial_log = lambda message: _captured.append(str(message))
 try:
     _cls.get_memory = _always_failing_get_memory
     try:
@@ -102,7 +104,7 @@ try:
     finally:
         _cls.get_memory = _real_get_memory
 finally:
-    serial_log = _real_serial_log
+    jsbridge.serial_log = _real_serial_log
 
 json.dumps({
     "maxGroups": MAX_LOGGED_FAILURE_GROUPS,

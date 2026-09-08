@@ -96,7 +96,7 @@ test("the cancellation is still recognizable after the runtime flattens it", () 
     [
       "Traceback (most recent call last):",
       '  File "<exec>", line 1, in <module>',
-      '  File "/lib/python3.12/site-packages/runtime_bridge.py", line 1162, in webserial_connect',
+      '  File "/webchirp_runtime/webchirp_bridge/serial_pipe.py", line 60, in webserial_connect',
       "    result = await serial_open(int(baudrate))",
       `pyodide.ffi.JsException: ${PORT_SELECTION_CANCELLED}: ${PORT_SELECTION_CANCELLED_MESSAGE}`,
     ].join("\n"),

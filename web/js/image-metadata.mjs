@@ -81,7 +81,8 @@ export function findCatalogRadioForImageMetadata(radioCatalog, metadata) {
   return null;
 }
 
-// Only a detection failure is worth a retry. `runtime_bridge.ImageDetectionError`
+// Only a detection failure is worth a retry. `ImageDetectionError`
+// (web/python/webchirp_bridge/runtime_errors.py)
 // means no imported driver claimed the image, which importing the rest can fix;
 // every other failure (not a clone-mode image, a bad payload, a driver blowing
 // up while reading memories) is about the image itself and would still fail

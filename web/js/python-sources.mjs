@@ -23,6 +23,33 @@ const CORE_CHIRP_RELATIVE_FILES = [
   "chirp/drivers/h777.py",
 ];
 
+// Every file of the Python runtime, by its path under web/python/ -- which is
+// also where it lands under /webchirp_runtime in the Pyodide filesystem, so
+// the webchirp_bridge package imports by exactly these names. The entry point
+// is executed rather than written: it is the one file whose names land in
+// Pyodide's globals. Where the browser fetches each file from is the caller's
+// business (RUNTIME_PYTHON_URLS in web/js/runtime-rpc.js): scripts/build-dist.mjs
+// rewrites asset references to their hashed names in .js files only and copies
+// this .mjs file verbatim, so a URL literal written here would 404 in a deploy.
+export const RUNTIME_BRIDGE_ENTRY = "runtime_bridge.py";
+export const RUNTIME_PYTHON_FILES = Object.freeze([
+  RUNTIME_BRIDGE_ENTRY,
+  "webchirp_bridge/__init__.py",
+  "webchirp_bridge/channel_rows.py",
+  "webchirp_bridge/chirp_loader.py",
+  "webchirp_bridge/clone.py",
+  "webchirp_bridge/column_metadata.py",
+  "webchirp_bridge/driver_cache.py",
+  "webchirp_bridge/images.py",
+  "webchirp_bridge/jsbridge.py",
+  "webchirp_bridge/power_levels.py",
+  "webchirp_bridge/radio_memories.py",
+  "webchirp_bridge/radio_settings.py",
+  "webchirp_bridge/row_validation.py",
+  "webchirp_bridge/runtime_errors.py",
+  "webchirp_bridge/serial_pipe.py",
+]);
+
 function assertMethod(obj, name) {
   if (!obj || typeof obj[name] !== "function") {
     throw new Error(`Python source provider is missing method: ${name}`);
@@ -74,10 +101,18 @@ function parseDriverModuleNames(indexJson) {
 
 export function createBrowserCdnPythonSource({
   chirpRevision = DEFAULT_CHIRP_REVISION,
-  runtimeBridgePath = "./python/runtime_bridge.py",
+  runtimeFileUrls,
   fetchTextImpl = fetchText,
   fetchJsonImpl = fetchJson,
 } = {}) {
+  // Checked up front rather than at fetch time so a module added to
+  // RUNTIME_PYTHON_FILES without a URL fails the first boot loudly, not the
+  // first user who reaches the code that imports it.
+  for (const relPath of RUNTIME_PYTHON_FILES) {
+    if (typeof runtimeFileUrls?.[relPath] !== "string") {
+      throw new Error(`createBrowserCdnPythonSource: no URL for runtime Python file ${relPath}`);
+    }
+  }
   const chirpCdnBase = `https://cdn.jsdelivr.net/gh/kk7ds/chirp@${chirpRevision}`;
   const chirpFileIndexUrl =
     `https://data.jsdelivr.com/v1/package/gh/kk7ds/chirp@${chirpRevision}/flat`;
@@ -87,8 +122,8 @@ export function createBrowserCdnPythonSource({
       const relPath = normalizeSourcePath(sourcePath);
       return fetchTextImpl(`${chirpCdnBase}/${relPath}`);
     },
-    async fetchRuntimeBridge() {
-      return fetchTextImpl(runtimeBridgePath);
+    async fetchRuntimeFile(relPath) {
+      return fetchTextImpl(runtimeFileUrls[relPath]);
     },
     async listDriverModules() {
       const indexJson = await fetchJsonImpl(chirpFileIndexUrl);
@@ -106,7 +141,7 @@ export function createBrowserCdnPythonSource({
 
 export function createFilesystemPythonSource({
   chirpPackageDir,
-  runtimeBridgePath,
+  runtimePythonDir,
   readText,
   readDirNames,
   joinPath,
@@ -114,8 +149,8 @@ export function createFilesystemPythonSource({
   if (!chirpPackageDir) {
     throw new Error("createFilesystemPythonSource requires chirpPackageDir");
   }
-  if (!runtimeBridgePath) {
-    throw new Error("createFilesystemPythonSource requires runtimeBridgePath");
+  if (!runtimePythonDir) {
+    throw new Error("createFilesystemPythonSource requires runtimePythonDir");
   }
   if (typeof readText !== "function") {
     throw new Error("createFilesystemPythonSource requires readText(path) function");
@@ -132,8 +167,8 @@ export function createFilesystemPythonSource({
       const relPath = normalizeSourcePath(sourcePath);
       return readText(joinPath(chirpPackageDir, relPath.replace(/^chirp\//, "")));
     },
-    async fetchRuntimeBridge() {
-      return readText(runtimeBridgePath);
+    async fetchRuntimeFile(relPath) {
+      return readText(joinPath(runtimePythonDir, ...relPath.split("/")));
     },
     async listDriverModules() {
       const names = await readDirNames(joinPath(chirpPackageDir, "drivers"));
@@ -156,7 +191,7 @@ export function createFilesystemPythonSource({
 
 function ensureProvider(sourceProvider) {
   assertMethod(sourceProvider, "fetchChirpSource");
-  assertMethod(sourceProvider, "fetchRuntimeBridge");
+  assertMethod(sourceProvider, "fetchRuntimeFile");
   assertMethod(sourceProvider, "listDriverModules");
 }
 
@@ -192,7 +227,19 @@ export async function seedPyodideRuntime(pyodide, sourceProvider) {
     }),
   );
 
-  const runtimePython = await sourceProvider.fetchRuntimeBridge();
+  // The package modules go into the filesystem alongside chirp/, where the
+  // entry point's sys.path entry finds them; the entry point itself is run.
+  await Promise.all(
+    RUNTIME_PYTHON_FILES.filter((relPath) => relPath !== RUNTIME_BRIDGE_ENTRY)
+      .map(async (relPath) => {
+        const text = await sourceProvider.fetchRuntimeFile(relPath);
+        const target = `/webchirp_runtime/${relPath}`;
+        await mkdirp(pyodide, target.slice(0, target.lastIndexOf("/")));
+        pyodide.FS.writeFile(target, text, { encoding: "utf8" });
+      }),
+  );
+
+  const runtimePython = await sourceProvider.fetchRuntimeFile(RUNTIME_BRIDGE_ENTRY);
   await pyodide.runPythonAsync(runtimePython);
 }
 

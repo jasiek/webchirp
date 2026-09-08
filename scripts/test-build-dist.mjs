@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { repoRoot, webDir } from "./test-support/repo-paths.mjs";
 import { withTempDir } from "./test-support/temp-dir.mjs";
+import { RUNTIME_PYTHON_FILES } from "../web/js/python-sources.mjs";
 
 const SCRIPT = path.join(repoRoot, "scripts", "build-dist.mjs");
 // Matches build-dist.mjs: name.<10 hex>.ext.
@@ -349,4 +350,27 @@ test("module paths named in comments are canonical and resolve", () => {
     [],
     "write module paths from the repo root, and update them when a module moves",
   );
+});
+
+// The Python runtime is fetched file by file, and each file is hashed, so every
+// one needs a URL literal somewhere the build rewrites -- a .js, .html or .css
+// source under web/. A literal in an .mjs file is copied verbatim and 404s in a
+// deploy; a file with no literal at all is fetched under its unhashed name and
+// 404s the same way. Both looked fine locally, where the dev server serves the
+// unhashed tree, which is why this is checked against the source tree here.
+test("every runtime Python file has a URL the build can rewrite", () => {
+  const rewritten = sourceFiles(webDir)
+    .filter((file) => [".js", ".html", ".css"].includes(path.extname(file)))
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
+  const missing = RUNTIME_PYTHON_FILES.filter(
+    (relPath) => !rewritten.includes(`"./python/${relPath}"`),
+  );
+  assert.deepEqual(missing, [], "add the URL to RUNTIME_PYTHON_URLS in web/js/runtime-rpc.js");
+
+  const shipped = readdirSync(path.join(webDir, "python", "webchirp_bridge"))
+    .filter((name) => name.endsWith(".py"))
+    .map((name) => `webchirp_bridge/${name}`);
+  const unlisted = shipped.filter((relPath) => !RUNTIME_PYTHON_FILES.includes(relPath));
+  assert.deepEqual(unlisted, [], "list the module in RUNTIME_PYTHON_FILES so it is seeded");
 });

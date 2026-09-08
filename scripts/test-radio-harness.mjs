@@ -77,10 +77,10 @@ async function createLocalPythonSource(repoRoot, chirpDirArg) {
   const chirpInputDir =
     chirpDirArg || process.env.WEBCHIRP_CHIRP_DIR || path.join(repoRoot, "chirp");
   const chirpPackageDir = await resolveChirpPackageDir(chirpInputDir);
-  const runtimeBridgePath = path.join(repoRoot, "web/python/runtime_bridge.py");
+  const runtimePythonDir = path.join(repoRoot, "web/python");
   return createFilesystemPythonSource({
     chirpPackageDir,
-    runtimeBridgePath,
+    runtimePythonDir,
     readText: (fullPath) => fs.readFile(fullPath, "utf8"),
     readDirNames: async (fullPath) => {
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
