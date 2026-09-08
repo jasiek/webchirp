@@ -12,7 +12,7 @@ than guessing from a blank instance.
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence, TypeAlias
 
 from chirp import (
     chirp_common,
@@ -25,6 +25,12 @@ from webchirp_bridge.driver_cache import (
     _import_radio_class,
 )
 from webchirp_bridge.jsbridge import _log_debug
+
+
+# What the settings walkers recurse over: the top-level RadioSettings is a
+# list subclass, every node below it is a RadioSettingGroup -- including
+# RadioSetting leaves, which CHIRP derives from the group class.
+SettingsContainer: TypeAlias = chirp_settings.RadioSettings | chirp_settings.RadioSettingGroup
 
 
 def _settings_unavailable_payload(
@@ -84,7 +90,7 @@ def _setting_issue(path: Sequence[Any], value_index: int, message: Any) -> dict[
     return {"path": _setting_path(path), "valueIndex": int(value_index), "message": str(message)}
 
 
-def _serialize_setting_value(value: Any) -> dict[str, Any]:
+def _serialize_setting_value(value: chirp_settings.RadioSettingValue) -> dict[str, Any]:
     """Convert a CHIRP RadioSettingValue into UI-friendly JSON metadata."""
     current = value.get_value() if value.initialized else None
     data = {
@@ -137,7 +143,9 @@ def _serialize_setting_value(value: Any) -> dict[str, Any]:
     return data
 
 
-def _serialize_setting_node(node: Any, path_parts: list[Any]) -> dict[str, Any]:
+def _serialize_setting_node(
+    node: chirp_settings.RadioSettingGroup, path_parts: list[Any]
+) -> dict[str, Any]:
     """Serialize a CHIRP settings tree node for browser rendering."""
     if isinstance(node, chirp_settings.RadioSetting):
         raw_values = node.value if isinstance(node.value, list) else [node.value]
@@ -174,12 +182,16 @@ def _serialize_setting_node(node: Any, path_parts: list[Any]) -> dict[str, Any]:
     }
 
 
-def _serialize_radio_settings(settings_tree: Iterable[Any]) -> list[dict[str, Any]]:
+def _serialize_radio_settings(
+    settings_tree: Iterable[chirp_settings.RadioSettingGroup],
+) -> list[dict[str, Any]]:
     """Serialize the top-level RadioSettings collection."""
     return [_serialize_setting_node(group, []) for group in settings_tree]
 
 
-def _settings_container_children(container: Any) -> list[Any]:
+def _settings_container_children(
+    container: SettingsContainer,
+) -> list[chirp_settings.RadioSettingGroup]:
     """List a settings container's child nodes in tree order.
 
     CHIRP hands us three shapes of container and only two of them index by
@@ -195,8 +207,8 @@ def _settings_container_children(container: Any) -> list[Any]:
 
 
 def _match_serialized_child(
-    actual_children: Sequence[Any], child_id: str, position: int
-) -> Optional[Any]:
+    actual_children: Sequence[chirp_settings.RadioSettingGroup], child_id: str, position: int
+) -> Optional[chirp_settings.RadioSettingGroup]:
     """Resolve the CHIRP node a serialized child refers to, position first.
 
     Names are not unique: `kguv920pa.py:770` names its Repeater group
@@ -226,7 +238,9 @@ def _match_serialized_child(
     return named[0] if len(named) == 1 else None
 
 
-def _setting_value_at(setting: Any, value_index: int) -> Optional[Any]:
+def _setting_value_at(
+    setting: chirp_settings.RadioSetting, value_index: int
+) -> Optional[chirp_settings.RadioSettingValue]:
     """Return the CHIRP value object a serialized value index addresses."""
     try:
         return setting[value_index] if len(setting) > 1 else setting.value
@@ -234,7 +248,7 @@ def _setting_value_at(setting: Any, value_index: int) -> Optional[Any]:
         return None
 
 
-def _setting_value_is_mutable(setting: Any, value_index: int) -> bool:
+def _setting_value_is_mutable(setting: chirp_settings.RadioSetting, value_index: int) -> bool:
     """Report whether the selected CHIRP setting value accepts updates."""
     target = _setting_value_at(setting, value_index)
     if target is None:
@@ -242,7 +256,7 @@ def _setting_value_is_mutable(setting: Any, value_index: int) -> bool:
     return bool(getattr(target, "get_mutable", lambda: True)())
 
 
-def _serialized_value_matches(target: Any, next_value: Any) -> bool:
+def _serialized_value_matches(target: chirp_settings.RadioSettingValue, next_value: Any) -> bool:
     """Report whether a serialized value already equals CHIRP's current one.
 
     Writing back a value the driver itself emitted is a no-op at best and a
@@ -265,7 +279,7 @@ def _serialized_value_matches(target: Any, next_value: Any) -> bool:
 
 
 def _apply_serialized_settings(
-    actual_container: Any,
+    actual_container: SettingsContainer,
     payload_children: Optional[Sequence[Any]],
     issues: list[dict[str, Any]],
     prefix: list[str],
@@ -333,7 +347,7 @@ def _apply_serialized_settings(
                 issues.append(_setting_issue(path, value_index, exc))
 
 
-def _settings_child_is_writable(setting: Any) -> bool:
+def _settings_child_is_writable(setting: chirp_settings.RadioSettingGroup) -> bool:
     """Report whether CHIRP can write every value of one setting back.
 
     A value is unwritable when it is immutable, or when it never initialized:
@@ -353,7 +367,9 @@ def _settings_child_is_writable(setting: Any) -> bool:
     return True
 
 
-def _remove_settings_child(container: Any, element: Any) -> None:
+def _remove_settings_child(
+    container: SettingsContainer, element: chirp_settings.RadioSettingGroup
+) -> None:
     """Detach one child from whichever container shape CHIRP handed us.
 
     `RadioSettingGroup` deletes by element (`settings.py:591-593`), while a
@@ -365,7 +381,7 @@ def _remove_settings_child(container: Any, element: Any) -> None:
         container.remove(element)
 
 
-def _prune_dead_settings(container: Any) -> list[str]:
+def _prune_dead_settings(container: SettingsContainer) -> list[str]:
     """Drop settings CHIRP cannot write, and report what was dropped.
 
     Drivers differ in how defensive their `set_settings` is. `uv5r.py:2156`

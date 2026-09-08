@@ -22,7 +22,7 @@ from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 DEFAULT_EXPORT_POWER = "50W"
 
 
-def _watts_label(level: Any) -> str:
+def _watts_label(level: chirp_common.PowerLevel) -> str:
     """Format a power level's wattage the way CHIRP writes power into a CSV.
 
     ``float()``, not ``int()``: ``PowerLevel.__int__`` truncates the dBm, so a
@@ -33,7 +33,9 @@ def _watts_label(level: Any) -> str:
     )
 
 
-def _power_label_map_from_features(rf: Any) -> tuple[dict[str, str], str]:
+def _power_label_map_from_features(
+    rf: Optional[chirp_common.RadioFeatures],
+) -> tuple[dict[str, str], str]:
     """Map radio power labels (e.g., High) to CSV power specs (e.g., 50W)."""
     levels = (getattr(rf, "valid_power_levels", None) or []) if rf else []
 
@@ -51,13 +53,13 @@ def _power_label_map_from_features(rf: Any) -> tuple[dict[str, str], str]:
     return mapped, default_power
 
 
-def _valid_power_levels_for_driver(module_name: str, class_name: str) -> list[Any]:
+def _valid_power_levels_for_driver(module_name: str, class_name: str) -> list[chirp_common.PowerLevel]:
     """Return a driver's own PowerLevel objects, or an empty list if unavailable."""
     rf = _driver_features(module_name, class_name)
     return list(getattr(rf, "valid_power_levels", None) or []) if rf else []
 
 
-def _power_levels_by_label(levels: Iterable[Any]) -> dict[str, Any]:
+def _power_levels_by_label(levels: Iterable[chirp_common.PowerLevel]) -> dict[str, chirp_common.PowerLevel]:
     """Index a driver's PowerLevel objects by every label they round-trip as.
 
     Rows carry power as text: `Memory.to_csv()` writes the driver's own label
@@ -79,7 +81,9 @@ def _power_levels_by_label(levels: Iterable[Any]) -> dict[str, Any]:
     return mapped
 
 
-def _level_map_for_radio(radio: Any, module_name: str, class_name: str) -> dict[str, Any]:
+def _level_map_for_radio(
+    radio: Optional[chirp_common.Radio], module_name: str, class_name: str
+) -> dict[str, chirp_common.PowerLevel]:
     """Index the power levels a radio instance advertises, or its driver's if none.
 
     A parsed image can advertise levels a blank instance does not (Rt98Radio),
@@ -92,7 +96,9 @@ def _level_map_for_radio(radio: Any, module_name: str, class_name: str) -> dict[
     )
 
 
-def _resolve_power_level(power_text: Any, level_map: dict[str, Any]) -> Any:
+def _resolve_power_level(
+    power_text: Any, level_map: dict[str, chirp_common.PowerLevel]
+) -> Optional[chirp_common.PowerLevel]:
     """Resolve row power text to the driver's own PowerLevel object."""
     text = str(power_text or "").strip()
     # Memory.to_csv() renders an unset power as "%s" % None, so a channel that
@@ -149,7 +155,7 @@ def _csv_export_power_text(value: Any, power_map: dict[str, str]) -> str:
     return text
 
 
-def _power_level_watts(levels: Optional[Iterable[Any]]) -> dict[str, str]:
+def _power_level_watts(levels: Optional[Iterable[chirp_common.PowerLevel]]) -> dict[str, str]:
     """Map each advertised power level's label to its wattage.
 
     Driver labels carry no wattage — "L3" and "Mid1" say nothing on their own —

@@ -25,26 +25,26 @@ def _mk_enum(values: Optional[Iterable[Any]]) -> list[str]:
     return [str(v) for v in values] if values else []
 
 
-def _radio_supports_dv(rf: Any) -> bool:
+def _radio_supports_dv(rf: chirp_common.RadioFeatures) -> bool:
     """Detect whether a radio's mode capabilities include D-STAR DV mode."""
     modes = {str(mode) for mode in (rf.valid_modes or [])}
     return "DV" in modes
 
 
-def _enum_column(editable: Any, values: Optional[Iterable[Any]]) -> dict[str, Any]:
+def _enum_column(editable: bool, values: Optional[Iterable[Any]]) -> dict[str, Any]:
     """An enumerated column: the grid offers exactly the driver's values."""
     return {"kind": "enum", "editable": bool(editable), "options": _mk_enum(values)}
 
 
 def _formatted_enum_column(
-    editable: Any, values: Optional[Iterable[Any]], fmt: str, convert: Callable[[Any], Any]
+    editable: bool, values: Optional[Iterable[Any]], fmt: str, convert: Callable[[Any], Any]
 ) -> dict[str, Any]:
     """An enumerated column of numbers, spelled the way an exported CSV spells them."""
     options = [fmt.format(convert(value)) for value in (values or [])]
     return {"kind": "enum", "editable": bool(editable), "options": options}
 
 
-def _freq_column(editable: Any, rf: Any) -> dict[str, Any]:
+def _freq_column(editable: bool, rf: chirp_common.RadioFeatures) -> dict[str, Any]:
     """A frequency column constrained to the radio's bands."""
     bands = [[int(low), int(high)] for (low, high) in (rf.valid_bands or [])]
     return {"kind": "freq", "editable": bool(editable), "bands": bands}

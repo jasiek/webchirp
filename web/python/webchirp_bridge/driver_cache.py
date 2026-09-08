@@ -136,8 +136,8 @@ def _protected_channels(module_name: str, class_name: str) -> set[int]:
 
 
 def _cached_image_class(
-    module_name: str, class_name: str, radio_cls: type
-) -> type:
+    module_name: str, class_name: str, radio_cls: type[chirp_common.Radio]
+) -> type[chirp_common.Radio]:
     """Return the class that should re-parse this driver key's cached image.
 
     Falls back to the selected class when nothing has been cached under this

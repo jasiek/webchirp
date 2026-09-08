@@ -34,7 +34,7 @@ from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 from webchirp_bridge.serial_pipe import WebSerialPipe, _serial_pipe_timeout_seconds
 
 
-def _ensure_clone_mode_radio(radio_cls: type) -> None:
+def _ensure_clone_mode_radio(radio_cls: type[chirp_common.Radio]) -> None:
     """Enforce clone-mode driver requirement for live serial workflows."""
     if not issubclass(radio_cls, chirp_common.CloneModeRadio):
         raise RuntimeUnsupportedError(
@@ -42,7 +42,7 @@ def _ensure_clone_mode_radio(radio_cls: type) -> None:
         )
 
 
-def _driver_baud_rate(radio_cls: Any) -> Optional[int]:
+def _driver_baud_rate(radio_cls: type[chirp_common.Radio]) -> Optional[int]:
     """Return the driver's declared serial line rate, or None when unusable.
 
     CHIRP drivers advertise BAUD_RATE as a plain class attribute, so it can be
@@ -130,7 +130,7 @@ def _create_radio_for_serial(radio_cls: type[chirp_common.Radio]) -> chirp_commo
     return radio
 
 
-def _prepare_clone_session(radio_cls: Any) -> None:
+def _prepare_clone_session(radio_cls: type[chirp_common.Radio]) -> None:
     """Reset/prepare transport lines before clone operations for stability.
 
     Also hands the bridge the driver's declared BAUD_RATE. The port's line rate

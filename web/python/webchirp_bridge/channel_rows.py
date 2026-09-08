@@ -153,7 +153,7 @@ def _row_int(text: Any, fallback: int, label: str) -> int:
 
 
 def _memory_from_row_values(
-    vals: Sequence[Any], level_map: Optional[dict[str, Any]] = None
+    vals: Sequence[Any], level_map: Optional[dict[str, chirp_common.PowerLevel]] = None
 ) -> chirp_common.Memory:
     """Build a Memory from row values, inverting chirp_common.Memory.to_csv().
 
