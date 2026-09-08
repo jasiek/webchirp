@@ -31,6 +31,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
+import { parseLcov } from "./coverage-lcov.mjs";
 import { toRepoPath } from "./test-support/python-coverage.mjs";
 import { repoRoot } from "./test-support/repo-paths.mjs";
 
@@ -61,28 +62,6 @@ function testFilesFromPackageJson() {
 }
 
 // --- lcov -------------------------------------------------------------------
-
-// Totals per file from an lcov file, keyed by source path.
-function parseLcov(text) {
-  const files = new Map();
-  let current = null;
-  for (const line of text.split("\n")) {
-    const [key, value] = [line.slice(0, line.indexOf(":")), line.slice(line.indexOf(":") + 1)];
-    if (key === "SF") {
-      current = { lines: 0, linesHit: 0, branches: 0, branchesHit: 0, functions: 0, functionsHit: 0 };
-      files.set(value.trim(), current);
-    } else if (!current) {
-      continue;
-    } else if (key === "LF") current.lines = Number(value);
-    else if (key === "LH") current.linesHit = Number(value);
-    else if (key === "BRF") current.branches = Number(value);
-    else if (key === "BRH") current.branchesHit = Number(value);
-    else if (key === "FNF") current.functions = Number(value);
-    else if (key === "FNH") current.functionsHit = Number(value);
-    else if (key === "end_of_record") current = null;
-  }
-  return files;
-}
 
 // An lcov file carrying line hits only, which is all coverage.py's fragments
 // give us. Enough for GitHub annotations and for every lcov reader worth using.
