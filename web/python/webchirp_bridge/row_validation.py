@@ -11,7 +11,7 @@ preflight and the upload can never disagree about what a row means.
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from chirp import chirp_common
 
@@ -26,14 +26,14 @@ from webchirp_bridge.driver_cache import _best_effort_radio_instance, _driver_fe
 from webchirp_bridge.power_levels import _level_map_for_radio
 
 if TYPE_CHECKING:
-    from typing import Optional
+    from typing import Any, Literal, Optional
     from webchirp_bridge.channel_rows import Row, Rows
 
-# One invalid cell reported by the upload preflight: which row, which column,
-# and CHIRP's own message for it.
-ValidationIssue = dict[str, Any]
-ValidationMessage = str | Exception
-RowChangeAction = Literal["skip", "erase", "set"]
+    # One invalid cell reported by the upload preflight: which row, which column,
+    # and CHIRP's own message for it.
+    ValidationIssue = dict[str, Any]
+    ValidationMessage = str | Exception
+    RowChangeAction = Literal["skip", "erase", "set"]
 
 # CHIRP Memory attribute -> the grid column (CSV header) that shows it, in
 # Memory.CSV_FORMAT order. Every translation between the driver's field

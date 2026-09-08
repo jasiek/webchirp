@@ -10,7 +10,7 @@ under ``ROW_EXTRA_KEY`` and are applied to memories here as well.
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from chirp import (
     chirp_common,
@@ -28,23 +28,23 @@ from webchirp_bridge.power_levels import (
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
 if TYPE_CHECKING:
-    from typing import Optional, Sequence
+    from typing import Any, Optional, Sequence
 
-# A channel as it crosses the JS/Python boundary: one JSON object per channel,
-# keyed by CSV header name (``CSV_HEADERS`` below, from
-# ``chirp_common.Memory.CSV_FORMAT``) with text values — "Location": "25",
-# "Frequency": "443.000000", "Duplex": "+". It is the grid's row, serialized by
-# ``setRowsJsonGlobal()`` in ``web/js/runtime-rpc.js`` and parsed here with
-# ``json.loads``, so every value a header names is a string.
-#
-# The value type is ``Any`` rather than ``str`` because a row may also carry
-# non-header keys the editor rides along on it — currently the ``__geo``
-# sidecar (``web/js/row-geo.js``), an object, which is why the type cannot
-# promise ``str`` for arbitrary keys. Nothing in the runtime reads those: every
-# consumer projects a row through ``CSV_HEADERS`` and ignores the rest, which is
-# what keeps the sidecar out of a codeplug.
-Row = dict[str, Any]
-Rows = list[Row]
+    # A channel as it crosses the JS/Python boundary: one JSON object per channel,
+    # keyed by CSV header name (``CSV_HEADERS`` below, from
+    # ``chirp_common.Memory.CSV_FORMAT``) with text values — "Location": "25",
+    # "Frequency": "443.000000", "Duplex": "+". It is the grid's row, serialized by
+    # ``setRowsJsonGlobal()`` in ``web/js/runtime-rpc.js`` and parsed here with
+    # ``json.loads``, so every value a header names is a string.
+    #
+    # The value type is ``Any`` rather than ``str`` because a row may also carry
+    # non-header keys the editor rides along on it — currently the ``__geo``
+    # sidecar (``web/js/row-geo.js``), an object, which is why the type cannot
+    # promise ``str`` for arbitrary keys. Nothing in the runtime reads those: every
+    # consumer projects a row through ``CSV_HEADERS`` and ignores the rest, which is
+    # what keeps the sidecar out of a codeplug.
+    Row = dict[str, Any]
+    Rows = list[Row]
 
 # Driver extras ride on channel rows under a key that is not a CSV header, the
 # same way repeater coordinates do in web/js/row-geo.js. Everything that
