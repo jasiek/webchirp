@@ -38,6 +38,11 @@
   --table-header: #e3ebf8;
   --selected-bg: #dcecff;
   --focus-bg: #f2f8ff;
+  /* The channel grid's dropdown indicator, drawn at --muted; see #mem-table td
+     select. Inlined rather than loaded, because an artifact of this size costs
+     more as a request than as bytes, and the colour has to change with the
+     theme, which an external file cannot do. */
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='5' viewBox='0 0 7 5'%3E%3Cpath d='M0.5 0.5 3.5 4 6.5 0.5' fill='none' stroke='%235e6a7f' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
   /* Settings / info */
   --info-bg: #eef5fe;
@@ -110,6 +115,7 @@
     --table-header: #222e3d;
     --selected-bg: #234061;
     --focus-bg: #243549;
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='5' viewBox='0 0 7 5'%3E%3Cpath d='M0.5 0.5 3.5 4 6.5 0.5' fill='none' stroke='%239aa6b8' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
     /* Settings / info */
     --info-bg: #182636;
@@ -1406,10 +1412,21 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+/* A native dropdown arrow is a fixture about 21px wide -- a few pixels of
+   indicator plus the room the platform reserves around it -- and this grid has
+   a dozen enum columns, several holding values narrower than that (Skip is one
+   character, Duplex two). So the arrow itself was setting their width, and the
+   gap it left between a value and the edge of its cell was the visible half of
+   the same problem. Draw a chevron scaled to the grid instead, from the
+   theme-aware --select-arrow, with the left padding matched to the inputs so
+   values line up down a row. */
 #mem-table td select {
   width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
   border: none;
-  background: transparent;
+  padding: 0 10px 0 2px;
+  background: transparent var(--select-arrow) no-repeat right 2px center;
   color: var(--text);
   font-size: 0.85rem;
 }
@@ -1434,13 +1451,15 @@ button:disabled {
    Keep the auto-indexed Location column compact. */
 #mem-table td:first-child,
 #mem-table th:first-child {
-  min-width: 2.75rem;
+  min-width: 2rem;
 }
 
+/* A floor, not a width: the button holds a memory slot number, so a radio
+   numbering past three digits widens the column from its own content. */
 #mem-table td:first-child input,
 #mem-table td:first-child select,
 #mem-table .channel-location-button {
-  min-width: 2.75rem;
+  min-width: 2rem;
 }
 
 #mem-table .channel-location-button {
