@@ -12,14 +12,13 @@ driver that fails on hundreds of channels would otherwise bury it.
 from __future__ import annotations
 
 import traceback
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING
 
 from chirp import chirp_common
 
 from webchirp_bridge.channel_rows import (
     CSV_HEADERS,
     ROW_EXTRA_KEY,
-    Rows,
     _apply_row_extras,
     _coerce_csv_vals_for_chirp,
     _memory_from_row_values,
@@ -37,6 +36,9 @@ from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.row_validation import _immutable_policy_errors, _prepare_row_change
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
+if TYPE_CHECKING:
+    from typing import Any, Optional, Sequence
+    from webchirp_bridge.channel_rows import Rows
 
 def _iter_memory_numbers(radio: chirp_common.Radio) -> range:
     """Return numeric memory range for the active radio model."""

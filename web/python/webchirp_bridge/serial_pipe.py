@@ -11,7 +11,7 @@ loopback-probe entry points, which do not go through a driver at all.
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import TYPE_CHECKING
 
 from js import (
     serial_close,
@@ -28,6 +28,9 @@ from js import (
 )
 
 from webchirp_bridge.jsbridge import _await_js, _js_to_py, _log_debug
+
+if TYPE_CHECKING:
+    from typing import Any, Optional
 
 
 DEFAULT_SERIAL_PIPE_TIMEOUT = 1.2

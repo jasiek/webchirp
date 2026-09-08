@@ -17,7 +17,7 @@ from __future__ import annotations
 import contextlib
 import os
 import tempfile
-from typing import Iterator, Optional, Sequence
+from typing import TYPE_CHECKING
 
 from chirp import (
     chirp_common,
@@ -27,6 +27,8 @@ from chirp import (
 from webchirp_bridge.jsbridge import _make_status_logger
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
+if TYPE_CHECKING:
+    from typing import Iterator, Optional, Sequence
 
 LAST_IMAGE_BY_DRIVER = {}
 # Which class actually produced/parses LAST_IMAGE_BY_DRIVER[key]. Serial

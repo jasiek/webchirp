@@ -8,7 +8,8 @@ ever runs.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, Optional
+from typing import TYPE_CHECKING
+
 
 from chirp import chirp_common
 
@@ -16,6 +17,8 @@ from webchirp_bridge.channel_rows import CSV_HEADERS
 from webchirp_bridge.driver_cache import _blank_radio_instance, _import_radio_class
 from webchirp_bridge.power_levels import _power_level_watts
 
+if TYPE_CHECKING:
+    from typing import Any, Callable, Iterable, Optional
 
 DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
 

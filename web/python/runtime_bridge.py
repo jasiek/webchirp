@@ -18,8 +18,7 @@ from __future__ import annotations
 # has to be a global even though no bridge module needs it.
 import json  # noqa: F401
 import sys
-import types
-from typing import Any
+from typing import TYPE_CHECKING
 
 # The package and the seeded CHIRP sources both live under this directory (the
 # JS side writes them there); the guard keeps a re-run from stacking entries.
@@ -42,6 +41,10 @@ from webchirp_bridge import (  # noqa: E402
     runtime_errors,
     serial_pipe,
 )
+
+if TYPE_CHECKING:
+    import types
+    from typing import Any
 
 # Every module whose names make up the RPC namespace, the package itself
 # included for the shims it installs. Order is irrelevant: no two modules

@@ -12,7 +12,7 @@ than guessing from a blank instance.
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable, Optional, Sequence, TypeAlias
+from typing import TYPE_CHECKING
 
 from chirp import (
     chirp_common,
@@ -26,11 +26,16 @@ from webchirp_bridge.driver_cache import (
 )
 from webchirp_bridge.jsbridge import _log_debug
 
+if TYPE_CHECKING:
+    from typing import Any, Iterable, Optional, Sequence, TypeAlias
 
-# What the settings walkers recurse over: the top-level RadioSettings is a
-# list subclass, every node below it is a RadioSettingGroup -- including
-# RadioSetting leaves, which CHIRP derives from the group class.
-SettingsContainer: TypeAlias = chirp_settings.RadioSettings | chirp_settings.RadioSettingGroup
+    # What the settings walkers recurse over: the top-level RadioSettings is a
+    # list subclass, every node below it is a RadioSettingGroup -- including
+    # RadioSetting leaves, which CHIRP derives from the group class. Only the
+    # checker needs the alias: annotations are lazy, so nothing reads it at runtime.
+    SettingsContainer: TypeAlias = (
+        chirp_settings.RadioSettings | chirp_settings.RadioSettingGroup
+    )
 
 
 def _settings_unavailable_payload(

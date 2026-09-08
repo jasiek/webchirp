@@ -11,14 +11,12 @@ preflight and the upload can never disagree about what a row means.
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, Optional
+from typing import Any, Literal, TYPE_CHECKING
 
 from chirp import chirp_common
 
 from webchirp_bridge.channel_rows import (
     CSV_HEADERS,
-    Row,
-    Rows,
     _coerce_csv_vals_for_chirp,
     _memory_from_row_values,
     _row_from_memory,
@@ -27,6 +25,9 @@ from webchirp_bridge.channel_rows import (
 from webchirp_bridge.driver_cache import _best_effort_radio_instance, _driver_features
 from webchirp_bridge.power_levels import _level_map_for_radio
 
+if TYPE_CHECKING:
+    from typing import Optional
+    from webchirp_bridge.channel_rows import Row, Rows
 
 # One invalid cell reported by the upload preflight: which row, which column,
 # and CHIRP's own message for it.

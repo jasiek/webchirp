@@ -11,13 +11,16 @@ the mapping.
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional
+from typing import TYPE_CHECKING
+
 
 from chirp import chirp_common
 
 from webchirp_bridge.driver_cache import _driver_features
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
+if TYPE_CHECKING:
+    from typing import Any, Iterable, Optional
 
 DEFAULT_EXPORT_POWER = "50W"
 

@@ -10,12 +10,13 @@ is never written from a blank instance.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING
+
 
 from chirp import chirp_common
 from js import serial_prepare_clone
 
-from webchirp_bridge.channel_rows import Rows, normalize_rows
+from webchirp_bridge.channel_rows import normalize_rows
 from webchirp_bridge.driver_cache import (
     LAST_IMAGE_BY_DRIVER,
     _cache_driver_image,
@@ -33,6 +34,9 @@ from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 from webchirp_bridge.serial_pipe import WebSerialPipe, _serial_pipe_timeout_seconds
 
+if TYPE_CHECKING:
+    from typing import Any, Optional, Sequence
+    from webchirp_bridge.channel_rows import Rows
 
 def _ensure_clone_mode_radio(radio_cls: type[chirp_common.Radio]) -> None:
     """Enforce clone-mode driver requirement for live serial workflows."""

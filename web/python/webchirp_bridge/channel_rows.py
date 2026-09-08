@@ -10,7 +10,7 @@ under ``ROW_EXTRA_KEY`` and are applied to memories here as well.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Sequence
+from typing import Any, TYPE_CHECKING
 
 from chirp import (
     chirp_common,
@@ -27,6 +27,8 @@ from webchirp_bridge.power_levels import (
 )
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
+if TYPE_CHECKING:
+    from typing import Optional, Sequence
 
 # A channel as it crosses the JS/Python boundary: one JSON object per channel,
 # keyed by CSV header name (``CSV_HEADERS`` below, from

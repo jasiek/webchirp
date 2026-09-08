@@ -16,8 +16,7 @@ import importlib.abc
 import os
 import sys
 import traceback
-import types
-from typing import Any, Callable, Iterable, Optional, Sequence
+from typing import TYPE_CHECKING
 
 from chirp import (
     chirp_common,
@@ -26,6 +25,10 @@ from chirp import (
 from js import fetch_chirp_source
 
 from webchirp_bridge.jsbridge import _await_js, _js_to_py, _log_debug
+
+if TYPE_CHECKING:
+    import types
+    from typing import Any, Callable, Iterable, Optional, Sequence
 
 
 def _chirp_source_relpath(fullname: str) -> str:

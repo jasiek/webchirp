@@ -10,14 +10,13 @@ settings before serializing it, the same way an upload would.
 from __future__ import annotations
 
 import base64
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING
 
 from chirp import (
     chirp_common,
     directory,
 )
 
-from webchirp_bridge.channel_rows import Rows
 from webchirp_bridge.clone import (
     _ensure_clone_mode_radio,
     _new_serial_pipe,
@@ -41,6 +40,9 @@ from webchirp_bridge.radio_memories import (
 from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.runtime_errors import ImageDetectionError, RuntimeUnsupportedError
 
+if TYPE_CHECKING:
+    from typing import Any, Optional, Sequence
+    from webchirp_bridge.channel_rows import Rows
 
 def _decode_image_b64(image_b64: str) -> bytes:
     """Decode an image the browser sent as base64, refusing a malformed payload."""
