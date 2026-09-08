@@ -17,9 +17,8 @@ import {
 
 const HEADERS = ["Location", "Name", "Frequency", "Offset", "Duplex", "Comment"];
 
-// Sizes for one rendered channel row, keyed by column. Selects carry no size:
-// a select is already exactly as wide as the widest option its driver offers.
-async function editorSizes(columns) {
+// A headless grid with one channel row rendered, for the driver metadata given.
+async function renderGrid(columns) {
   const { document } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
@@ -44,7 +43,13 @@ async function editorSizes(columns) {
   document.querySelector("#channel-insert").dispatchEvent({ type: "click" });
   await flushMicrotasks();
 
-  const row = channelRows(document)[0];
+  return document;
+}
+
+// Sizes for one rendered channel row, keyed by column. Selects carry no size:
+// a select is already exactly as wide as the widest option its driver offers.
+async function editorSizes(columns) {
+  const row = channelRows(await renderGrid(columns))[0];
   return Object.fromEntries(
     row.children.map((td) => [td.dataset.column, td.children[0]?.size]),
   );
@@ -83,4 +88,29 @@ test("a driver's own limits set the column width, within bounds", async () => {
 
   assert.equal(sizes.Name, 1);
   assert.equal(sizes.Comment, 12);
+});
+
+test("the Location header is abbreviated without renaming the column", async () => {
+  const document = await renderGrid({
+    Name: { kind: "text", editable: true, maxLength: 7 },
+  });
+  const header = document.querySelector("#mem-table thead").children[0];
+  const location = header.children[0];
+
+  // The widest thing in the slot-number column used to be the word above it.
+  assert.equal(location.textContent, "#");
+  // An abbreviation still has to name its column to anyone who cannot see the
+  // grid, and to a user hovering the header.
+  assert.equal(location.attributes.get("aria-label"), "Location");
+  assert.equal(location.title, "Location");
+  // Every other header is spelled out as the driver names it.
+  assert.deepEqual(
+    header.children.slice(1).map((th) => th.textContent),
+    HEADERS.slice(1),
+  );
+
+  // The label is display only: rows, and the cells bound to them, are still
+  // keyed by CHIRP's own column name.
+  const row = channelRows(document)[0];
+  assert.equal(row.children[0].dataset.column, "Location");
 });

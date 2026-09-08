@@ -51,6 +51,14 @@ export function createChannelTable({ dom, state, log, actions }) {
   const FREQ_COLUMN_CHARS = 10;
   const TEXT_COLUMN_CHARS = 12;
 
+  // Headers the grid abbreviates, keyed by CHIRP's own column name. "Location"
+  // is what CHIRP calls a channel's memory slot, and it stays the key that rows,
+  // CSV files, metadata and preflight messages all use -- only the header cell
+  // is shortened, because the column holds a slot number two or three digits
+  // wide and the spelled-out word was what made it wide. renderHeader() keeps
+  // the full name reachable from the header's tooltip and accessible name.
+  const COLUMN_LABELS = new Map([["Location", "#"]]);
+
   // The schema the current row elements were built for; a change to either
   // invalidates every editor.
   let renderedColumns = [];
@@ -894,7 +902,8 @@ export function createChannelTable({ dom, state, log, actions }) {
     const headerRow = document.createElement("tr");
     renderedColumns.forEach((column) => {
       const th = document.createElement("th");
-      th.textContent = column;
+      const label = COLUMN_LABELS.get(column) ?? column;
+      th.textContent = label;
       // Mirror the cell treatment: grey + tooltip on headers of columns the
       // selected radio marks read-only (Location stays the selection handle).
       const meta = state.radioMetadata.columns?.[column] || {};
@@ -905,6 +914,16 @@ export function createChannelTable({ dom, state, log, actions }) {
       if (meta.editable === false && column !== "Location") {
         th.classList.add("readonly-cell");
         th.title = `${column} is read-only for this radio.`;
+      }
+      // An abbreviated header still has to say which column it is: the full
+      // name becomes the cell's accessible name, so a screen reader announces
+      // it with every cell in the column, and its tooltip unless a more urgent
+      // one above already claimed it.
+      if (label !== column) {
+        th.setAttribute("aria-label", column);
+        if (!th.title) {
+          th.title = column;
+        }
       }
       headerRow.appendChild(th);
     });
