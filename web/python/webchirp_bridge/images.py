@@ -17,7 +17,7 @@ from chirp import (
     directory,
 )
 
-from webchirp_bridge.channel_rows import CSV_HEADERS, Rows
+from webchirp_bridge.channel_rows import Rows
 from webchirp_bridge.clone import (
     _ensure_clone_mode_radio,
     _new_serial_pipe,
@@ -31,13 +31,12 @@ from webchirp_bridge.driver_cache import (
     _image_bytes_from_radio,
     _import_radio_class,
     _radio_from_image_bytes,
-    _record_unreadable_channels,
     _temp_image_path,
 )
 from webchirp_bridge.jsbridge import _make_status_logger
 from webchirp_bridge.radio_memories import (
     _apply_rows_to_radio_instance,
-    _radio_rows_from_instance,
+    _read_radio_payload,
 )
 from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.runtime_errors import ImageDetectionError, RuntimeUnsupportedError
@@ -172,18 +171,11 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     base_cls = getattr(radio.__class__, "_orig_rclass", radio.__class__)
     module_short = str(base_cls.__module__).rsplit(".", 1)[-1]
     class_name = str(base_cls.__name__)
-    _cache_driver_image(module_short, class_name, radio)
-    rows, unreadable = _radio_rows_from_instance(radio)
-    _record_unreadable_channels(module_short, class_name, unreadable)
-    settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
         "module": module_short,
         "className": class_name,
         "vendor": str(getattr(radio.__class__, "VENDOR", "")),
         "model": str(getattr(radio.__class__, "MODEL", "")),
         "variant": str(getattr(radio.__class__, "VARIANT", "")),
-        "rows": rows,
-        "headers": CSV_HEADERS,
-        "settings": settings_result["settings"],
-        "unreadableChannels": unreadable,
+        **_read_radio_payload(module_short, class_name, radio),
     }

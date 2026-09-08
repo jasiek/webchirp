@@ -15,7 +15,7 @@ from typing import Any, Optional, Sequence
 from chirp import chirp_common
 from js import serial_prepare_clone
 
-from webchirp_bridge.channel_rows import CSV_HEADERS, Rows, normalize_rows
+from webchirp_bridge.channel_rows import Rows, normalize_rows
 from webchirp_bridge.driver_cache import (
     LAST_IMAGE_BY_DRIVER,
     _cache_driver_image,
@@ -23,12 +23,11 @@ from webchirp_bridge.driver_cache import (
     _driver_cache_key,
     _import_radio_class,
     _radio_from_image_bytes,
-    _record_unreadable_channels,
 )
 from webchirp_bridge.jsbridge import _await_js, _log_debug, _make_status_logger
 from webchirp_bridge.radio_memories import (
     _apply_rows_to_radio_instance,
-    _radio_rows_from_instance,
+    _read_radio_payload,
 )
 from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
@@ -159,19 +158,9 @@ def _download_selected_radio_sync(module_name: str, class_name: str) -> dict[str
     radio.sync_in()
     # The image belongs to whatever detection settled on, not to the selection
     # the user made in the UI, and upload/export have to re-parse it as such.
-    _cache_driver_image(module_name, class_name, radio)
-
-    rows, unreadable = _radio_rows_from_instance(radio)
-    _record_unreadable_channels(module_name, class_name, unreadable)
-    csv_text = normalize_rows(rows, module_name, class_name)
-    settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
-    return {
-        "rows": rows,
-        "headers": CSV_HEADERS,
-        "csvText": csv_text,
-        "settings": settings_result["settings"],
-        "unreadableChannels": unreadable,
-    }
+    payload = _read_radio_payload(module_name, class_name, radio)
+    payload["csvText"] = normalize_rows(payload["rows"], module_name, class_name)
+    return payload
 
 
 def _upload_selected_radio_sync(

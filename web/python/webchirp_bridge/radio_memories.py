@@ -12,7 +12,7 @@ driver that fails on hundreds of channels would otherwise bury it.
 from __future__ import annotations
 
 import traceback
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from chirp import chirp_common
 
@@ -26,9 +26,14 @@ from webchirp_bridge.channel_rows import (
     _row_extras_from_memory,
     _row_from_memory,
 )
-from webchirp_bridge.driver_cache import _protected_channels
+from webchirp_bridge.driver_cache import (
+    _cache_driver_image,
+    _protected_channels,
+    _record_unreadable_channels,
+)
 from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.power_levels import _level_map_for_radio
+from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.row_validation import _immutable_policy_errors, _prepare_row_change
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
@@ -130,6 +135,28 @@ def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int
         trace_by_reason,
     )
     return rows, unreadable
+
+
+def _read_radio_payload(
+    module_name: str, class_name: str, radio: chirp_common.Radio
+) -> dict[str, Any]:
+    """Everything a freshly read radio hands the grid, plus the state it leaves.
+
+    The serial download and the image load differ only in how they obtained the
+    radio; from here on both cache its image under the driver key, extract the
+    rows, record the slots that would not decode so a later upload leaves them
+    alone, and serialize the radio-wide settings read-only.
+    """
+    _cache_driver_image(module_name, class_name, radio)
+    rows, unreadable = _radio_rows_from_instance(radio)
+    _record_unreadable_channels(module_name, class_name, unreadable)
+    settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
+    return {
+        "rows": rows,
+        "headers": CSV_HEADERS,
+        "settings": settings_result["settings"],
+        "unreadableChannels": unreadable,
+    }
 
 
 def _apply_rows_to_radio_instance(
