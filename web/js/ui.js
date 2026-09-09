@@ -1,4 +1,8 @@
-import { buildExportFileName } from "./ui/format.js";
+import {
+  buildExportFileName,
+  detectBrowserName,
+  detectPlatformName,
+} from "./ui/format.js";
 import { queryUiElements } from "./ui/dom.js";
 import {
   createUiState,
@@ -72,7 +76,22 @@ export function createUiController() {
   // moment of the failure. radioEventParams is reused verbatim: the driver
   // identity worth reporting is the same one analytics already sends, and it is
   // a CHIRP identifier rather than anything belonging to the user.
-  setContextProvider(() => radioEventParams(state.selectedRadio));
+  //
+  // Browser and platform ride along for a reason specific to this app: it talks
+  // to hardware through APIs only some browsers have, so "which flows are
+  // broken" usually has a browser answer. They are not read once at startup --
+  // the Brave probe in web/js/ui/format.js is async and settles after the first
+  // few calls, and a provider read per failure picks that up for free.
+  //
+  // These go to Sentry only, never to GA: GA4 already collects browser, OS and
+  // device as built-in dimensions, and per FINDINGS the EVENT-scoped custom
+  // dimension budget is scarce and one-way, so declaring them there would spend
+  // two slots to duplicate what the property already has.
+  setContextProvider(() => ({
+    browser: detectBrowserName(),
+    platform: detectPlatformName(),
+    ...radioEventParams(state.selectedRadio),
+  }));
 
   function setRuntimeApi(api) {
     state.runtimeApi = api;

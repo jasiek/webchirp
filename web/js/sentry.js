@@ -135,6 +135,13 @@ export const METRIC_ATTRIBUTES = Object.freeze([
   "error_type",
   "stage",
   "first_column",
+  // What it ran in. Web Serial is Chromium only, WebUSB behaves differently per
+  // platform, and every browser on iOS is Safari underneath whatever brand it
+  // wears -- so for this app these are often the dimension that explains a
+  // failure rate rather than merely describing it. Both are bounded tokens from
+  // web/js/ui/format.js, never a version and never a raw user agent.
+  "browser",
+  "platform",
   // What it was working on or over.
   "transport",
   "format",
