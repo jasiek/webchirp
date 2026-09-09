@@ -13,6 +13,7 @@ import {
   radioEventParams,
   trackEvent,
 } from "./analytics.js";
+import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
 import {
   PORT_SELECTION_CANCELLED_MESSAGE,
   isPortSelectionCancelled,
@@ -26,6 +27,16 @@ const NO_RADIO_SELECTED_TITLE = "Search for and select a radio first";
 // the enabled/visible state of the sidebar's radio actions, the clone progress
 // bar, and the download/upload clone operations with their preflight. Owns the
 // connection and capability state.
+// Which flow and outcome each clone event stands for. Keyed by the GA event
+// name rather than derived from it, so "radio_download_success" is still one
+// grep away from every place it is reported.
+const CLONE_FLOW_OUTCOMES = Object.freeze({
+  radio_download_success: { flow: FLOWS.RADIO_DOWNLOAD, outcome: OUTCOMES.OK },
+  radio_download_failure: { flow: FLOWS.RADIO_DOWNLOAD, outcome: OUTCOMES.FAILED },
+  radio_upload_success: { flow: FLOWS.RADIO_UPLOAD, outcome: OUTCOMES.OK },
+  radio_upload_failure: { flow: FLOWS.RADIO_UPLOAD, outcome: OUTCOMES.FAILED },
+});
+
 export function createSerialActions(ctx) {
   const { dom, state, log, actions } = ctx;
 
@@ -84,23 +95,49 @@ export function createSerialActions(ctx) {
         ...radioEventParams(state.selectedRadio),
         transport: transport || "unknown",
       });
+      recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.OK, {
+        ...radioEventParams(state.selectedRadio),
+        transport: transport || "unknown",
+      });
     } catch (error) {
       // A user who closes the browser's port picker lands here too; error_kind
       // separates that from an adapter the browser could not open.
+      const errorKind = classifyErrorKind(error);
+      const errorType = errorTypeName(error);
       trackEvent("serial_connect_failed", {
         ...radioEventParams(state.selectedRadio),
-        error_kind: classifyErrorKind(error),
-        error_type: errorTypeName(error),
+        error_kind: errorKind,
+        error_type: errorType,
       });
       // Dismissing the chooser is the one outcome here the user already knows
       // about, so it gets a sentence rather than the Pyodide traceback the
       // failure path dumps. It still has to be said out loud: with no visible
       // status surface in this app, saying nothing left Connect-then-Cancel
       // looking exactly like a button that does not work.
+      //
+      // It is also not a failed connect, and must not be recorded as one:
+      // closing the picker is the commonest way out of this dialog, so counting
+      // it would swamp the failure rate the metric exists to expose with the
+      // one outcome that is nothing going wrong. Same call the debug log makes
+      // through reportActionCancelled, and the same reasoning that leaves a
+      // cancelled codeplug import unrecorded. GA still gets the event, where
+      // error_kind separates the two.
       if (isPortSelectionCancelled(error)) {
         log.reportActionCancelled("Serial connect", PORT_SELECTION_CANCELLED_MESSAGE);
         return;
       }
+      recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.FAILED, {
+        ...radioEventParams(state.selectedRadio),
+        // What was being attempted, since nothing was negotiated. Without it a
+        // dashboard grouped by transport counts WebUSB's successes and drops
+        // its failures, which reads as a success rate far better than the real
+        // one. "auto" is an honest third value: the browser was left to choose
+        // and the attempt never got far enough to say what it would have
+        // chosen.
+        transport: preferredTransport === "webusb" ? "webusb" : "auto",
+        error_kind: errorKind,
+        error_type: errorType,
+      });
       log.reportActionError("Serial connect", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -324,11 +361,27 @@ export function createSerialActions(ctx) {
   // Report how a clone ended. The attempt events on their own only count who
   // pressed the button; pairing them with an outcome is what turns the reports
   // into a per-driver record of which radios actually work in the browser.
+  //
+  // The same outcome goes to Sentry as a flow metric. GA answers this over
+  // days, from a property someone has to go and read; the metric answers it as
+  // a rate a dashboard can watch and an alert can fire on, which is what a
+  // driver that breaks in a new browser release needs.
   function trackCloneOutcome(eventName, radio, startedAt, params = {}) {
+    const durationMs = Date.now() - startedAt;
     trackRadioEvent(eventName, radio, {
-      duration_ms: Date.now() - startedAt,
+      duration_ms: durationMs,
       ...params,
     });
+    const dimensions = CLONE_FLOW_OUTCOMES[eventName];
+    if (!radio || !dimensions) {
+      return;
+    }
+    recordFlow(
+      dimensions.flow,
+      dimensions.outcome,
+      { ...radioEventParams(radio), ...params },
+      durationMs,
+    );
   }
 
   function cloneFailureParams(error, stage) {
@@ -461,10 +514,16 @@ export function createSerialActions(ctx) {
       const preflight = await runUploadPreflight();
       if (!preflight.valid) {
         const count = Array.isArray(preflight.issues) ? preflight.issues.length : 0;
+        const blockedColumn = firstIssueColumn(preflight.issues);
         trackRadioEvent("upload_blocked_preflight", radio, {
           ...codeplugParams(state),
           issue_count: count,
-          first_column: firstIssueColumn(preflight.issues),
+          first_column: blockedColumn,
+        });
+        recordFlow(FLOWS.RADIO_UPLOAD, OUTCOMES.BLOCKED, {
+          ...radioEventParams(radio),
+          ...codeplugParams(state),
+          first_column: blockedColumn,
         });
         log.setStatus(
           count > 0
@@ -491,7 +550,15 @@ export function createSerialActions(ctx) {
       // or a file they brought with them.
       trackCloneOutcome("radio_upload_success", radio, startedAt, codeplugParams(state));
     } catch (error) {
-      trackCloneOutcome("radio_upload_failure", radio, startedAt, cloneFailureParams(error, stage));
+      // codeplugParams is merged in here as well as on the success and blocked
+      // paths, or grouping upload outcomes by codeplug_source would count every
+      // success and no failure at all. It is deliberately not done for a failed
+      // *download*: there the editor still holds whatever preceded the
+      // transfer, so the same dimensions would describe the wrong codeplug.
+      trackCloneOutcome("radio_upload_failure", radio, startedAt, {
+        ...codeplugParams(state),
+        ...cloneFailureParams(error, stage),
+      });
       log.reportActionError("Upload", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {

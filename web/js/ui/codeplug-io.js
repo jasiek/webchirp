@@ -11,6 +11,7 @@ import {
   radioEventParams,
   trackEvent,
 } from "./analytics.js";
+import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
 import { requireRuntimeApi } from "./state.js";
 
 const LOADABLE_FILE_KINDS = new Map([
@@ -54,6 +55,18 @@ export function createCodeplugIo(ctx) {
       format,
       import_source: source,
       import_mode: mode,
+    });
+    // A cancelled import is not a completed flow. The user answered the
+    // replace-or-merge prompt with "neither", which is the feature working;
+    // counting it here would depress the success rate of a flow that never ran.
+    if (mode === "cancelled") {
+      return;
+    }
+    recordFlow(FLOWS.CODEPLUG_IMPORT, OUTCOMES.OK, {
+      ...radioEventParams(state.selectedRadio),
+      ...codeplugParams(state),
+      format,
+      import_source: source,
     });
   }
 
@@ -293,12 +306,21 @@ export function createCodeplugIo(ctx) {
       // The counterpart to codeplug_import. Without it a file CHIRP could not
       // parse — the most interesting import there is — looks exactly like a
       // file nobody tried to import.
+      const errorKind = classifyErrorKind(error);
+      const errorType = errorTypeName(error);
       trackEvent("codeplug_import_failed", {
         ...radioEventParams(state.selectedRadio),
         format,
         import_source: source,
-        error_kind: classifyErrorKind(error),
-        error_type: errorTypeName(error),
+        error_kind: errorKind,
+        error_type: errorType,
+      });
+      recordFlow(FLOWS.CODEPLUG_IMPORT, OUTCOMES.FAILED, {
+        ...radioEventParams(state.selectedRadio),
+        format,
+        import_source: source,
+        error_kind: errorKind,
+        error_type: errorType,
       });
       log.reportActionError(label, error);
     } finally {
