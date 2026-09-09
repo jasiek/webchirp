@@ -54,14 +54,16 @@ function installBrowserGlobals() {
     vivify: (selector) => selector.trim().match(/^([a-zA-Z][\w-]*)/)?.[1] || "div",
     navigator: {
       userAgent: "FakeBrowser/1.0",
-      // web/app.js branches on serial support at import time and logs down
-      // either path; absent both, it takes the unsupported branch.
-      serial: undefined,
-      usb: undefined,
+      // No serial or usb key at all. web/js/serial.js and
+      // web/js/serial-test-page.js test for support with the `in` operator, so
+      // a key present with the value undefined reads as supported -- the
+      // opposite of what is wanted here. web/app.js branches on that at import
+      // time and logs down either path; with both absent it takes the
+      // unsupported branch, which is the one worth loading under a fake DOM.
     },
     globals: {
-      // version-info.js fetches ./version.json as it loads and swallows any
-      // failure, so a rejecting fetch exercises its own error path.
+      // web/js/version-info.js fetches ./version.json as it loads and swallows
+      // any failure, so a rejecting fetch exercises its own error path.
       fetch: async () => {
         throw new Error("fetch is not available in the module-loading test");
       },

@@ -292,8 +292,9 @@ function checkFloors(summary, floors) {
 // How far below the measured value a floor is set. Coverage is not
 // deterministic across runs: the same commit measured 81.04% then 80.94% of JS
 // branches, roughly three branches out of 2605, because some of what the suite
-// exercises is timing-dependent (test-driver-import-race.mjs races two imports
-// on purpose, and async ordering decides which arm of a few guards runs). A
+// exercises is timing-dependent (scripts/test-driver-import-race.mjs races two
+// imports on purpose, and async ordering decides which arm of a few guards
+// runs). A
 // floor set at the last measurement therefore fails intermittently on an
 // unchanged branch. Half a point absorbs that jitter and still catches a real
 // regression, which moves coverage by whole points, not tenths.

@@ -56,6 +56,13 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # Before the tests, not after, and for the same reason pages.yml does it:
+      # build:catalog regenerates web/radio-catalog.json from the submodule pin
+      # and three tests read that file, so without this a pin or catalog change
+      # is tested against the committed copy and only really validated after
+      # merge. It costs a few seconds.
+      - run: npm run build:dist
+
       # Best effort: a first run on a new branch, an expired artifact, or a
       # master history with no coverage run yet all leave no baseline, and the
       # report simply omits the delta column.
@@ -91,14 +98,24 @@ jobs:
           # would be blamed for every master commit since. Naming the ref lets
           # git compute a fresh merge-base with its three-dot diff instead.
           COVERAGE_DIFF_BASE: origin/${{ github.event.pull_request.base.ref }}
-        run: npm run coverage:patch
+        run: |
+          if [ -f coverage/js.lcov ]; then
+            npm run coverage:patch
+          else
+            echo "No coverage data: an earlier step failed before it was produced."
+          fi
 
       # The line-by-line view, into the same artifact. GitHub will not render
       # it in place, but it downloads as one self-contained file that opens
       # from disk with no network access.
       - name: Build the line-by-line report
         if: always()
-        run: npm run coverage:report
+        run: |
+          if [ -f coverage/js.lcov ]; then
+            npm run coverage:report
+          else
+            echo "No coverage data: an earlier step failed before it was produced."
+          fi
 
       # Written whether or not the floors were met, so a failing run still
       # explains itself on the summary page instead of only in the log.
@@ -112,9 +129,14 @@ jobs:
       # fork gets a read-only token and cannot be commented on at all, so it is
       # skipped rather than left to fail; its numbers are still in the job
       # summary and the artifact.
+      # A fork's token is read-only, and so is Dependabot's even though its
+      # branch lives in this repository, so both would turn an otherwise-green
+      # run red on a 403. Skipped rather than allowed to fail; the job summary
+      # and the artifact still carry every number.
       - name: Comment coverage on the pull request
         if: always() && github.event_name == 'pull_request'
           && github.event.pull_request.head.repo.full_name == github.repository
+          && github.actor != 'dependabot[bot]'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
@@ -123,6 +145,10 @@ jobs:
           # Invisible when the comment is rendered.
           MARKER: <!-- webchirp-coverage -->
         run: |
+          # coverage/ is created by coverage.mjs, which a failing check:syntax,
+          # check:types or check:python aborts before reaching -- and then this
+          # redirect would fail and the fallback message never post.
+          mkdir -p coverage
           {
             echo "$MARKER"
             cat coverage/summary.md 2>/dev/null || echo "Coverage did not produce a summary; see the job log."

@@ -19,12 +19,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Annotation-only, and gated so it is not imported at runtime: coverage is
+    # loaded into Pyodide by _webchirp_coverage_start(), so importing it at
+    # module scope would fail on the seed that happens before loadPackage().
+    import coverage
 
 # Where seedPyodideRuntime() writes the package inside Pyodide's filesystem.
 _PACKAGE_DIR = "/webchirp_runtime/webchirp_bridge"
 
-_coverage: Any = None
+# The live Coverage object between start and fragment, or None outside that
+# window. Named concretely rather than as Any so a reader knows what it holds.
+_coverage: coverage.Coverage | None = None
 
 
 def _webchirp_coverage_start() -> None:
