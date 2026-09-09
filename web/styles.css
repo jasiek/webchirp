@@ -1406,8 +1406,23 @@ button:disabled {
   white-space: nowrap;
 }
 
+/* Keep the column headers in view while the channel list scrolls. The nearest
+   scrolling ancestor is .mem-table-scroll, so top:0 pins them to the top of the
+   grid's own scroll area rather than to the page; the background is what stops
+   the rows showing through, and the stacking order what keeps them over the
+   editors rather than under.
+
+   Sticky on the cells rather than on thead because border-collapse gives the
+   borders to the table rather than to the cell, so a sticky header leaves its
+   own behind as it detaches from the rows. The shadow redraws the bottom edge
+   at the same width and colour; it has to be a shadow rather than a border,
+   which would change the header's height and so every row's offset. */
 #mem-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: var(--table-header);
+  box-shadow: inset 0 -1px 0 var(--border);
   text-align: left;
 }
 

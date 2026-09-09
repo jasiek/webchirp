@@ -11,7 +11,10 @@ import test from "node:test";
 // inputs that ask the browser for no width of their own, and the stylesheet
 // rule that gives them one. The resulting layout is the browser's own and
 // cannot be checked headlessly -- the fake DOM has no layout at all -- so it is
-// verified in a real browser instead.
+// verified in a real browser instead. The last test covers the grid's other
+// stylesheet-only guarantee for the same reason: a sticky header row whose
+// bottom edge would go missing, while scrolled and only while scrolled, if the
+// shadow standing in for it were tidied away as redundant.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -119,4 +122,25 @@ test("the Location header is abbreviated without renaming the column", async () 
   // The label is display only: rows, and the cells bound to them, are still
   // keyed by CHIRP's own column name.
   assert.equal(channelRows(document)[0].children[0].dataset.column, "Location");
+});
+
+test("the header row stays put while the channels scroll", () => {
+  const styles = fs.readFileSync(path.join(repoRootDir, "web", "styles.css"), "utf8");
+  const rule = styles.match(/#mem-table th \{([^}]*)\}/);
+  assert.ok(rule, "the grid's header cells must carry their own rule");
+
+  const declarations = rule[1];
+  // On the cells, not on thead: the scroll container is .mem-table-scroll, so
+  // top:0 pins them to the top of the grid rather than of the page.
+  assert.match(declarations, /position:\s*sticky/);
+  assert.match(declarations, /top:\s*0/);
+  // Opaque and over the editors, or the rows show through and under.
+  assert.match(declarations, /background:/);
+  assert.match(declarations, /z-index:\s*[1-9]/);
+  // border-collapse gives the borders to the table rather than to the cell, so
+  // a sticky header leaves its own behind: verified by giving the header a 4px
+  // red border, which paints nothing once the header detaches. The shadow is
+  // what draws that edge, and it has to stay a shadow -- a border would change
+  // the header's height, and so every row's offset in visibleRowRange().
+  assert.match(declarations, /box-shadow:.*var\(--border\)/);
 });
