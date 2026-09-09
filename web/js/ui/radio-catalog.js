@@ -450,6 +450,18 @@ export function createRadioCatalog(ctx) {
     state.currentHeaders = state.radioMetadata.headers?.length
       ? state.radioMetadata.headers
       : state.currentHeaders;
+    // Channels can predate the radio: repeaters imported before one was
+    // picked, or a codeplug edited under a different driver. Their Power
+    // labels belong to whatever schema built them, and this driver's preflight
+    // rejects a label it does not publish, so drop those rather than let the
+    // user meet the error one upload later. Said out loud, because it edits
+    // rows the user can see.
+    const cleared = ctx.table.dropUnsupportedPowerValues();
+    if (cleared > 0) {
+      log.logDebug(
+        `RADIO POWER cleared on ${cleared} channel(s): the level they carried is not one this radio publishes.`,
+      );
+    }
   }
 
   // Load selected radio's CHIRP-derived column metadata from Python runtime.

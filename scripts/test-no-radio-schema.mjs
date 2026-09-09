@@ -26,7 +26,7 @@ import { FakeElement, channelRows, installFakeDom } from "./test-support/fake-do
 
 // The grid with the driver metadata a caller passes in. `columns` undefined is
 // the state before the startup schema has been fetched.
-async function tableWithMetadata(columns) {
+async function tableWithMetadata(columns, rows = []) {
   installFakeDom();
   const { createChannelTable } = await import("../web/js/ui/channel-table.js");
   const dom = {
@@ -37,7 +37,7 @@ async function tableWithMetadata(columns) {
   };
   const state = {
     currentHeaders: CSV_FORMAT_HEADERS.slice(),
-    currentRows: [],
+    currentRows: rows,
     radioMetadata: columns ? { headers: CSV_FORMAT_HEADERS.slice(), columns } : {},
   };
   return createChannelTable({
@@ -118,9 +118,9 @@ test("each enum column publishes CHIRP's own default, not its first option", asy
   assert.equal(schema.columns.TStep.default, "5.00");
   assert.equal(schema.columns.Tone.default, "");
 
-  // A default Memory carries no power level, so the column publishes none and
-  // the grid keeps falling back to the driver's first level.
-  assert.equal("default" in schema.columns.Power, false);
+  // A default Memory carries no power level, so Power's default is blank —
+  // deliberately not one of the options. See the Power tests below.
+  assert.equal(schema.columns.Power.default, "");
 });
 
 test("a column with no published default still falls back to its first option", async () => {
@@ -146,6 +146,109 @@ test("a blank channel starts on CHIRP's defaults under the startup schema", asyn
   assert.equal(row.CrossMode, "Tone->Tone");
   assert.equal(row.Tone, "");
   assert.equal(row.Location, "", "the location is assigned on insert, not defaulted");
+});
+
+// Power is the column where CHIRP's answer is "none" and the grid's old
+// options[0] guess was not merely arbitrary but unusable: the levels are
+// per-driver labels, so a level chosen under one schema blocks the upload
+// preflight under another. Both halves of that are pinned here — what a row
+// starts with, and what happens to a row that predates the radio.
+
+test("no schema seeds a power level onto a channel that never chose one", async () => {
+  const harness = await sharedHarness();
+  const schema = await harness.runPythonJson("json.dumps(get_default_schema())");
+
+  // The generic driver's placeholder levels are the ones that made this bite:
+  // 0.1W is its first option and no ordinary handheld advertises it.
+  assert.deepEqual(schema.columns.Power.options, ["0.1W", "50W", "1500W"]);
+  assert.equal(schema.columns.Power.default, "");
+  assert.equal(await tableWithMetadata(schema.columns)
+    .then((table) => table.createBlankChannelRow().Power), "");
+
+  // The same rule on a real radio: a blank channel holds no level until one is
+  // chosen, exactly as chirp_common.Memory() does.
+  await ensureModule(harness, "uv5r");
+  const uv5r = await harness.runPythonJson(
+    "json.dumps(get_radio_column_metadata(_m, _c))",
+    { _m: "uv5r", _c: "BaofengUV5RGeneric" },
+  );
+  assert.deepEqual(uv5r.columns.Power.options, ["High", "Low"]);
+  assert.equal(uv5r.columns.Power.default, "");
+  const table = await tableWithMetadata(uv5r.columns);
+  assert.equal(table.createBlankChannelRow().Power, "");
+});
+
+test("a repeater imported before a radio was picked passes that radio's preflight", async () => {
+  // The whole point of the workflow this branch enables: import, then choose
+  // the radio, then upload. RSGB is the source that writes a Power of its own,
+  // and under the generic schema the only level it recognises is 50W — a
+  // label a UV-5R does not publish, so the row would be rejected outright.
+  const harness = await sharedHarness();
+  const schema = await harness.runPythonJson("json.dumps(get_default_schema())");
+  const table = await tableWithMetadata(schema.columns);
+
+  const { rows } = buildRsgbRows(
+    [{
+      record: {
+        repeater: "GB3XP", tx: 145687500, rx: 145087500,
+        ctcss: 77, mode: "A", band: "2M", locator: "IO91VJ", status: "OPERATIONAL",
+      },
+      distanceKm: 12,
+    }],
+    table.rowBuilderHooks(),
+    { modes: ["A"] },
+  );
+  assert.equal(rows[0].Power, "50W", "honest under the schema that built it");
+  rows[0].Location = "0";
+
+  await ensureModule(harness, "uv5r");
+  const uv5r = await harness.runPythonJson(
+    "json.dumps(get_radio_column_metadata(_m, _c))",
+    { _m: "uv5r", _c: "BaofengUV5RGeneric" },
+  );
+  const rejected = await harness.runPythonJson(
+    "json.dumps(validate_rows_for_upload(json.loads(_rows), _m, _c))",
+    { _rows: JSON.stringify(rows), _m: "uv5r", _c: "BaofengUV5RGeneric" },
+  );
+  assert.equal(rejected.valid, false, "the level is a word this radio does not speak");
+  assert.match(rejected.issues[0].message, /Power '50W' is not supported/);
+
+  // Selecting the radio is what resolves it: the label goes, the channel stays.
+  const withRows = await tableWithMetadata(uv5r.columns, rows);
+  assert.equal(withRows.dropUnsupportedPowerValues(), 1);
+  assert.equal(rows[0].Power, "");
+  assert.equal(rows[0].Frequency, "145.687500", "nothing else is touched");
+
+  const accepted = await harness.runPythonJson(
+    "json.dumps(validate_rows_for_upload(json.loads(_rows), _m, _c))",
+    { _rows: JSON.stringify(rows), _m: "uv5r", _c: "BaofengUV5RGeneric" },
+  );
+  assert.deepEqual(accepted.issues, []);
+  assert.equal(accepted.valid, true);
+});
+
+test("a power level the radio does publish survives the schema swap", async () => {
+  const rows = [{ Power: "High", Frequency: "145.500000" }];
+  const table = await tableWithMetadata(
+    { Power: { kind: "enum", editable: true, options: ["High", "Low"] } },
+    rows,
+  );
+
+  assert.equal(table.dropUnsupportedPowerValues(), 0);
+  assert.equal(rows[0].Power, "High");
+});
+
+test("a driver that publishes no power levels measures nothing", async () => {
+  // 99 driver classes advertise none. An empty list is not evidence that a
+  // row's level is wrong, so nothing is cleared.
+  const rows = [{ Power: "5.0W" }];
+  const table = await tableWithMetadata(
+    { Power: { kind: "enum", editable: true, options: [] } },
+    rows,
+  );
+
+  assert.equal(table.dropUnsupportedPowerValues(), 0);
+  assert.equal(rows[0].Power, "5.0W");
 });
 
 test("the startup schema imports every repeater a directory offers", async () => {

@@ -32,11 +32,22 @@ def _memory_defaults() -> dict[str, str]:
     grid used to start a blank row on each enum column's *first option*, which
     is a poor stand-in for a default: the full CHIRP mode list starts at WFM
     and the tone table at 67.0 -- the very value that made a rejected tone
-    write look plausible (issue #104). Power is excluded because a default
-    Memory has none and the field stringifies to "None".
+    write look plausible (issue #104).
+
+    Power is the column where the first option is not merely arbitrary but
+    wrong. ``Memory().power`` is ``None``, which ``_row_from_memory`` renders
+    as the literal "None"; the grid's own spelling for that is blank, and the
+    runtime already reads a blank Power as unset on both paths
+    (``_resolve_power_level`` hands CHIRP ``None``, ``_csv_export_power_text``
+    writes the CSV driver's 50 W). Seeding it from the option list instead
+    wrote a level the user never chose onto every row -- harmless while it
+    happened to be one the driver advertises, and an upload blocker as soon as
+    it was not, because the levels are per-driver: rows built under the generic
+    CSV schema carried its placeholder "0.1W" into a UV-5R, where the upload
+    preflight rejected every one of them.
     """
     defaults = _row_from_memory(chirp_common.Memory())
-    return {column: value for column, value in defaults.items() if column != "Power"}
+    return {**defaults, "Power": ""}
 
 
 def _mk_enum(values: Optional[Iterable[Any]]) -> list[str]:
@@ -150,6 +161,11 @@ def _column_metadata_for_radio(radio: chirp_common.Radio) -> dict[str, Any]:
         "Skip": _enum_column(True, rf.valid_skips, defaults.get("Skip")),
         "Power": {
             **_enum_column(True, rf.valid_power_levels),
+            # Blank on purpose, and deliberately not one of the options: a new
+            # channel has no power level in CHIRP, and every driver names its
+            # levels differently, so a row must not carry one until something
+            # chooses it. See _memory_defaults.
+            "default": defaults["Power"],
             "optionWatts": _power_level_watts(rf.valid_power_levels),
         },
         "Comment": {

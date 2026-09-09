@@ -345,6 +345,42 @@ export function createChannelTable({ dom, state, log, actions }) {
     };
   }
 
+  // Clear any Power the newly selected driver does not advertise, and report
+  // how many rows that touched.
+  //
+  // Power is the one column whose vocabulary is private to a driver: "High",
+  // "Hi", "L3" and "0.1W" all name the same kind of thing in different words,
+  // while Mode "FM" and Tone "TSQL" come from lists CHIRP shares across every
+  // radio. So a Power carried over from another schema -- a channel built
+  // before a radio was selected, or under a different driver -- is not a value
+  // the new driver disagrees with, it is a word it does not speak, and the
+  // upload preflight rejects the whole row for it ("Power '0.1W' is not
+  // supported by this radio"). Clearing it means "no level chosen", which is
+  // what a new CHIRP memory holds and what the runtime already writes as the
+  // driver's own default (_resolve_power_level in
+  // web/python/webchirp_bridge/power_levels.py).
+  function dropUnsupportedPowerValues() {
+    if (!state.currentHeaders.includes("Power")) {
+      return 0;
+    }
+    const options = state.radioMetadata.columns?.Power?.options;
+    // No option list is a driver that has published nothing about power, so
+    // there is nothing to measure a row against.
+    if (!Array.isArray(options) || options.length === 0) {
+      return 0;
+    }
+    const spoken = new Set(options.map(String));
+    let cleared = 0;
+    for (const row of state.currentRows) {
+      const value = String(row.Power ?? "");
+      if (value !== "" && !spoken.has(value)) {
+        row.Power = "";
+        cleared += 1;
+      }
+    }
+    return cleared;
+  }
+
   // A row counts as a real channel when it has a usable frequency or a name;
   // blank inserted rows should not trigger the data-loss prompt.
   function hasRealChannels() {
@@ -1300,6 +1336,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     reconcileLocations,
     sortRowsByLocation,
     insertRowsAtSelectionOrEnd,
+    dropUnsupportedPowerValues,
     createBlankChannelRow,
     setRowValueIfPresent,
     findEnumOption,
