@@ -22,7 +22,13 @@ import { CSV_FORMAT_HEADERS } from "../web/js/clipboard.js";
 import { buildPmr446Rows, buildPrzemiennikiRows } from "../web/js/datasources.js";
 import { buildRsgbRows } from "../web/js/rsgb.js";
 import { ensureModule, sharedHarness } from "./test-support/chirp.mjs";
-import { FakeElement, channelRows, installFakeDom } from "./test-support/fake-dom.mjs";
+import {
+  FakeElement,
+  channelRows,
+  flushMicrotasks,
+  installFakeDom,
+  selectRadioBySearch,
+} from "./test-support/fake-dom.mjs";
 
 // The grid with the driver metadata a caller passes in. `columns` undefined is
 // the state before the startup schema has been fetched.
@@ -296,6 +302,71 @@ test("loadEmptySchema installs the whole schema, not just its headers", async ()
   const modeCell = channelRows(document)[0].children[3].children[0];
   assert.equal(modeCell.tagName, "SELECT");
   assert.equal(modeCell.value, "FM");
+});
+
+test("selecting a radio is what clears a power level it cannot hold", async () => {
+  // The seam the unit tests above cannot see: dropUnsupportedPowerValues is
+  // correct on its own, but nothing proved applyRadioMetadata calls it, so
+  // deleting that call would leave the fix out of the running app with every
+  // test still green.
+  const { document } = installFakeDom();
+  const { createUiController } = await import("../web/js/ui.js");
+  const ui = createUiController();
+  const headers = ["Location", "Name", "Frequency", "Power"];
+
+  ui.setRuntimeApi({
+    listRadios: async () => ({
+      radios: [
+        { vendor: "Acme", model: "One", module: "one", className: "OneRadio", key: "one:OneRadio", isLiveRadio: false },
+      ],
+    }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    // The generic schema a channel is built under: its levels are the CSV
+    // driver's placeholders, and 50W is the one buildRsgbRows matches there.
+    getDefaultSchema: async () => ({
+      headers,
+      columns: {
+        Location: { kind: "int", editable: false, min: 0 },
+        Power: { kind: "enum", editable: true, options: ["0.1W", "50W", "1500W"], default: "50W" },
+      },
+    }),
+    // The radio the user then picks, which names its levels differently.
+    getRadioMetadata: async () => ({
+      headers,
+      columns: {
+        Location: { kind: "int", editable: false, min: 0, max: 127 },
+        Power: { kind: "enum", editable: true, options: ["High", "Low"] },
+      },
+    }),
+    getRadioSettings: async () => ({
+      supported: false, available: false, requiresImage: false, message: "", groups: [],
+    }),
+  });
+  await ui.init(true);
+
+  document.querySelector("#channel-insert").dispatchEvent({ type: "click" });
+  assert.equal(channelRows(document)[0].children[3].children[0].value, "50W");
+
+  selectRadioBySearch(document, "Acme One");
+  await flushMicrotasks();
+
+  // A row that kept its stale label renders it: bindCellEditor appends an
+  // option for a value outside the driver's list and selects it, so "50W"
+  // surviving here is exactly what an unwired clear would look like. (A
+  // cleared cell reads as the fake DOM's empty-select convention — its first
+  // option — rather than the browser's "", which is what the real grid shows.)
+  const powerCell = channelRows(document)[0].children[3].children[0];
+  assert.notEqual(powerCell.value, "50W", "the label this radio cannot hold is gone");
+  assert.deepEqual(
+    powerCell.children.map((option) => option.value),
+    ["High", "Low"],
+    "and it left no option behind for itself",
+  );
+  assert.match(
+    document.querySelector("#debug-output").value,
+    /RADIO POWER cleared on 1 channel\(s\)/,
+    "an edit the user can see has to be said out loud",
+  );
 });
 
 // Everything below is the state before the startup schema resolves, and after
