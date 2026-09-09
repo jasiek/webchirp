@@ -65,6 +65,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `CUSTOM_DIMENSIONS` (`web/js/analytics.js`) or GA collects it and shows it
   nowhere, and never send user data — no file names, channel names, frequencies,
   search terms or coordinates.
+- When on a worktree other than the master branch run a dev server on a port other than 8000.
 - Avoid regressions in clone workflow:
   - Download should cache the image for the selected driver.
   - Upload should use cached image and fail clearly if no cached image exists.
