@@ -2,7 +2,7 @@
 //
 // Two languages, two mechanisms, one report. JavaScript is measured by Node's
 // own V8 coverage; the Python runtime is measured by coverage.py running
-// inside Pyodide (scripts/test-support/python-coverage.mjs). Both end up as
+// inside Pyodide (tests/support/python-coverage.mjs). Both end up as
 // lcov plus a merged summary, so a reader sees one number per language and CI
 // can gate on both.
 //
@@ -35,33 +35,45 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { parseLcov } from "./coverage-lcov.mjs";
-import { toRepoPath } from "./test-support/python-coverage.mjs";
-import { repoRoot } from "./test-support/repo-paths.mjs";
+import { toRepoPath } from "../tests/support/python-coverage.mjs";
+import { repoRoot } from "../tests/support/repo-paths.mjs";
 
 const COVERAGE_DIR = path.join(repoRoot, "coverage");
 const FRAGMENT_DIR = path.join(COVERAGE_DIR, "python-fragments");
 const FLOORS_PATH = path.join(repoRoot, "coverage-floors.json");
 
-// The suites worth measuring. Read out of package.json rather than repeated
-// here, so a test file added to npm test is measured without a second edit --
-// and so this cannot drift into measuring a subset while claiming a total.
-// test:api and test:hw are excluded: one calls a live third-party API, the
-// other needs a radio on a serial port.
-const MEASURED_SUITES = ["test:channels", "test:webusb", "test:settings", "test:build"];
+// Directories under tests/ that are not suites: support/ holds shared fixtures
+// rather than tests, and manual/ is excluded on purpose -- one of its files
+// calls a live third-party API, the other needs a radio on a serial port.
+const NON_SUITE_DIRS = new Set(["support", "manual"]);
 
-function testFilesFromPackageJson() {
+// Every suite, discovered from the filesystem rather than named here, so a test
+// file -- or a whole suite -- is measured the moment it lands and npm test and
+// this script cannot drift apart. Each suite is cross-checked against
+// package.json for the other half of that: a directory no npm script globs
+// would be measured here without CI ever running it, quietly claiming coverage
+// from files the gate never executes.
+export function testFiles() {
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
-  const files = new Set();
-  for (const suite of MEASURED_SUITES) {
-    const command = pkg.scripts[suite];
-    if (!command) {
-      throw new Error(`package.json has no script named ${suite}`);
+  const commands = Object.values(pkg.scripts).join("\n");
+  const files = [];
+  for (const entry of fs.readdirSync(path.join(repoRoot, "tests"), { withFileTypes: true })) {
+    if (!entry.isDirectory() || NON_SUITE_DIRS.has(entry.name)) {
+      continue;
     }
-    for (const match of command.matchAll(/scripts\/[\w-]+\.mjs/g)) {
-      files.add(match[0]);
+    if (!commands.includes(`tests/${entry.name}/*.mjs`)) {
+      throw new Error(
+        `tests/${entry.name}/ is a suite no package.json script runs; `
+          + "add a test: script that globs it, or move it under tests/manual/",
+      );
+    }
+    for (const name of fs.readdirSync(path.join(repoRoot, "tests", entry.name))) {
+      if (name.endsWith(".mjs")) {
+        files.push(`tests/${entry.name}/${name}`);
+      }
     }
   }
-  return [...files].sort();
+  return files.sort();
 }
 
 // --- lcov -------------------------------------------------------------------
@@ -292,7 +304,7 @@ function checkFloors(summary, floors) {
 // How far below the measured value a floor is set. Coverage is not
 // deterministic across runs: the same commit measured 81.04% then 80.94% of JS
 // branches, roughly three branches out of 2605, because some of what the suite
-// exercises is timing-dependent (scripts/test-driver-import-race.mjs races two
+// exercises is timing-dependent (tests/channels/driver-import-race.mjs races two
 // imports on purpose, and async ordering decides which arm of a few guards
 // runs). A
 // floor set at the last measurement therefore fails intermittently on an
@@ -328,13 +340,13 @@ function main() {
   fs.rmSync(COVERAGE_DIR, { recursive: true, force: true });
   fs.mkdirSync(FRAGMENT_DIR, { recursive: true });
 
-  runSuiteWithCoverage(testFilesFromPackageJson());
+  runSuiteWithCoverage(testFiles());
 
   const jsFiles = parseLcov(fs.readFileSync(path.join(COVERAGE_DIR, "js.lcov"), "utf8"));
   const pythonFiles = mergePythonFragments();
   if (pythonFiles.size === 0) {
     throw new Error(
-      "no Python coverage was collected; check that scripts/test-radio-harness.mjs still calls startPythonCoverage()",
+      "no Python coverage was collected; check that tests/support/radio-harness.mjs still calls startPythonCoverage()",
     );
   }
   writeLineOnlyLcov(path.join(COVERAGE_DIR, "python.lcov"), pythonFiles);
@@ -366,4 +378,7 @@ function main() {
   }
 }
 
-main();
+// Guarded so a test can import testFiles() without running the whole suite.
+if (import.meta.main) {
+  main();
+}

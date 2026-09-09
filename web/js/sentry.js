@@ -15,7 +15,7 @@
 //
 // The SDK is a runtime dependency of the browser, not of Node: it is declared
 // in package.json to pin the version of record, and shipped from the CDN URL
-// below. scripts/test-sentry.mjs fails the build if the two drift apart.
+// below. tests/channels/sentry.mjs fails the build if the two drift apart.
 
 // Project this app reports into. Unlike a secret, a DSN is meant to be public --
 // it only grants the right to submit events -- which is why it can sit in a
@@ -40,7 +40,7 @@ export const SENTRY_SDK_URL =
 // it is a bug report against code that was never deployed.
 //
 // This list must stay in step with ANALYTICS_HOSTS; the same deployment is
-// "production" for both, and scripts/test-sentry.mjs fails if they diverge.
+// "production" for both, and tests/channels/sentry.mjs fails if they diverge.
 export const SENTRY_HOSTS = Object.freeze(["codeplug.org", "www.codeplug.org"]);
 
 // Noise that is never actionable: a benign layout notification the browser
@@ -191,7 +191,7 @@ export function scrubMetricAttributes(attributes) {
 // here, and there is no option that closes that -- the isolation scope is
 // merged whatever scope a capture is given. The app's guarantee rests on never
 // setting one: it reaches the SDK only through this module, and
-// scripts/test-sentry.mjs fails if a setAttribute call appears in it.
+// tests/channels/sentry.mjs fails if a setAttribute call appears in it.
 export function scrubMetric(metric) {
   if (!metric || typeof metric !== "object") {
     return metric;

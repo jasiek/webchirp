@@ -23,6 +23,25 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `runtime_errors`. `__init__.py` only installs the shims CHIRP needs before import.
   No embedded Python in JS files.
 - `chirp/`: Upstream CHIRP source as a git submodule.
+- `tests/`: The node:test suite, one directory per suite — `channels` and
+  `settings` boot Pyodide and need `--experimental-wasm-stack-switching`,
+  `webusb` and `build` do not. `manual` holds the two tests npm test never
+  runs (`rsgb-live` needs the network, `hw-radio` needs a radio on a serial
+  port). `support` holds shared fixtures and the two harnesses, not tests.
+- `scripts/`: Build, coverage and CLI tooling only. No tests live here.
+
+### Test conventions
+- Each suite is globbed, not listed: `npm run test:channels` runs
+  `tests/channels/*.mjs`. **Adding a test is dropping a file into a suite
+  directory — never edit `package.json` for it.** `scripts/coverage.mjs`
+  discovers the same directories, and fails if a suite exists that no npm
+  script runs.
+- Name a test for what it covers, without a `test-` prefix; the directory
+  already says it is a test (`tests/channels/channel-list.mjs`).
+- Shared fakes belong in `tests/support/`; import from there before writing
+  a new one.
+- A file in a suite directory is executed by the runner, so a helper with no
+  tests in it goes in `tests/support/`, not beside its callers.
 
 ### UI module conventions
 - Each module is a `create<Area>(ctx)` factory. `ctx` carries `dom`, `state`,
@@ -51,7 +70,8 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   partial (`ui/format.js`). `build-dist.mjs` matches references textually, so a
   comment spelled exactly like a real import is rewritten into the built file;
   the canonical form is anchored away from that and is checked by
-  `test-build-dist.mjs`, which also fails when a rename leaves a path behind.
+  `tests/build/build-dist.mjs`, which also fails when a rename leaves a path
+  behind.
 - Python functions must have type signatures.
 - An import used only in annotations goes under `if TYPE_CHECKING:` so it adds no
   runtime dependency; every module has `from __future__ import annotations`, which is
@@ -100,5 +120,6 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 
 ## Validation
 Before committing, run syntax checks, typechecking and all tests.
+`npm test` covers syntax, types and the four automatic suites.
 
 

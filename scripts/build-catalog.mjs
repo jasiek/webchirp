@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { DEFAULT_CHIRP_REVISION } from "../web/js/python-sources.mjs";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { createTestRadioHarness } from "../tests/support/radio-harness.mjs";
 
 const execFileAsync = promisify(execFile);
 
