@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { OSM_ATTRIBUTION, OSM_COPYRIGHT_URL, metresPerPixel } from "../../web/js/staticmap.js";
 import { installFakeDom } from "../support/fake-dom.mjs";
 
 // The field components build every element themselves via
@@ -155,9 +156,33 @@ function buildPositionField(config = {}) {
     onChange: (lat, lon) => changes.push([lat, lon]),
     ...config,
   });
-  const [, latitude, , longitude, , geoRow] = field.nodes;
+  const [, latitude, , longitude, , geoRow, preview] = field.nodes;
   const locator = geoRow.children[0];
-  return { field, latitude, longitude, locator, geoRow, changes };
+  const [previewCanvas, previewEmpty, previewAttribution] = preview.children;
+  return {
+    field,
+    latitude,
+    longitude,
+    locator,
+    geoRow,
+    changes,
+    preview,
+    previewCanvas,
+    previewEmpty,
+    previewAttribution,
+  };
+}
+
+// The field debounces preview redraws so a typist does not fetch a tile set
+// per keystroke; tests that want the redraw wait past that window.
+const PREVIEW_DEBOUNCE_MS = 300;
+
+function afterPreviewDebounce() {
+  return new Promise((resolve) => setTimeout(resolve, PREVIEW_DEBOUNCE_MS + 50));
+}
+
+function tilesIn(canvas) {
+  return canvas.children.filter((child) => child.className === "repeater-map-tile");
 }
 
 test("position field renders the locator row with the geolocate and clear buttons", () => {
@@ -287,4 +312,225 @@ test("typing coordinates or a locator notifies onChange with the coordinate text
     ["52.2297", "21.0122"],
     ["51.520833", "-0.125000"],
   ]);
+});
+
+test("the map preview starts empty and stays empty without a full position", async () => {
+  const { previewCanvas, previewEmpty, previewAttribution, latitude, field } = buildPositionField();
+  assert.equal(previewCanvas.className, "repeater-map-canvas");
+  assert.equal(previewCanvas.hidden, true);
+  assert.equal(previewAttribution.hidden, true);
+  assert.equal(previewEmpty.hidden, false);
+  assert.equal(tilesIn(previewCanvas).length, 0);
+
+  // A lone latitude is not a position, exactly as value() reads it, so there
+  // is still nothing to draw.
+  latitude.value = "52.2297";
+  await latitude.dispatch("input");
+  await afterPreviewDebounce();
+  assert.equal(field.value(), null);
+  assert.equal(previewCanvas.hidden, true);
+  assert.equal(tilesIn(previewCanvas).length, 0);
+});
+
+test("refreshPreview draws OSM tiles and a marker for the current position", () => {
+  const { field, previewCanvas, previewEmpty, previewAttribution } = buildPositionField({
+    initial: { latitudeText: "51.520833", longitudeText: "-0.125000" },
+  });
+  // Construction leaves the preview blank on purpose: the modal is still
+  // hidden, so there is no width to measure yet.
+  assert.equal(tilesIn(previewCanvas).length, 0);
+
+  field.refreshPreview();
+  assert.equal(previewCanvas.hidden, false);
+  assert.equal(previewAttribution.hidden, false);
+  assert.equal(previewEmpty.hidden, true);
+  const tiles = tilesIn(previewCanvas);
+  assert.ok(tiles.length >= 1);
+  for (const tile of tiles) {
+    assert.match(tile.src, /^https:\/\/tile\.openstreetmap\.org\/11\/\d+\/\d+\.png$/);
+    assert.equal(tile.crossOrigin, "anonymous");
+  }
+  // The marker sits last so it paints over the tiles it is centred on.
+  assert.equal(previewCanvas.children.at(-1).className, "repeater-map-marker");
+});
+
+test("the preview renders at the container's measured width once the modal has laid out", () => {
+  const { field, preview, previewCanvas } = buildPositionField({
+    initial: { latitudeText: "51.520833", longitudeText: "-0.125000" },
+  });
+  preview.clientWidth = 360;
+  field.refreshPreview();
+  // Square: one measurement is both sides, so the range circle has the same
+  // room in each direction.
+  assert.equal(previewCanvas.style.width, "360px");
+  assert.equal(previewCanvas.style.height, "360px");
+
+  // A narrower card redraws to the new width: the canvas's own width is the
+  // previous render's, so only the container can report the change.
+  preview.clientWidth = 300;
+  field.refreshPreview();
+  assert.equal(previewCanvas.style.width, "300px");
+});
+
+test("typing a position redraws the preview, but only after the debounce", async () => {
+  const { latitude, longitude, previewCanvas } = buildPositionField();
+  latitude.value = "52.2297";
+  await latitude.dispatch("input");
+  longitude.value = "21.0122";
+  await longitude.dispatch("input");
+  // Nothing yet: a redraw per keystroke is a tile fetch per keystroke.
+  assert.equal(tilesIn(previewCanvas).length, 0);
+
+  await afterPreviewDebounce();
+  assert.ok(tilesIn(previewCanvas).length >= 1);
+});
+
+test("a locator edit previews the square it decodes to", async () => {
+  const { locator, previewCanvas } = buildPositionField();
+  locator.value = "IO91WM";
+  await locator.dispatch("input");
+  await afterPreviewDebounce();
+  assert.ok(tilesIn(previewCanvas).length >= 1);
+});
+
+test("clearing the location returns the preview to its empty state", async () => {
+  const { field, geoRow, previewCanvas, previewEmpty, previewAttribution } = buildPositionField();
+  field.setPosition(51.520833, -0.125);
+  field.refreshPreview();
+  assert.ok(tilesIn(previewCanvas).length >= 1);
+
+  await geoRow.children[2].dispatch("click");
+  await afterPreviewDebounce();
+  assert.equal(previewCanvas.hidden, true);
+  assert.equal(previewAttribution.hidden, true);
+  assert.equal(previewEmpty.hidden, false);
+  assert.equal(tilesIn(previewCanvas).length, 0);
+});
+
+test("an out-of-range pair previews nothing, matching what value() would refuse", () => {
+  const { field, latitude, longitude, previewCanvas } = buildPositionField();
+  latitude.value = "95";
+  longitude.value = "10";
+  field.refreshPreview();
+  assert.equal(previewCanvas.hidden, true);
+  assert.equal(tilesIn(previewCanvas).length, 0);
+});
+
+test("the preview carries the OSM attribution the tile policy requires", () => {
+  const { previewAttribution } = buildPositionField();
+  assert.equal(previewAttribution.className, "repeater-map-attribution");
+  const [link] = previewAttribution.children;
+  assert.equal(link.tagName, "A");
+  assert.equal(link.href, OSM_COPYRIGHT_URL);
+  assert.equal(link.textContent, OSM_ATTRIBUTION);
+  assert.equal(link.rel, "noopener noreferrer");
+});
+
+function rangeRingIn(canvas) {
+  return canvas.children.find((child) => child.className === "repeater-map-range") || null;
+}
+
+test("without a range the preview draws no circle", () => {
+  const { field, previewCanvas } = buildPositionField({
+    initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
+  });
+  field.refreshPreview();
+  assert.equal(rangeRingIn(previewCanvas), null);
+});
+
+test("the range circle fits the square with map left visible around it", () => {
+  const { field, preview, previewCanvas } = buildPositionField({
+    initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
+  });
+  preview.clientWidth = 320;
+  field.setRangeKm(30);
+  field.refreshPreview();
+
+  const ring = rangeRingIn(previewCanvas);
+  assert.ok(ring, "the range circle is drawn");
+  // 90% of the square: the whole 30 km radius is on screen, with a margin that
+  // shows it as a radius rather than as the edge of the widget.
+  const diameter = Number.parseFloat(ring.style.width);
+  assert.equal(ring.style.height, ring.style.width);
+  assert.ok(Math.abs(diameter - 320 * 0.9) < 0.5, `diameter ${diameter}`);
+  assert.ok(diameter < 320);
+
+  // The marker paints over the ring, so it has to come after it.
+  assert.equal(previewCanvas.children.at(-1).className, "repeater-map-marker");
+});
+
+test("a wider range zooms the preview out instead of overflowing the square", async () => {
+  const { field, preview, previewCanvas } = buildPositionField({
+    initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
+  });
+  preview.clientWidth = 320;
+  field.setRangeKm(30);
+  field.refreshPreview();
+  const tightZoom = Number(previewCanvas.children[0].src.split("/")[3]);
+  const tightDiameter = Number.parseFloat(rangeRingIn(previewCanvas).style.width);
+
+  field.setRangeKm(200);
+  await afterPreviewDebounce();
+  const wideZoom = Number(previewCanvas.children[0].src.split("/")[3]);
+  const wideDiameter = Number.parseFloat(rangeRingIn(previewCanvas).style.width);
+
+  // Six times the radius, but the circle stays the same size on screen: the
+  // map zoomed out under it.
+  assert.ok(wideZoom <= tightZoom);
+  assert.ok(Math.abs(wideDiameter - tightDiameter) < 0.5);
+});
+
+test("setRangeKm redraws only when the range actually changes", async () => {
+  const { field, previewCanvas } = buildPositionField({
+    initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
+  });
+  field.setRangeKm(30);
+  field.refreshPreview();
+  const first = previewCanvas.children[0];
+
+  // The shell re-applies the range on every build; an unchanged value must not
+  // cost a second tile fetch.
+  field.setRangeKm(30);
+  await afterPreviewDebounce();
+  assert.equal(previewCanvas.children[0], first);
+
+  field.setRangeKm(60);
+  await afterPreviewDebounce();
+  assert.notEqual(previewCanvas.children[0], first);
+});
+
+test("a blank range field previews the position with no circle at the fallback zoom", () => {
+  const { field, preview, previewCanvas } = buildPositionField({
+    initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
+  });
+  preview.clientWidth = 320;
+  // numericFieldValue reads a cleared "Range (km)" box as NaN, which is not a
+  // radius to frame.
+  field.setRangeKm(Number.NaN);
+  field.refreshPreview();
+  assert.equal(rangeRingIn(previewCanvas), null);
+  assert.equal(Number(previewCanvas.children[0].src.split("/")[3]), 11);
+});
+
+test("tiles are drawn at the scaled size a fractional zoom needs", () => {
+  const { field, preview, previewCanvas } = buildPositionField({
+    initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
+  });
+  preview.clientWidth = 320;
+  field.setRangeKm(30);
+  field.refreshPreview();
+
+  const tiles = tilesIn(previewCanvas);
+  assert.ok(tiles.length >= 1);
+  const tileSize = Number.parseFloat(tiles[0].style.width);
+  // Tiles exist only at whole zooms, so the grid is planned one zoom in and
+  // drawn shrunk to the fraction: never bigger than a tile, never below half.
+  assert.ok(tileSize > 128 && tileSize <= 256, `tile size ${tileSize}`);
+  for (const tile of tiles) {
+    assert.equal(tile.style.height, tile.style.width);
+  }
+  // The scaled grid still resolves to the ground resolution asked for.
+  const zoom = Number(tiles[0].src.split("/")[3]);
+  const scale = tileSize / 256;
+  assert.ok(Math.abs(metresPerPixel(52, zoom) / scale - (2 * 30000) / (320 * 0.9)) < 1e-6);
 });

@@ -1225,7 +1225,11 @@ button:disabled {
 
 .modal-grid {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  /* minmax(0, ...) rather than a bare 1fr: a bare fr track is floored at its
+     content's min-content width, which lets a wide field (the map preview)
+     push the column past the card and leaves percentage widths inside it
+     unresolvable. Flooring at 0 keeps the column at the card's width. */
+  grid-template-columns: 160px minmax(0, 1fr);
   gap: 0.45rem 0.7rem;
   align-items: center;
 }
@@ -1273,6 +1277,45 @@ button:disabled {
   min-width: 2rem;
   padding: 0.35rem 0.45rem;
   line-height: 1;
+}
+
+/* Static OSM preview of the coordinates the repeater-query modal currently
+   holds, with the search radius drawn on it (web/js/ui/query-fields.js). It
+   spans both grid columns and is pushed right, so it lines up under the values
+   it previews rather than under their labels, and it carries no label of its
+   own — the map is the label. */
+.modal-map-preview {
+  grid-column: 1 / -1;
+  /* A definite width, not min(100%, 320px): the second track is 1fr, so while
+     it is still being sized from its content a percentage here has nothing to
+     resolve against and the item collapses to its min-content width (the
+     attribution line). justify-self does the right-alignment that margin-left:
+     auto would, without needing a width the track cannot supply yet. */
+  justify-self: end;
+  width: 320px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Square, so the range circle has the same room in both directions.
+   web/js/ui/query-fields.js measures the container and renders the tile grid
+   at that pixel size; the aspect ratio is what it measures against before the
+   first render. */
+.modal-map-preview .repeater-map-canvas {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+/* Stand-in of the same height range as the map, so the grid does not jump when
+   a position is entered or cleared. */
+.modal-map-preview-empty {
+  margin: 0;
+  padding: 1.5rem 0.6rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .modal-modes {
@@ -1603,6 +1646,20 @@ button:disabled {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
+/* The search radius a repeater query will use, drawn around the marker.
+   web/js/ui/static-map-view.js sizes it in pixels from the ground radius; the
+   fill is faint enough to read the map through. */
+.repeater-map-range {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgba(224, 27, 36, 0.75);
+  background: rgba(224, 27, 36, 0.12);
+  pointer-events: none;
+}
+
 /* Attribution strip along the bottom of the widget, below the map: the OSM
    tile policy wants the credit visible on every map and reachable through to
    the licence, which the link inside it provides. */
@@ -1806,7 +1863,7 @@ button:disabled {
   }
 
   .modal-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .settings-layout {

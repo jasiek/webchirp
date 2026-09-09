@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  OSM_EQUATOR_METRES_PER_PIXEL,
   OSM_TILE_SIZE,
   formatCoordinates,
   latLonToWorldPixel,
+  metresPerPixel,
   osmTileUrl,
   planStaticMap,
+  zoomForRadius,
 } from "../../web/js/staticmap.js";
 import { rowGeo, setRowGeo } from "../../web/js/row-geo.js";
 
@@ -93,4 +96,46 @@ test("the geo sidecar never reaches header-driven serialization", async () => {
   const tsv = serializeRowsToTsv([row]);
   assert.ok(!tsv.includes("52.737737"));
   assert.ok(!tsv.includes("__geo"));
+});
+
+test("ground resolution halves with every zoom level and shrinks away from the equator", () => {
+  assert.equal(metresPerPixel(0, 0), OSM_EQUATOR_METRES_PER_PIXEL);
+  assert.equal(metresPerPixel(0, 1), OSM_EQUATOR_METRES_PER_PIXEL / 2);
+  // Mercator stretches the map away from the equator, so a pixel there covers
+  // less ground: at 60 degrees, half as much as on the equator.
+  assert.ok(Math.abs(metresPerPixel(60, 0) / metresPerPixel(0, 0) - 0.5) < 1e-9);
+  // Symmetric about the equator, and the poles are clamped rather than zero.
+  assert.equal(metresPerPixel(-52, 11), metresPerPixel(52, 11));
+  assert.ok(metresPerPixel(90, 0) > 0);
+});
+
+test("zoomForRadius frames a circle at the requested fraction of the viewport", () => {
+  const latitude = 52;
+  const size = 320;
+  const radiusMetres = 30000;
+  const zoom = zoomForRadius(latitude, radiusMetres, size, { fill: 0.9 });
+  // The circle's diameter comes out at exactly the asked-for fraction: the
+  // zoom is fractional, so nothing has to be rounded away.
+  const diameter = (2 * radiusMetres) / metresPerPixel(latitude, zoom);
+  assert.ok(Math.abs(diameter - size * 0.9) < 1e-6, `diameter ${diameter}`);
+});
+
+test("zoomForRadius zooms in for a tighter search and out for a wider one", () => {
+  const near = zoomForRadius(52, 5000, 320);
+  const far = zoomForRadius(52, 200000, 320);
+  assert.ok(near > far);
+  // Quadrupling the area is one whole zoom level.
+  const base = zoomForRadius(52, 10000, 320);
+  assert.ok(Math.abs(base - zoomForRadius(52, 20000, 320) - 1) < 1e-9);
+});
+
+test("zoomForRadius stays inside its bounds and refuses inputs that are not a circle", () => {
+  assert.equal(zoomForRadius(52, 20000000, 320), 1);
+  assert.equal(zoomForRadius(52, 1, 320), 17);
+  assert.equal(zoomForRadius(52, 5000, 320, { minZoom: 9, maxZoom: 10 }), 10);
+  for (const radius of [0, -5, Number.NaN, undefined, "wide"]) {
+    assert.equal(zoomForRadius(52, radius, 320), null, `radius ${radius}`);
+  }
+  // A viewport with no width yet is the hidden-modal case: no zoom to give.
+  assert.equal(zoomForRadius(52, 30000, 0), null);
 });

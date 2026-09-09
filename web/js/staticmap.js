@@ -58,6 +58,39 @@ export function planStaticMap(latitude, longitude, { zoom, width, height }) {
   return { width, height, tiles };
 }
 
+// Ground resolution: how many metres one screen pixel covers at a latitude and
+// zoom. The constant is the equator's circumference over the 256 pixels the
+// whole world occupies at zoom 0; Mercator stretches everything away from the
+// equator, which the cosine takes back out.
+export const OSM_EQUATOR_METRES_PER_PIXEL = 40075016.686 / OSM_TILE_SIZE;
+
+export function metresPerPixel(latitude, zoom) {
+  const lat = Math.max(-85.05112878, Math.min(85.05112878, Number(latitude)));
+  const worldMetresPerPixel = OSM_EQUATOR_METRES_PER_PIXEL * Math.cos((lat * Math.PI) / 180);
+  return worldMetresPerPixel / Math.pow(2, zoom);
+}
+
+// The zoom at which a circle of `radiusMetres` fills `fill` of a `size`-pixel
+// square viewport — what a search-radius preview needs to show the whole
+// radius and not much more. Fractional on purpose: renderStaticMap scales a
+// whole-zoom tile grid to reach it, where rounding down to a whole zoom would
+// show up to four times the area asked for. Returns null for a radius or a
+// viewport that is not a positive number, so callers can fall back to a fixed
+// zoom rather than test the inputs themselves.
+export function zoomForRadius(latitude, radiusMetres, size, { fill = 0.9, minZoom = 1, maxZoom = 17 } = {}) {
+  const radius = Number(radiusMetres);
+  const viewport = Number(size) * fill;
+  if (!Number.isFinite(radius) || radius <= 0 || !Number.isFinite(viewport) || viewport <= 0) {
+    return null;
+  }
+  const required = (2 * radius) / viewport;
+  const zoom = Math.log2(metresPerPixel(latitude, 0) / required);
+  if (!Number.isFinite(zoom)) {
+    return null;
+  }
+  return Math.max(minZoom, Math.min(maxZoom, zoom));
+}
+
 export function osmTileUrl(tile, template = OSM_TILE_URL_TEMPLATE) {
   return template
     .replace("{z}", String(tile.z))

@@ -328,6 +328,16 @@ function clearLocationButton(dom) {
   return button;
 }
 
+function previewCanvas(dom) {
+  const canvas = descendants(grid(dom)).find((el) => el.className === "repeater-map-canvas");
+  assert.ok(canvas, "the coordinate preview canvas is in the grid");
+  return canvas;
+}
+
+function previewTiles(dom) {
+  return previewCanvas(dom).children.filter((child) => child.className === "repeater-map-tile");
+}
+
 function queryUrl(calls) {
   const call = calls.find((entry) => !entry.url.includes("/meta"));
   assert.ok(call, "a query request was made");
@@ -689,6 +699,59 @@ test("the position carries over when switching sources", async () => {
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query repeaterbook.com");
   assert.equal(fieldByName(dom, "latitude").value, "51.5");
   assert.equal(fieldByName(dom, "longitude").value, "-0.12");
+});
+
+test("opening the modal draws the coordinate preview for the persisted position", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }]);
+
+  // A first open with nothing entered has nothing to draw.
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.equal(previewCanvas(dom).hidden, true);
+  assert.equal(previewTiles(dom).length, 0);
+
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = "52.2297";
+  await latitude.dispatch("input");
+  const longitude = fieldByName(dom, "longitude");
+  longitude.value = "21.0122";
+  await longitude.dispatch("input");
+  await dom.repeaterQueryCancelEl.dispatch("click");
+
+  // Reopening rebuilds the field around the persisted position, and the shell
+  // refreshes the preview once the overlay is visible — without waiting for
+  // the typing debounce, which is what a rebuilt field would otherwise need.
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.equal(previewCanvas(dom).hidden, false);
+  assert.ok(previewTiles(dom).length >= 1);
+});
+
+test("the preview draws the range filter's circle and follows edits to it", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = "52";
+  await latitude.dispatch("input");
+  const longitude = fieldByName(dom, "longitude");
+  longitude.value = "-2";
+  await longitude.dispatch("input");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+
+  // The source's default range (30 km) is already applied when the form is
+  // built, without the user touching the field.
+  const ring = () => previewCanvas(dom).children.find((el) => el.className === "repeater-map-range");
+  assert.ok(ring(), "the default range is drawn on the preview");
+  const zoomOf = () => Number(previewCanvas(dom).children[0].src.split("/")[3]);
+  const defaultZoom = zoomOf();
+
+  const range = fieldByName(dom, "radius");
+  range.value = "300";
+  await range.dispatch("input");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.ok(ring(), "the widened range is still drawn");
+  assert.ok(zoomOf() < defaultZoom, "a wider range zooms the preview out");
 });
 
 test("clearing the location empties the persisted position too", async () => {
