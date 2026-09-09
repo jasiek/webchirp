@@ -347,9 +347,12 @@ async function handleListRadios() {
   return { radios, source: radioCatalogSource };
 }
 
-async function handleGetDefaultHeaders() {
+// The schema the grid runs on before a radio is selected: CHIRP's generic CSV
+// driver reporting its own RadioFeatures, headers and columns alike. See
+// get_default_schema (web/python/webchirp_bridge/column_metadata.py).
+async function handleGetDefaultSchema() {
   await requirePyodide();
-  return runPythonJson("json.dumps(get_default_headers())");
+  return runPythonJson("json.dumps(get_default_schema())");
 }
 
 async function handleParseCsv(payload = {}) {
@@ -510,7 +513,7 @@ async function handleValidateRadioSettings(payload = {}) {
 const RUNTIME_METHODS = Object.freeze({
   getRuntimeInfo: handleGetRuntimeInfo,
   listRadios: handleListRadios,
-  getDefaultHeaders: handleGetDefaultHeaders,
+  getDefaultSchema: handleGetDefaultSchema,
   parseCsv: handleParseCsv,
   normalizeRows: handleNormalizeRows,
   validateRowsForUpload: handleValidateRowsForUpload,

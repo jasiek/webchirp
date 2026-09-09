@@ -137,11 +137,20 @@ export function createCodeplugIo(ctx) {
     }
   }
 
-  // Startup state: no channels, but a column schema in place so the grid can
-  // accept a hand-inserted channel before anything has been loaded. A radio
-  // selection replaces these headers with the driver's own.
+  // Startup state: no channels, but a full column schema in place so the grid
+  // can accept a hand-inserted channel, validate it and offer the driver's own
+  // pickers before anything has been loaded. That schema is CHIRP's generic
+  // CSV driver reporting its own RadioFeatures -- CHIRP has no "no radio"
+  // state either, and an editor with nothing loaded is a CSVRadio there. A
+  // radio selection replaces the whole thing with that driver's schema.
   async function loadEmptySchema() {
-    const defaults = await requireRuntimeApi(state).getDefaultHeaders();
+    const defaults = await requireRuntimeApi(state).getDefaultSchema();
+    // Only when nothing has claimed the schema yet: a radio restored from the
+    // cookie can win this race, and its driver's metadata outranks the CSV
+    // driver's.
+    if (!state.radioMetadata.headers?.length && defaults.columns) {
+      state.radioMetadata = defaults;
+    }
     state.currentHeaders = state.radioMetadata.headers?.length
       ? state.radioMetadata.headers
       : (defaults.headers || []);

@@ -104,16 +104,6 @@ def _row_from_memory(mem: chirp_common.Memory) -> Row:
     return dict(zip(CSV_HEADERS, _row_text_values(mem)))
 
 
-def get_default_headers() -> dict[str, Any]:
-    """Channel columns to show before a radio or codeplug decides them.
-
-    The editor starts with no channels, and CHIRP's CSV driver refuses to
-    parse a header-only file ("No channels found"), so the startup schema is
-    read straight from ``chirp_common`` rather than round-tripped through it.
-    """
-    return {"headers": CSV_HEADERS}
-
-
 def parse_csv(csv_text: str) -> dict[str, Any]:
     """Parse CSV content with CHIRP's CSV driver and return row dictionaries."""
     radio = _blank_csv_radio()

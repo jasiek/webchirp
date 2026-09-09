@@ -48,7 +48,7 @@ function createRuntimeApi({ catalog = CATALOG, imageRadio = CATALOG[0] } = {}) {
     api: {
       listRadios: async () => ({ radios: catalog }),
       getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-      getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+      getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
       getRadioMetadata: async ({ module }) => {
         calls.metadata.push(module);
         return { headers: ["Location", `${module} Name`, "Frequency"], columns: {} };

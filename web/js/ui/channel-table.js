@@ -152,7 +152,12 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
     const meta = state.radioMetadata.columns?.[column] || {};
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
-      return String(meta.options[0]);
+      // CHIRP's own starting value for the column when the driver offers it
+      // (get_radio_column_metadata publishes it from chirp_common.Memory()),
+      // and only then the first option. options[0] is a poor default: it is
+      // 67.0 on every CTCSS table and WFM on the full mode list, neither of
+      // which is what CHIRP calls a new channel.
+      return String(meta.default ?? meta.options[0]);
     }
     if (meta.kind === "int" && Number.isFinite(meta.min)) {
       return String(meta.min);
