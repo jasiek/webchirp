@@ -372,14 +372,18 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     }, PREVIEW_DEBOUNCE_MS);
   }
 
-  // Redraw now, dropping any debounced redraw it pre-empts. The shell calls
-  // this once the modal is on screen, which is the first moment the canvas has
-  // a width to measure.
-  function refreshPreview() {
+  function cancelScheduledPreview() {
     if (previewTimer) {
       clearTimeout(previewTimer);
       previewTimer = 0;
     }
+  }
+
+  // Redraw now, dropping any debounced redraw it pre-empts. The shell calls
+  // this once the modal is on screen, which is the first moment the canvas has
+  // a width to measure.
+  function refreshPreview() {
+    cancelScheduledPreview();
     renderPreview();
   }
 
@@ -429,10 +433,23 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
 
   previewCanvas.addEventListener("pointerdown", (event) => {
     const position = currentPosition();
-    // Nothing to drag before there is a position, and nothing to compute with
-    // before a render has fixed a zoom. Secondary buttons are left to the
-    // browser's own menus.
-    if (!position || !lastPreviewZoom || (event.button ?? 0) !== 0) {
+    // Nothing to drag before there is a position. Secondary buttons are left
+    // to the browser's own menus.
+    if (!position || (event.button ?? 0) !== 0) {
+      return;
+    }
+    // A redraw queued by a keystroke that landed inside the debounce window
+    // is still pending here, and schedulePreview's drag guard only covers
+    // redraws asked for *after* the drag began. Left alone it fires
+    // mid-gesture, recentring the tile grid under a captured pointer that goes
+    // on measuring from where it started — a visible jump, then a doubled pan
+    // until release. Settling it now also makes the tiles and the drag's
+    // origin describe the same place, which they otherwise need not.
+    if (previewTimer) {
+      refreshPreview();
+    }
+    // Nothing to compute with before a render has fixed a zoom.
+    if (!lastPreviewZoom) {
       return;
     }
     drag = {

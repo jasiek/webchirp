@@ -714,3 +714,46 @@ test("the drawn map extends past the viewport so a drag has somewhere to go", ()
   assert.ok(Math.min(...lefts) <= -128, `leftmost tile at ${Math.min(...lefts)}`);
   assert.ok(Math.min(...tops) <= -128, `topmost tile at ${Math.min(...tops)}`);
 });
+
+test("a redraw queued just before a drag is settled by it, not fired under it", async () => {
+  const { field, previewCanvas, longitude } = buildDraggableField();
+
+  // A keystroke inside the debounce window, then a drag started before its
+  // redraw has fired.
+  longitude.value = "-2.5";
+  await longitude.dispatch("input");
+  const queued = previewCanvas.children[0];
+
+  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  // Settled at pointerdown: the tiles now show where the drag is starting
+  // from, rather than the position two keystrokes ago.
+  const atStart = previewCanvas.children[0];
+  assert.notEqual(atStart, queued, "the pending redraw ran at pointerdown");
+
+  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 150, clientY: 100 });
+  // Past the debounce, still dragging: nothing may recentre the grid under the
+  // pointer, or the next move applies the whole accumulated delta to a map
+  // that has already moved.
+  await afterPreviewDebounce();
+  assert.equal(previewCanvas.children[0], atStart, "no redraw fired mid-drag");
+  assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => "translate(50px, 0px)"));
+
+  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  assert.notEqual(previewCanvas.children[0], atStart, "release redraws once");
+});
+
+test("a queued redraw is not lost to a press that turns out not to be a drag", async () => {
+  const { field, previewCanvas, longitude } = buildDraggableField();
+  const stale = previewCanvas.children[0];
+  longitude.value = "-2.5";
+  await longitude.dispatch("input");
+
+  // Press and release without moving. endDrag has nothing to redraw for, so
+  // if the pointerdown had merely cancelled the queued redraw the map would
+  // still be showing the position before the keystroke, for good.
+  await dragMap(previewCanvas, [[101, 101]]);
+  await afterPreviewDebounce();
+
+  assert.notEqual(previewCanvas.children[0], stale, "the typed position reached the map");
+  assert.equal(field.value().longitude, -2.5);
+});

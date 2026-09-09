@@ -1152,8 +1152,17 @@ button:disabled {
   inset: 0;
   z-index: 60;
   display: flex;
-  align-items: center;
+  /* flex-start, not center: a flex item taller than its container is centred
+     by overflowing equally at both ends, and overflow past the *start* edge is
+     outside the scroll range — so the top of a tall dialog cannot be reached
+     at all. flex-start plus the card's auto margins centres it while there is
+     room and keeps its top edge reachable once there is not. The repeater
+     query form clears 1100px on a phone once every label and control stacks,
+     which is what makes this the difference between a usable dialog and one
+     whose Cancel button is off-screen. */
+  align-items: flex-start;
   justify-content: center;
+  overflow: auto;
   background: var(--overlay);
   padding: 1rem;
 }
@@ -1164,7 +1173,9 @@ button:disabled {
 
 .modal-card {
   width: min(560px, 100%);
-  margin: 0;
+  /* Centres the card in the overlay while it fits, and collapses to nothing
+     once it does not — see .modal-overlay. */
+  margin: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
