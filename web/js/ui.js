@@ -56,7 +56,7 @@ export function createUiController() {
       ctx.repeaterQuery.isModalOpen()
       || ctx.repeaterMap.isModalOpen()
       || ctx.channelExtra.isModalOpen(),
-    openChannelExtra: (rowIdx) => ctx.channelExtra.openForRow(rowIdx),
+    openChannelExtra: (rowIdx, trigger) => ctx.channelExtra.openForRow(rowIdx, trigger),
     currentViewLabel: () => currentViewLabel(),
   };
 

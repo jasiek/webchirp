@@ -25,6 +25,8 @@ export function createChannelExtra(ctx) {
   // finds a different row (or none) and returns.
   let editedRow = null;
   let fieldControls = [];
+  // The grid button the open came from, refocused when the modal closes.
+  let triggerElement = null;
   // Bumped on every open so the response to a superseded open cannot render
   // over the one the user is looking at.
   let openToken = 0;
@@ -40,6 +42,10 @@ export function createChannelExtra(ctx) {
     if (!open) {
       editedRow = null;
       fieldControls = [];
+      // Hand the keyboard back to where it came from; without this it is left
+      // inside a hidden dialog and the next Tab starts from the top of the page.
+      triggerElement?.focus?.();
+      triggerElement = null;
     }
   }
 
@@ -123,11 +129,16 @@ export function createChannelExtra(ctx) {
     }
     if (field.type === "integer" || field.type === "float") {
       const text = String(control.value ?? "").trim();
-      const parsed = field.type === "integer"
-        ? Number.parseInt(text, 10)
-        : Number.parseFloat(text);
-      if (!Number.isFinite(parsed)) {
+      // Number(), not parseInt(): a number input accepts exponential notation,
+      // so 1e1 is a legitimate way to type 10, and parseInt stops at the "e"
+      // and returns 1 -- a value in range on any driver whose extra spans it,
+      // and therefore saved silently as the wrong setting.
+      const parsed = Number(text);
+      if (text === "" || !Number.isFinite(parsed)) {
         return { value: null, error: field.type === "integer" ? "Enter a whole number." : "Enter a number." };
+      }
+      if (field.type === "integer" && !Number.isInteger(parsed)) {
+        return { value: parsed, error: "Enter a whole number." };
       }
       if (Number.isFinite(field.min) && parsed < Number(field.min)) {
         return { value: parsed, error: `Value must be at least ${field.min}.` };
@@ -188,6 +199,9 @@ export function createChannelExtra(ctx) {
     return {
       field,
       control,
+      // What the field opened on, so the save can tell an edit from a value
+      // that was merely on display. See save().
+      initial: current,
       setError(text) {
         errorEl.textContent = String(text || "");
         errorEl.hidden = !text;
@@ -207,15 +221,33 @@ export function createChannelExtra(ctx) {
     fieldControls[0]?.control.focus?.();
   }
 
+  // A channel that carries nothing of its own has no values to show but the
+  // ones sitting in the memory it points at, and those belong to whatever was
+  // there before -- a channel this one replaced, or the image's own occupant.
+  // Saying so is what keeps the form from reading as "your channel's settings",
+  // and pairs with the save writing back only what was actually changed.
+  function startingValuesNote(stored, location) {
+    if (Object.keys(stored).length > 0) {
+      return "";
+    }
+    return `This channel has no settings of its own yet, so the values shown are `
+      + `what memory ${location || "this slot"} currently holds. Only what you `
+      + `change is stored on the channel.`;
+  }
+
   // Open the editor for one grid row. The modal opens before the runtime is
   // asked anything, so a slow first call (this can be the one that boots
   // Pyodide) shows a dialog that is loading rather than a click that did
   // nothing.
-  async function openForRow(rowIdx) {
+  async function openForRow(rowIdx, trigger = null) {
     const row = state.currentRows[rowIdx];
     if (!row) {
       return;
     }
+    // Where focus goes back to on every close path. The grid hands its button
+    // over rather than this reading document.activeElement, because a click
+    // does not focus a button on every platform (Safari does not).
+    triggerElement = trigger;
     const radio = state.selectedRadio;
     const token = openToken + 1;
     openToken = token;
@@ -229,6 +261,11 @@ export function createChannelExtra(ctx) {
     dom.channelExtraSaveEl.disabled = true;
     setMessage("Reading this channel's extra settings from the driver...");
     setModalOpen(true);
+    // Immediately, not when the fields arrive: the read can be the call that
+    // boots Pyodide, and until focus is inside the dialog the keyboard is still
+    // on the button behind the overlay -- permanently so when the read fails or
+    // the driver has nothing to offer, since no field is ever rendered.
+    dom.channelExtraCancelEl.focus?.();
 
     if (!radio) {
       setMessage("Select a radio to edit driver-specific channel settings.");
@@ -261,18 +298,36 @@ export function createChannelExtra(ctx) {
       setMessage(payload?.message || "This channel has no extra settings.");
       return;
     }
-    setMessage("");
-    renderFields(payload.fields || [], rowExtras(row) || {});
+    const stored = rowExtras(row) || {};
+    setMessage(startingValuesNote(stored, location));
+    renderFields(payload.fields || [], stored);
     dom.channelExtraSaveEl.disabled = false;
     trackEvent("channel_extra_opened", { ...radioEventParams(radio), outcome: "ok" });
   }
 
-  // Write the edited values onto the row. Immutable fields are left out: the
-  // schema was read from the memory this row's Location points at, and a value
-  // the driver will not accept anyway is not this channel's to carry.
+  // Write the edited values onto the row.
+  //
+  // Only the fields the user actually changed, and never an immutable one. The
+  // schema was read from the memory this row's Location points at, so a field
+  // left alone is showing that memory's value -- which for a channel created,
+  // pasted or imported over an occupied slot belongs to the *previous
+  // occupant*. Storing those would hand a replacement channel the settings of
+  // the one it replaced, which is the exact failure the row sidecar exists to
+  // prevent (see web/python/webchirp_bridge/channel_extra.py). A field nobody
+  // touched simply stays out of the sidecar, and the driver's own defaults
+  // apply to it at upload.
   function save() {
     const row = editedRow;
     if (!row) {
+      return;
+    }
+    // A download or an image load replaces state.currentRows wholesale without
+    // closing this modal, which would leave the save mutating a row that is no
+    // longer in the editor -- reported as success, absent from what is later
+    // uploaded.
+    if (!state.currentRows.includes(row)) {
+      setModalOpen(false);
+      log.setStatus("The channel list changed while the extra settings were open; nothing was saved.");
       return;
     }
     const values = {};
@@ -287,20 +342,35 @@ export function createChannelExtra(ctx) {
       if (entry.field.mutable === false) {
         continue;
       }
+      // Compared as text so a number input handing back 3 for an initial "3"
+      // still reads as untouched; every value here is a primitive.
+      if (String(value) === String(entry.initial ?? "")) {
+        continue;
+      }
       values[entry.field.name] = value;
     }
     if (invalid > 0) {
       setMessage(`Fix ${invalid} highlighted value${invalid === 1 ? "" : "s"} before saving.`);
       return;
     }
-    setRowExtras(row, values);
+    const changedCount = Object.keys(values).length;
     const location = String(row.Location ?? "").trim();
+    if (changedCount === 0) {
+      // Nothing to record: a row must not pick up a sidecar it does not need,
+      // which is what tells the upload path to leave the driver's own values
+      // alone for this channel.
+      setModalOpen(false);
+      log.setStatus(`No extra settings were changed for channel ${location || "?"}.`);
+      return;
+    }
+    setRowExtras(row, values);
     setModalOpen(false);
     // No re-render: the grid shows the same button whatever a row carries, and
     // the Extra column is already up (nothing else could have opened this).
     trackEvent("channel_extra_saved", radioEventParams(state.selectedRadio));
     log.setStatus(
-      `Extra settings updated for channel ${location || "?"}; they are written on upload or export.`,
+      `Extra settings updated for channel ${location || "?"}; they are written on `
+      + "upload to the radio or image export. CSV export does not carry them.",
     );
   }
 

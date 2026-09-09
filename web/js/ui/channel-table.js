@@ -1244,7 +1244,9 @@ export function createChannelTable({ dom, state, log, actions }) {
       const extraButton = event.target?.closest?.(".channel-extra-button");
       const extraCell = extraButton && cellReferenceFor(extraButton);
       if (extraCell) {
-        actions.openChannelExtra(extraCell.rowIdx);
+        // The button travels with the call so the editor can hand the keyboard
+        // back to it on close.
+        actions.openChannelExtra(extraCell.rowIdx, extraButton);
         return;
       }
       const button = event.target?.closest?.(".channel-location-button");

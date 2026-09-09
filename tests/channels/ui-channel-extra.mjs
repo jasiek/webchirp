@@ -110,16 +110,22 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
     document.querySelector(selector).classList.add("hidden");
   }
 
-  const imgInput = document.querySelector("#img-file");
-  imgInput.files = [{
-    name: "codeplug.img",
-    arrayBuffer: async () => Uint8Array.from([1, 2, 3, 4]).buffer,
-  }];
-  imgInput.dispatchEvent({ type: "change" });
-  await flushMicrotasks();
+  // The binary import path, which is what a dropped or picked .img runs
+  // through. Reusable: loading a second image is how the editor's rows get
+  // replaced wholesale, which a modal left open has to survive.
+  async function loadImage() {
+    const imgInput = document.querySelector("#img-file");
+    imgInput.files = [{
+      name: "codeplug.img",
+      arrayBuffer: async () => Uint8Array.from([1, 2, 3, 4]).buffer,
+    }];
+    imgInput.dispatchEvent({ type: "change" });
+    await flushMicrotasks();
+  }
+  await loadImage();
   // The grid's rows, read back through the controller: globalThis.currentRows
   // is bound to whichever controller was built first in this process.
-  return { document, calls, rows: () => ui.selectedRowsForOperations() };
+  return { document, calls, rows: () => ui.selectedRowsForOperations(), loadImage };
 }
 
 function headerLabels(document) {
@@ -229,13 +235,109 @@ test("saving writes the edited values onto the row", async () => {
   );
 });
 
-test("a channel with no extras of its own takes them on when saved", async () => {
+// The values a field opens on come from the memory the row's Location points
+// at, so for a channel that carries nothing of its own they belong to whatever
+// occupied that slot before -- the channel this one replaced, or the image's
+// own. Writing them back would hand a replacement channel the settings of the
+// one it replaced, which is the exact failure the row sidecar exists to
+// prevent; a field nobody touched has to stay out of the sidecar so the driver
+// applies its own defaults at upload.
+test("a channel with no extras of its own stores only what was changed", async () => {
   const { document, rows } = await boot();
   await openExtraModal(document, 1);
+  // bcl is left showing the slot's true, and must not be recorded for it.
   controlFor(document, "scode").value = "2";
   await submitModal(document);
 
-  assert.deepEqual(rows()[1].__extra, { bcl: true, scode: "2" });
+  assert.deepEqual(rows()[1].__extra, { scode: "2" });
+});
+
+test("the editor says whose values a sidecar-free channel is showing", async () => {
+  const { document } = await boot();
+  await openExtraModal(document, 1);
+  assert.match(
+    document.querySelector("#channel-extra-message").textContent,
+    /no settings of its own/,
+  );
+  // A channel that does carry its own gets no such warning.
+  await openExtraModal(document, 0);
+  assert.equal(document.querySelector("#channel-extra-message").hidden, true);
+});
+
+test("closing without changing anything leaves the row without a sidecar", async () => {
+  const { document, rows } = await boot();
+  await openExtraModal(document, 1);
+  await submitModal(document);
+
+  assert.equal(
+    rows()[1].__extra,
+    undefined,
+    "an empty sidecar would stop the driver applying its own defaults",
+  );
+});
+
+test("a save is refused once the channel list has been replaced under it", async () => {
+  const { document, rows, loadImage } = await boot();
+  await openExtraModal(document, 0);
+  controlFor(document, "scode").value = "2";
+  // A download or a second image load replaces state.currentRows wholesale and
+  // does not close this modal; the row it is holding is no longer in the editor.
+  const detached = rows()[0];
+  await loadImage();
+  await submitModal(document);
+
+  assert.equal(modalIsOpen(document), false);
+  assert.deepEqual(
+    detached.__extra,
+    { bcl: false, scode: "3" },
+    "the detached row must not be edited as if it were still in the editor",
+  );
+});
+
+test("an integer typed in exponential notation is read whole", async () => {
+  const { document, rows } = await boot({
+    getChannelExtra: async () => ({
+      available: true,
+      message: "",
+      fields: [{ name: "voxlevel", label: "VOX level", type: "integer", min: 0, max: 99, mutable: true, current: 3 }],
+    }),
+  });
+  await openExtraModal(document, 0);
+  // A number input accepts this, and it means 10; parseInt would read it as 1.
+  controlFor(document, "voxlevel").value = "1e1";
+  await submitModal(document);
+
+  assert.equal(rows()[0].__extra.voxlevel, 10);
+});
+
+test("a fractional value for an integer extra is rejected", async () => {
+  const { document } = await boot({
+    getChannelExtra: async () => ({
+      available: true,
+      message: "",
+      fields: [{ name: "voxlevel", label: "VOX level", type: "integer", min: 0, max: 99, mutable: true, current: 3 }],
+    }),
+  });
+  await openExtraModal(document, 0);
+  controlFor(document, "voxlevel").value = "2.5";
+  await submitModal(document);
+
+  assert.equal(modalIsOpen(document), true);
+  assert.match(document.querySelector("#channel-extra-grid").textContent, /whole number/);
+});
+
+test("focus enters the dialog on open and returns to the button on close", async () => {
+  const { document } = await boot({
+    // Nothing renders, which is the case that used to leave the keyboard on the
+    // button behind the overlay for as long as the modal stayed up.
+    getChannelExtra: async () => ({ available: false, message: "No extra settings.", fields: [] }),
+  });
+  const button = await openExtraModal(document, 0);
+  assert.equal(document.querySelector("#channel-extra-cancel").focused, true);
+
+  button.focused = false;
+  document.querySelector("#channel-extra-cancel").dispatchEvent({ type: "click" });
+  assert.equal(button.focused, true, "focus should go back to the button that opened it");
 });
 
 test("an out-of-range value is reported and blocks the save", async () => {
@@ -288,12 +390,18 @@ test("a driver with nothing to offer says so instead of showing an empty form", 
 
 test("Escape closes the editor without touching the row", async () => {
   const { document, rows } = await boot();
-  await openExtraModal(document, 0);
+  const button = await openExtraModal(document, 0);
   controlFor(document, "scode").value = "2";
+  button.focused = false;
 
   document.dispatchEvent(keydownEvent("Escape"));
   assert.equal(modalIsOpen(document), false);
   assert.deepEqual(rows()[0].__extra, { bcl: false, scode: "3" });
+  assert.equal(
+    button.focused,
+    true,
+    "Escape should hand the keyboard back to the button too",
+  );
 });
 
 test("a response for a channel the user has left behind is discarded", async () => {

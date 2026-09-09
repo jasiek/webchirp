@@ -26,5 +26,11 @@ export function setRowExtras(row, values) {
   if (!row || !values || typeof values !== "object") {
     return;
   }
+  // An empty write is not a write: a row that has no settings of its own must
+  // not gain an empty sidecar, because the sidecar's absence is what tells the
+  // upload path to leave the driver's defaults alone for that channel.
+  if (Object.keys(values).length === 0) {
+    return;
+  }
   row[EXTRA_KEY] = { ...(rowExtras(row) || {}), ...values };
 }

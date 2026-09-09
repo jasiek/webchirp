@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sharedHarness } from "../support/chirp.mjs";
+import { loadImageFor, readCatalog, sharedHarness } from "../support/chirp.mjs";
 
 // The editor behind the grid's Extra column (web/js/ui/channel-extra.js) needs
 // two things the row sidecar cannot give it: what type each driver extra is,
@@ -153,4 +153,77 @@ test("a row that carries no extras is left on the driver's own values", async ()
     _location: "1",
   });
   assert.equal(after.extras.bcl, expected);
+});
+
+// The preflight is where a rejected extra has to stop the operation. The write
+// path cannot: the only way to reach it is with a clone already in progress and
+// memories already written, so raising there leaves a half-programmed radio. It
+// logs the driver's traceback and carries on, and this is what makes sure it
+// never gets the chance.
+const PREFLIGHT = `
+import json
+json.dumps(validate_rows_for_upload(json.loads(_rows_json), "h777", "H777Radio"))
+`;
+
+function extraIssues(result) {
+  return (result.issues || []).filter((issue) => issue.column === "Extra");
+}
+
+// h777's channel extras are both booleans, and a boolean refuses nothing --
+// RadioSettingValueBoolean coerces whatever it is given. The UV-5R is the
+// driver with an extra that can say no: PTT ID is a RadioSettingValueList, so
+// an option outside its own list raises, which is what a sidecar carried over
+// from another driver or edited by hand hands it.
+test("a value the driver refuses blocks the upload instead of vanishing", async () => {
+  const harness = await sharedHarness();
+  const catalog = await readCatalog();
+  const { match, loaded } = await loadImageFor(harness, catalog, "Baofeng_UV-5R.img");
+  const withExtras = loaded.rows.findIndex((row) => row.__extra?.pttid !== undefined);
+  assert.ok(withExtras >= 0, "the UV-5R image should carry PTT ID on its channels");
+
+  const edited = loaded.rows.map((row) => ({ ...row }));
+  edited[withExtras] = {
+    ...edited[withExtras],
+    __extra: { ...edited[withExtras].__extra, pttid: "Telepathy" },
+  };
+
+  const result = await harness.runPythonJson(
+    `import json\njson.dumps(validate_rows_for_upload(json.loads(_rows_json), _module, _class_name))`,
+    { _rows_json: JSON.stringify(edited), _module: match.module, _class_name: match.className },
+  );
+  const issues = extraIssues(result);
+  assert.equal(result.valid, false, "a refused extra must fail the preflight");
+  assert.equal(issues.length, 1, JSON.stringify(result.issues));
+  assert.equal(issues[0].rowIndex, withExtras);
+  // Named by the label the user saw, not by the driver's internal key.
+  assert.match(issues[0].message, /PTT ID/);
+});
+
+test("an unedited codeplug reports nothing about its extras", async () => {
+  const harness = await sharedHarness();
+  const { rows } = await harness.runPythonJson(SETUP);
+  const result = await harness.runPythonJson(PREFLIGHT, {
+    _rows_json: JSON.stringify(rows),
+  });
+  assert.deepEqual(extraIssues(result), []);
+  assert.equal(result.valid, true, JSON.stringify(result.issues));
+});
+
+// A row whose columns match its memory is classified "skip", which returns
+// before validate_memory is ever called -- so before this, an extras-only edit
+// reached the radio with no driver validation at all. h777 has no
+// extras-dependent rule to trip (hf90, ft450d and ar8200 do), so what is pinned
+// here is that the pass runs and stays quiet, which is the half a regression
+// would break silently.
+test("an extras-only edit is still put through the driver's validation", async () => {
+  const harness = await sharedHarness();
+  const { rows } = await harness.runPythonJson(SETUP);
+  const edited = rows.map((row) => ({ ...row }));
+  edited[0] = { ...rows[0], __extra: { ...rows[0].__extra, bcl: !rows[0].__extra.bcl } };
+
+  const result = await harness.runPythonJson(PREFLIGHT, {
+    _rows_json: JSON.stringify(edited),
+  });
+  assert.equal(result.valid, true, JSON.stringify(result.issues));
+  assert.deepEqual(extraIssues(result), []);
 });

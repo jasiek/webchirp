@@ -225,7 +225,8 @@ def _apply_rows_to_radio_instance(
             # exactly like an untouched one here. Replay the sidecar against
             # the memory that was read a moment ago: it only writes when a
             # value actually differs, so an untouched row still costs nothing.
-            if _apply_row_extras_to_memory(existing, row):
+            extras_changed, _rejected = _apply_row_extras_to_memory(existing, row)
+            if extras_changed:
                 radio.set_memory(existing)
             continue
         if validation_errors:

@@ -1269,16 +1269,32 @@ button:disabled {
   row-gap: 1.1rem;
 }
 
+/* A driver decides how many extras a channel has -- anytone_iii publishes
+   thirteen -- so this is the one modal whose height is not something the markup
+   knows. Without a cap the card grows past both edges of the fixed overlay on a
+   short viewport and takes Cancel and Save off screen with it; the field grid
+   is what scrolls, so the title, the hint and the actions stay put. */
+#channel-extra-modal .modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2rem);
+}
+
 /* The per-channel extras editor. Its fields are label/control pairs in the
    shared .modal-grid, but each label carries the driver's own explanation of
-   the setting underneath it, so the rows align to the top rather than centre. */
+   the setting underneath it, so the rows align to the top rather than centre,
+   and the label column is wider than the shared 160px -- at 160px a two-line
+   explanation becomes an eight-line ribbon. The phone-width override lives with
+   the other responsive rules at the foot of this file: this selector outranks
+   the shared one there, so it has to be answered at its own specificity. */
 #channel-extra-modal .modal-grid {
-  /* Wider than the shared 160px label column: these labels carry the driver's
-     own explanation of the setting under them, and at 160px a two-line
-     explanation becomes an eight-line ribbon. */
   grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
   align-items: start;
   row-gap: 0.7rem;
+  overflow-y: auto;
+  /* A flex child's default minimum is its content height, which would defeat
+     the cap above by refusing to shrink. */
+  min-height: 0;
 }
 
 .channel-extra-hint,
@@ -1673,7 +1689,7 @@ button:disabled {
 }
 
 /* The Extra column's cell: a button rather than an editor, because the fields
-   behind it are per-driver and per-channel (ui/channel-extra.js). Sized to its
+   behind it are per-driver and per-channel (web/js/ui/channel-extra.js). Sized to its
    label so the column stays the narrowest one in the grid. */
 #mem-table .channel-extra-button {
   padding: 0.05rem 0.4rem;
@@ -2008,6 +2024,13 @@ button:disabled {
 
   .modal-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The extras editor sets its own label column at a specificity the rule above
+     cannot reach, so it needs its own override or it keeps two columns -- a
+     220px label beside a squeezed control -- on a phone. */
+  #channel-extra-modal .modal-grid {
+    grid-template-columns: 1fr;
   }
 
   .settings-layout {

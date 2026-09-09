@@ -18,6 +18,7 @@ reads.
 
 from __future__ import annotations
 
+import traceback
 from typing import TYPE_CHECKING
 
 from chirp import (
@@ -74,14 +75,20 @@ def _row_extras_from_memory(memory: chirp_common.Memory) -> dict[str, Any]:
 
 def _apply_row_extras_to_memory(
     memory: chirp_common.Memory, row: Row
-) -> bool:
+) -> tuple[bool, list[str]]:
     """Replay a row's stored extras onto a memory the driver just handed back.
 
-    Returns whether any value actually moved, so the caller can skip a write
-    that would change nothing. The memory has to come from the driver rather
-    than be rebuilt from the row: it carries the driver's own setting objects,
-    with this slot's option lists and value types, so no type has to be
-    reconstructed from the row.
+    Returns whether any value actually moved -- so a caller can skip a write
+    that would change nothing -- and one message per value the driver refused.
+    A refusal is a real loss (the setting stays at the destination's value while
+    everything else succeeds), so it is never merely swallowed: the full
+    traceback goes to the debug panel here, and the messages go back to the
+    caller, which is what lets the upload preflight report them as blocking
+    issues before a byte is written.
+
+    The memory has to come from the driver rather than be rebuilt from the row:
+    it carries the driver's own setting objects, with this slot's option lists
+    and value types, so no type has to be reconstructed from the row.
 
     A row with no sidecar is left alone. That is the channel the user created,
     imported from CSV, or pasted over this slot, and it is entitled to the
@@ -89,11 +96,12 @@ def _apply_row_extras_to_memory(
     """
     stored = row.get(ROW_EXTRA_KEY)
     if not isinstance(stored, dict) or not stored:
-        return False
+        return False, []
     extra = getattr(memory, "extra", None)
     if not extra:
-        return False
+        return False, []
     changed = False
+    rejected: list[str] = []
     for setting in extra:
         name = str(setting.get_name())
         if name not in stored:
@@ -104,13 +112,17 @@ def _apply_row_extras_to_memory(
                 continue
             setting.value = wanted
         except Exception as exc:
+            rejected.append(
+                f"Extra setting {setting.get_shortname()} does not accept "
+                f"{wanted!r}: {exc}"
+            )
             _log_debug(
                 f"Channel {memory.number} extra setting {name} "
-                f"could not be restored: {exc}"
+                f"could not be set to {wanted!r}: {exc}\n{traceback.format_exc()}"
             )
             continue
         changed = True
-    return changed
+    return changed, rejected
 
 
 def _apply_row_extras(radio: chirp_common.Radio, number: int, row: Row) -> None:
@@ -122,9 +134,18 @@ def _apply_row_extras(radio: chirp_common.Radio, number: int, row: Row) -> None:
     the memory afterwards is what makes this safe to do generically.
 
     Writing again only pays for itself when a value actually moved.
+
+    A value the driver refuses is logged with its traceback and the rest of the
+    channel is still written. This does not abort the operation, because the
+    only way to reach it is with a clone already in progress and memories
+    already written -- raising here would leave the radio half programmed. The
+    upload preflight is where a refusal stops the operation instead
+    (``_row_extra_findings`` in web/python/webchirp_bridge/row_validation.py),
+    while it is still a highlighted cell rather than a partly written radio.
     """
     memory = radio.get_memory(number)
-    if _apply_row_extras_to_memory(memory, row):
+    changed, _rejected = _apply_row_extras_to_memory(memory, row)
+    if changed:
         radio.set_memory(memory)
 
 

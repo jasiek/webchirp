@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from chirp import chirp_common
 
+from webchirp_bridge.channel_extra import _apply_row_extras_to_memory
 from webchirp_bridge.channel_rows import (
     CSV_HEADERS,
     _coerce_csv_vals_for_chirp,
@@ -58,6 +59,11 @@ MEMORY_FIELD_HEADERS: dict[str, str] = {
     "power": "Power",
     "comment": "Comment",
 }
+# The grid's synthetic column for driver extras, which every findings message
+# about them is reported against so the cell the button sits in is the one that
+# highlights. Spelled the same way web/js/ui/channel-table.js spells it.
+EXTRA_COLUMN = "Extra"
+
 # Fields an immutable-field error can name that are not grid fields: number
 # is the row's Location, and empty has no column, so it lands on Frequency,
 # the cell that defines whether a channel exists.
@@ -270,6 +276,47 @@ def _prepare_row_change(
     return "set", mem, warnings, validation_errors
 
 
+def _row_extra_findings(
+    radio: chirp_common.Radio,
+    row: Row,
+    existing: chirp_common.Memory,
+    action: RowChangeAction,
+) -> tuple[list[str], list[str]]:
+    """What a row's driver extras would do to the memory they land on.
+
+    Two things nothing else in the preflight looks at. A stored value the
+    driver refuses -- an option this slot does not offer, a number outside its
+    range -- is a silent loss at write time: the rest of the channel is written
+    and that one setting keeps the destination's value. And a row whose grid
+    columns match the memory exactly is classified "skip", which returns before
+    ``validate_memory`` is ever called, so a driver with an extras-dependent
+    rule (``hf90`` on scan/selcall, ``ft450d`` on mode/filter, ``ar8200``) never
+    gets to see the combination an extras-only edit produces.
+
+    Applying the sidecar to ``existing`` is safe here in a way it would not be
+    in the write path: the preflight builds a throwaway radio and re-reads each
+    memory, so the mutated setting objects are discarded with it.
+
+    A changed row re-validates in ``_prepare_and_validate_memory`` already, and
+    re-running it here with the extras attached would report every finding
+    twice; the value check still runs for those rows, which is the half that is
+    genuinely missing.
+    """
+    if action == "erase":
+        return [], []
+    changed, rejected = _apply_row_extras_to_memory(existing, row)
+    if not changed or action != "skip":
+        return list(rejected), []
+    try:
+        messages = radio.validate_memory(chirp_common.FrozenMemory(existing))
+    except Exception as exc:
+        return [*rejected, str(exc)], []
+    warnings, errors = chirp_common.split_validation_msgs(messages)
+    return [*rejected, *(str(error) for error in errors)], [
+        str(warning) for warning in warnings
+    ]
+
+
 def _validation_column(message: ValidationMessage) -> str:
     """Map a CHIRP validation or immutable-field message to a grid column."""
     text = str(message or "")
@@ -350,6 +397,17 @@ def validate_rows_for_upload(
             action, mem, row_warnings, row_errors = _prepare_row_change(
                 radio, row, existing, mem
             )
+            # Extras ride on the row, not in a column, so they are checked
+            # against the memory they will land on rather than through the
+            # column machinery above -- including for a row the change
+            # classification skipped, which an extras-only edit always is.
+            extra_errors, extra_warnings = _row_extra_findings(
+                radio, row, existing, action
+            )
+            for message in extra_errors:
+                issues.append(_issue(row_index, EXTRA_COLUMN, message))
+            for message in extra_warnings:
+                warnings.append(_issue(row_index, EXTRA_COLUMN, message))
             if action == "skip":
                 continue
         except Exception as exc:
