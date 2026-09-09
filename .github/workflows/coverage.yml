@@ -1,0 +1,172 @@
+# Runs the checks and the full test suite under coverage, and publishes the
+# result where GitHub can show it: a table in the run's job summary, and
+# js.lcov / python.lcov / summary.json as a downloadable artifact.
+#
+# This is also the only workflow that runs on pull requests -- pages.yml tests
+# on master because it gates a deploy, which is too late to learn a branch is
+# broken.
+#
+# On a pull request the result is also brought to the pull request itself,
+# where a reviewer already is: one comment, edited in place on each push rather
+# than a new one per run, and annotations on the diff marking changed lines the
+# suite never executes. That patch figure is the one worth reading -- forty
+# untested new lines move a 13,000-line project total by a third of a percent,
+# so only the patch number can answer "did this branch test what it added".
+#
+# Tracking works without any third-party service. Each master run uploads its
+# summary.json; a pull request downloads the last successful one and reports the
+# change against it, so the summary says whether the branch moved coverage and
+# in which direction. The floors in coverage-floors.json are the hard part of
+# that: they fail the run when coverage drops, and a PR that improves coverage
+# raises them in the same commit, so git log over that one file is the trend.
+name: Coverage
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Reading the previous run's artifact for the baseline delta.
+  actions: read
+  # Posting and editing the one coverage comment on a pull request.
+  pull-requests: write
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The Pyodide tests seed CHIRP from the submodule and read its test
+          # images; without it most of the suite cannot run at all.
+          submodules: true
+          # Patch coverage diffs against the pull request's base commit, which
+          # a shallow clone does not contain.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+      - run: npm ci
+
+      # Before the tests, not after, and for the same reason pages.yml does it:
+      # build:catalog regenerates web/radio-catalog.json from the submodule pin
+      # and three tests read that file, so without this a pin or catalog change
+      # is tested against the committed copy and only really validated after
+      # merge. It costs a few seconds.
+      - run: npm run build:dist
+
+      # Best effort: a first run on a new branch, an expired artifact, or a
+      # master history with no coverage run yet all leave no baseline, and the
+      # report simply omits the delta column.
+      - name: Fetch master coverage baseline
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --workflow coverage.yml --branch master --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$run_id" ]; then
+            gh run download "$run_id" --name coverage --dir baseline
+          fi
+
+      # check:syntax, check:types, check:python, then the whole suite under
+      # coverage. Same test files npm test runs, measured rather than repeated.
+      - name: Test with coverage
+        env:
+          # Ignored when the file is absent, which is the no-baseline case.
+          WEBCHIRP_COVERAGE_BASELINE: baseline/summary.json
+        run: npm run test:ci
+
+      # Runs even when the floors failed: a branch that drops overall coverage
+      # is exactly when a reviewer wants to know which of its own lines are
+      # untested. The ::warning lines it prints become annotations on the diff.
+      - name: Patch coverage
+        if: always() && github.event_name == 'pull_request'
+        env:
+          # The base branch, not the event's base.sha. GitHub pins base.sha to
+          # the merge-base at pull request creation and never advances it (see
+          # pr-refs-go-stale in FINDINGS.md), so a branch opened a week ago
+          # would be blamed for every master commit since. Naming the ref lets
+          # git compute a fresh merge-base with its three-dot diff instead.
+          COVERAGE_DIFF_BASE: origin/${{ github.event.pull_request.base.ref }}
+        run: |
+          if [ -f coverage/js.lcov ]; then
+            npm run coverage:patch
+          else
+            echo "No coverage data: an earlier step failed before it was produced."
+          fi
+
+      # The line-by-line view, into the same artifact. GitHub will not render
+      # it in place, but it downloads as one self-contained file that opens
+      # from disk with no network access.
+      - name: Build the line-by-line report
+        if: always()
+        run: |
+          if [ -f coverage/js.lcov ]; then
+            npm run coverage:report
+          else
+            echo "No coverage data: an earlier step failed before it was produced."
+          fi
+
+      # Written whether or not the floors were met, so a failing run still
+      # explains itself on the summary page instead of only in the log.
+      - name: Publish job summary
+        if: always()
+        run: |
+          cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          cat coverage/patch.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+      # One comment per pull request, edited in place. A pull request from a
+      # fork gets a read-only token and cannot be commented on at all, so it is
+      # skipped rather than left to fail; its numbers are still in the job
+      # summary and the artifact.
+      # A fork's token is read-only, and so is Dependabot's even though its
+      # branch lives in this repository, so both would turn an otherwise-green
+      # run red on a 403. Skipped rather than allowed to fail; the job summary
+      # and the artifact still carry every number.
+      - name: Comment coverage on the pull request
+        if: always() && github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && github.actor != 'dependabot[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          # Identifies our own comment among any others on the pull request.
+          # Invisible when the comment is rendered.
+          MARKER: <!-- webchirp-coverage -->
+        run: |
+          # coverage/ is created by coverage.mjs, which a failing check:syntax,
+          # check:types or check:python aborts before reaching -- and then this
+          # redirect would fail and the fallback message never post.
+          mkdir -p coverage
+          {
+            echo "$MARKER"
+            cat coverage/summary.md 2>/dev/null || echo "Coverage did not produce a summary; see the job log."
+            echo
+            cat coverage/patch.md 2>/dev/null || true
+          } > coverage/pr-comment.md
+          existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq "map(select(.body | contains(\"$MARKER\"))) | .[0].id // empty")
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -F body=@coverage/pr-comment.md
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@coverage/pr-comment.md
+          fi
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: warn

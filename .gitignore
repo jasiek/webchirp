@@ -42,3 +42,6 @@ TODO.md
 
 # Claude Code session state and worktrees
 .claude/
+
+# Coverage artifacts (npm run coverage)
+coverage/
