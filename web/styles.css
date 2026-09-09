@@ -1681,9 +1681,15 @@ button:disabled {
   background: var(--focus-bg);
 }
 
+/* background-color, not the background shorthand: the shorthand resets
+   background-image, and since these selects draw their own dropdown chevron
+   there (native appearance being off) a focused cell would lose the only sign
+   that it is a dropdown at all -- exactly while the user is interacting with
+   it. The input rule above can use the shorthand safely because an input has
+   no background layer to lose. */
 #mem-table td select:focus {
   outline: 1px solid var(--accent);
-  background: var(--focus-bg);
+  background-color: var(--focus-bg);
 }
 
 @media (max-width: 900px) {

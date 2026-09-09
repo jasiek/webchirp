@@ -144,3 +144,24 @@ test("the header row stays put while the channels scroll", () => {
   // the header's height, and so every row's offset in visibleRowRange().
   assert.match(declarations, /box-shadow:.*var\(--border\)/);
 });
+
+test("a focused dropdown keeps the chevron that replaced its native arrow", () => {
+  const styles = fs.readFileSync(path.join(repoRootDir, "web", "styles.css"), "utf8");
+  const base = styles.match(/#mem-table td select \{([^}]*)\}/);
+  const focused = styles.match(/#mem-table td select:focus \{([^}]*)\}/);
+  assert.ok(base && focused, "grid selects need both a base and a focus rule");
+
+  // Native appearance is off, so this background layer is the only thing
+  // telling the user the cell is a dropdown.
+  assert.match(base[1], /appearance:\s*none/);
+  assert.match(base[1], /background:.*var\(--select-arrow\)/);
+  // The background shorthand resets background-image, so a focus rule using it
+  // takes the chevron away exactly while the cell is being used -- and leaves
+  // no indicator at all, native or otherwise. Reported by review on #158.
+  assert.doesNotMatch(
+    focused[1],
+    /background:/,
+    "the focus rule must set background-color, not the background shorthand",
+  );
+  assert.match(focused[1], /background-color:\s*var\(--focus-bg\)/);
+});
