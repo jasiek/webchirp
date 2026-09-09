@@ -3,7 +3,7 @@
 // and measured purely by where it sits. Nothing lists the files any more, which
 // is the point -- and also why the wiring itself needs a test. Each assertion
 // below covers a way a file can end up silently unrun: sitting in a directory
-// no npm script globs, sitting loose in tests/, being measured for coverage
+// npm test does not reach, sitting loose in tests/, being measured for coverage
 // while CI never executes it, or -- the one that actually happened -- never
 // reaching the repository at all, because an unanchored build/ in .gitignore
 // matched tests/build/ and git never offered its new files for commit.
@@ -13,7 +13,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { testFiles } from "../../scripts/coverage.mjs";
+import { suitesRunByNpmTest, testFiles } from "../../scripts/coverage.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
 const TESTS_DIR = path.join(repoRoot, "tests");
@@ -21,8 +21,10 @@ const TESTS_DIR = path.join(repoRoot, "tests");
 // from npm test (one file needs the network, the other a radio on a port).
 const NON_SUITE_DIRS = new Set(["support", "manual"]);
 
+const pkgPath = path.join(repoRoot, "package.json");
+
 function scripts() {
-  return JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")).scripts;
+  return JSON.parse(readFileSync(pkgPath, "utf8")).scripts;
 }
 
 function suiteDirs() {
@@ -31,10 +33,14 @@ function suiteDirs() {
     .map((e) => e.name);
 }
 
-test("every suite directory is globbed by an npm script", () => {
-  const commands = Object.values(scripts()).join("\n");
-  const unrun = suiteDirs().filter((name) => !commands.includes(`tests/${name}/*.mjs`));
-  assert.deepEqual(unrun, [], `suite directories no npm script runs: ${unrun.join(", ")}`);
+test("every suite directory is reachable from npm test", () => {
+  // Reachable, not merely mentioned. A test: script that still globs its suite
+  // but is no longer chained into the root test script leaves the suite green
+  // in coverage and absent from the gate: .github/workflows/pages.yml runs
+  // npm test and nothing else, so that suite would stop blocking a deploy.
+  const gated = suitesRunByNpmTest(JSON.parse(readFileSync(pkgPath, "utf8")));
+  const unrun = suiteDirs().filter((name) => !gated.has(name));
+  assert.deepEqual(unrun, [], `suite directories npm test never reaches: ${unrun.join(", ")}`);
 });
 
 test("suites are globbed, never listed file by file", () => {
@@ -71,7 +77,7 @@ test("coverage measures exactly the files the suites run", () => {
   assert.ok(expected.length > 60, `expected the whole suite, found ${expected.length} files`);
 });
 
-test("every test file is tracked by git", () => {
+test("no test file is hidden from git by an ignore rule", () => {
   // A glob runs what is on disk; CI runs what was committed. An ignore rule
   // that matches a suite directory silently separates the two -- the author
   // sees green locally and the file never lands. Ask git directly rather than
@@ -85,7 +91,11 @@ test("every test file is tracked by git", () => {
         .map((name) => `tests/${dir}/${name}`));
   let ignored = "";
   try {
-    ignored = execFileSync("git", ["check-ignore", "--stdin"], {
+    // --no-index is what makes this check anything at all: by default
+    // check-ignore reports nothing for a path already in the index, so every
+    // file here -- all of them committed -- would come back clean however
+    // badly .gitignore were written, and the guard would pass vacuously.
+    ignored = execFileSync("git", ["check-ignore", "--no-index", "--stdin"], {
       cwd: repoRoot,
       input: files.join("\n"),
       encoding: "utf8",

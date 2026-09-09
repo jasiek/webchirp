@@ -47,24 +47,51 @@ const FLOORS_PATH = path.join(repoRoot, "coverage-floors.json");
 // calls a live third-party API, the other needs a radio on a serial port.
 const NON_SUITE_DIRS = new Set(["support", "manual"]);
 
+// The suites npm test actually runs, resolved transitively: the root test
+// script chains into the per-suite scripts with npm run, so a suite counts as
+// gated only if it is reachable from scripts.test. "Named by some script" is
+// too weak -- .github/workflows/pages.yml runs npm test and nothing else, so a
+// suite dropped from that chain stops gating the deploy while its own
+// test: script, and the scan below, still find it.
+export function suitesRunByNpmTest(pkg) {
+  const suites = new Set();
+  const seen = new Set();
+  const queue = ["test"];
+  while (queue.length > 0) {
+    const name = queue.pop();
+    if (seen.has(name) || !pkg.scripts[name]) {
+      continue;
+    }
+    seen.add(name);
+    const command = pkg.scripts[name];
+    for (const [, suite] of command.matchAll(/tests\/([\w-]+)\/\*\.mjs/g)) {
+      suites.add(suite);
+    }
+    for (const [, next] of command.matchAll(/npm run ([\w:-]+)/g)) {
+      queue.push(next);
+    }
+  }
+  return suites;
+}
+
 // Every suite, discovered from the filesystem rather than named here, so a test
 // file -- or a whole suite -- is measured the moment it lands and npm test and
-// this script cannot drift apart. Each suite is cross-checked against
-// package.json for the other half of that: a directory no npm script globs
-// would be measured here without CI ever running it, quietly claiming coverage
-// from files the gate never executes.
+// this script cannot drift apart. Each suite is cross-checked against npm test
+// for the other half of that: a directory npm test does not reach would be
+// measured here without CI ever running it, quietly claiming coverage from
+// files the gate never executes.
 export function testFiles() {
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
-  const commands = Object.values(pkg.scripts).join("\n");
+  const gated = suitesRunByNpmTest(pkg);
   const files = [];
   for (const entry of fs.readdirSync(path.join(repoRoot, "tests"), { withFileTypes: true })) {
     if (!entry.isDirectory() || NON_SUITE_DIRS.has(entry.name)) {
       continue;
     }
-    if (!commands.includes(`tests/${entry.name}/*.mjs`)) {
+    if (!gated.has(entry.name)) {
       throw new Error(
-        `tests/${entry.name}/ is a suite no package.json script runs; `
-          + "add a test: script that globs it, or move it under tests/manual/",
+        `tests/${entry.name}/ is a suite npm test does not reach; add a test: script `
+          + "that globs it and chain that script into test, or move it under tests/manual/",
       );
     }
     for (const name of fs.readdirSync(path.join(repoRoot, "tests", entry.name))) {
