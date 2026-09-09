@@ -1269,6 +1269,59 @@ button:disabled {
   row-gap: 1.1rem;
 }
 
+/* The per-channel extras editor. Its fields are label/control pairs in the
+   shared .modal-grid, but each label carries the driver's own explanation of
+   the setting underneath it, so the rows align to the top rather than centre. */
+#channel-extra-modal .modal-grid {
+  /* Wider than the shared 160px label column: these labels carry the driver's
+     own explanation of the setting under them, and at 160px a two-line
+     explanation becomes an eight-line ribbon. */
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  align-items: start;
+  row-gap: 0.7rem;
+}
+
+.channel-extra-hint,
+.channel-extra-message {
+  margin: 0 0 0.8rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.channel-extra-label label {
+  font-size: 0.88rem;
+}
+
+.channel-extra-doc {
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.channel-extra-control {
+  min-width: 0;
+}
+
+.channel-extra-control.is-immutable input,
+.channel-extra-control.is-immutable select {
+  background: var(--surface-muted);
+  color: var(--disabled-text);
+}
+
+.channel-extra-control.is-invalid input,
+.channel-extra-control.is-invalid select {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+
+.channel-extra-error {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--error-text);
+}
+
 /* A value the modal reports rather than asks for: the fixed RSGB country.
    Styled to read as text, not as a disabled input the user might try to
    edit. */
@@ -1617,6 +1670,29 @@ button:disabled {
 #mem-table .channel-location-button:focus-visible {
   outline: 1px solid var(--accent);
   background: var(--focus-bg);
+}
+
+/* The Extra column's cell: a button rather than an editor, because the fields
+   behind it are per-driver and per-channel (ui/channel-extra.js). Sized to its
+   label so the column stays the narrowest one in the grid. */
+#mem-table .channel-extra-button {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+#mem-table .channel-extra-button:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+#mem-table .channel-extra-button:focus-visible {
+  outline: 1px solid var(--accent);
 }
 
 /* Static OSM context map for imported repeater channels (issue #57): rows

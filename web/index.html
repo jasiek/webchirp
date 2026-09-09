@@ -364,6 +364,34 @@
     </div>
 
     <!--
+      Per-channel driver settings (CHIRP's Memory.extra): the editor behind the
+      grid's Extra column. The grid is empty on purpose -- the fields depend on
+      the driver and on the channel, so web/js/ui/channel-extra.js builds them
+      from what the runtime reports when the modal opens.
+    -->
+    <div
+      id="channel-extra-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="channel-extra-title"
+    >
+      <form id="channel-extra-form" class="modal-card">
+        <h2 id="channel-extra-title">Extra settings</h2>
+        <p class="channel-extra-hint">
+          Settings this radio's driver keeps per channel. They are written when
+          you upload to the radio or export an image.
+        </p>
+        <p id="channel-extra-message" class="channel-extra-message" hidden></p>
+        <div id="channel-extra-grid" class="modal-grid"></div>
+        <div class="modal-actions">
+          <button id="channel-extra-cancel" type="button">Cancel</button>
+          <button id="channel-extra-save" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+
+    <!--
       Single query modal shared by every repeater directory (przemienniki.net,
       RepeaterBook, IRTS, RSGB ETCC). The grid is empty on purpose: each field is
       built per source by web/js/ui/query-fields.js when the modal opens.
