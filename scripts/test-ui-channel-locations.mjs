@@ -61,7 +61,7 @@ async function bootWithRows(rows, bounds = { min: 0, max: 127 }) {
       ],
     }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-    getDefaultHeaders: async () => ({ headers: HEADERS }),
+    getDefaultSchema: async () => ({ headers: HEADERS }),
     getRadioMetadata: async () => ({ headers: HEADERS, columns }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers: HEADERS, rows: rows.map((row) => ({ ...row })), errors: [] }),

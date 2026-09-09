@@ -152,7 +152,12 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
     const meta = state.radioMetadata.columns?.[column] || {};
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
-      return String(meta.options[0]);
+      // CHIRP's own starting value for the column when the driver offers it
+      // (get_radio_column_metadata publishes it from chirp_common.Memory()),
+      // and only then the first option. options[0] is a poor default: it is
+      // 67.0 on every CTCSS table and WFM on the full mode list, neither of
+      // which is what CHIRP calls a new channel.
+      return String(meta.default ?? meta.options[0]);
     }
     if (meta.kind === "int" && Number.isFinite(meta.min)) {
       return String(meta.min);
@@ -291,11 +296,27 @@ export function createChannelTable({ dom, state, log, actions }) {
     return result.accepted;
   }
 
+  // Resolve a caller's ranked list of choices against the column's own option
+  // list, returning the first one the driver offers (or "" when it offers
+  // none). The ranking is the point: a repeater builder asks for
+  // ["FM", "NFM", "FMN"] and takes whichever spelling this driver uses.
   function findEnumOption(column, choices, caseInsensitive = false) {
     if (!state.currentHeaders.includes(column)) {
       return "";
     }
-    const meta = state.radioMetadata.columns?.[column] || {};
+    const meta = state.radioMetadata.columns?.[column];
+    // A column with no driver metadata behind it is unconstrained, not
+    // unsupported. Until a radio is selected the grid runs on the startup
+    // schema (loadEmptySchema in web/js/ui/codeplug-io.js), which seeds
+    // CHIRP's generic CSV headers with no columns to validate against, and
+    // setRowValueIfPresent writes anything through in that state. This has to
+    // agree with it: reading the absent option list as "the radio refuses
+    // this" made every repeater builder skip every record it was given, so a
+    // directory query fetched hundreds of repeaters and inserted none, blaming
+    // a selected radio that did not exist.
+    if (!meta) {
+      return String(choices[0] ?? "");
+    }
     const options = Array.isArray(meta.options) ? meta.options.map(String) : [];
     if (caseInsensitive) {
       const normalized = new Map(options.map((option) => [option.toLowerCase(), option]));
@@ -322,6 +343,42 @@ export function createChannelTable({ dom, state, log, actions }) {
       setRowValue: setRowValueIfPresent,
       findEnumOption,
     };
+  }
+
+  // Clear any Power the newly selected driver does not advertise, and report
+  // how many rows that touched.
+  //
+  // Power is the one column whose vocabulary is private to a driver: "High",
+  // "Hi", "L3" and "0.1W" all name the same kind of thing in different words,
+  // while Mode "FM" and Tone "TSQL" come from lists CHIRP shares across every
+  // radio. So a Power carried over from another schema -- a channel built
+  // before a radio was selected, or under a different driver -- is not a value
+  // the new driver disagrees with, it is a word it does not speak, and the
+  // upload preflight rejects the whole row for it ("Power '0.1W' is not
+  // supported by this radio"). Clearing it means "no level chosen", which is
+  // what a new CHIRP memory holds and what the runtime already writes as the
+  // driver's own default (_resolve_power_level in
+  // web/python/webchirp_bridge/power_levels.py).
+  function dropUnsupportedPowerValues() {
+    if (!state.currentHeaders.includes("Power")) {
+      return 0;
+    }
+    const options = state.radioMetadata.columns?.Power?.options;
+    // No option list is a driver that has published nothing about power, so
+    // there is nothing to measure a row against.
+    if (!Array.isArray(options) || options.length === 0) {
+      return 0;
+    }
+    const spoken = new Set(options.map(String));
+    let cleared = 0;
+    for (const row of state.currentRows) {
+      const value = String(row.Power ?? "");
+      if (value !== "" && !spoken.has(value)) {
+        row.Power = "";
+        cleared += 1;
+      }
+    }
+    return cleared;
   }
 
   // A row counts as a real channel when it has a usable frequency or a name;
@@ -1279,6 +1336,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     reconcileLocations,
     sortRowsByLocation,
     insertRowsAtSelectionOrEnd,
+    dropUnsupportedPowerValues,
     createBlankChannelRow,
     setRowValueIfPresent,
     findEnumOption,

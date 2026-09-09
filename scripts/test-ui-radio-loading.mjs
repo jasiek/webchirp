@@ -41,7 +41,7 @@ test("the selected-radio readout shows Loading... while CHIRP drivers are loadin
   ui.setRuntimeApi({
     listRadios: () => radioListDeferred.promise,
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({
       headers: ["Location", "Name"],
       columns: {},
@@ -107,7 +107,7 @@ test("search box shows narrowing make+model suggestions", async () => {
       ],
     }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
@@ -176,7 +176,7 @@ test("search suggestions disambiguate duplicates, cap results, and close on Esca
   ui.setRuntimeApi({
     listRadios: async () => ({ radios }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
@@ -230,7 +230,7 @@ test("stale metadata response does not overwrite a newer radio selection", async
   ui.setRuntimeApi({
     listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async ({ module }) => {
       if (module === "slow") {
         return slowMetadata.promise;
@@ -285,7 +285,7 @@ test("reselecting the loaded radio rejects partial loads in either completion or
     ui.setRuntimeApi({
       listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
       getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-      getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+      getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
       getRadioMetadata: async ({ module }) => {
         metadataCalls.push(module);
         return module === "slow" && deferredPart === "metadata"
@@ -346,7 +346,7 @@ test("picking a search suggestion names the radio in the readout and loads it on
   ui.setRuntimeApi({
     listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async ({ module }) => {
       metadataCalls.push(module);
       return { headers: ["Location", "Name"], columns: {} };
@@ -426,7 +426,7 @@ test("search finds radios by their alias identities and names the matching alias
       ],
     }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
@@ -472,7 +472,7 @@ test("live-mode radios carry their marker after the name, in list and readout", 
       ],
     }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
@@ -508,7 +508,7 @@ test("the readout names the driver only when two entries share a name", async ()
       ],
     }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
@@ -537,7 +537,7 @@ test("serial and clone actions stay disabled until a radio is selected", async (
   ui.setRuntimeApi({
     listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
-    getDefaultHeaders: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
