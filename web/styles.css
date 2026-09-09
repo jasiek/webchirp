@@ -1302,10 +1302,17 @@ button:disabled {
 /* Square, so the range circle has the same room in both directions.
    web/js/ui/query-fields.js measures the container and renders the tile grid
    at that pixel size; the aspect ratio is what it measures against before the
-   first render. */
-.modal-map-preview .repeater-map-canvas {
+   first render. The stand-in shown before a position is entered is the same
+   square, so the block never changes size and the first render already
+   measures the width the map will keep. */
+.modal-map-preview .repeater-map-canvas,
+.modal-map-preview-empty {
   width: 100%;
   aspect-ratio: 1 / 1;
+  background: var(--border);
+}
+
+.modal-map-preview .repeater-map-canvas {
   /* Draggable: the map sets the position as well as showing it. touch-action
      hands the gesture to the page's own handler instead of letting the browser
      scroll the modal with it, which is what makes the drag work on a phone. */
@@ -1318,14 +1325,22 @@ button:disabled {
   cursor: grabbing;
 }
 
-/* Stand-in of the same height range as the map, so the grid does not jump when
-   a position is entered or cleared. */
 .modal-map-preview-empty {
   margin: 0;
-  padding: 1.5rem 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.2rem;
   text-align: center;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+/* Any author `display` beats the user agent's own [hidden] rule, so a flex
+   stand-in stays on screen next to the map it was meant to stand in for
+   unless the attribute is honoured explicitly here. */
+.modal-map-preview-empty[hidden] {
+  display: none;
 }
 
 .modal-modes {

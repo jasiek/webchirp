@@ -273,6 +273,11 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // to draw, and the OSM credit. It spans both columns of the modal grid (see
   // .modal-map-preview in web/styles.css), so it reads as one block belonging
   // to the three inputs above it rather than as a fourth labelled field.
+  // The canvas and the stand-in are the same square (see .modal-map-preview in
+  // web/styles.css) and only one of them is ever shown, so the block is the
+  // same size before a position is entered as after — the modal does not
+  // resize under the pointer the moment a locator is typed. The attribution
+  // stays put for the same reason: it is the widget's credit, not the tiles'.
   const previewCanvas = document.createElement("div");
   previewCanvas.className = "repeater-map-canvas";
   previewCanvas.title = "Drag the map to move the location";
@@ -317,7 +322,6 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     lastPreviewWidth = preview.clientWidth || PREVIEW_FALLBACK_SIZE;
     const position = currentPosition();
     previewCanvas.hidden = !position;
-    previewAttribution.hidden = !position;
     previewEmpty.hidden = Boolean(position);
     if (!position) {
       previewCanvas.innerHTML = "";
@@ -548,7 +552,6 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // draws it.
   refreshLocatorFromCoords();
   previewCanvas.hidden = true;
-  previewAttribution.hidden = true;
   previewEmpty.hidden = false;
 
   return {

@@ -348,8 +348,10 @@ test("the map preview starts empty and stays empty without a full position", asy
   const { previewCanvas, previewEmpty, previewAttribution, latitude, field } = buildPositionField();
   assert.equal(previewCanvas.className, "repeater-map-canvas");
   assert.equal(previewCanvas.hidden, true);
-  assert.equal(previewAttribution.hidden, true);
   assert.equal(previewEmpty.hidden, false);
+  // The stand-in and the attribution hold the block's size while there is no
+  // map, so entering a position does not resize the modal.
+  assert.equal(previewAttribution.hidden, false);
   assert.equal(tilesIn(previewCanvas).length, 0);
 
   // A lone latitude is not a position, exactly as value() reads it, so there
@@ -372,8 +374,8 @@ test("refreshPreview draws OSM tiles and a marker for the current position", () 
 
   field.refreshPreview();
   assert.equal(previewCanvas.hidden, false);
-  assert.equal(previewAttribution.hidden, false);
   assert.equal(previewEmpty.hidden, true);
+  assert.equal(previewAttribution.hidden, false);
   const tiles = tilesIn(previewCanvas);
   assert.ok(tiles.length >= 1);
   for (const tile of tiles) {
@@ -432,8 +434,8 @@ test("clearing the location returns the preview to its empty state", async () =>
   await geoRow.children[2].dispatch("click");
   await afterPreviewDebounce();
   assert.equal(previewCanvas.hidden, true);
-  assert.equal(previewAttribution.hidden, true);
   assert.equal(previewEmpty.hidden, false);
+  assert.equal(previewAttribution.hidden, false, "clearing must not shrink the block either");
   assert.equal(tilesIn(previewCanvas).length, 0);
 });
 
@@ -444,6 +446,21 @@ test("an out-of-range pair previews nothing, matching what value() would refuse"
   field.refreshPreview();
   assert.equal(previewCanvas.hidden, true);
   assert.equal(tilesIn(previewCanvas).length, 0);
+});
+
+test("the block keeps one size whether or not a position is set", async () => {
+  const { field, previewCanvas, previewEmpty, previewAttribution, latitude, longitude } = buildPositionField();
+  // Exactly one of the two squares is shown at any time, and the credit under
+  // them never leaves the flow — so the block's height is the same in both
+  // states without anything having to measure it.
+  const shown = () => [previewCanvas, previewEmpty, previewAttribution].filter((el) => !el.hidden);
+  assert.deepEqual(shown(), [previewEmpty, previewAttribution]);
+
+  latitude.value = "52";
+  longitude.value = "-2";
+  await longitude.dispatch("input");
+  field.refreshPreview();
+  assert.deepEqual(shown(), [previewCanvas, previewAttribution]);
 });
 
 test("the preview carries the OSM attribution the tile policy requires", () => {
