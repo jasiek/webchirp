@@ -291,11 +291,27 @@ export function createChannelTable({ dom, state, log, actions }) {
     return result.accepted;
   }
 
+  // Resolve a caller's ranked list of choices against the column's own option
+  // list, returning the first one the driver offers (or "" when it offers
+  // none). The ranking is the point: a repeater builder asks for
+  // ["FM", "NFM", "FMN"] and takes whichever spelling this driver uses.
   function findEnumOption(column, choices, caseInsensitive = false) {
     if (!state.currentHeaders.includes(column)) {
       return "";
     }
-    const meta = state.radioMetadata.columns?.[column] || {};
+    const meta = state.radioMetadata.columns?.[column];
+    // A column with no driver metadata behind it is unconstrained, not
+    // unsupported. Until a radio is selected the grid runs on the startup
+    // schema (loadEmptySchema in web/js/ui/codeplug-io.js), which seeds
+    // CHIRP's generic CSV headers with no columns to validate against, and
+    // setRowValueIfPresent writes anything through in that state. This has to
+    // agree with it: reading the absent option list as "the radio refuses
+    // this" made every repeater builder skip every record it was given, so a
+    // directory query fetched hundreds of repeaters and inserted none, blaming
+    // a selected radio that did not exist.
+    if (!meta) {
+      return String(choices[0] ?? "");
+    }
     const options = Array.isArray(meta.options) ? meta.options.map(String) : [];
     if (caseInsensitive) {
       const normalized = new Map(options.map((option) => [option.toLowerCase(), option]));
