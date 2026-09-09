@@ -129,14 +129,6 @@ def _power_label_map_for_radio(module_name: str, class_name: str) -> tuple[dict[
     """Map a selected driver's power labels to CSV power specs."""
     return _power_label_map_from_features(_driver_features(module_name, class_name))
 
-    if text in power_map:
-        return power_map[text]
-    try:
-        chirp_common.parse_power(text)
-        return text
-    except Exception:
-        return fallback
-
 
 def _csv_export_power_text(value: Any, power_map: dict[str, str]) -> str:
     """Return the Power text CHIRP's CSV export would write for a row value.
