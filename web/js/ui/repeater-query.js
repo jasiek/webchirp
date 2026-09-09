@@ -2,7 +2,7 @@ import { DEFAULT_REPEATER_API_BASE, buildRepeaterEndpoints } from "../datasource
 import { encodeMaidenhead } from "../rsgb.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
-import { createRepeaterSources } from "./repeater-sources.js";
+import { RepeaterInputError, createRepeaterSources } from "./repeater-sources.js";
 import {
   createCheckboxField,
   createCheckboxGroupField,
@@ -217,14 +217,20 @@ export function createRepeaterQuery(ctx) {
         return;
       }
       setQueryBusy(true);
+      // Captured before the await, for the same reason the clone paths capture
+      // the radio: Cancel and the backdrop close the modal without waiting for
+      // the query, so the user can open a different directory while this one is
+      // still in flight, and openModal() reassigns activeSource when they do.
+      // Every line below has to keep meaning the source the query started on.
+      const source = activeSource;
       try {
         if (!state.currentHeaders.length) {
           log.setStatus("No channel schema loaded yet.");
           setModalOpen(false);
           return;
         }
-        await activeSource.runQuery(collectValues());
-        recordFlow(FLOWS.REPEATER_QUERY, OUTCOMES.OK, { repeater_source: activeSource.key });
+        await source.runQuery(collectValues());
+        recordFlow(FLOWS.REPEATER_QUERY, OUTCOMES.OK, { repeater_source: source.key });
         setModalOpen(false);
       } catch (error) {
         // The only place a failed directory lookup is reported at all: the
@@ -232,12 +238,18 @@ export function createRepeaterQuery(ctx) {
         // started returning errors looked exactly like nobody running a query.
         // Every source shares this one handler, so one call site covers all of
         // them.
-        recordFlow(FLOWS.REPEATER_QUERY, OUTCOMES.FAILED, {
-          repeater_source: activeSource.key,
+        //
+        // Input the form itself rejected is "blocked" rather than "failed":
+        // nothing was requested, there is nothing wrong with the directory, and
+        // the user can fix it in the box in front of them. Counting those as
+        // failures is what would have an alert firing over a missing location.
+        const blocked = error instanceof RepeaterInputError;
+        recordFlow(FLOWS.REPEATER_QUERY, blocked ? OUTCOMES.BLOCKED : OUTCOMES.FAILED, {
+          repeater_source: source.key,
           error_kind: classifyErrorKind(error),
           error_type: errorTypeName(error),
         });
-        log.reportActionError(`${activeSource.actionLabel} query`, error);
+        log.reportActionError(`${source.actionLabel} query`, error);
       } finally {
         setQueryBusy(false);
       }

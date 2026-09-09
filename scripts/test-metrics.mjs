@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
 
 import { FLOWS, OUTCOMES, recordFlow } from "../web/js/ui/metrics.js";
 import { METRIC_ATTRIBUTES, initSentry, resetSentryForTests } from "../web/js/sentry.js";
 import { makeWindow } from "./test-support/fake-window.mjs";
+import { callArgumentKeys, sourceFiles } from "./test-support/param-scanner.mjs";
 import { jsDir } from "./test-support/repo-paths.mjs";
 
 // The vocabulary the UI records flows in. web/js/sentry.js owns the vendor
@@ -29,6 +29,11 @@ function makeSdk() {
   };
 }
 
+// Run one test against a freshly initialised Sentry with the fake SDK above.
+// The reset in finally is what keeps the tests independent: the module holds
+// the SDK handle, the pending buffer and the context provider in module state,
+// so without it one test's fake SDK collects the next test's metrics and a
+// failure shows up in whichever test happens to run afterwards.
 async function withSdk(fn) {
   resetSentryForTests();
   const sdk = makeSdk();
@@ -99,79 +104,25 @@ test("every flow is a distinct name", () => {
   assert.equal(new Set(Object.values(FLOWS)).size, Object.values(FLOWS).length);
 });
 
-// Pull the top-level keys out of the attribute object of every `recordFlow(...)`
-// call, so the coverage check below reads the calls themselves rather than a
-// hand-kept list. Same shape as the trackEvent scanner in
-// scripts/test-ga-dimensions.mjs, and it relies on the same thing: the object
-// has to be a literal at the call site, not a variable holding one.
-function recordedAttributes(source) {
-  const names = new Set();
-  for (
-    let start = source.indexOf("recordFlow(");
-    start !== -1;
-    start = source.indexOf("recordFlow(", start + 1)
-  ) {
-    let depth = 0;
-    let objectStart = -1;
-    for (let index = start + "recordFlow".length; index < source.length; index += 1) {
-      const char = source[index];
-      if (char === "(") {
-        depth += 1;
-      } else if (char === ")") {
-        depth -= 1;
-        if (depth === 0) {
-          break;
-        }
-      } else if (char === "{" && depth === 1) {
-        objectStart = index;
-        break;
-      }
-    }
-    if (objectStart === -1) {
-      continue;
-    }
-    let braces = 0;
-    for (let index = objectStart; index < source.length; index += 1) {
-      const char = source[index];
-      if (char === "{") {
-        braces += 1;
-      } else if (char === "}") {
-        braces -= 1;
-        if (braces === 0) {
-          break;
-        }
-      } else if (braces === 1 && /[A-Za-z_]/.test(char) && /[{,\s]/.test(source[index - 1])) {
-        const key = source.slice(index).match(/^[A-Za-z_]\w*(?=\s*:)/);
-        if (key) {
-          names.add(key[0]);
-        }
-      }
-    }
-  }
-  return names;
-}
-
-function sourceFiles(dir) {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      return sourceFiles(full);
-    }
-    return /\.m?js$/.test(entry.name) ? [full] : [];
-  });
-}
-
 test("the scanner finds the attributes a recordFlow call actually sends", () => {
-  assert.deepEqual([...recordedAttributes('recordFlow(F.A, O.B, { a: 1, b: "x" });')], ["a", "b"]);
-  assert.deepEqual([...recordedAttributes("recordFlow(F.A, O.B);")], []);
-  assert.deepEqual([...recordedAttributes("recordFlow(F.A, O.B, { a: 1 }, ms);")], ["a"]);
+  assert.deepEqual([...callArgumentKeys('recordFlow(F.A, O.B, { a: 1, b: "x" });', "recordFlow")], ["a", "b"]);
+  assert.deepEqual([...callArgumentKeys("recordFlow(F.A, O.B);", "recordFlow")], []);
+  assert.deepEqual([...callArgumentKeys("recordFlow(F.A, O.B, { a: 1 }, ms);", "recordFlow")], ["a"]);
+  // Prose inside the literal is not a key. Any explanatory comment can contain
+  // a word followed by a colon, and reading one as an attribute fails the build
+  // a long way from its cause -- which is exactly what it did while this change
+  // was being written.
+  assert.deepEqual(
+    [...callArgumentKeys('recordFlow(F.A, O.B, {\n  // an honest third value: the browser chose\n  a: 1,\n});', "recordFlow")],
+    ["a"],
+  );
 });
 
 test("every attribute the app records is on the allowlist", () => {
   const declared = new Set([...METRIC_ATTRIBUTES, "flow", "outcome"]);
   const sent = new Set();
   for (const file of sourceFiles(jsDir)) {
-    for (const name of recordedAttributes(fs.readFileSync(file, "utf8"))) {
+    for (const name of callArgumentKeys(fs.readFileSync(file, "utf8"), "recordFlow")) {
       sent.add(name);
     }
   }

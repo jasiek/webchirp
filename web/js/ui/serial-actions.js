@@ -109,20 +109,35 @@ export function createSerialActions(ctx) {
         error_kind: errorKind,
         error_type: errorType,
       });
-      recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.FAILED, {
-        ...radioEventParams(state.selectedRadio),
-        error_kind: errorKind,
-        error_type: errorType,
-      });
       // Dismissing the chooser is the one outcome here the user already knows
       // about, so it gets a sentence rather than the Pyodide traceback the
       // failure path dumps. It still has to be said out loud: with no visible
       // status surface in this app, saying nothing left Connect-then-Cancel
       // looking exactly like a button that does not work.
+      //
+      // It is also not a failed connect, and must not be recorded as one:
+      // closing the picker is the commonest way out of this dialog, so counting
+      // it would swamp the failure rate the metric exists to expose with the
+      // one outcome that is nothing going wrong. Same call the debug log makes
+      // through reportActionCancelled, and the same reasoning that leaves a
+      // cancelled codeplug import unrecorded. GA still gets the event, where
+      // error_kind separates the two.
       if (isPortSelectionCancelled(error)) {
         log.reportActionCancelled("Serial connect", PORT_SELECTION_CANCELLED_MESSAGE);
         return;
       }
+      recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.FAILED, {
+        ...radioEventParams(state.selectedRadio),
+        // What was being attempted, since nothing was negotiated. Without it a
+        // dashboard grouped by transport counts WebUSB's successes and drops
+        // its failures, which reads as a success rate far better than the real
+        // one. "auto" is an honest third value: the browser was left to choose
+        // and the attempt never got far enough to say what it would have
+        // chosen.
+        transport: preferredTransport === "webusb" ? "webusb" : "auto",
+        error_kind: errorKind,
+        error_type: errorType,
+      });
       log.reportActionError("Serial connect", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -535,7 +550,15 @@ export function createSerialActions(ctx) {
       // or a file they brought with them.
       trackCloneOutcome("radio_upload_success", radio, startedAt, codeplugParams(state));
     } catch (error) {
-      trackCloneOutcome("radio_upload_failure", radio, startedAt, cloneFailureParams(error, stage));
+      // codeplugParams is merged in here as well as on the success and blocked
+      // paths, or grouping upload outcomes by codeplug_source would count every
+      // success and no failure at all. It is deliberately not done for a failed
+      // *download*: there the editor still holds whatever preceded the
+      // transfer, so the same dimensions would describe the wrong codeplug.
+      trackCloneOutcome("radio_upload_failure", radio, startedAt, {
+        ...codeplugParams(state),
+        ...cloneFailureParams(error, stage),
+      });
       log.reportActionError("Upload", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {

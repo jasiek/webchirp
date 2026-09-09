@@ -178,10 +178,20 @@ export function scrubMetricAttributes(attributes) {
   return out;
 }
 
-// The last gate every metric passes through, and the counterpart to
-// scrubEvent(). It has to exist separately because Sentry runs metrics down a
-// pipeline of their own: beforeSend is never called for them, so none of the
-// redaction above would otherwise apply.
+// The last gate every metric this app records passes through, and the
+// counterpart to scrubEvent(). It has to exist separately because Sentry runs
+// metrics down a pipeline of their own: beforeSend is never called for them, so
+// none of the redaction above would otherwise apply.
+//
+// One documented limit, because the boundary is narrower than it looks:
+// beforeSendMetric runs *before* the SDK serializes the metric, and
+// _buildSerializedMetric then merges the current and isolation scopes'
+// attributes into the payload underneath the metric's own. Anything set with
+// the SDK's setAttribute() would therefore reach Sentry without passing through
+// here, and there is no option that closes that -- the isolation scope is
+// merged whatever scope a capture is given. The app's guarantee rests on never
+// setting one: it reaches the SDK only through this module, and
+// scripts/test-sentry.mjs fails if a setAttribute call appears in it.
 export function scrubMetric(metric) {
   if (!metric || typeof metric !== "object") {
     return metric;
@@ -377,7 +387,17 @@ export function captureMetric(name, metric = {}) {
   try {
     if (!sdk) {
       if (pendingMetrics.length < MAX_PENDING) {
-        pendingMetrics.push([name, metric]);
+        // The context is snapshotted here rather than read at drain time. A
+        // buffered metric describes the moment it was recorded, and the SDK's
+        // load overlaps app startup -- long enough for a radio to be selected
+        // or restored in between, which would otherwise attribute an app_start
+        // or runtime metric to a radio that had nothing to do with it. The
+        // snapshot wins on drain because sendMetric() merges context underneath
+        // the metric's own attributes.
+        pendingMetrics.push([
+          name,
+          { ...metric, attributes: { ...safeContext(), ...metric.attributes } },
+        ]);
       }
       return false;
     }

@@ -32,6 +32,19 @@ import { trackEvent } from "./analytics.js";
 //
 // Not a create<Area> sibling module: this is a helper imported solely by
 // repeater-query.js, which passes it the constructed ctx.
+// A query rejected by this module's own checks, before any request is made --
+// an unset location, a distance that is not a positive number. Marked as its
+// own type so the one catch in web/js/ui/repeater-query.js can tell it from a
+// directory that is actually down: both reach the user the same way, but
+// counting form input the user can fix as a service failure inflates the rate
+// an alert would watch, and does it most on the sources with the most fields.
+//
+// A subclass rather than a flag on the error: nothing is added to the object,
+// so the marker cannot ride along into a Sentry payload the way a property
+// would, and instanceof survives the plain rethrow that carries it to the
+// caller.
+export class RepeaterInputError extends Error {}
+
 export function createRepeaterSources(ctx, { endpoints }) {
   const { log } = ctx;
 
@@ -312,11 +325,11 @@ export function createRepeaterSources(ctx, { endpoints }) {
       runQuery: async (values) => {
         const position = values.position;
         if (!position) {
-          throw new Error("Set a location first: use the 🛰️ button or type a latitude and longitude.");
+          throw new RepeaterInputError("Set a location first: use the 🛰️ button or type a latitude and longitude.");
         }
         const radiusKm = values.radius;
         if (!Number.isFinite(radiusKm) || radiusKm <= 0) {
-          throw new Error("Distance must be a positive number of kilometres.");
+          throw new RepeaterInputError("Distance must be a positive number of kilometres.");
         }
 
         const plan = squaresForRadius(position.latitude, position.longitude, radiusKm);

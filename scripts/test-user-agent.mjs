@@ -34,6 +34,10 @@ function nav(userAgent, extra = {}) {
   return { userAgent, maxTouchPoints: 0, ...extra };
 }
 
+// Detect the browser for one user agent with the module's Brave cache cleared
+// on both sides of the test. The cache is keyed on nothing -- it is one flag
+// for the life of the page, which is right in a browser and wrong here, where
+// one fake navigator would otherwise answer for every case after it.
 function browserFor(t, userAgent, extra) {
   withNavigator(t, nav(userAgent, extra));
   resetBrowserProbeForTests();

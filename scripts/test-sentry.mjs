@@ -403,6 +403,55 @@ test("metrics recorded before the SDK arrives are replayed once", async () => {
   resetSentryForTests();
 });
 
+test("a buffered metric keeps the context it was recorded with", async () => {
+  resetSentryForTests();
+  const sdk = makeSdk();
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  const started = initSentry(makeWindow(), {
+    loadSdk: async () => {
+      await pending;
+      return sdk;
+    },
+  });
+
+  // The SDK's load overlaps app startup, which is long enough for a radio to be
+  // selected or restored from a cookie in between. A metric describes the
+  // moment it was recorded, so reading the context at drain time would file a
+  // startup failure against a radio that had nothing to do with it.
+  setContextProvider(() => ({ radio: "Baofeng UV-5R" }));
+  captureMetric("flow.completed", {
+    type: "count",
+    value: 1,
+    attributes: { flow: "app_start", outcome: "failed" },
+  });
+  setContextProvider(() => ({ radio: "Yaesu FT-60" }));
+
+  release();
+  await started;
+  assert.equal(sdk.recorded.length, 1);
+  assert.equal(sdk.recorded[0].attributes.radio, "Baofeng UV-5R");
+  resetSentryForTests();
+});
+
+test("this module never sets a scope attribute, which would bypass the allowlist", () => {
+  // beforeSendMetric runs before the SDK serializes a metric, and serialization
+  // then merges the current and isolation scopes' attributes underneath the
+  // metric's own. Anything set with the SDK's setAttribute() therefore reaches
+  // Sentry without passing scrubMetricAttributes, and no init option closes
+  // that. The app's guarantee is that it never sets one -- it reaches the SDK
+  // only through this module -- so that is what is pinned here rather than a
+  // behaviour the SDK does not offer.
+  const source = fs.readFileSync(path.join(repoRoot, "web", "js", "sentry.js"), "utf8");
+  assert.equal(
+    /\.setAttributes?\s*\(/.test(source),
+    false,
+    "web/js/sentry.js sets a scope attribute, which is not covered by METRIC_ATTRIBUTES",
+  );
+});
+
 test("errors raised before the SDK arrives are buffered and replayed once", async () => {
   resetSentryForTests();
   const sdk = makeSdk();

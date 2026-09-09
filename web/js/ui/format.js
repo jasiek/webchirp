@@ -157,6 +157,9 @@ const BRAND_TOKENS = Object.freeze([
 let braveProbe = null;
 let isBraveBrowser = false;
 
+// Ask the browser whether it is Brave, once, and remember the answer. Fired
+// from the first detection rather than at import so this module stays free of
+// side effects on load.
 function probeBrave() {
   if (braveProbe) {
     return;
@@ -183,6 +186,10 @@ export function resetBrowserProbeForTests() {
   isBraveBrowser = false;
 }
 
+// First token in an ordered table whose pattern matches, or "" for none.
+// Ordered rather than a lookup because the tables above encode precedence:
+// every Chromium browser matches the Chrome pattern, so the first match has to
+// win and the derivatives have to come first.
 function matchToken(table, value) {
   for (const [name, pattern] of table) {
     if (pattern.test(value)) {
