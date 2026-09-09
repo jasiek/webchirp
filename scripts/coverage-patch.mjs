@@ -21,7 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { isJsCodeLine, parseLcov } from "./coverage-lcov.mjs";
-import { repoRoot } from "./test-support/repo-paths.mjs";
+import { repoRoot } from "../tests/support/repo-paths.mjs";
 
 const COVERAGE_DIR = path.join(repoRoot, "coverage");
 

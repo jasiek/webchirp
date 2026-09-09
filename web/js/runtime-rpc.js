@@ -30,7 +30,7 @@ const CHIRP_REVISION = DEFAULT_CHIRP_REVISION;
 // live in this .js file because scripts/build-dist.mjs rewrites references to
 // their hashed names in .js files and copies .mjs files verbatim; the provider
 // refuses to construct if a listed file has no URL here, and
-// scripts/test-build-dist.mjs checks the pairing statically.
+// tests/build/build-dist.mjs checks the pairing statically.
 const RUNTIME_PYTHON_URLS = Object.freeze({
   "runtime_bridge.py": "./python/runtime_bridge.py",
   "webchirp_bridge/__init__.py": "./python/webchirp_bridge/__init__.py",

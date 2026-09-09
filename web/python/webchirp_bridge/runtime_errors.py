@@ -23,5 +23,5 @@ class ImageDetectionError(RuntimeUnsupportedError):
     all-drivers sweep can fix, and the browser gates its retry on this class
     name (`isImageDetectionFailure`, `web/js/image-metadata.mjs`). Renaming it
     without updating that predicate silently disables the backstop, so
-    `scripts/test-metadataless-image-load.mjs` pins the two together.
+    `tests/channels/metadataless-image-load.mjs` pins the two together.
     """

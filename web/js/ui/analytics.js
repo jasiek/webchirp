@@ -15,7 +15,7 @@
 //     text — error messages above all — is mapped onto a small fixed vocabulary
 //     before it is sent, rather than reported verbatim. Anything sent also has
 //     to be declared in CUSTOM_DIMENSIONS, or GA collects it and shows it
-//     nowhere; scripts/test-ga-dimensions.mjs fails the build if it is not.
+//     nowhere; tests/channels/ga-dimensions.mjs fails the build if it is not.
 
 import { errorDetails } from "./format.js";
 

@@ -74,14 +74,14 @@ def _export_bridge_namespace(
 
     Private helpers are exported on purpose: the tests reach for them
     (``_import_radio_class``, ``LAST_IMAGE_BY_DRIVER``) and so do the harness
-    snippets in ``scripts/test-radio-harness.mjs``, and an explicit export
+    snippets in ``tests/support/radio-harness.mjs``, and an explicit export
     list would have to be kept in step with every helper they touch. Dunder
     names stay behind so the globals keep their own ``__name__`` and
     ``__builtins__``. Values are shared rather than copied, so mutating
     ``LAST_IMAGE_BY_DRIVER`` through the global mutates the cache the modules
     use -- but *rebinding* a global does not reach them; a test that swaps a
     callable patches the owning module's attribute instead
-    (``scripts/test-chirp-import-errors.mjs``).
+    (``tests/channels/chirp-import-errors.mjs``).
     """
     for module in modules:
         for name, value in vars(module).items():

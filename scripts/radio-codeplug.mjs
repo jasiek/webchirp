@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createTestRadioHarness } from "./test-radio-harness.mjs";
+import { createTestRadioHarness } from "../tests/support/radio-harness.mjs";
 
 function parseArgs(argv = process.argv.slice(2)) {
   const positionals = [];
