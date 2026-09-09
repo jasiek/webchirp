@@ -980,6 +980,10 @@ export function createChannelTable({ dom, state, log, actions }) {
     const headerRow = document.createElement("tr");
     renderedColumns.forEach((column) => {
       const th = document.createElement("th");
+      // Cells carry this already; the header needs it too, because the Extra
+      // column is pinned to the right edge from the stylesheet and both halves
+      // of the column have to be selectable there.
+      th.dataset.column = String(column);
       const label = COLUMN_LABELS.get(column) ?? column;
       th.textContent = label;
       // Mirror the cell treatment: grey + tooltip on headers of columns the

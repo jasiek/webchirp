@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
+import { repoRoot } from "../support/repo-paths.mjs";
 import {
   channelRows,
   flushMicrotasks,
@@ -165,6 +168,14 @@ test("the Extra column appears once loaded channels carry driver extras", async 
   for (const row of channelRows(document)) {
     assert.ok(row.querySelector(".channel-extra-button"), "a row is missing its Extra button");
   }
+  // Both halves of the column are addressed by data-column, which is what the
+  // stylesheet pins them to the right edge with (see the last test here).
+  const headerCells = document.querySelector("#mem-table thead").children[0].children;
+  assert.equal(headerCells[headerCells.length - 1].dataset.column, "Extra");
+  assert.equal(
+    channelRows(document)[0].children[headerCells.length - 1].dataset.column,
+    "Extra",
+  );
 });
 
 test("a codeplug without driver extras has no Extra column", async () => {
@@ -318,4 +329,33 @@ test("a response for a channel the user has left behind is discarded", async () 
     "2",
     "the superseded response rendered over the current one",
   );
+});
+
+// Layout is the browser's own and cannot be checked headlessly -- the fake DOM
+// has no layout at all -- so what is asserted here is the stylesheet rule that
+// produces it, in the same spirit as the sticky-header test in
+// tests/channels/ui-column-widths.mjs. This one earns its keep: Extra is the
+// eighteenth of eighteen columns, so without the pin it sits past the right
+// edge at any ordinary window width and the whole feature is invisible until
+// someone thinks to scroll for it, which is exactly how it was first reported.
+test("the Extra column stays pinned to the right edge of the grid", () => {
+  const styles = fs.readFileSync(path.join(repoRoot, "web", "styles.css"), "utf8");
+  const cells = styles.match(/#mem-table td\[data-column="Extra"\] \{([^}]*)\}/);
+  assert.ok(cells, "the Extra column's cells must carry their own rule");
+  assert.match(cells[1], /position:\s*sticky/);
+  assert.match(cells[1], /right:\s*0/);
+  // Opaque, or the cells it travels over show through it; above them in the
+  // stacking order, or it travels under them instead.
+  assert.match(cells[1], /background:/);
+  assert.match(cells[1], /z-index:/);
+  // border-collapse gives the borders to the table, so a sticky cell's left
+  // edge scrolls away with it and the shadow is what stands in.
+  assert.match(cells[1], /box-shadow:[^;]*inset 1px 0/);
+
+  const header = styles.match(/#mem-table th\[data-column="Extra"\] \{([^}]*)\}/);
+  assert.ok(header, "the Extra header must be pinned on both axes");
+  // position and top come from the shared #mem-table th rule; right is what
+  // makes this one sticky horizontally as well.
+  assert.match(header[1], /right:\s*0/);
+  assert.match(header[1], /z-index:/);
 });

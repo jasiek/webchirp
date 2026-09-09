@@ -1695,6 +1695,38 @@ button:disabled {
   outline: 1px solid var(--accent);
 }
 
+/* The Extra column is pinned to the right edge of the grid's scroll area. It is
+   the eighteenth of eighteen columns, so at any ordinary window width it sits
+   past the right edge and the feature is invisible until someone thinks to
+   scroll for it -- which is how it was first reported. right:0 keeps the button
+   in view at every scroll position while leaving the column where it belongs,
+   last, after Comment.
+
+   Same two constraints as the sticky header above, for the same reasons: an
+   opaque background so the cells it travels over do not show through, and a
+   box-shadow standing in for the left border that border-collapse hands to the
+   table and that therefore scrolls away with it. The outer shadow is what says
+   the column is floating over the grid rather than sitting in it. The header
+   cell is sticky on both axes at once, so it has to outrank the row cells as
+   well as the ordinary headers. A selected row still paints through, because
+   its own rule is the more specific one. */
+#mem-table td[data-column="Extra"] {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--surface);
+  box-shadow: inset 1px 0 0 var(--border), -3px 0 5px -3px var(--shadow-color);
+}
+
+#mem-table th[data-column="Extra"] {
+  right: 0;
+  z-index: 3;
+  box-shadow:
+    inset 0 -1px 0 var(--border),
+    inset 1px 0 0 var(--border),
+    -3px 0 5px -3px var(--shadow-color);
+}
+
 /* Static OSM context map for imported repeater channels (issue #57): rows
    with coordinates mark their Location cell, hover shows the tooltip map on
    desktop, tap opens the modal map on touch devices (ui/repeater-map.js). */
