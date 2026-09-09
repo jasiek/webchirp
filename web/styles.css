@@ -1446,8 +1446,14 @@ button:disabled {
    their header widths. min-width:100% so the input still fills its cell: a
    percentage minimum does not feed back into the intrinsic width, so it stretches
    the control without widening the column, and a click anywhere in the cell
-   still lands in the editor. max-width caps a long comment at a readable width;
-   the rest scrolls inside the input.
+   still lands in the editor. max-width is a backstop against a pasted
+   paragraph, not a working limit: it only ever binds on a free-text column,
+   because a name is bounded by the driver's own valid_name_length (16
+   characters at the most, across every real driver) and a frequency by the ten
+   digits normalizeValue() writes. So it is set well clear of what the repeater
+   directories actually produce -- an RSGB query returns comments like
+   "KIDDERMINSTER | IO82 | ~3.6 km", 23 to 32 characters -- and a value past it
+   still scrolls inside the input.
 
    Note what this does *not* see: the grid is virtualized (see
    web/js/ui/channel-table.js), so the browser is measuring the rows currently in
@@ -1458,7 +1464,7 @@ button:disabled {
     field-sizing: content;
     width: auto;
     min-width: 100%;
-    max-width: 16ch;
+    max-width: 48ch;
   }
 }
 
