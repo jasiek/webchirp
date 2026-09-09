@@ -101,7 +101,9 @@ test("the grid spells out the driver's power table on hover", async () => {
   const legend = "Driver power levels: Hi = 5.0W, L3 = 2.5W, L2 = 1.0W, L1 = 0.3W";
   const headerCells = dom.tableHead.children[0].children;
   assert.equal(headerCells[1].title, legend, "Power header should carry the legend");
-  assert.equal(headerCells[0].title, "", "other headers should be untouched");
+  // The Location header is abbreviated to "#", so its tooltip is its own full
+  // column name -- what matters here is that the legend did not leak onto it.
+  assert.equal(headerCells[0].title, "Location", "other headers should be untouched");
 
   const powerCell = renderedRows(dom)[0].children[1];
   assert.equal(powerCell.children[0].title, legend, "Power cell should carry the legend");

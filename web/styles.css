@@ -38,6 +38,11 @@
   --table-header: #e3ebf8;
   --selected-bg: #dcecff;
   --focus-bg: #f2f8ff;
+  /* The channel grid's dropdown indicator, drawn at --muted; see #mem-table td
+     select. Inlined rather than loaded, because an artifact of this size costs
+     more as a request than as bytes, and the colour has to change with the
+     theme, which an external file cannot do. */
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='5' viewBox='0 0 7 5'%3E%3Cpath d='M0.5 0.5 3.5 4 6.5 0.5' fill='none' stroke='%235e6a7f' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
   /* Settings / info */
   --info-bg: #eef5fe;
@@ -110,6 +115,7 @@
     --table-header: #222e3d;
     --selected-bg: #234061;
     --focus-bg: #243549;
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='5' viewBox='0 0 7 5'%3E%3Cpath d='M0.5 0.5 3.5 4 6.5 0.5' fill='none' stroke='%239aa6b8' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
     /* Settings / info */
     --info-bg: #182636;
@@ -1373,25 +1379,50 @@ button:disabled {
 /* Let the table take its natural width so all 17 column headers stay
    readable; it scrolls horizontally inside .mem-table-scroll when the
    window is narrower (previously table-layout: fixed compressed every
-   column to fit, overlapping the header text). */
+   column to fit, overlapping the header text).
+
+   Natural width and nothing more: a min-width of 100% here used to stretch the
+   grid across the pane, and auto table layout hands that slack back to every
+   column in proportion, which put it straight back between each value and the
+   divider to its right -- the columns fitInputColumnWidths()
+   (web/js/ui/channel-table.js) had just measured. So the grid now ends where
+   its contents end, and a window wider than the channel list simply shows
+   page behind it. */
 #mem-table {
   width: max-content;
-  min-width: 100%;
   border-collapse: collapse;
   background: var(--surface);
   border: 1px solid var(--border);
 }
 
+/* Less horizontal than vertical padding: the cell borders already separate the
+   columns, and across seventeen of them the symmetric padding cost more width
+   than the values it framed. */
 #mem-table th,
 #mem-table td {
   border: 1px solid var(--border);
-  padding: 0.35rem;
+  padding: 0.35rem 0.25rem;
   font-size: 0.85rem;
   white-space: nowrap;
 }
 
+/* Keep the column headers in view while the channel list scrolls. The nearest
+   scrolling ancestor is .mem-table-scroll, so top:0 pins them to the top of the
+   grid's own scroll area rather than to the page; the background is what stops
+   the rows showing through, and the stacking order what keeps them over the
+   editors rather than under.
+
+   Sticky on the cells rather than on thead because border-collapse gives the
+   borders to the table rather than to the cell, so a sticky header leaves its
+   own behind as it detaches from the rows. The shadow redraws the bottom edge
+   at the same width and colour; it has to be a shadow rather than a border,
+   which would change the header's height and so every row's offset. */
 #mem-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: var(--table-header);
+  box-shadow: inset 0 -1px 0 var(--border);
   text-align: left;
 }
 
@@ -1403,10 +1434,55 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+/* An <input> is the one editor that cannot size itself: its width comes from
+   the size attribute, which buys N *average* characters plus a one-character
+   surcharge, and the browser never looks at the value inside. That is what made
+   every text column the same ~150px whether it held a callsign or a frequency.
+   field-sizing hands the browser the job instead, so a column is exactly as
+   wide as the widest value the grid is showing.
+
+   All three declarations are load-bearing. width:auto because a percentage
+   width suppresses field-sizing outright -- the columns silently fall back to
+   their header widths. min-width:100% so the input still fills its cell: a
+   percentage minimum does not feed back into the intrinsic width, so it stretches
+   the control without widening the column, and a click anywhere in the cell
+   still lands in the editor. max-width is a backstop against a pasted
+   paragraph, not a working limit: it only ever binds on a free-text column,
+   because a name is bounded by the driver's own valid_name_length (16
+   characters at the most, across every real driver) and a frequency by the ten
+   digits normalizeValue() writes. So it is set well clear of what the repeater
+   directories actually produce -- an RSGB query returns comments like
+   "KIDDERMINSTER | IO82 | ~3.6 km", 23 to 32 characters -- and a value past it
+   still scrolls inside the input.
+
+   Note what this does *not* see: the grid is virtualized (see
+   web/js/ui/channel-table.js), so the browser is measuring the rows currently in
+   the DOM, not the whole channel list. Columns therefore track what is on
+   screen. */
+@supports (field-sizing: content) {
+  #mem-table td input {
+    field-sizing: content;
+    width: auto;
+    min-width: 100%;
+    max-width: 48ch;
+  }
+}
+
+/* A native dropdown arrow is a fixture about 21px wide -- a few pixels of
+   indicator plus the room the platform reserves around it -- and this grid has
+   a dozen enum columns, several holding values narrower than that (Skip is one
+   character, Duplex two). So the arrow itself was setting their width, and the
+   gap it left between a value and the edge of its cell was the visible half of
+   the same problem. Draw a chevron scaled to the grid instead, from the
+   theme-aware --select-arrow, with the left padding matched to the inputs so
+   values line up down a row. */
 #mem-table td select {
   width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
   border: none;
-  background: transparent;
+  padding: 0 10px 0 2px;
+  background: transparent var(--select-arrow) no-repeat right 2px center;
   color: var(--text);
   font-size: 0.85rem;
 }
@@ -1421,22 +1497,25 @@ button:disabled {
   opacity: 1;
 }
 
-/* With natural table sizing, editors set the column width floor; keep the
-   auto-indexed Location column compact. */
-#mem-table td input,
-#mem-table td select {
-  min-width: 6rem;
-}
-
+/* With natural table sizing the editors are what give each column its width,
+   so they must ask for no more than their own contents: a select is already as
+   wide as the widest option its driver publishes, and an input is sized by the
+   size attribute columnCharBudget() derives from the column metadata in
+   web/js/ui/channel-table.js. A blanket min-width here flattened all of that to
+   one width, so a two-character Duplex or Skip column was as wide as a
+   frequency and the desktop grid scrolled sideways for space it was not using.
+   Keep the auto-indexed Location column compact. */
 #mem-table td:first-child,
 #mem-table th:first-child {
-  min-width: 2.75rem;
+  min-width: 2rem;
 }
 
+/* A floor, not a width: the button holds a memory slot number, so a radio
+   numbering past three digits widens the column from its own content. */
 #mem-table td:first-child input,
 #mem-table td:first-child select,
 #mem-table .channel-location-button {
-  min-width: 2.75rem;
+  min-width: 2rem;
 }
 
 #mem-table .channel-location-button {
@@ -1602,9 +1681,15 @@ button:disabled {
   background: var(--focus-bg);
 }
 
+/* background-color, not the background shorthand: the shorthand resets
+   background-image, and since these selects draw their own dropdown chevron
+   there (native appearance being off) a focused cell would lose the only sign
+   that it is a dropdown at all -- exactly while the user is interacting with
+   it. The input rule above can use the shorthand safely because an input has
+   no background layer to lose. */
 #mem-table td select:focus {
   outline: 1px solid var(--accent);
-  background: var(--focus-bg);
+  background-color: var(--focus-bg);
 }
 
 @media (max-width: 900px) {
