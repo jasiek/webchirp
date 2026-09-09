@@ -35,6 +35,7 @@ export const RUNTIME_BRIDGE_ENTRY = "runtime_bridge.py";
 export const RUNTIME_PYTHON_FILES = Object.freeze([
   RUNTIME_BRIDGE_ENTRY,
   "webchirp_bridge/__init__.py",
+  "webchirp_bridge/channel_extra.py",
   "webchirp_bridge/channel_rows.py",
   "webchirp_bridge/chirp_loader.py",
   "webchirp_bridge/clone.py",

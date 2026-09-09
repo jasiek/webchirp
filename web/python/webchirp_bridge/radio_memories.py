@@ -16,13 +16,16 @@ from typing import TYPE_CHECKING
 
 from chirp import chirp_common
 
-from webchirp_bridge.channel_rows import (
-    CSV_HEADERS,
+from webchirp_bridge.channel_extra import (
     ROW_EXTRA_KEY,
     _apply_row_extras,
+    _apply_row_extras_to_memory,
+    _row_extras_from_memory,
+)
+from webchirp_bridge.channel_rows import (
+    CSV_HEADERS,
     _coerce_csv_vals_for_chirp,
     _memory_from_row_values,
-    _row_extras_from_memory,
     _row_from_memory,
 )
 from webchirp_bridge.driver_cache import (
@@ -216,6 +219,14 @@ def _apply_rows_to_radio_instance(
             radio, row, existing, mem
         )
         if action == "skip":
+            # The grid columns say nothing changed, but the extras editor
+            # (web/js/ui/channel-extra.js) writes only to the row's sidecar, so
+            # a channel whose Busy Channel Lockout was just switched off looks
+            # exactly like an untouched one here. Replay the sidecar against
+            # the memory that was read a moment ago: it only writes when a
+            # value actually differs, so an untouched row still costs nothing.
+            if _apply_row_extras_to_memory(existing, row):
+                radio.set_memory(existing)
             continue
         if validation_errors:
             raise RuntimeUnsupportedError(
