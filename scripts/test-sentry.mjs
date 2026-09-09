@@ -4,16 +4,20 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
+  METRIC_ATTRIBUTES,
   SENTRY_DSN,
   SENTRY_HOSTS,
   SENTRY_SDK_URL,
   SENTRY_SDK_VERSION,
   captureError,
+  captureMetric,
   initOptions,
   initSentry,
   isSentryHost,
   resetSentryForTests,
   scrubEvent,
+  scrubMetric,
+  scrubMetricAttributes,
   scrubText,
   setContextProvider,
 } from "../web/js/sentry.js";
@@ -32,9 +36,17 @@ import { repoRoot } from "./test-support/repo-paths.mjs";
 // Fake SDK namespace with the same surface this module calls.
 function makeSdk() {
   const captured = [];
+  const recorded = [];
   let options = null;
   return {
     captured,
+    // Metrics go down a pipeline of their own in the real SDK, so the fake
+    // keeps them in a separate list rather than folding them into captured.
+    recorded,
+    metrics: {
+      count: (name, value, opts) => recorded.push({ type: "count", name, value, ...opts }),
+      distribution: (name, value, opts) => recorded.push({ type: "distribution", name, value, ...opts }),
+    },
     getOptions: () => options,
     init(opts) {
       options = opts;
@@ -144,6 +156,74 @@ test("scrubEvent redacts messages, exception values and breadcrumbs", () => {
   assert.equal(event.request.url, "https://codeplug.org/?[query]");
 });
 
+test("metric attributes are an allowlist, not a filter on their contents", () => {
+  const attributes = scrubMetricAttributes({
+    flow: "radio_download",
+    outcome: "failed",
+    radio: "Baofeng UV-5R",
+    error_kind: "checksum",
+    // Stamped by the SDK itself, and what ties a metric to the build it came
+    // from, so it has to survive.
+    "sentry.release": "webchirp@abc123",
+    // Stamped by the same SDK code from the scope's user. Empty today only
+    // because this app never calls setUser, which is not a thing to rely on.
+    "user.id": "u-1",
+    "user.email": "someone@example.com",
+    // Values rather than dimensions: GA sends these, a metric must not turn
+    // them into series.
+    duration_ms: 1234,
+    channel_count: 128,
+    // Anything undeclared, whatever it holds.
+    channel_name: "HOME REPEATER",
+    file_name: "Dads-UV5R.img",
+  });
+  assert.deepEqual(Object.keys(attributes).sort(), [
+    "error_kind",
+    "flow",
+    "outcome",
+    "radio",
+    "sentry.release",
+  ]);
+});
+
+test("metric attribute values are scrubbed as well as filtered", () => {
+  // Defence in depth: an allowed key whose value was built from a caught error
+  // could still carry user data.
+  const attributes = scrubMetricAttributes({
+    flow: "repeater_query",
+    error_type: "at 51.5074",
+    outcome: "",
+  });
+  assert.equal(attributes.error_type, "at [num]");
+  // Empty values are dropped rather than sent as an empty series.
+  assert.equal("outcome" in attributes, false);
+});
+
+test("every attribute the flow metrics send is declared", () => {
+  // The counterpart to the CUSTOM_DIMENSIONS check in
+  // scripts/test-ga-dimensions.mjs: a key added at a call site but not here is
+  // silently dropped, which looks exactly like the flow never running.
+  for (const name of ["flow", "outcome", "radio", "radio_module", "radio_class"]) {
+    assert.ok(METRIC_ATTRIBUTES.includes(name), `${name} must be declared`);
+  }
+  assert.equal(METRIC_ATTRIBUTES.includes("duration_ms"), false);
+  assert.equal(METRIC_ATTRIBUTES.includes("channel_count"), false);
+});
+
+test("scrubMetric leaves the metric's own shape alone", () => {
+  const metric = scrubMetric({
+    name: "flow.duration",
+    type: "distribution",
+    value: 1234,
+    unit: "millisecond",
+    attributes: { flow: "radio_upload", channel_name: "HOME" },
+  });
+  assert.equal(metric.name, "flow.duration");
+  assert.equal(metric.value, 1234);
+  assert.equal(metric.unit, "millisecond");
+  assert.deepEqual(metric.attributes, { flow: "radio_upload" });
+});
+
 test("init options disable tracing and PII, and drop console breadcrumbs", () => {
   const options = initOptions("webchirp@abc123");
   assert.equal(options.dsn, SENTRY_DSN);
@@ -155,6 +235,21 @@ test("init options disable tracing and PII, and drop console breadcrumbs", () =>
   assert.equal(options.beforeBreadcrumb({ category: "console", message: "145.500000" }), null);
   const crumb = options.beforeBreadcrumb({ category: "fetch", message: "at 51.5074" });
   assert.equal(crumb.message, "at [num]");
+  // Metrics are on deliberately; structured logs are off so that adding a
+  // console logging integration later cannot start shipping tracebacks down a
+  // pipeline neither beforeSend nor beforeSendMetric polices.
+  assert.equal(options.enableMetrics, true);
+  assert.equal(options.enableLogs, false);
+});
+
+test("beforeSendMetric is the last gate, because beforeSend never sees a metric", () => {
+  const metric = initOptions().beforeSendMetric({
+    name: "flow.completed",
+    type: "count",
+    value: 1,
+    attributes: { flow: "radio_download", "user.email": "someone@example.com" },
+  });
+  assert.deepEqual(metric.attributes, { flow: "radio_download" });
 });
 
 test("beforeSend stamps context tags and redacts events the SDK raised itself", () => {
@@ -221,6 +316,142 @@ test("init loads the SDK, tags the release, and reports afterwards", async () =>
   resetSentryForTests();
 });
 
+test("captureMetric emits counters and distributions with the UI's context", async () => {
+  resetSentryForTests();
+  const sdk = makeSdk();
+  await initSentry(makeWindow(), { loadSdk: async () => sdk });
+  setContextProvider(() => ({ radio: "Baofeng UV-5R", radio_module: "uv5r" }));
+
+  captureMetric("flow.completed", {
+    type: "count",
+    value: 1,
+    attributes: { flow: "radio_download", outcome: "failed", error_kind: "checksum" },
+  });
+  captureMetric("flow.duration", {
+    type: "distribution",
+    value: 4200,
+    unit: "millisecond",
+    attributes: { flow: "radio_download", outcome: "failed" },
+  });
+
+  assert.equal(sdk.recorded.length, 2);
+  assert.equal(sdk.recorded[0].type, "count");
+  assert.equal(sdk.recorded[0].name, "flow.completed");
+  assert.equal(sdk.recorded[0].value, 1);
+  // Context from the UI rides along, so a failure is attributable to a driver
+  // without every call site having to pass the radio.
+  assert.equal(sdk.recorded[0].attributes.radio, "Baofeng UV-5R");
+  assert.equal(sdk.recorded[0].attributes.error_kind, "checksum");
+  assert.equal(sdk.recorded[1].type, "distribution");
+  assert.equal(sdk.recorded[1].value, 4200);
+  assert.equal(sdk.recorded[1].unit, "millisecond");
+  resetSentryForTests();
+});
+
+test("an attribute set at the call site wins over the context provider", async () => {
+  resetSentryForTests();
+  const sdk = makeSdk();
+  await initSentry(makeWindow(), { loadSdk: async () => sdk });
+  // The selection can change while a clone is in flight, and the outcome
+  // belongs to the radio the transfer actually ran against.
+  setContextProvider(() => ({ radio: "Selected Later" }));
+  captureMetric("flow.completed", {
+    type: "count",
+    value: 1,
+    attributes: { flow: "radio_upload", radio: "Baofeng UV-5R" },
+  });
+  assert.equal(sdk.recorded[0].attributes.radio, "Baofeng UV-5R");
+  resetSentryForTests();
+});
+
+test("a metric of an unknown kind is dropped rather than thrown", async () => {
+  resetSentryForTests();
+  const sdk = makeSdk();
+  await initSentry(makeWindow(), { loadSdk: async () => sdk });
+  assert.equal(captureMetric("flow.completed", { type: "gauge", value: 1 }), true);
+  assert.equal(sdk.recorded.length, 0);
+  resetSentryForTests();
+});
+
+test("metrics recorded before the SDK arrives are replayed once", async () => {
+  resetSentryForTests();
+  const sdk = makeSdk();
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  const started = initSentry(makeWindow(), {
+    loadSdk: async () => {
+      await pending;
+      return sdk;
+    },
+  });
+
+  // app_start reports the boot that the SDK's own load is racing, so this is
+  // not a hypothetical window.
+  captureMetric("flow.completed", {
+    type: "count",
+    value: 1,
+    attributes: { flow: "app_start", outcome: "failed" },
+  });
+  assert.equal(sdk.recorded.length, 0, "a metric was sent before the SDK existed");
+
+  release();
+  await started;
+  assert.equal(sdk.recorded.length, 1);
+  assert.equal(sdk.recorded[0].attributes.flow, "app_start");
+  resetSentryForTests();
+});
+
+test("a buffered metric keeps the context it was recorded with", async () => {
+  resetSentryForTests();
+  const sdk = makeSdk();
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  const started = initSentry(makeWindow(), {
+    loadSdk: async () => {
+      await pending;
+      return sdk;
+    },
+  });
+
+  // The SDK's load overlaps app startup, which is long enough for a radio to be
+  // selected or restored from a cookie in between. A metric describes the
+  // moment it was recorded, so reading the context at drain time would file a
+  // startup failure against a radio that had nothing to do with it.
+  setContextProvider(() => ({ radio: "Baofeng UV-5R" }));
+  captureMetric("flow.completed", {
+    type: "count",
+    value: 1,
+    attributes: { flow: "app_start", outcome: "failed" },
+  });
+  setContextProvider(() => ({ radio: "Yaesu FT-60" }));
+
+  release();
+  await started;
+  assert.equal(sdk.recorded.length, 1);
+  assert.equal(sdk.recorded[0].attributes.radio, "Baofeng UV-5R");
+  resetSentryForTests();
+});
+
+test("this module never sets a scope attribute, which would bypass the allowlist", () => {
+  // beforeSendMetric runs before the SDK serializes a metric, and serialization
+  // then merges the current and isolation scopes' attributes underneath the
+  // metric's own. Anything set with the SDK's setAttribute() therefore reaches
+  // Sentry without passing scrubMetricAttributes, and no init option closes
+  // that. The app's guarantee is that it never sets one -- it reaches the SDK
+  // only through this module -- so that is what is pinned here rather than a
+  // behaviour the SDK does not offer.
+  const source = fs.readFileSync(path.join(repoRoot, "web", "js", "sentry.js"), "utf8");
+  assert.equal(
+    /\.setAttributes?\s*\(/.test(source),
+    false,
+    "web/js/sentry.js sets a scope attribute, which is not covered by METRIC_ATTRIBUTES",
+  );
+});
+
 test("errors raised before the SDK arrives are buffered and replayed once", async () => {
   resetSentryForTests();
   const sdk = makeSdk();
@@ -278,6 +509,7 @@ test("a blocked or offline CDN costs reporting, not the app", async () => {
   // than an exception thrown into whatever operation was reporting.
   assert.equal(win.listenerCount("error"), 0);
   assert.equal(captureError(new Error("later failure")), false);
+  assert.equal(captureMetric("flow.completed", { type: "count", value: 1 }), false);
   resetSentryForTests();
 });
 

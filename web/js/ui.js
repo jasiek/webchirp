@@ -1,4 +1,8 @@
-import { buildExportFileName } from "./ui/format.js";
+import {
+  buildExportFileName,
+  detectBrowserName,
+  detectPlatformName,
+} from "./ui/format.js";
 import { queryUiElements } from "./ui/dom.js";
 import {
   createUiState,
@@ -21,6 +25,7 @@ import {
   radioEventParams,
   trackEvent,
 } from "./ui/analytics.js";
+import { FLOWS, OUTCOMES, recordFlow } from "./ui/metrics.js";
 import { captureError, setContextProvider } from "./sentry.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
@@ -71,7 +76,22 @@ export function createUiController() {
   // moment of the failure. radioEventParams is reused verbatim: the driver
   // identity worth reporting is the same one analytics already sends, and it is
   // a CHIRP identifier rather than anything belonging to the user.
-  setContextProvider(() => radioEventParams(state.selectedRadio));
+  //
+  // Browser and platform ride along for a reason specific to this app: it talks
+  // to hardware through APIs only some browsers have, so "which flows are
+  // broken" usually has a browser answer. They are not read once at startup --
+  // the Brave probe in web/js/ui/format.js is async and settles after the first
+  // few calls, and a provider read per failure picks that up for free.
+  //
+  // These go to Sentry only, never to GA: GA4 already collects browser, OS and
+  // device as built-in dimensions, and per FINDINGS the EVENT-scoped custom
+  // dimension budget is scarce and one-way, so declaring them there would spend
+  // two slots to duplicate what the property already has.
+  setContextProvider(() => ({
+    browser: detectBrowserName(),
+    platform: detectPlatformName(),
+    ...radioEventParams(state.selectedRadio),
+  }));
 
   function setRuntimeApi(api) {
     state.runtimeApi = api;
@@ -218,19 +238,32 @@ export function createUiController() {
       );
       settings.render();
       serial.setSidebarControlsEnabled(true);
-      trackEvent("app_ready", {
-        duration_ms: Date.now() - startedAt,
-        // "sources" means the prebuilt catalog was missing or stale and every
-        // driver had to be imported in Pyodide first — a much slower start.
-        catalog_source: catalogResponse.source || "unknown",
-      });
+      const readyMs = Date.now() - startedAt;
+      // "sources" means the prebuilt catalog was missing or stale and every
+      // driver had to be imported in Pyodide first — a much slower start.
+      const catalogSource = catalogResponse.source || "unknown";
+      trackEvent("app_ready", { duration_ms: readyMs, catalog_source: catalogSource });
+      recordFlow(FLOWS.APP_START, OUTCOMES.OK, { catalog_source: catalogSource }, readyMs);
     } catch (error) {
       catalog.setRadioSelectPlaceholder("Unavailable");
+      const failedMs = Date.now() - startedAt;
+      const errorKind = classifyErrorKind(error);
+      const errorType = errorTypeName(error);
       trackEvent("app_init_failed", {
-        duration_ms: Date.now() - startedAt,
-        error_kind: classifyErrorKind(error),
-        error_type: errorTypeName(error),
+        duration_ms: failedMs,
+        error_kind: errorKind,
+        error_type: errorType,
       });
+      // The startup flow is the one whose failures can leave nothing else
+      // behind: if the runtime never boots there is no session to read in GA,
+      // and often no error either, so the share of starts that never reach
+      // ready is the only thing that says anything is wrong.
+      recordFlow(
+        FLOWS.APP_START,
+        OUTCOMES.FAILED,
+        { error_kind: errorKind, error_type: errorType },
+        failedMs,
+      );
       log.reportActionError("Initialization", error);
       log.setStatus("Initialization failed; sidebar controls remain disabled.");
     }
@@ -254,6 +287,7 @@ export function createUiController() {
     onRuntimeCrash(message) {
       log.logError(`RUNTIME CRASH ${message}`);
       captureError(message, { action: "Runtime", tags: { error_kind: "runtime_crash" } });
+      recordFlow(FLOWS.RUNTIME, OUTCOMES.CRASHED, { error_kind: "runtime_crash" });
     },
   };
 }

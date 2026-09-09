@@ -83,9 +83,12 @@ function parseCompound(compound) {
       rest = rest.slice(match[0].length);
       continue;
     }
-    match = rest.match(/^\[([\w-]+)(?:=(?:"([^"]*)"|'([^']*)'))?\]/);
+    // Attribute values may be quoted or bare -- input[type=checkbox] is what
+    // web/js/serial-test-page.js actually ships, and rejecting it made the
+    // module impossible to import under this DOM.
+    match = rest.match(/^\[([\w-]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\]]*)))?\]/);
     if (match) {
-      parsed.attributes.push({ name: match[1], value: match[2] ?? match[3] ?? null });
+      parsed.attributes.push({ name: match[1], value: match[2] ?? match[3] ?? match[4] ?? null });
       rest = rest.slice(match[0].length);
       continue;
     }
@@ -464,6 +467,14 @@ export class FakeDocument {
       this.elements.set(key, new FakeElement(tagName, this, id));
     }
     return this.elements.get(key);
+  }
+
+  // The id lookup, in terms of the selector lookup, so an element resolved
+  // either way is the same object and the vivify rule applies to both.
+  // web/js/version-info.js and web/js/serial-test-page.js reach for the DOM
+  // this way rather than by selector.
+  getElementById(id) {
+    return this.querySelector(`#${id}`);
   }
 
   // Registered elements matching the selector list. There is no tree to

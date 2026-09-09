@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { CUSTOM_DIMENSIONS } from "../web/js/analytics.js";
 import { parseArgs, planSync, validateDeclarations } from "./ga-dimensions.mjs";
+import { callArgumentKeys, sourceFiles } from "./test-support/param-scanner.mjs";
 import { jsDir } from "./test-support/repo-paths.mjs";
 
 // The sync script talks to a live GA property, so the parts worth testing are
@@ -121,73 +122,18 @@ test("arguments parse, including the property id in its various shapes", () => {
   assert.throws(() => parseArgs(["--nope"]), /Unknown argument: --nope/);
 });
 
-// Pull the top-level keys out of every `trackEvent(name, { ... })` call so the
-// coverage check below reads the calls themselves rather than a hand-kept list.
-function trackedParams(source) {
-  const names = new Set();
-  for (let start = source.indexOf("trackEvent("); start !== -1; start = source.indexOf("trackEvent(", start + 1)) {
-    let depth = 0;
-    let objectStart = -1;
-    for (let index = start + "trackEvent".length; index < source.length; index += 1) {
-      const char = source[index];
-      if (char === "(") {
-        depth += 1;
-      } else if (char === ")") {
-        depth -= 1;
-        if (depth === 0) {
-          break;
-        }
-      } else if (char === "{" && depth === 1) {
-        objectStart = index;
-        break;
-      }
-    }
-    if (objectStart === -1) {
-      continue;
-    }
-    let braces = 0;
-    for (let index = objectStart; index < source.length; index += 1) {
-      const char = source[index];
-      if (char === "{") {
-        braces += 1;
-      } else if (char === "}") {
-        braces -= 1;
-        if (braces === 0) {
-          break;
-        }
-      } else if (braces === 1 && /[A-Za-z_]/.test(char) && /[{,\s]/.test(source[index - 1])) {
-        const key = source.slice(index).match(/^[A-Za-z_]\w*(?=\s*:)/);
-        if (key) {
-          names.add(key[0]);
-        }
-      }
-    }
-  }
-  return names;
-}
-
-function sourceFiles(dir) {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      return sourceFiles(full);
-    }
-    return /\.m?js$/.test(entry.name) ? [full] : [];
-  });
-}
-
 test("the scanner finds the parameters a call actually sends", () => {
-  assert.deepEqual([...trackedParams('trackEvent("e", { a: 1, b: "x" });')], ["a", "b"]);
-  assert.deepEqual([...trackedParams('trackEvent("e", {}, win);')], []);
-  assert.deepEqual([...trackedParams('trackEvent(name);\nconst other = { c: 1 };')], []);
-  assert.deepEqual([...trackedParams('trackEvent("e", { a: { nested: 1 }, b: 2 });')], ["a", "b"]);
+  assert.deepEqual([...callArgumentKeys('trackEvent("e", { a: 1, b: "x" });', "trackEvent")], ["a", "b"]);
+  assert.deepEqual([...callArgumentKeys('trackEvent("e", {}, win);', "trackEvent")], []);
+  assert.deepEqual([...callArgumentKeys('trackEvent(name);\nconst other = { c: 1 };', "trackEvent")], []);
+  assert.deepEqual([...callArgumentKeys('trackEvent("e", { a: { nested: 1 }, b: 2 });', "trackEvent")], ["a", "b"]);
 });
 
 test("every parameter the app sends is declared as a custom dimension", () => {
   const declared = new Set(CUSTOM_DIMENSIONS.map((dimension) => dimension.parameterName));
   const sent = new Set();
   for (const file of sourceFiles(jsDir)) {
-    for (const name of trackedParams(fs.readFileSync(file, "utf8"))) {
+    for (const name of callArgumentKeys(fs.readFileSync(file, "utf8"), "trackEvent")) {
       sent.add(name);
     }
   }
