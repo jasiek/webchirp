@@ -25,6 +25,21 @@ export function latLonToWorldPixel(latitude, longitude, zoom) {
   return { x, y };
 }
 
+// The inverse of latLonToWorldPixel: where an absolute world pixel falls on
+// the globe. This is what turns a drag in screen pixels back into a
+// coordinate, so a map can be an input and not only a picture. Latitude is
+// clamped to Mercator's limit and longitude wrapped, so a drag off the edge of
+// the world still yields a coordinate the form can hold.
+export function worldPixelToLatLon(x, y, zoom) {
+  const worldSize = Math.pow(2, zoom) * OSM_TILE_SIZE;
+  const wrappedX = ((Number(x) % worldSize) + worldSize) % worldSize;
+  const longitude = (wrappedX / worldSize) * 360 - 180;
+  const clampedY = Math.max(0, Math.min(worldSize, Number(y)));
+  const mercator = (0.5 - clampedY / worldSize) * 2 * Math.PI;
+  const latitude = (Math.atan(Math.sinh(mercator)) * 180) / Math.PI;
+  return { latitude, longitude };
+}
+
 // Plan the tiles a width x height viewport centered on the coordinate needs.
 // Tiles carry the CSS offset that puts them in place inside the (relatively
 // positioned, overflow-hidden) viewport; x wraps around the antimeridian and

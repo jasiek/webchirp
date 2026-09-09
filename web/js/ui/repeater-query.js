@@ -99,6 +99,10 @@ export function createRepeaterQuery(ctx) {
             positionState.latitudeText = latitudeText;
             positionState.longitudeText = longitudeText;
           },
+          // Counted next to repeater_geolocate, so the three ways of setting a
+          // position can be compared. Which source was open, never where the
+          // drag landed — the coordinates stay in the form.
+          onPan: () => trackEvent("repeater_map_panned", { repeater_source: activeSource.key }),
         });
         positionField = instance;
         // The button is recreated with the field on every open, so the

@@ -151,9 +151,11 @@ test("number field without min/max leaves the constraints unset", () => {
 
 function buildPositionField(config = {}) {
   const changes = [];
+  const pans = [];
   const field = createPositionField({
     locatorPlaceholder: "e.g. JO91GG",
     onChange: (lat, lon) => changes.push([lat, lon]),
+    onPan: () => pans.push(true),
     ...config,
   });
   const [, latitude, , longitude, , geoRow, preview] = field.nodes;
@@ -170,7 +172,35 @@ function buildPositionField(config = {}) {
     previewCanvas,
     previewEmpty,
     previewAttribution,
+    pans,
   };
+}
+
+// A field whose preview has been rendered once, which is the state a drag
+// needs: a position on screen and a zoom the pointer arithmetic can use.
+function buildDraggableField(config = {}) {
+  const built = buildPositionField({
+    initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
+    ...config,
+  });
+  built.preview.clientWidth = 320;
+  built.field.setRangeKm(30);
+  built.field.refreshPreview();
+  return built;
+}
+
+function dragMap(previewCanvas, moves, { pointerId = 1 } = {}) {
+  return (async () => {
+    await previewCanvas.dispatch("pointerdown", { pointerId, button: 0, clientX: 100, clientY: 100 });
+    for (const [x, y] of moves) {
+      await previewCanvas.dispatch("pointermove", { pointerId, clientX: x, clientY: y });
+    }
+    await previewCanvas.dispatch("pointerup", { pointerId });
+  })();
+}
+
+function tileTransforms(canvas) {
+  return tilesIn(canvas).map((tile) => tile.style.transform || "");
 }
 
 // The field debounces preview redraws so a typist does not fetch a tile set
@@ -533,4 +563,137 @@ test("tiles are drawn at the scaled size a fractional zoom needs", () => {
   const zoom = Number(tiles[0].src.split("/")[3]);
   const scale = tileSize / 256;
   assert.ok(Math.abs(metresPerPixel(52, zoom) / scale - (2 * 30000) / (320 * 0.9)) < 1e-6);
+});
+
+test("dragging the map moves the position under the marker", async () => {
+  const { field, previewCanvas, latitude, longitude, locator } = buildDraggableField();
+  const before = field.value();
+
+  // Pull the map east; the point under the fixed centre marker moves west.
+  await dragMap(previewCanvas, [[160, 100]]);
+
+  const after = field.value();
+  assert.ok(after.longitude < before.longitude, `${after.longitude} < ${before.longitude}`);
+  assert.ok(Math.abs(after.latitude - before.latitude) < 1e-9, "a horizontal drag does not move north");
+  // The drag is an input like any other: the three fields agree afterwards.
+  assert.equal(Number(latitude.value), after.latitude);
+  assert.equal(Number(longitude.value), after.longitude);
+  assert.equal(locator.value.length, 6);
+});
+
+test("a vertical drag moves the position north or south", async () => {
+  const { field, previewCanvas } = buildDraggableField();
+  const before = field.value();
+  // Pull the map down; the point under the marker moves north.
+  await dragMap(previewCanvas, [[100, 160]]);
+  const after = field.value();
+  assert.ok(after.latitude > before.latitude, `${after.latitude} > ${before.latitude}`);
+});
+
+test("a press that barely moves is a click, not a drag", async () => {
+  const { field, previewCanvas, pans, changes } = buildDraggableField();
+  const before = field.value();
+  const firstTile = previewCanvas.children[0];
+
+  await dragMap(previewCanvas, [[101, 102]]);
+
+  assert.deepEqual(field.value(), before, "a shaky press leaves the position alone");
+  assert.deepEqual(changes, [], "and reports no change");
+  assert.deepEqual(pans, [], "and is not counted as a map drag");
+  assert.equal(previewCanvas.children[0], firstTile, "and costs no redraw");
+});
+
+test("the drag translates the tiles it has and redraws once, on release", async () => {
+  const { previewCanvas } = buildDraggableField();
+  const firstTile = previewCanvas.children[0];
+
+  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  for (const x of [120, 140, 160]) {
+    await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: x, clientY: 100 });
+  }
+  // Still the same tiles, shifted: a redraw per pointermove would refetch the
+  // whole grid dozens of times across one gesture.
+  assert.equal(previewCanvas.children[0], firstTile);
+  assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => "translate(60px, 0px)"));
+  // The marker and the range ring mark the position being chosen, so they stay
+  // at the centre while the map slides under them.
+  assert.equal(previewCanvas.children.at(-1).style.transform, undefined);
+
+  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  assert.notEqual(previewCanvas.children[0], firstTile, "release redraws around the new centre");
+  assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => ""));
+});
+
+test("a drag past the drawn map rebases and keeps tracking the pointer", async () => {
+  const { field, previewCanvas } = buildDraggableField();
+  const before = field.value();
+  const firstTile = previewCanvas.children[0];
+
+  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  // Past the overscan: the map has run out of drawn tiles, so it redraws
+  // around where it now is mid-gesture rather than showing blank canvas.
+  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 260, clientY: 100 });
+  assert.notEqual(previewCanvas.children[0], firstTile, "rebased mid-drag");
+  assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => ""));
+  const rebased = field.value();
+
+  // The same gesture carries on from the rebased origin.
+  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 300, clientY: 100 });
+  assert.ok(field.value().longitude < rebased.longitude, "kept moving west");
+  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  assert.ok(field.value().longitude < before.longitude);
+});
+
+test("onPan reports the drag once, without the coordinates it produced", async () => {
+  const { previewCanvas, pans } = buildDraggableField();
+  await dragMap(previewCanvas, [[130, 100], [150, 100], [170, 100]]);
+  assert.deepEqual(pans, [true], "one drag, one report");
+  await dragMap(previewCanvas, [[140, 120]]);
+  assert.equal(pans.length, 2);
+});
+
+test("a cancelled drag still settles the map on where it was left", async () => {
+  const { field, previewCanvas, pans } = buildDraggableField();
+  const before = field.value();
+  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 150, clientY: 100 });
+  await previewCanvas.dispatch("pointercancel", { pointerId: 1 });
+  assert.ok(field.value().longitude < before.longitude);
+  assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => ""));
+  assert.deepEqual(pans, [true]);
+  assert.equal(previewCanvas.classList.contains("is-panning"), false);
+});
+
+test("moves from another pointer, and drags with no position or no render, are ignored", async () => {
+  const { field, previewCanvas } = buildDraggableField();
+  const before = field.value();
+  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  // A second finger landing on the map must not steer the first one's drag.
+  await previewCanvas.dispatch("pointermove", { pointerId: 2, clientX: 300, clientY: 300 });
+  assert.deepEqual(field.value(), before);
+  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+
+  // Nothing drawn, nothing to drag: an empty preview has no zoom to compute in.
+  const empty = buildPositionField();
+  await dragMap(empty.previewCanvas, [[200, 200]]);
+  assert.equal(empty.field.value(), null);
+  assert.deepEqual(empty.pans, []);
+});
+
+test("the drag ignores secondary buttons", async () => {
+  const { field, previewCanvas } = buildDraggableField();
+  const before = field.value();
+  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 2, clientX: 100, clientY: 100 });
+  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 200, clientY: 100 });
+  assert.deepEqual(field.value(), before);
+});
+
+test("the drawn map extends past the viewport so a drag has somewhere to go", () => {
+  const { previewCanvas } = buildDraggableField();
+  const lefts = tilesIn(previewCanvas).map((tile) => Number.parseFloat(tile.style.left));
+  const tops = tilesIn(previewCanvas).map((tile) => Number.parseFloat(tile.style.top));
+  // Overscan: the grid starts left of and above the viewport's own origin, and
+  // the canvas's overflow is what hides it until a drag pulls it into view.
+  assert.ok(Math.min(...lefts) <= -128, `leftmost tile at ${Math.min(...lefts)}`);
+  assert.ok(Math.min(...tops) <= -128, `topmost tile at ${Math.min(...tops)}`);
 });

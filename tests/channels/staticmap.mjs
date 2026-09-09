@@ -9,6 +9,7 @@ import {
   metresPerPixel,
   osmTileUrl,
   planStaticMap,
+  worldPixelToLatLon,
   zoomForRadius,
 } from "../../web/js/staticmap.js";
 import { rowGeo, setRowGeo } from "../../web/js/row-geo.js";
@@ -138,4 +139,30 @@ test("zoomForRadius stays inside its bounds and refuses inputs that are not a ci
   }
   // A viewport with no width yet is the hidden-modal case: no zoom to give.
   assert.equal(zoomForRadius(52, 30000, 0), null);
+});
+
+test("world pixels round-trip back to the coordinate they came from", () => {
+  for (const [latitude, longitude] of [[52.2297, 21.0122], [-33.8688, 151.2093], [0, 0], [51.5, -0.12]]) {
+    for (const zoom of [3, 9, 14]) {
+      const pixel = latLonToWorldPixel(latitude, longitude, zoom);
+      const back = worldPixelToLatLon(pixel.x, pixel.y, zoom);
+      assert.ok(Math.abs(back.latitude - latitude) < 1e-6, `lat ${latitude} @ z${zoom}`);
+      assert.ok(Math.abs(back.longitude - longitude) < 1e-6, `lon ${longitude} @ z${zoom}`);
+    }
+  }
+});
+
+test("a drag off the edge of the world still yields a coordinate a form can hold", () => {
+  const zoom = 5;
+  const worldSize = Math.pow(2, zoom) * OSM_TILE_SIZE;
+  // Past the antimeridian wraps rather than running off to +infinity: one
+  // world east of Greenwich is Greenwich again.
+  const wrapped = worldPixelToLatLon(worldSize / 2 + worldSize, 0.5 * worldSize, zoom);
+  assert.ok(Math.abs(wrapped.longitude) < 1e-9);
+  // Past the poles clamps to Mercator's limit instead of producing NaN.
+  for (const y of [-5000, worldSize + 5000]) {
+    const polar = worldPixelToLatLon(worldSize / 2, y, zoom);
+    assert.ok(Number.isFinite(polar.latitude), `y ${y}`);
+    assert.ok(Math.abs(polar.latitude) <= 85.06, `y ${y} -> ${polar.latitude}`);
+  }
 });

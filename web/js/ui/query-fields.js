@@ -1,5 +1,5 @@
 import { decodeMaidenheadBox, encodeMaidenhead } from "../rsgb.js";
-import { zoomForRadius } from "../staticmap.js";
+import { latLonToWorldPixel, worldPixelToLatLon, zoomForRadius } from "../staticmap.js";
 import { createMapAttribution, renderStaticMap } from "./static-map-view.js";
 
 // Field components for the shared repeater-query modal. Each factory builds
@@ -191,6 +191,16 @@ const PREVIEW_FALLBACK_SIZE = 300;
 // rendering each one would fetch a tile set per character. The preview only
 // has to keep up with the typist, not with the keyboard.
 const PREVIEW_DEBOUNCE_MS = 300;
+// How much map is drawn beyond each edge of the preview. A drag translates the
+// tiles that are already there, so this is how far one can travel before the
+// trailing edge runs out of map — and, in the other direction, how much extra
+// tile traffic every render costs. Past it the drag rebases: the map redraws
+// around where it now is and the drag carries on from there.
+const PREVIEW_OVERSCAN = 128;
+// A drag has to beat this before it counts as one. Below it, a press is a
+// click with a shaky hand, and moving the location under it would make the map
+// impossible to merely look at.
+const PREVIEW_DRAG_SLOP = 3;
 
 // Latitude + geolocate button, longitude, and a Maidenhead locator. The
 // locator is a two-way alternative way to enter the position, not a filter of
@@ -207,8 +217,12 @@ const PREVIEW_DEBOUNCE_MS = 300;
 // Under the three inputs sits a static OSM map of whatever position they
 // currently hold, so a mistyped digit or a locator from the wrong square is
 // visible before the query runs rather than after a hundred repeaters from the
-// wrong country land in the grid.
-export function createPositionField({ key = "position", locatorPlaceholder, initial = {}, onChange } = {}) {
+// wrong country land in the grid. It is a fourth way *into* the position as
+// well as a picture of it: dragging the map moves the coordinates under the
+// marker, which stays pinned to the centre. `onPan()` fires once per drag that
+// actually moved, so the shell can count it the way it counts geolocation —
+// where the drag ended up is not reported.
+export function createPositionField({ key = "position", locatorPlaceholder, initial = {}, onChange, onPan } = {}) {
   const latitude = document.createElement("input");
   latitude.id = fieldId(key, "latitude");
   latitude.name = "latitude";
@@ -261,6 +275,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // to the three inputs above it rather than as a fourth labelled field.
   const previewCanvas = document.createElement("div");
   previewCanvas.className = "repeater-map-canvas";
+  previewCanvas.title = "Drag the map to move the location";
   const previewEmpty = document.createElement("p");
   previewEmpty.className = "modal-map-preview-empty";
   previewEmpty.textContent = "Set a latitude and longitude to preview the location.";
@@ -311,14 +326,15 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     const radiusMetres = Number.isFinite(rangeKm) && rangeKm > 0 ? rangeKm * 1000 : 0;
     // Frame the search radius when there is one; a source without a range
     // filter falls back to the fixed zoom.
-    const zoom = zoomForRadius(position.latitude, radiusMetres, lastPreviewWidth, {
+    lastPreviewZoom = zoomForRadius(position.latitude, radiusMetres, lastPreviewWidth, {
       fill: PREVIEW_RANGE_FILL,
     }) ?? PREVIEW_ZOOM;
     renderStaticMap(previewCanvas, position, {
-      zoom,
+      zoom: lastPreviewZoom,
       width: lastPreviewWidth,
       height: lastPreviewWidth,
       radiusMetres,
+      overscan: PREVIEW_OVERSCAN,
     });
   }
 
@@ -326,12 +342,23 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // Width of the last render, so a resize can tell a card that actually
   // changed shape from one that merely reflowed.
   let lastPreviewWidth = 0;
+  // Zoom of the last render. A drag needs it to turn screen pixels back into
+  // degrees, and it is the render's own value rather than a recomputed one so
+  // the arithmetic matches the tiles actually on screen.
+  let lastPreviewZoom = 0;
   // The search radius the preview draws, in km. It belongs to a different
   // field entirely (Range/Distance), so the modal shell pushes it in here —
   // see setRangeKm.
   let rangeKm = Number.NaN;
 
   function schedulePreview() {
+    // A drag writes the coordinate fields on every pointermove; redrawing
+    // under it would refetch the tile grid dozens of times across one gesture
+    // and yank the map out from under the pointer. The drag redraws itself,
+    // when it rebases and when it ends.
+    if (drag) {
+      return;
+    }
     if (previewTimer) {
       clearTimeout(previewTimer);
     }
@@ -360,6 +387,118 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       onChange(String(latitude.value ?? ""), String(longitude.value ?? ""));
     }
   }
+
+  // --- The map as an input --------------------------------------------------
+
+  // Write a coordinate pair into the three fields. Shared by setPosition and
+  // by the drag, so a dragged position reaches the locator and the shell's
+  // onChange exactly as a geolocated one does.
+  function applyPosition(lat, lon) {
+    latitude.value = Number(lat).toFixed(6);
+    longitude.value = Number(lon).toFixed(6);
+    refreshLocatorFromCoords();
+    notifyChange();
+  }
+
+  // The in-progress drag: where the pointer went down, the position the map
+  // was drawn around at that moment, and whether it has yet moved far enough
+  // to count. Null whenever no drag is running.
+  let drag = null;
+
+  // Offset the tiles without redrawing them. Only the tiles move: the marker
+  // and the range ring mark the position being chosen, which is always the
+  // centre of the viewport.
+  function panTiles(dx, dy) {
+    for (const child of previewCanvas.children) {
+      if (child.className === "repeater-map-tile") {
+        child.style.transform = dx || dy ? `translate(${dx}px, ${dy}px)` : "";
+      }
+    }
+  }
+
+  // Where the centre lands once the map has been dragged by (dx, dy): dragging
+  // the map right moves the point under the marker west, hence the subtraction.
+  function positionAfterPan(dx, dy) {
+    const origin = latLonToWorldPixel(drag.latitude, drag.longitude, drag.zoom);
+    return worldPixelToLatLon(origin.x - dx, origin.y - dy, drag.zoom);
+  }
+
+  previewCanvas.addEventListener("pointerdown", (event) => {
+    const position = currentPosition();
+    // Nothing to drag before there is a position, and nothing to compute with
+    // before a render has fixed a zoom. Secondary buttons are left to the
+    // browser's own menus.
+    if (!position || !lastPreviewZoom || (event.button ?? 0) !== 0) {
+      return;
+    }
+    drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      zoom: lastPreviewZoom,
+      moved: false,
+    };
+    // Capture, so a drag that leaves the little map keeps being this map's
+    // drag instead of ending wherever the pointer crossed the border.
+    previewCanvas.setPointerCapture?.(event.pointerId);
+    previewCanvas.classList.add("is-panning");
+    event.preventDefault?.();
+  });
+
+  previewCanvas.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < PREVIEW_DRAG_SLOP) {
+      return;
+    }
+    drag.moved = true;
+    const next = positionAfterPan(dx, dy);
+    // The fields track the map as it moves, so the numbers are part of the
+    // feedback rather than something that appears at the end.
+    applyPosition(next.latitude, next.longitude);
+    if (Math.max(Math.abs(dx), Math.abs(dy)) >= PREVIEW_OVERSCAN) {
+      // Dragged to the edge of the map that was drawn: redraw around where we
+      // are now and let the same gesture carry on from there.
+      drag.startX = event.clientX;
+      drag.startY = event.clientY;
+      drag.latitude = next.latitude;
+      drag.longitude = next.longitude;
+      panTiles(0, 0);
+      renderPreview();
+      drag.zoom = lastPreviewZoom;
+      return;
+    }
+    panTiles(dx, dy);
+  });
+
+  function endDrag(event) {
+    if (!drag || (event && event.pointerId !== drag.pointerId)) {
+      return;
+    }
+    const moved = drag.moved;
+    drag = null;
+    previewCanvas.classList.remove("is-panning");
+    previewCanvas.releasePointerCapture?.(event?.pointerId);
+    if (!moved) {
+      return;
+    }
+    // The tiles are still translated and only cover where the map used to be;
+    // one real render at the new centre replaces both.
+    panTiles(0, 0);
+    renderPreview();
+    // Only that the map was used to set the position, never where it ended up.
+    if (typeof onPan === "function") {
+      onPan();
+    }
+  }
+
+  previewCanvas.addEventListener("pointerup", endDrag);
+  previewCanvas.addEventListener("pointercancel", endDrag);
 
   latitude.addEventListener("input", () => {
     refreshLocatorFromCoords();
@@ -436,12 +575,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       schedulePreview();
     },
     value: () => currentPosition(),
-    setPosition: (lat, lon) => {
-      latitude.value = Number(lat).toFixed(6);
-      longitude.value = Number(lon).toFixed(6);
-      refreshLocatorFromCoords();
-      notifyChange();
-    },
+    setPosition: applyPosition,
     geolocateButton,
   };
 }

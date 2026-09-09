@@ -1306,6 +1306,16 @@ button:disabled {
 .modal-map-preview .repeater-map-canvas {
   width: 100%;
   aspect-ratio: 1 / 1;
+  /* Draggable: the map sets the position as well as showing it. touch-action
+     hands the gesture to the page's own handler instead of letting the browser
+     scroll the modal with it, which is what makes the drag work on a phone. */
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.modal-map-preview .repeater-map-canvas.is-panning {
+  cursor: grabbing;
 }
 
 /* Stand-in of the same height range as the map, so the grid does not jump when

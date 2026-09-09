@@ -30,7 +30,12 @@ import {
 //
 // `radiusMetres` draws a circle of that ground radius around the centre, for
 // callers previewing a "repeaters within N km" search.
-export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetres = 0 }) {
+//
+// `overscan` plans that many extra pixels of map beyond each edge, hidden by
+// the viewport's own overflow. A map nobody can move needs none; a draggable
+// one needs it, or the first pixel of a drag exposes blank canvas at the
+// trailing edge before any redraw could cover it.
+export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetres = 0, overscan = 0 }) {
   canvasEl.innerHTML = "";
   canvasEl.style.width = `${width}px`;
   canvasEl.style.height = `${height}px`;
@@ -38,8 +43,8 @@ export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetr
   const scale = Math.pow(2, zoom - tileZoom);
   const plan = planStaticMap(geo.latitude, geo.longitude, {
     zoom: tileZoom,
-    width: width / scale,
-    height: height / scale,
+    width: (width + 2 * overscan) / scale,
+    height: (height + 2 * overscan) / scale,
   });
   const tileSize = OSM_TILE_SIZE * scale;
   for (const tile of plan.tiles) {
@@ -52,8 +57,10 @@ export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetr
     // tile.openstreetmap.org sends Access-Control-Allow-Origin: *, so a
     // CORS-mode load satisfies COEP where a no-cors one is blocked.
     img.crossOrigin = "anonymous";
-    img.style.left = `${tile.left * scale}px`;
-    img.style.top = `${tile.top * scale}px`;
+    // The plan is centred on the padded viewport, so shifting every tile back
+    // by the overscan lands the coordinate in the middle of the real one.
+    img.style.left = `${tile.left * scale - overscan}px`;
+    img.style.top = `${tile.top * scale - overscan}px`;
     img.style.width = `${tileSize}px`;
     img.style.height = `${tileSize}px`;
     img.src = osmTileUrl(tile);
