@@ -4,11 +4,18 @@ import test from "node:test";
 // The channel grid takes its natural width from its cells, and an <input> is
 // the one editor whose width has nothing to do with the value inside it: the
 // browser sizes it from the size attribute -- twenty average characters by
-// default, plus a one-character surcharge -- and cannot see the text at all.
+// default, plus a one-character surcharge -- and never looks at the text.
 // Seventeen such columns is what made the desktop grid overflow with space no
-// value was using. fitInputColumnWidths() (web/js/ui/channel-table.js) measures
-// the values instead and gives each input column the result as a floor. These
-// tests pin that: nothing else here would notice a regression to a fixed width.
+// value was using. The grid now hands that job to field-sizing in
+// web/styles.css, which needs two things from here that nothing else asserts:
+// inputs that ask the browser for no width of their own, and the stylesheet
+// rule that gives them one. The resulting layout is the browser's own and
+// cannot be checked headlessly -- the fake DOM has no layout at all -- so it is
+// verified in a real browser instead.
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   channelRows,
   flushMicrotasks,
@@ -17,52 +24,11 @@ import {
   selectRadioBySearch,
 } from "./test-support/fake-dom.mjs";
 
+const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HEADERS = ["Location", "Name", "Frequency", "Duplex", "Comment"];
 
-// The stub font: every character this wide, and 2px of padding each side of an
-// input. Widths below are therefore characters * 7 + 4, which is what makes the
-// expected numbers readable rather than magic.
-const CHAR_PX = 7;
-const INPUT_PADDING_PX = 4;
-
-function expectedWidth(text) {
-  return `${text.length * CHAR_PX + INPUT_PADDING_PX}px`;
-}
-
-// installFakeDom() has no layout and no canvas, which is how the grid tells a
-// headless caller apart from a browser. Give it just enough of both to measure
-// with: a font whose metrics are trivial, and cells whose (zero-sized) boxes
-// leave the editor's own padding as the only chrome around the text.
-function installMeasurableDom() {
-  const fake = installFakeDom({
-    window: {
-      getComputedStyle: () => ({
-        fontStyle: "normal",
-        fontWeight: "400",
-        fontSize: "14px",
-        fontFamily: "Stub",
-        paddingLeft: "2px",
-        paddingRight: "2px",
-      }),
-    },
-  });
-  const createElement = fake.document.createElement.bind(fake.document);
-  fake.document.createElement = (tagName) => {
-    const element = createElement(tagName);
-    if (String(tagName).toLowerCase() === "canvas") {
-      element.getContext = () => ({
-        font: "",
-        measureText: (text) => ({ width: String(text).length * CHAR_PX }),
-      });
-    }
-    return element;
-  };
-  return fake;
-}
-
-// A grid holding the given rows, with the driver metadata given.
 async function renderGrid(rows, columns = {}) {
-  const { document } = installMeasurableDom();
+  const { document } = installFakeDom();
   const { createUiController } = await import("../web/js/ui.js");
   const ui = createUiController();
   ui.setRuntimeApi({
@@ -87,18 +53,7 @@ async function renderGrid(rows, columns = {}) {
   return document;
 }
 
-// The floor each header cell carries, keyed by column. Only input columns get
-// one: a select is already as wide as the widest option it may have to show,
-// and the Location button prints its slot number as ordinary text the browser
-// can measure by itself.
-function columnFloors(document) {
-  const header = document.querySelector("#mem-table thead").children[0];
-  return Object.fromEntries(
-    header.children.map((th, idx) => [HEADERS[idx], th.style.minWidth]),
-  );
-}
-
-test("input columns are measured against the values they hold", async () => {
+test("text editors ask the browser for no width of their own", async () => {
   const document = await renderGrid(
     [
       { Location: "0", Name: "SR5E", Frequency: "439.375000", Duplex: "-", Comment: "Warszawa" },
@@ -107,60 +62,41 @@ test("input columns are measured against the values they hold", async () => {
     { Duplex: { kind: "enum", editable: true, options: ["", "-", "+", "split"] } },
   );
 
-  const floors = columnFloors(document);
-  // The widest value in the column, not the widest the driver would allow.
-  assert.equal(floors.Name, expectedWidth("SR5KPN"));
-  assert.equal(floors.Frequency, expectedWidth("439.375000"));
-  assert.equal(floors.Comment, expectedWidth("Piaseczno"));
-  // A select sizes itself, so nothing is imposed on it.
-  assert.equal(floors.Duplex, undefined);
-  assert.equal(floors.Location, undefined);
-
-  // The inputs ask the browser for nothing, which is what leaves the floors
-  // above in charge of the column.
   const row = channelRows(document)[0];
+  const editors = row.children.map((td) => td.children[0]);
+  // A size of 1 is what leaves the stylesheet in charge of the column. It also
+  // decides the fallback: where field-sizing is missing, the size attribute is
+  // still what governs, so those columns come out at their header width rather
+  // than at the browser's twenty-character default.
   assert.deepEqual(
-    row.children.filter((td) => td.children[0]?.tagName === "INPUT").map((td) => td.children[0].size),
+    editors.filter((editor) => editor.tagName === "INPUT").map((editor) => editor.size),
     [1, 1, 1],
   );
+  // Nothing is imposed on the editors that already size themselves: a select is
+  // as wide as the widest option it may have to show, and the Location button
+  // prints its slot number as ordinary text the browser can measure.
+  assert.equal(editors[HEADERS.indexOf("Duplex")].tagName, "SELECT");
+  assert.equal(editors[HEADERS.indexOf("Duplex")].size, undefined);
+  assert.equal(editors[HEADERS.indexOf("Location")].tagName, "BUTTON");
 });
 
-test("a long value is capped, and an empty column asks for nothing", async () => {
-  const document = await renderGrid([
-    { Location: "0", Name: "", Frequency: "146.520000", Comment: "x".repeat(40) },
-  ]);
+test("the stylesheet sizes grid inputs from their contents", () => {
+  const styles = fs.readFileSync(path.join(repoRootDir, "web", "styles.css"), "utf8");
+  const rule = styles.match(
+    /@supports \(field-sizing: content\) \{\s*#mem-table td input \{([^}]*)\}/,
+  );
+  assert.ok(rule, "grid inputs must be sized by field-sizing, behind an @supports guard");
 
-  const floors = columnFloors(document);
-  // Sixteen characters is the ceiling; the rest scrolls inside the input.
-  assert.equal(floors.Comment, expectedWidth("x".repeat(16)));
-  // A column with nothing in it falls back to its header, which the browser
-  // applies on top of this floor.
-  assert.equal(floors.Name, expectedWidth(""));
-});
-
-test("editing a cell refits its column, in both directions", async () => {
-  const document = await renderGrid([
-    { Location: "0", Name: "SR5E", Frequency: "146.520000", Comment: "" },
-  ]);
-  const header = document.querySelector("#mem-table thead").children[0];
-  const commentIdx = HEADERS.indexOf("Comment");
-  const editor = channelRows(document)[0].children[commentIdx].children[0];
-
-  // A typed value is one the browser never laid out, so the refit has to
-  // happen when the edit commits rather than at the next render.
-  editor.value = "Konstancin";
-  document.querySelector("#mem-table tbody").dispatchEvent({
-    type: "focusout",
-    target: editor,
-  });
-  assert.equal(header.children[commentIdx].style.minWidth, expectedWidth("Konstancin"));
-
-  editor.value = "";
-  document.querySelector("#mem-table tbody").dispatchEvent({
-    type: "focusout",
-    target: editor,
-  });
-  assert.equal(header.children[commentIdx].style.minWidth, expectedWidth(""));
+  const declarations = rule[1];
+  assert.match(declarations, /field-sizing:\s*content/);
+  // Each of these is load-bearing, and each fails silently if it is dropped: a
+  // percentage width suppresses field-sizing outright and the columns fall back
+  // to their header widths; without the percentage minimum the input stops
+  // filling its cell, so a click in the empty part of a cell reaches no editor;
+  // without the cap one long comment takes a third of the window.
+  assert.match(declarations, /width:\s*auto/);
+  assert.match(declarations, /min-width:\s*100%/);
+  assert.match(declarations, /max-width:\s*\d+ch/);
 });
 
 test("the Location header is abbreviated without renaming the column", async () => {

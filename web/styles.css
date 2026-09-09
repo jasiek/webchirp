@@ -1419,6 +1419,34 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+/* An <input> is the one editor that cannot size itself: its width comes from
+   the size attribute, which buys N *average* characters plus a one-character
+   surcharge, and the browser never looks at the value inside. That is what made
+   every text column the same ~150px whether it held a callsign or a frequency.
+   field-sizing hands the browser the job instead, so a column is exactly as
+   wide as the widest value the grid is showing.
+
+   All three declarations are load-bearing. width:auto because a percentage
+   width suppresses field-sizing outright -- the columns silently fall back to
+   their header widths. min-width:100% so the input still fills its cell: a
+   percentage minimum does not feed back into the intrinsic width, so it stretches
+   the control without widening the column, and a click anywhere in the cell
+   still lands in the editor. max-width caps a long comment at a readable width;
+   the rest scrolls inside the input.
+
+   Note what this does *not* see: the grid is virtualized (see
+   web/js/ui/channel-table.js), so the browser is measuring the rows currently in
+   the DOM, not the whole channel list. Columns therefore track what is on
+   screen. */
+@supports (field-sizing: content) {
+  #mem-table td input {
+    field-sizing: content;
+    width: auto;
+    min-width: 100%;
+    max-width: 16ch;
+  }
+}
+
 /* A native dropdown arrow is a fixture about 21px wide -- a few pixels of
    indicator plus the room the platform reserves around it -- and this grid has
    a dozen enum columns, several holding values narrower than that (Skip is one
