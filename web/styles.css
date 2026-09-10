@@ -1271,9 +1271,13 @@ button:disabled {
 
 /* A driver decides how many extras a channel has -- anytone_iii publishes
    thirteen -- so this is the one modal whose height is not something the markup
-   knows. Without a cap the card grows past both edges of the fixed overlay on a
-   short viewport and takes Cancel and Save off screen with it; the field grid
-   is what scrolls, so the title, the hint and the actions stay put. */
+   knows, and the only one that scrolls inside its card rather than inside the
+   overlay. The overlay's own scrolling (see .modal-overlay) already keeps a
+   tall dialog reachable, but it moves the whole card: on a phone the title and
+   the Save button would both leave the screen, and a form of unknown length is
+   exactly where they should not. Capping the card at the viewport and scrolling
+   the field grid instead keeps the title, the hint and the actions in place, and
+   the overlay never has to scroll this dialog at all. */
 #channel-extra-modal .modal-card {
   display: flex;
   flex-direction: column;
