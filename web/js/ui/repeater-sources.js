@@ -113,7 +113,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
     label,
     actionLabel,
     insertLabel,
-    menuButton,
+    toolbarButton,
     sourceEndpoints,
   }) {
     const apiUrl = sourceEndpoints?.apiUrl || "";
@@ -126,7 +126,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
 
     return {
       key,
-      menuButton,
+      toolbarButton,
       // Proxy-dependent sources have null endpoints when the configured base
       // is blank. IRTS always receives its default api.codeplug.org endpoints.
       available: Boolean(apiUrl && metaUrl),
@@ -150,7 +150,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
           optionsPromise = (async () => {
             // The whole exchange runs under one deadline, body read included:
             // this fetch is what the modal blocks on while it opens, so a
-            // stalled proxy would otherwise leave the menu click doing nothing
+            // stalled proxy would otherwise leave the toolbar click doing nothing
             // visible for minutes.
             const text = await withRequestTimeout(`${label} dictionary request`, async (signal) => {
               const response = await fetch(metaUrl, { signal });
@@ -266,7 +266,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
     const actionLabel = "RSGB ETCC";
     return {
       key: "rsgb",
-      menuButton: "channelImportRsgbEl",
+      toolbarButton: "channelImportRsgbEl",
       available: true,
       title: "Query RSGB ETCC API",
       label: "RSGB ETCC",
@@ -401,7 +401,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
       label: "przemienniki.net",
       actionLabel: "Przemienniki",
       insertLabel: "przemienniki",
-      menuButton: "channelImportPrzemiennikiEl",
+      toolbarButton: "channelImportPrzemiennikiEl",
       sourceEndpoints: endpoints?.przemienniki,
     }),
     remoteDirectorySource({
@@ -409,7 +409,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
       label: "repeaterbook.com",
       actionLabel: "RepeaterBook",
       insertLabel: "repeaterbook",
-      menuButton: "channelImportRepeaterbookEl",
+      toolbarButton: "channelImportRepeaterbookEl",
       sourceEndpoints: endpoints?.repeaterbook,
     }),
     remoteDirectorySource({
@@ -417,7 +417,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
       label: "IRTS",
       actionLabel: "IRTS",
       insertLabel: "IRTS",
-      menuButton: "channelImportIrtsEl",
+      toolbarButton: "channelImportIrtsEl",
       sourceEndpoints: endpoints?.irts,
     }),
     rsgbSource(),

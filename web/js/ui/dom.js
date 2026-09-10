@@ -66,8 +66,6 @@ export const REQUIRED_ELEMENTS = {
   channelCopyEl: "#channel-copy",
   channelCutEl: "#channel-cut",
   channelPasteEl: "#channel-paste",
-  channelMenuToggleEl: "#channel-menu-toggle",
-  channelMenuPopupEl: "#channel-menu-popup",
   channelAddGmrsEl: "#channel-add-gmrs",
   channelAddFrsEl: "#channel-add-frs",
   channelAddPmr446El: "#channel-add-pmr446",

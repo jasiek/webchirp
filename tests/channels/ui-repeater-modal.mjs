@@ -222,7 +222,7 @@ function buildHarness({
   dom.repeaterQueryModalEl.classList.add("hidden");
 
   const log = { statuses: [], debug: [], errors: [] };
-  const table = { menuOpenCalls: [], inserted: [] };
+  const table = { inserted: [] };
 
   const ctx = {
     dom,
@@ -233,7 +233,6 @@ function buildHarness({
       reportActionError: (label, error) => log.errors.push(`${label}: ${error?.message || error}`),
     },
     table: {
-      setMenuOpen: (open) => table.menuOpenCalls.push(open),
       insertRowsAtSelectionOrEnd: (rows, label) => table.inserted.push({ rows, label }),
       rowBuilderHooks: () => ({
         createBlankRow: () => Object.fromEntries(headers.map((column) => [column, ""])),
@@ -916,7 +915,7 @@ async function openRsgb(dom) {
   await dom.channelImportRsgbEl.dispatch("click");
 }
 
-test("the RSGB modal opens without a network round trip and closes the actions menu", async () => {
+test("the RSGB modal opens without a network round trip", async () => {
   const { query, dom, table } = buildHarness();
   const calls = installRsgbFetch({});
   assert.equal(query.isModalOpen(), false);
@@ -924,7 +923,6 @@ test("the RSGB modal opens without a network round trip and closes the actions m
   await openRsgb(dom);
   assert.equal(query.isModalOpen(), true);
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query RSGB ETCC API");
-  assert.deepEqual(table.menuOpenCalls, [false], "the actions menu must close behind the modal");
   assert.deepEqual(calls, [], "the static filter options need no dictionary fetch");
   // The first focusable control is the first band checkbox — the fixed
   // country row offers nothing to focus.

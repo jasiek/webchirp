@@ -59,7 +59,7 @@ export function createRepeaterQuery(ctx) {
   const sources = createRepeaterSources(ctx, { endpoints });
   for (const source of sources) {
     if (!source.available) {
-      dom[source.menuButton].hidden = true;
+      dom[source.toolbarButton].hidden = true;
     }
   }
 
@@ -168,7 +168,6 @@ export function createRepeaterQuery(ctx) {
     if (!source || !source.available) {
       return;
     }
-    ctx.table.setMenuOpen(false);
     let loadedOptions = null;
     if (source.loadOptions) {
       log.setStatus(`Loading ${source.label} query options...`);
@@ -225,7 +224,7 @@ export function createRepeaterQuery(ctx) {
 
   function bindEvents() {
     for (const source of sources) {
-      dom[source.menuButton].addEventListener("click", async () => {
+      dom[source.toolbarButton].addEventListener("click", async () => {
         try {
           await openModal(source.key);
         } catch (error) {

@@ -137,8 +137,7 @@ export function createUiController() {
     serial.bindEvents();
 
     // Escape closes the topmost open surface: the import prompt, then the
-    // channel extras editor, then the repeater modals, then the channel
-    // actions menu.
+    // channel extras editor, then the repeater modals.
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         if (codeplugIo.isImportChoiceModalOpen()) {
@@ -155,9 +154,7 @@ export function createUiController() {
         }
         if (repeaterQuery.isModalOpen()) {
           repeaterQuery.setModalOpen(false);
-          return;
         }
-        table.setMenuOpen(false);
         return;
       }
       if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
