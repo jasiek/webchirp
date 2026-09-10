@@ -201,20 +201,54 @@
 
           <div id="channel-editor" class="editor-view is-active">
             <!--
-              Every channel action is its own toolbar button: the flag on an
-              import button says which country or region it covers, and the
+              Every channel action is its own toolbar button. The editing and
+              clipboard actions are inline SVG rather than emoji: emoji has no
+              glyph that reads as "copy", and a stroked icon inherits the
+              button's text colour, so it greys out with a disabled button
+              instead of staying full-colour. The import buttons keep an emoji
+              flag for the country or region they cover, and every button's
               title/aria-label spells that out for anyone who cannot read the
               flag (Windows renders regional-indicator pairs as letters).
             -->
             <div class="channel-toolbar">
-              <button id="channel-insert" type="button" class="channel-toolbar-icon" title="Insert new channel" aria-label="Insert new channel">➕</button>
-              <button id="channel-remove" type="button" class="channel-toolbar-icon" title="Remove selected channels" aria-label="Remove selected channels">➖</button>
-              <button id="channel-move-up" type="button" class="channel-toolbar-icon" title="Move selected channels up (Alt+ArrowUp)" aria-label="Move selected channels up">⬆️</button>
-              <button id="channel-move-down" type="button" class="channel-toolbar-icon" title="Move selected channels down (Alt+ArrowDown)" aria-label="Move selected channels down">⬇️</button>
+              <button id="channel-insert" type="button" class="channel-toolbar-icon" title="Insert new channel" aria-label="Insert new channel">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              </button>
+              <button id="channel-remove" type="button" class="channel-toolbar-icon" title="Remove selected channels" aria-label="Remove selected channels">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
+              </button>
+              <button id="channel-move-up" type="button" class="channel-toolbar-icon" title="Move selected channels up (Alt+ArrowUp)" aria-label="Move selected channels up">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+              </button>
+              <button id="channel-move-down" type="button" class="channel-toolbar-icon" title="Move selected channels down (Alt+ArrowDown)" aria-label="Move selected channels down">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
+              </button>
               <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
-              <button id="channel-cut" type="button" class="channel-toolbar-icon" title="Cut the selected channels to the clipboard" aria-label="Cut selected channels">✂️</button>
-              <button id="channel-copy" type="button" class="channel-toolbar-icon" title="Copy the selected channels to the clipboard" aria-label="Copy selected channels">📋</button>
-              <button id="channel-paste" type="button" class="channel-toolbar-icon" title="Paste channels from the clipboard" aria-label="Paste channels">📥</button>
+              <button id="channel-cut" type="button" class="channel-toolbar-icon" title="Cut the selected channels to the clipboard" aria-label="Cut selected channels">
+                <!-- Scissors: two handles bottom-left, blades crossing to the upper right. -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" />
+                  <path d="M7.8 7.8 19.5 19.5M7.8 16.2 19.5 4.5" />
+                </svg>
+              </button>
+              <button id="channel-copy" type="button" class="channel-toolbar-icon" title="Copy the selected channels to the clipboard" aria-label="Copy selected channels">
+                <!-- Two stacked sheets. The back sheet is drawn as an open path
+                     rather than a second rect, so the front one does not have to
+                     be filled to hide the corner behind it - a fill would go
+                     opaque against the button's gradient. -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+                  <rect x="8" y="8" width="13" height="13" rx="2" />
+                </svg>
+              </button>
+              <button id="channel-paste" type="button" class="channel-toolbar-icon" title="Paste channels from the clipboard" aria-label="Paste channels">
+                <!-- Clipboard with its clip: the board is an open path so the
+                     clip sits in the gap rather than on top of a drawn edge. -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 4.5H7a2 2 0 0 0-2 2V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6.5a2 2 0 0 0-2-2h-2" />
+                  <rect x="9" y="2.5" width="6" height="4" rx="1.25" />
+                </svg>
+              </button>
               <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
               <button
                 id="channel-add-gmrs"
