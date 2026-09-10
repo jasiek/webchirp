@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.js";
 import { createRepeaterQuery } from "../../web/js/ui/repeater-query.js";
 import { rowGeo } from "../../web/js/row-geo.js";
 import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
+import { repoRoot } from "../support/repo-paths.mjs";
 
 // The unified query modal is driven directly rather than through
 // createUiController, so each test can assert on exactly what it hands its
@@ -892,6 +895,31 @@ function installGatedRsgbFetch(bySquare) {
   return { calls, release: () => openGate() };
 }
 
+// installGatedRsgbFetch()'s general-purpose sibling: every request is held open
+// until the test releases it, whatever the URL, so a source can be caught with
+// its dictionary still loading.
+function installGatedFetch(routes) {
+  const calls = [];
+  let openGate;
+  const gate = new Promise((resolve) => {
+    openGate = resolve;
+  });
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: async (url, init) => {
+      const text = String(url);
+      calls.push({ url: text, init });
+      await gate;
+      const route = routes.find((entry) => text.includes(entry.match));
+      if (!route) {
+        throw new Error(`Unrouted fetch: ${text}`);
+      }
+      return { ok: true, status: 200, text: async () => route.body ?? "" };
+    },
+  });
+  return { calls, release: () => openGate() };
+}
+
 function repeaterRecord(overrides = {}) {
   return {
     id: 199,
@@ -914,6 +942,49 @@ const LONDON = { coords: { latitude: 51.5072, longitude: -0.1276 } };
 async function openRsgb(dom) {
   await dom.channelImportRsgbEl.dispatch("click");
 }
+
+// Every directory is one click from every other now that the toolbar carries
+// them all, so a dictionary that is still loading has to lose to the source
+// the user asked for next. Before the generation check, the late resolution
+// rebuilt the modal under the newer source's title.
+test("a directory still loading its options cannot replace the one opened after it", async () => {
+  const { query, dom, log } = buildHarness();
+  const { calls, release } = installGatedFetch([{ match: "/przemienniki/meta", body: META_JSON }]);
+
+  // przemienniki has to fetch its filter dictionary; RSGB's options are
+  // static, so the second click finishes while the first is still in flight.
+  const pending = dom.channelImportPrzemiennikiEl.dispatch("click");
+  await flush();
+  assert.deepEqual(calls.map((call) => call.url), ["https://proxy.example.com/przemienniki/meta"]);
+  await dom.channelImportRsgbEl.dispatch("click");
+  assert.equal(dom.repeaterQueryTitleEl.textContent, "Query RSGB ETCC API");
+
+  release();
+  await pending;
+  await flush();
+
+  assert.equal(query.isModalOpen(), true, "the modal the user asked for must stay open");
+  assert.equal(
+    dom.repeaterQueryTitleEl.textContent,
+    "Query RSGB ETCC API",
+    "the superseded load must not retitle the modal",
+  );
+  // The fields belong to RSGB too, not just the title: RSGB offers a locator,
+  // which no przemienniki form does.
+  assert.ok(grid(dom).querySelectorAll('input[name="locator"]').length > 0);
+  assert.equal(log.statuses.at(-1), "Configure RSGB ETCC query.");
+});
+
+// The button is hidden by web/js/ui/repeater-query.js when a blank proxy base
+// makes its source unavailable, which only works if the stylesheet lets it:
+// the toolbar's own display declaration outranks the browser's [hidden] rule,
+// so a visible button would sit there doing nothing when clicked.
+test("the toolbar lets an unavailable source's button stay hidden", () => {
+  const styles = fs.readFileSync(path.join(repoRoot, "web", "styles.css"), "utf8");
+  const rule = styles.match(/\.channel-toolbar button\[hidden\] \{([^}]*)\}/);
+  assert.ok(rule, "toolbar buttons need a rule restoring the [hidden] default");
+  assert.match(rule[1], /display:\s*none/);
+});
 
 test("the RSGB modal opens without a network round trip", async () => {
   const { query, dom, table } = buildHarness();

@@ -842,6 +842,14 @@ button:disabled {
   white-space: nowrap;
 }
 
+/* The display above is author-level, so it outranks the browser's own
+   [hidden] rule. A repeater source that a blank proxy base makes unavailable
+   is hidden exactly that way (web/js/ui/repeater-query.js), and without this
+   its button would stay on the toolbar doing nothing when clicked. */
+.channel-toolbar button[hidden] {
+  display: none;
+}
+
 /* Icon-only buttons are squares matching the toolbar height. */
 .channel-toolbar button.channel-toolbar-icon {
   width: 2.3rem;
