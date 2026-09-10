@@ -1,5 +1,28 @@
 # Release Notes
 
+## 2026-09-10
+- The channel Actions dropdown is gone: insert/remove/move and cut/copy/paste are now icon buttons on the toolbar itself, and the three band plans and four repeater directories are flagged buttons whose tooltips say what each import contains (#164).
+- The repeater query modal now draws the search position and range filter on a map that can be dragged to move the position, so a mistyped coordinate or a locator from the wrong square is visible before the query runs (#163).
+- Added an Extra column, pinned to the right edge of the channel grid, that opens the selected driver's own per-channel settings — Busy Channel Lockout, PTT-ID, signalling code, scramble, compander — for editing (#162).
+- The channel grid now sizes its columns from their contents rather than their editors, taking a Baofeng UV-5R grid from 2026px to 1158px so all seventeen columns fit a desktop window, and the header row stays pinned while long channel lists scroll (#158).
+- Editing any visible column no longer resets that channel's hidden driver settings on the 69 drivers that wipe the channel record before writing, and those settings now follow the channel when it is moved instead of staying with the memory slot (#144, fixes #110).
+- Memory comments stored outside the channel record, as on the Baofeng UV-5R, now load into the grid, survive editing and clearing through upload and binary export, and are erased with the channel (#143, fixes #84).
+- Repeaters whose CTCSS access tone the selected radio cannot send are now skipped and counted in the status line instead of arriving as Tone + 67.0 Hz — a channel that looked right and opened nothing — across RSGB, przemienniki.net, RepeaterBook and IRTS (#153, fixes #104).
+- Repeater queries run before a radio is selected now insert their channels instead of silently skipping every one, because the empty grid runs on CHIRP's own generic CSV driver (#159).
+- Double-clicking Query API no longer imports every repeater twice: the button reads "Querying..." and is disabled until the query finishes, across all four directories (#150, fixes #105).
+- A repeater directory that accepts the request and then hangs now fails after 10 seconds with a readable message instead of leaving the query button stuck on "Querying..." for minutes (#151).
+- Uploads no longer abort when the radio's image holds a setting CHIRP could not decode — Baofeng UV-5R images with an out-of-range `abr` or squelch byte now upload, with the skipped settings named in Debug Output (#149, fixes #75).
+- Exporting a binary while offline no longer marks the result as a trusted radio image, so a later upload cannot send a codeplug that was never read from a radio (#148, fixes #74).
+- Deploys no longer serve a stale hashed module importing a file the new build never emitted, which showed as a blank app after an update; asset names are now the digest of the bytes actually served (#152, fixes #114).
+- Flow outcomes — app start, serial connect, download, upload, codeplug import, repeater query, runtime crash — are now reported as Sentry metrics tagged with radio, browser and platform, so failure rates per radio are visible (#156).
+- Test coverage is now measured for both the JavaScript and Python halves, published on every pull request and gated against regression; no user-visible change (#157).
+- Test suites are globbed by directory under `tests/`, so adding a test no longer means editing `package.json`; no user-visible change (#161).
+- Shared test fixtures moved into `tests/support/` and the Pyodide harness is memoized, cutting about 1,100 lines and several seconds from the suite; no user-visible change (#147).
+- The 2,850-line Python runtime is now the `webchirp_bridge` package with one module per concern; no user-visible change (#154).
+- Eleven behaviour-preserving simplifications inside `webchirp_bridge` removed duplicated helpers and hand-built payloads; no user-visible change (#155).
+- Removed an unreachable fragment left inside `_power_label_map_for_radio` by an earlier deletion; no user-visible change (#160).
+- Added a regression test covering no-op binary exports against the five issue #35 images; no user-visible change (#142).
+
 ## 2026-09-06
 - Picking a radio is now a single search box plus a "Selected radio" readout instead of two dependent dropdowns; the search matches the driver's own aliases as well as make and model, nothing is selected at startup, and the clone buttons read "Load from radio" / "Save to radio" (#135).
 - Clones now call CHIRP's `detect_from_serial` first, so drivers that put the programming-mode handshake there — Baofeng GA-510, TD-H8, AnyTone 778UV, TDM11 — can talk to the radio at all instead of reading nothing (#131).
