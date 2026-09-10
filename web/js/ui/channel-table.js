@@ -11,6 +11,7 @@ import {
   serializeRowsToTsv,
 } from "../clipboard.js";
 import { normalizeCellValue, normalizeValue } from "./channel-values.js";
+import { rowExtras } from "../row-extra.js";
 import { rowGeo } from "../row-geo.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
 
@@ -50,6 +51,33 @@ export function createChannelTable({ dom, state, log, actions }) {
   // wide and the spelled-out word was what made it wide. renderHeader() keeps
   // the full name reachable from the header's tooltip and accessible name.
   const COLUMN_LABELS = new Map([["Location", "#"]]);
+
+  // The grid's one synthetic column, appended after Comment: driver-specific
+  // per-channel settings have no CSV header and no fixed shape, so the cell
+  // holds a button that opens the editor (web/js/ui/channel-extra.js) rather
+  // than a value. It is not part of state.currentHeaders, which stays CHIRP's
+  // own column list -- everything that serializes a row reads that, and a
+  // header no CSV knows would have to be filtered back out everywhere.
+  const EXTRA_COLUMN = "Extra";
+
+  // Show the column only once something in the grid actually carries extras,
+  // which is to say once a codeplug has been read from a radio or an image: a
+  // driver's extras arrive with the memories it decoded. Rows typed in the grid
+  // or imported from CSV have none, and neither does a radio whose driver
+  // exposes no extras at all -- in both cases the column would be a button that
+  // opens an empty dialog.
+  function extraColumnVisible() {
+    return state.currentRows.some((row) => rowExtras(row));
+  }
+
+  // The columns the grid renders: CHIRP's own, plus Extra when it applies.
+  function gridColumns() {
+    const columns = state.currentHeaders.slice();
+    if (extraColumnVisible()) {
+      columns.push(EXTRA_COLUMN);
+    }
+    return columns;
+  }
 
   // The schema the current row elements were built for; a change to either
   // invalidates every editor.
@@ -537,7 +565,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (state.currentEditorView !== "channels") {
       return false;
     }
-    if (actions.isRepeaterModalOpen()) {
+    if (actions.isAnyModalOpen()) {
       return false;
     }
     const target = event.target;
@@ -795,6 +823,14 @@ export function createChannelTable({ dom, state, log, actions }) {
       button.className = "channel-location-button";
       return button;
     }
+    if (column === EXTRA_COLUMN) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "channel-extra-button";
+      button.textContent = "Edit";
+      button.title = "Edit this channel's driver-specific settings";
+      return button;
+    }
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
       const select = document.createElement("select");
       for (const opt of meta.options.map(String)) {
@@ -833,6 +869,12 @@ export function createChannelTable({ dom, state, log, actions }) {
   }
 
   function bindCellEditor(editor, row, column) {
+    if (column === EXTRA_COLUMN) {
+      // Nothing to bind: the button is identical for every row, and marking
+      // the ones carrying stored extras would mark every row a download
+      // produced -- the runtime records a value for each of them.
+      return;
+    }
     const value = String(row[column] ?? "");
     if (editor.tagName === "BUTTON") {
       editor.textContent = value;
@@ -938,6 +980,10 @@ export function createChannelTable({ dom, state, log, actions }) {
     const headerRow = document.createElement("tr");
     renderedColumns.forEach((column) => {
       const th = document.createElement("th");
+      // Cells carry this already; the header needs it too, because the Extra
+      // column is pinned to the right edge from the stylesheet and both halves
+      // of the column have to be selectable there.
+      th.dataset.column = String(column);
       const label = COLUMN_LABELS.get(column) ?? column;
       th.textContent = label;
       // Mirror the cell treatment: grey + tooltip on headers of columns the
@@ -946,6 +992,9 @@ export function createChannelTable({ dom, state, log, actions }) {
       const legend = columnLegend(column);
       if (legend) {
         th.title = legend;
+      }
+      if (column === EXTRA_COLUMN) {
+        th.title = "Driver-specific settings this radio keeps per channel";
       }
       if (meta.editable === false && column !== "Location") {
         th.classList.add("readonly-cell");
@@ -1126,7 +1175,7 @@ export function createChannelTable({ dom, state, log, actions }) {
 
   // Render the editable channel table using current rows and metadata rules.
   function render() {
-    const columns = state.currentHeaders.slice();
+    const columns = gridColumns();
     if (schemaChanged(columns)) {
       renderedColumns = columns;
       renderedMetadata = state.radioMetadata;
@@ -1192,6 +1241,14 @@ export function createChannelTable({ dom, state, log, actions }) {
   // One listener per event type for the whole grid, instead of three per cell.
   function bindGridEvents() {
     dom.tableBody.addEventListener("click", (event) => {
+      const extraButton = event.target?.closest?.(".channel-extra-button");
+      const extraCell = extraButton && cellReferenceFor(extraButton);
+      if (extraCell) {
+        // The button travels with the call so the editor can hand the keyboard
+        // back to it on close.
+        actions.openChannelExtra(extraCell.rowIdx, extraButton);
+        return;
+      }
       const button = event.target?.closest?.(".channel-location-button");
       const cell = button && cellReferenceFor(button);
       if (cell) {

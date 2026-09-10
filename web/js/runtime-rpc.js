@@ -34,6 +34,7 @@ const CHIRP_REVISION = DEFAULT_CHIRP_REVISION;
 const RUNTIME_PYTHON_URLS = Object.freeze({
   "runtime_bridge.py": "./python/runtime_bridge.py",
   "webchirp_bridge/__init__.py": "./python/webchirp_bridge/__init__.py",
+  "webchirp_bridge/channel_extra.py": "./python/webchirp_bridge/channel_extra.py",
   "webchirp_bridge/channel_rows.py": "./python/webchirp_bridge/channel_rows.py",
   "webchirp_bridge/chirp_loader.py": "./python/webchirp_bridge/chirp_loader.py",
   "webchirp_bridge/clone.py": "./python/webchirp_bridge/clone.py",
@@ -491,6 +492,19 @@ async function handleGetRadioMetadata(payload = {}) {
   );
 }
 
+// The driver's own per-channel extra settings for one memory slot, typed the
+// way the radio-wide settings are, so the extras modal can render real controls
+// instead of guessing from the bare values a row carries.
+async function handleGetChannelExtra(payload = {}) {
+  await requirePyodide();
+  await ensureSelectedRadioModules(payload.module || "");
+  setSelectedRadioGlobals(payload);
+  pyodide.globals.set("_extra_location", String(payload.location ?? ""));
+  return runPythonJson(
+    "json.dumps(get_channel_extra(_sel_module, _sel_class, _extra_location))",
+  );
+}
+
 async function handleGetRadioSettings(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
@@ -525,6 +539,7 @@ const RUNTIME_METHODS = Object.freeze({
   downloadSelectedRadio: handleDownloadSelectedRadio,
   uploadSelectedRadio: handleUploadSelectedRadio,
   getRadioMetadata: handleGetRadioMetadata,
+  getChannelExtra: handleGetChannelExtra,
   getRadioSettings: handleGetRadioSettings,
   validateRadioSettings: handleValidateRadioSettings,
 });

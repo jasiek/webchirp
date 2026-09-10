@@ -5,7 +5,8 @@ A row is one JSON object per channel keyed by CHIRP's CSV header names
 ``chirp_common.Memory`` objects, always going through CHIRP's own CSV driver
 and import logic so the app parses and emits exactly what desktop CHIRP
 would. Driver-specific extras that have no CSV column ride along on the row
-under ``ROW_EXTRA_KEY`` and are applied to memories here as well.
+under a sidecar key of their own; that is
+``web/python/webchirp_bridge/channel_extra.py``'s concern, not this module's.
 """
 
 from __future__ import annotations
@@ -45,13 +46,6 @@ if TYPE_CHECKING:
     # what keeps the sidecar out of a codeplug.
     Row = dict[str, Any]
     Rows = list[Row]
-
-# Driver extras ride on channel rows under a key that is not a CSV header, the
-# same way repeater coordinates do in web/js/row-geo.js. Everything that
-# serializes rows reads header keys only, so the sidecar never reaches a CSV or
-# a codeplug; it travels with the row object while the grid is open.
-ROW_EXTRA_KEY = "__extra"
-
 
 CSV_HEADERS = list(chirp_common.Memory.CSV_FORMAT)
 
@@ -299,72 +293,3 @@ def normalize_rows(rows: Rows, module_name: str = "", class_name: str = "") -> s
         # No radio selected: rows came from a CSV, so treat CSV as the source.
         src_features = _blank_csv_radio(0).get_features()
     return _csv_text_for_memories(memories, src_features)
-
-
-def _row_extras_from_memory(memory: chirp_common.Memory) -> dict[str, Any]:
-    """Read a driver's per-channel extra settings into a JSON-safe mapping.
-
-    ``Memory.extra`` holds settings the channel grid has no column for (Busy
-    Channel Lockout, PTT-ID, signalling code, scramble). They ride back to the
-    editor on the row itself so that a channel keeps them wherever the row is
-    moved to, which a value read from the destination memory cannot express.
-
-    Only primitives are kept: the mapping crosses the Pyodide boundary as JSON,
-    and a driver value that will not survive that is better dropped here than
-    turned into a string that ``set_value()`` would misread on the way back.
-    """
-    extra = getattr(memory, "extra", None)
-    if not extra:
-        return {}
-    values: dict[str, Any] = {}
-    for setting in extra:
-        try:
-            value = setting.value.get_value()
-        except Exception:
-            continue
-        if isinstance(value, (bool, int, float, str)):
-            values[str(setting.get_name())] = value
-    return values
-
-
-def _apply_row_extras(radio: chirp_common.Radio, number: int, row: Row) -> None:
-    """Replay a row's own extra settings onto the memory just written.
-
-    set_memory() is what consumes ``Memory.extra``, and the 69 driver modules
-    that clear the channel record before replaying it reset every hidden
-    setting when handed a row-built Memory with an empty ``extra``. Re-reading
-    the memory afterwards is what makes this safe to do generically: the driver
-    hands back its own setting objects, with this slot's option lists and value
-    types, so no type has to be reconstructed from the row.
-
-    A row with no sidecar is left alone. That is the channel the user created,
-    imported from CSV, or pasted over this slot, and it is entitled to the
-    driver's defaults rather than to whatever the previous occupant had.
-    """
-    stored = row.get(ROW_EXTRA_KEY)
-    if not isinstance(stored, dict) or not stored:
-        return
-    memory = radio.get_memory(number)
-    extra = getattr(memory, "extra", None)
-    if not extra:
-        return
-    changed = False
-    for setting in extra:
-        name = str(setting.get_name())
-        if name not in stored:
-            continue
-        wanted = stored[name]
-        try:
-            if setting.value.get_value() == wanted:
-                continue
-            setting.value = wanted
-        except Exception as exc:
-            _log_debug(
-                f"Channel {number} extra setting {name} could not be restored: {exc}"
-            )
-            continue
-        changed = True
-    # Writing again only pays for itself when a value actually moved, and an
-    # unchanged row never reaches here because _prepare_row_change skips it.
-    if changed:
-        radio.set_memory(memory)

@@ -27,6 +27,7 @@ if "/webchirp_runtime" not in sys.path:
 
 import webchirp_bridge  # noqa: E402
 from webchirp_bridge import (  # noqa: E402
+    channel_extra,
     channel_rows,
     chirp_loader,
     clone,
@@ -57,6 +58,7 @@ BRIDGE_MODULES: tuple[types.ModuleType, ...] = (
     driver_cache,
     power_levels,
     channel_rows,
+    channel_extra,
     row_validation,
     radio_memories,
     serial_pipe,

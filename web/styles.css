@@ -1269,6 +1269,79 @@ button:disabled {
   row-gap: 1.1rem;
 }
 
+/* A driver decides how many extras a channel has -- anytone_iii publishes
+   thirteen -- so this is the one modal whose height is not something the markup
+   knows, and the only one that scrolls inside its card rather than inside the
+   overlay. The overlay's own scrolling (see .modal-overlay) already keeps a
+   tall dialog reachable, but it moves the whole card: on a phone the title and
+   the Save button would both leave the screen, and a form of unknown length is
+   exactly where they should not. Capping the card at the viewport and scrolling
+   the field grid instead keeps the title, the hint and the actions in place, and
+   the overlay never has to scroll this dialog at all. */
+#channel-extra-modal .modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2rem);
+}
+
+/* The per-channel extras editor. Its fields are label/control pairs in the
+   shared .modal-grid, but each label carries the driver's own explanation of
+   the setting underneath it, so the rows align to the top rather than centre,
+   and the label column is wider than the shared 160px -- at 160px a two-line
+   explanation becomes an eight-line ribbon. The phone-width override lives with
+   the other responsive rules at the foot of this file: this selector outranks
+   the shared one there, so it has to be answered at its own specificity. */
+#channel-extra-modal .modal-grid {
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  align-items: start;
+  row-gap: 0.7rem;
+  overflow-y: auto;
+  /* A flex child's default minimum is its content height, which would defeat
+     the cap above by refusing to shrink. */
+  min-height: 0;
+}
+
+.channel-extra-hint,
+.channel-extra-message {
+  margin: 0 0 0.8rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.channel-extra-label label {
+  font-size: 0.88rem;
+}
+
+.channel-extra-doc {
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.channel-extra-control {
+  min-width: 0;
+}
+
+.channel-extra-control.is-immutable input,
+.channel-extra-control.is-immutable select {
+  background: var(--surface-muted);
+  color: var(--disabled-text);
+}
+
+.channel-extra-control.is-invalid input,
+.channel-extra-control.is-invalid select {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+
+.channel-extra-error {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--error-text);
+}
+
 /* A value the modal reports rather than asks for: the fixed RSGB country.
    Styled to read as text, not as a disabled input the user might try to
    edit. */
@@ -1619,6 +1692,61 @@ button:disabled {
   background: var(--focus-bg);
 }
 
+/* The Extra column's cell: a button rather than an editor, because the fields
+   behind it are per-driver and per-channel (web/js/ui/channel-extra.js). Sized to its
+   label so the column stays the narrowest one in the grid. */
+#mem-table .channel-extra-button {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+#mem-table .channel-extra-button:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+#mem-table .channel-extra-button:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+/* The Extra column is pinned to the right edge of the grid's scroll area. It is
+   the eighteenth of eighteen columns, so at any ordinary window width it sits
+   past the right edge and the feature is invisible until someone thinks to
+   scroll for it -- which is how it was first reported. right:0 keeps the button
+   in view at every scroll position while leaving the column where it belongs,
+   last, after Comment.
+
+   Same two constraints as the sticky header above, for the same reasons: an
+   opaque background so the cells it travels over do not show through, and a
+   box-shadow standing in for the left border that border-collapse hands to the
+   table and that therefore scrolls away with it. The outer shadow is what says
+   the column is floating over the grid rather than sitting in it. The header
+   cell is sticky on both axes at once, so it has to outrank the row cells as
+   well as the ordinary headers. A selected row still paints through, because
+   its own rule is the more specific one. */
+#mem-table td[data-column="Extra"] {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--surface);
+  box-shadow: inset 1px 0 0 var(--border), -3px 0 5px -3px var(--shadow-color);
+}
+
+#mem-table th[data-column="Extra"] {
+  right: 0;
+  z-index: 3;
+  box-shadow:
+    inset 0 -1px 0 var(--border),
+    inset 1px 0 0 var(--border),
+    -3px 0 5px -3px var(--shadow-color);
+}
+
 /* Static OSM context map for imported repeater channels (issue #57): rows
    with coordinates mark their Location cell, hover shows the tooltip map on
    desktop, tap opens the modal map on touch devices (ui/repeater-map.js). */
@@ -1900,6 +2028,13 @@ button:disabled {
 
   .modal-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The extras editor sets its own label column at a specificity the rule above
+     cannot reach, so it needs its own override or it keeps two columns -- a
+     220px label beside a squeezed control -- on a phone. */
+  #channel-extra-modal .modal-grid {
+    grid-template-columns: 1fr;
   }
 
   .settings-layout {

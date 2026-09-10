@@ -13,6 +13,7 @@ import { createDebugLog } from "./ui/debug-log.js";
 import { createProgress } from "./ui/progress.js";
 import { createIssueReporter } from "./ui/issue-report.js";
 import { createSettingsPanel } from "./ui/settings-panel.js";
+import { createChannelExtra } from "./ui/channel-extra.js";
 import { createChannelTable } from "./ui/channel-table.js";
 import { createRadioCatalog } from "./ui/radio-catalog.js";
 import { createRepeaterQuery } from "./ui/repeater-query.js";
@@ -49,8 +50,13 @@ export function createUiController() {
   const actions = {
     updateSerialActionState: () => ctx.serial.updateSerialActionState(),
     setEditorView: (view) => setEditorView(view),
-    isRepeaterModalOpen: () =>
-      ctx.repeaterQuery.isModalOpen() || ctx.repeaterMap.isModalOpen(),
+    // Any modal that owns the keyboard: the channel grid's clipboard and
+    // reorder shortcuts stand down while one is open.
+    isAnyModalOpen: () =>
+      ctx.repeaterQuery.isModalOpen()
+      || ctx.repeaterMap.isModalOpen()
+      || ctx.channelExtra.isModalOpen(),
+    openChannelExtra: (rowIdx, trigger) => ctx.channelExtra.openForRow(rowIdx, trigger),
     currentViewLabel: () => currentViewLabel(),
   };
 
@@ -60,12 +66,15 @@ export function createUiController() {
   const ctx = { dom, state, log, progress, actions };
   const settings = createSettingsPanel(ctx);
   const table = createChannelTable(ctx);
+  const channelExtra = createChannelExtra(ctx);
   const catalog = createRadioCatalog(ctx);
   const repeaterQuery = createRepeaterQuery(ctx);
   const repeaterMap = createRepeaterMap(ctx);
   const codeplugIo = createCodeplugIo(ctx);
   const serial = createSerialActions(ctx);
-  Object.assign(ctx, { settings, table, catalog, repeaterQuery, repeaterMap, codeplugIo, serial });
+  Object.assign(ctx, {
+    settings, table, channelExtra, catalog, repeaterQuery, repeaterMap, codeplugIo, serial,
+  });
 
   exposeCurrentRowsForDebugging(state);
 
@@ -120,6 +129,7 @@ export function createUiController() {
   function bindEvents() {
     log.bindEvents();
     table.bindEvents();
+    channelExtra.bindEvents();
     repeaterQuery.bindEvents();
     repeaterMap.bindEvents();
     codeplugIo.bindEvents();
@@ -127,11 +137,16 @@ export function createUiController() {
     serial.bindEvents();
 
     // Escape closes the topmost open surface: the import prompt, then the
-    // repeater modal, then the channel actions menu.
+    // channel extras editor, then the repeater modals, then the channel
+    // actions menu.
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         if (codeplugIo.isImportChoiceModalOpen()) {
           codeplugIo.resolveImportChoice("cancel");
+          return;
+        }
+        if (channelExtra.isModalOpen()) {
+          channelExtra.closeModal();
           return;
         }
         if (repeaterMap.isModalOpen()) {
