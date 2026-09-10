@@ -1,12 +1,7 @@
-import {
-  OSM_ATTRIBUTION,
-  OSM_COPYRIGHT_URL,
-  formatCoordinates,
-  osmTileUrl,
-  planStaticMap,
-} from "../staticmap.js";
+import { formatCoordinates } from "../staticmap.js";
 import { rowGeo } from "../row-geo.js";
 import { trackEvent } from "./analytics.js";
+import { fillMapAttribution, renderStaticMap } from "./static-map-view.js";
 
 // Static OSM context map for imported repeater channels (issue #57). Rows that
 // arrived from a repeater directory carry coordinates (web/js/row-geo.js);
@@ -56,51 +51,10 @@ export function createRepeaterMap(ctx) {
     }
   }
 
-  // The OSM tile policy wants the credit to reach the licence, so the
-  // attribution strip under each map carries a link to the copyright page
-  // rather than plain text. Built once per surface: it never changes.
-  function fillAttribution(el) {
-    if (!el || el.children?.length) {
-      return;
-    }
-    const link = document.createElement("a");
-    link.href = OSM_COPYRIGHT_URL;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = OSM_ATTRIBUTION;
-    el.appendChild(link);
-  }
-
-  // Fill a map viewport element with positioned tile images and the centered
-  // marker. Tiles that fail to load just stay blank — the coordinates header
-  // still identifies the spot.
+  // This surface's fixed zoom, applied to both its sizes; the shared renderer
+  // (web/js/ui/static-map-view.js) owns everything below the tile plan.
   function renderMap(canvasEl, geo, width, height) {
-    canvasEl.innerHTML = "";
-    canvasEl.style.width = `${width}px`;
-    canvasEl.style.height = `${height}px`;
-    const plan = planStaticMap(geo.latitude, geo.longitude, {
-      zoom: MAP_ZOOM,
-      width,
-      height,
-    });
-    for (const tile of plan.tiles) {
-      const img = document.createElement("img");
-      img.className = "repeater-map-tile";
-      img.alt = "";
-      img.draggable = false;
-      // The dev server sends COEP: require-corp (Pyodide needs the
-      // cross-origin isolation), which blocks plain cross-origin images.
-      // tile.openstreetmap.org sends Access-Control-Allow-Origin: *, so a
-      // CORS-mode load satisfies COEP where a no-cors one is blocked.
-      img.crossOrigin = "anonymous";
-      img.style.left = `${tile.left}px`;
-      img.style.top = `${tile.top}px`;
-      img.src = osmTileUrl(tile);
-      canvasEl.appendChild(img);
-    }
-    const marker = document.createElement("div");
-    marker.className = "repeater-map-marker";
-    canvasEl.appendChild(marker);
+    renderStaticMap(canvasEl, geo, { zoom: MAP_ZOOM, width, height });
   }
 
   function geoForEventTarget(target) {
@@ -204,8 +158,8 @@ export function createRepeaterMap(ctx) {
   }
 
   function bindEvents() {
-    fillAttribution(dom.repeaterMapTooltipAttributionEl);
-    fillAttribution(dom.repeaterMapModalAttributionEl);
+    fillMapAttribution(dom.repeaterMapTooltipAttributionEl);
+    fillMapAttribution(dom.repeaterMapModalAttributionEl);
 
     dom.tableBody.addEventListener("mouseover", (event) => {
       if (!hoverCapable()) {

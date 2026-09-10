@@ -1152,8 +1152,17 @@ button:disabled {
   inset: 0;
   z-index: 60;
   display: flex;
-  align-items: center;
+  /* flex-start, not center: a flex item taller than its container is centred
+     by overflowing equally at both ends, and overflow past the *start* edge is
+     outside the scroll range — so the top of a tall dialog cannot be reached
+     at all. flex-start plus the card's auto margins centres it while there is
+     room and keeps its top edge reachable once there is not. The repeater
+     query form clears 1100px on a phone once every label and control stacks,
+     which is what makes this the difference between a usable dialog and one
+     whose Cancel button is off-screen. */
+  align-items: flex-start;
   justify-content: center;
+  overflow: auto;
   background: var(--overlay);
   padding: 1rem;
 }
@@ -1164,7 +1173,9 @@ button:disabled {
 
 .modal-card {
   width: min(560px, 100%);
-  margin: 0;
+  /* Centres the card in the overlay while it fits, and collapses to nothing
+     once it does not — see .modal-overlay. */
+  margin: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
@@ -1225,7 +1236,11 @@ button:disabled {
 
 .modal-grid {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  /* minmax(0, ...) rather than a bare 1fr: a bare fr track is floored at its
+     content's min-content width, which lets a wide field (the map preview)
+     push the column past the card and leaves percentage widths inside it
+     unresolvable. Flooring at 0 keeps the column at the card's width. */
+  grid-template-columns: 160px minmax(0, 1fr);
   gap: 0.45rem 0.7rem;
   align-items: center;
 }
@@ -1273,6 +1288,70 @@ button:disabled {
   min-width: 2rem;
   padding: 0.35rem 0.45rem;
   line-height: 1;
+}
+
+/* Static OSM preview of the coordinates the repeater-query modal currently
+   holds, with the search radius drawn on it (web/js/ui/query-fields.js). It
+   spans both grid columns and is pushed right, so it lines up under the values
+   it previews rather than under their labels, and it carries no label of its
+   own — the map is the label. */
+.modal-map-preview {
+  grid-column: 1 / -1;
+  /* A definite width, not min(100%, 320px): the second track is 1fr, so while
+     it is still being sized from its content a percentage here has nothing to
+     resolve against and the item collapses to its min-content width (the
+     attribution line). justify-self does the right-alignment that margin-left:
+     auto would, without needing a width the track cannot supply yet. */
+  justify-self: end;
+  width: 320px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Square, so the range circle has the same room in both directions.
+   web/js/ui/query-fields.js measures the container and renders the tile grid
+   at that pixel size; the aspect ratio is what it measures against before the
+   first render. The stand-in shown before a position is entered is the same
+   square, so the block never changes size and the first render already
+   measures the width the map will keep. */
+.modal-map-preview .repeater-map-canvas,
+.modal-map-preview-empty {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--border);
+}
+
+.modal-map-preview .repeater-map-canvas {
+  /* Draggable: the map sets the position as well as showing it. touch-action
+     hands the gesture to the page's own handler instead of letting the browser
+     scroll the modal with it, which is what makes the drag work on a phone. */
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.modal-map-preview .repeater-map-canvas.is-panning {
+  cursor: grabbing;
+}
+
+.modal-map-preview-empty {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.2rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Any author `display` beats the user agent's own [hidden] rule, so a flex
+   stand-in stays on screen next to the map it was meant to stand in for
+   unless the attribute is honoured explicitly here. */
+.modal-map-preview-empty[hidden] {
+  display: none;
 }
 
 .modal-modes {
@@ -1603,6 +1682,20 @@ button:disabled {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
+/* The search radius a repeater query will use, drawn around the marker.
+   web/js/ui/static-map-view.js sizes it in pixels from the ground radius; the
+   fill is faint enough to read the map through. */
+.repeater-map-range {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgba(224, 27, 36, 0.75);
+  background: rgba(224, 27, 36, 0.12);
+  pointer-events: none;
+}
+
 /* Attribution strip along the bottom of the widget, below the map: the OSM
    tile policy wants the credit visible on every map and reachable through to
    the licence, which the link inside it provides. */
@@ -1806,7 +1899,7 @@ button:disabled {
   }
 
   .modal-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .settings-layout {

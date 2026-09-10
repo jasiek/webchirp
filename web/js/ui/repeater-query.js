@@ -26,6 +26,12 @@ function resolveRepeaterApiBase() {
   return DEFAULT_REPEATER_API_BASE;
 }
 
+// The key every source gives its "repeaters within N km" filter. The position
+// field's map preview draws that radius, so the shell has to know which field
+// carries it; a source that named it something else would simply preview no
+// circle, which is why this is one constant rather than a guess per source.
+const RANGE_FIELD_KEY = "radius";
+
 const FIELD_FACTORIES = {
   select: createSelectField,
   fixed: createFixedField,
@@ -93,6 +99,10 @@ export function createRepeaterQuery(ctx) {
             positionState.latitudeText = latitudeText;
             positionState.longitudeText = longitudeText;
           },
+          // Counted next to repeater_geolocate, so the three ways of setting a
+          // position can be compared. Which source was open, never where the
+          // drag landed — the coordinates stay in the form.
+          onPan: () => trackEvent("repeater_map_panned", { repeater_source: activeSource.key }),
         });
         positionField = instance;
         // The button is recreated with the field on every open, so the
@@ -110,6 +120,22 @@ export function createRepeaterQuery(ctx) {
       }
       fieldInstances.push(instance);
     }
+    bindRangeToPreview();
+  }
+
+  // Feed the range filter's value to the position field, which draws it as a
+  // circle on its map preview and frames the map around it. This runs after
+  // the build loop rather than inside it because the range field is declared
+  // after the position field it has to reach — and both are rebuilt on every
+  // open, so the listener is attached here rather than in bindEvents.
+  function bindRangeToPreview() {
+    const range = fieldInstances.find((instance) => instance.key === RANGE_FIELD_KEY);
+    if (!positionField || !range?.input) {
+      return;
+    }
+    const applyRange = () => positionField.setRangeKm(range.value());
+    range.input.addEventListener("input", applyRange);
+    applyRange();
   }
 
   function collectValues() {
@@ -125,6 +151,11 @@ export function createRepeaterQuery(ctx) {
     if (open) {
       const focusable = fieldInstances.find((instance) => instance.focusTarget);
       focusable?.focusTarget.focus();
+      // Only now does the position field's map canvas have a width to measure:
+      // buildFields() ran while the overlay was still display:none, where every
+      // element is zero-sized. Same reason web/js/ui/repeater-map.js shows its
+      // modal before sizing the map inside it.
+      positionField?.refreshPreview();
     }
   }
 
