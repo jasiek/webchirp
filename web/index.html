@@ -200,55 +200,115 @@
           </div>
 
           <div id="channel-editor" class="editor-view is-active">
+            <!--
+              Every channel action is its own toolbar button. The editing and
+              clipboard actions are inline SVG rather than emoji: emoji has no
+              glyph that reads as "copy", and a stroked icon inherits the
+              button's text colour, so it greys out with a disabled button
+              instead of staying full-colour. The import buttons keep an emoji
+              flag for the country or region they cover, and every button's
+              title/aria-label spells that out for anyone who cannot read the
+              flag (Windows renders regional-indicator pairs as letters).
+            -->
             <div class="channel-toolbar">
-              <button id="channel-insert" type="button" title="Insert new channel" aria-label="Insert new channel">➕</button>
-              <button id="channel-remove" type="button" title="Remove selected channels" aria-label="Remove selected channels">➖</button>
-              <button id="channel-move-up" type="button" title="Move selected channels up (Alt+ArrowUp)" aria-label="Move selected channels up">⬆️</button>
-              <button id="channel-move-down" type="button" title="Move selected channels down (Alt+ArrowDown)" aria-label="Move selected channels down">⬇️</button>
-              <div class="channel-menu">
+              <button id="channel-insert" type="button" class="channel-toolbar-icon" title="Insert new channel" aria-label="Insert new channel">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              </button>
+              <button id="channel-remove" type="button" class="channel-toolbar-icon" title="Remove selected channels" aria-label="Remove selected channels">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
+              </button>
+              <button id="channel-move-up" type="button" class="channel-toolbar-icon" title="Move selected channels up (Alt+ArrowUp)" aria-label="Move selected channels up">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+              </button>
+              <button id="channel-move-down" type="button" class="channel-toolbar-icon" title="Move selected channels down (Alt+ArrowDown)" aria-label="Move selected channels down">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
+              </button>
+              <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
+              <button id="channel-cut" type="button" class="channel-toolbar-icon" title="Cut the selected channels to the clipboard" aria-label="Cut selected channels">
+                <!-- Scissors: two handles bottom-left, blades crossing to the upper right. -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" />
+                  <path d="M7.8 7.8 19.5 19.5M7.8 16.2 19.5 4.5" />
+                </svg>
+              </button>
+              <button id="channel-copy" type="button" class="channel-toolbar-icon" title="Copy the selected channels to the clipboard" aria-label="Copy selected channels">
+                <!-- Two stacked sheets. The back sheet is drawn as an open path
+                     rather than a second rect, so the front one does not have to
+                     be filled to hide the corner behind it - a fill would go
+                     opaque against the button's gradient. -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+                  <rect x="8" y="8" width="13" height="13" rx="2" />
+                </svg>
+              </button>
+              <button id="channel-paste" type="button" class="channel-toolbar-icon" title="Paste channels from the clipboard" aria-label="Paste channels">
+                <!-- Clipboard with its clip: the board is an open path so the
+                     clip sits in the gap rather than on top of a drawn edge. -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 4.5H7a2 2 0 0 0-2 2V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6.5a2 2 0 0 0-2-2h-2" />
+                  <rect x="9" y="2.5" width="6" height="4" rx="1.25" />
+                </svg>
+              </button>
+              <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
+              <button
+                id="channel-add-gmrs"
+                type="button"
+                title="United States: add the 30 GMRS channels, 462/467 MHz, including the 8 repeater pairs"
+              >
+                <span aria-hidden="true">🇺🇸</span> GMRS
+              </button>
+              <button
+                id="channel-add-frs"
+                type="button"
+                title="United States: add the 22 licence-free FRS simplex channels, 462/467 MHz"
+              >
+                <span aria-hidden="true">🇺🇸</span> FRS
+              </button>
+              <button
+                id="channel-add-pmr446"
+                type="button"
+                title="Europe: add the 16 licence-free PMR446 simplex channels, 446 MHz"
+              >
+                <span aria-hidden="true">🇪🇺</span> PMR446
+              </button>
+              <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
+              <!--
+                A labelled group rather than four loose buttons, so the
+                "Repeaters" heading reaches assistive technology as the group
+                name instead of being a caption only sighted users get. Each
+                button keeps its own title, which is what becomes its
+                description.
+              -->
+              <div class="channel-toolbar-group" role="group" aria-labelledby="channel-repeater-label">
+                <span class="channel-toolbar-label" id="channel-repeater-label">Repeaters</span>
                 <button
-                  id="channel-menu-toggle"
+                  id="channel-import-przemienniki"
                   type="button"
-                  title="Channel actions"
-                  aria-label="Channel actions"
-                  aria-haspopup="true"
-                  aria-expanded="false"
+                  title="Poland and neighbouring Europe: query the przemienniki.net repeater directory"
                 >
-                  Actions
+                  <span aria-hidden="true">🇪🇺</span> przemienniki.net
                 </button>
-                <div id="channel-menu-popup" class="channel-menu-popup hidden" role="menu">
-                  <button id="channel-copy" type="button" role="menuitem">
-                    📋 Copy selected channels
-                  </button>
-                  <button id="channel-cut" type="button" role="menuitem">
-                    ✂️ Cut selected channels
-                  </button>
-                  <button id="channel-paste" type="button" role="menuitem">
-                    📥 Paste channels
-                  </button>
-                  <hr class="channel-menu-separator" />
-                  <button id="channel-add-gmrs" type="button" role="menuitem">
-                    🇺🇸 Add GMRS channels
-                  </button>
-                  <button id="channel-add-frs" type="button" role="menuitem">
-                    🇺🇸 Add FRS channels
-                  </button>
-                  <button id="channel-add-pmr446" type="button" role="menuitem">
-                    🇪🇺 Add PMR446 channels
-                  </button>
-                  <button id="channel-import-przemienniki" type="button" role="menuitem">
-                    🇪🇺 Query przemienniki.net
-                  </button>
-                  <button id="channel-import-repeaterbook" type="button" role="menuitem">
-                    🌍 Query repeaterbook.com
-                  </button>
-                  <button id="channel-import-irts" type="button" role="menuitem">
-                    🇮🇪 Query IRTS repeaters
-                  </button>
-                  <button id="channel-import-rsgb" type="button" role="menuitem">
-                    🇬🇧 Query RSGB ETCC API
-                  </button>
-                </div>
+                <button
+                  id="channel-import-repeaterbook"
+                  type="button"
+                  title="Worldwide: query the RepeaterBook directory"
+                >
+                  <span aria-hidden="true">🌍</span> repeaterbook.com
+                </button>
+                <button
+                  id="channel-import-irts"
+                  type="button"
+                  title="Ireland: query the IRTS repeater directory"
+                >
+                  <span aria-hidden="true">🇮🇪</span> IRTS
+                </button>
+                <button
+                  id="channel-import-rsgb"
+                  type="button"
+                  title="United Kingdom: query the RSGB ETCC repeater directory"
+                >
+                  <span aria-hidden="true">🇬🇧</span> RSGB
+                </button>
               </div>
             </div>
             <div class="channel-grid">
@@ -273,8 +333,8 @@
                     to read the channel list.
                   </li>
                   <li>
-                    You can also add nearby repeater channels by selecting a data source
-                    from the Actions menu.
+                    You can also add nearby repeater channels by picking a data source
+                    from the toolbar above the grid.
                   </li>
                   <li>
                     If you already have a codeplug either as CSV or in binary format,

@@ -412,8 +412,6 @@ export const UI_STUBBED_SELECTORS = new Map([
   ["#app-progress-bar", "progress"],
   ["#channel-insert", "button"],
   ["#channel-remove", "button"],
-  ["#channel-menu-toggle", "button"],
-  ["#channel-menu-popup", "div"],
   ["#channel-add-gmrs", "button"],
   ["#channel-add-frs", "button"],
   ["#channel-add-pmr446", "button"],

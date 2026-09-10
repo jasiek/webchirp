@@ -59,11 +59,17 @@ export function createRepeaterQuery(ctx) {
   const sources = createRepeaterSources(ctx, { endpoints });
   for (const source of sources) {
     if (!source.available) {
-      dom[source.menuButton].hidden = true;
+      dom[source.toolbarButton].hidden = true;
     }
   }
 
   let activeSource = sources[0];
+  // Counts openModal() calls so a superseded one can bow out. Sources that
+  // fetch a dictionary resolve after sources whose options are static, and the
+  // directory buttons are now one click apart on the toolbar rather than two
+  // clicks apart through a menu — so the slow first click would otherwise
+  // rebuild the modal the second click had already opened.
+  let openGeneration = 0;
   let fieldInstances = [];
   let positionField = null;
   const positionState = { latitudeText: "", longitudeText: "" };
@@ -168,11 +174,17 @@ export function createRepeaterQuery(ctx) {
     if (!source || !source.available) {
       return;
     }
-    ctx.table.setMenuOpen(false);
+    const generation = ++openGeneration;
     let loadedOptions = null;
     if (source.loadOptions) {
       log.setStatus(`Loading ${source.label} query options...`);
       loadedOptions = await source.loadOptions();
+      // Another source was asked for while this one was loading; it owns the
+      // modal now, so leave it alone. The load still resolved, so a failure
+      // here is still reported by the caller.
+      if (generation !== openGeneration) {
+        return;
+      }
     }
     activeSource = source;
     buildFields(source, loadedOptions);
@@ -225,7 +237,7 @@ export function createRepeaterQuery(ctx) {
 
   function bindEvents() {
     for (const source of sources) {
-      dom[source.menuButton].addEventListener("click", async () => {
+      dom[source.toolbarButton].addEventListener("click", async () => {
         try {
           await openModal(source.key);
         } catch (error) {

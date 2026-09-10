@@ -809,30 +809,78 @@ button:disabled {
   display: flex;
 }
 
+/* The toolbar wraps: it carries every channel action now, and on a narrow
+   window the row is wider than the editor pane. */
 .channel-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.45rem;
   margin-bottom: 0.6rem;
   flex: 0 0 auto;
   position: relative;
 }
 
-/* Uniform height for all toolbar buttons (+, -, up, down, Actions). */
-.channel-toolbar > button,
-#channel-menu-toggle {
+/* The repeater sources travel together so their group label stays with them
+   when the toolbar wraps. */
+.channel-toolbar-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+/* Uniform height for every toolbar button, icon-only or labelled. */
+.channel-toolbar button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.3rem;
   height: 2.3rem;
-  padding: 0.3rem 0.5rem;
+  padding: 0.3rem 0.6rem;
   line-height: 1;
+  white-space: nowrap;
 }
 
-/* The icon buttons are squares matching the toolbar height. */
-.channel-toolbar > button {
+/* The display above is author-level, so it outranks the browser's own
+   [hidden] rule. A repeater source that a blank proxy base makes unavailable
+   is hidden exactly that way (web/js/ui/repeater-query.js), and without this
+   its button would stay on the toolbar doing nothing when clicked. */
+.channel-toolbar button[hidden] {
+  display: none;
+}
+
+/* Icon-only buttons are squares matching the toolbar height. */
+.channel-toolbar button.channel-toolbar-icon {
   width: 2.3rem;
   padding: 0;
+}
+
+/* One stroke style for the whole icon set. currentColor is the point: the
+   icons follow the button's text colour, so they grey out with a disabled
+   button and stay legible in the dark theme, neither of which emoji did. */
+.channel-toolbar-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Names the group of buttons that follows it; not a control itself. */
+.channel-toolbar-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Separates the toolbar's action groups. */
+.channel-toolbar-divider {
+  width: 1px;
+  height: 1.5rem;
+  background: var(--border);
 }
 
 /* Holds the grid and the empty-state notice, only one of which is ever shown. */
@@ -1062,46 +1110,6 @@ button:disabled {
   color: var(--warn-text-2);
   font-size: 0.78rem;
   line-height: 1.3;
-}
-
-#channel-insert,
-#channel-remove {
-  min-width: 2.1rem;
-  padding: 0.3rem 0.45rem;
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.channel-menu {
-  position: relative;
-}
-
-.channel-menu-popup {
-  position: absolute;
-  top: calc(100% + 0.25rem);
-  left: 0;
-  z-index: 20;
-  min-width: 24rem;
-  padding: 0.25rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface);
-  box-shadow: 0 6px 16px var(--shadow-color);
-}
-
-.channel-menu-popup.hidden {
-  display: none;
-}
-
-.channel-menu-popup button {
-  width: 100%;
-  text-align: left;
-}
-
-.channel-menu-popup .channel-menu-separator {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 0.25rem 0.2rem;
 }
 
 /* Drag-and-drop file loading (web/js/ui/codeplug-io.js). The whole page is the
@@ -2002,24 +2010,16 @@ button:disabled {
   .left-panel button,
   .left-panel select,
   .serial-actions button,
-  .channel-toolbar > button,
-  #channel-menu-toggle,
-  .channel-menu-popup button,
+  .channel-toolbar button,
   .modal-actions button,
   .debug-header-actions button {
     min-height: 2.75rem;
   }
 
-  /* Keep the icon buttons square at the larger touch-target height. */
-  .channel-toolbar > button {
+  /* Keep the emoji-only buttons square at the larger touch-target height. */
+  .channel-toolbar button.channel-toolbar-icon {
     min-width: 2.75rem;
-  }
-
-  /* The actions popup is fixed-width on desktop; keep it on-screen on phones. */
-  .channel-menu-popup {
-    min-width: 0;
-    width: max-content;
-    max-width: calc(100vw - 2rem);
+    width: 2.75rem;
   }
 
   #debug-output {

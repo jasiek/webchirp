@@ -1205,18 +1205,6 @@ export function createChannelTable({ dom, state, log, actions }) {
     return applied;
   }
 
-  function setMenuOpen(open) {
-    if (!dom.channelMenuToggleEl || !dom.channelMenuPopupEl) {
-      return;
-    }
-    dom.channelMenuPopupEl.classList.toggle("hidden", !open);
-    dom.channelMenuToggleEl.setAttribute("aria-expanded", open ? "true" : "false");
-  }
-
-  function toggleMenu() {
-    setMenuOpen(dom.channelMenuPopupEl.classList.contains("hidden"));
-  }
-
   // Resolve which channel and column an event inside the grid belongs to. The
   // row index is read from the element at event time, never captured when the
   // element was built, so recycled rows always report the channel they are
@@ -1311,52 +1299,28 @@ export function createChannelTable({ dom, state, log, actions }) {
     dom.channelMoveDownEl.addEventListener("click", () => {
       moveSelectedChannelRows(1);
     });
-    dom.channelMenuToggleEl.addEventListener("click", (event) => {
-      event.stopPropagation();
-      toggleMenu();
-    });
     dom.channelCopyEl.addEventListener("click", async () => {
-      setMenuOpen(false);
       await writeChannelTsvToClipboard("copy", false);
     });
     dom.channelCutEl.addEventListener("click", async () => {
-      setMenuOpen(false);
       await writeChannelTsvToClipboard("cut", true);
     });
     dom.channelPasteEl.addEventListener("click", async () => {
-      setMenuOpen(false);
       await pasteChannelsViaApi();
     });
     dom.channelAddGmrsEl.addEventListener("click", () => {
-      setMenuOpen(false);
       addBandPlanChannels(buildGmrsRows, "GMRS");
     });
     dom.channelAddFrsEl.addEventListener("click", () => {
-      setMenuOpen(false);
       addBandPlanChannels(buildFrsRows, "FRS");
     });
     dom.channelAddPmr446El.addEventListener("click", () => {
-      setMenuOpen(false);
       addBandPlanChannels(buildPmr446Rows, "PMR446");
-    });
-
-    document.addEventListener("click", (event) => {
-      if (!dom.channelMenuPopupEl || dom.channelMenuPopupEl.classList.contains("hidden")) {
-        return;
-      }
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (dom.channelMenuPopupEl.contains(target) || dom.channelMenuToggleEl.contains(target)) {
-        return;
-      }
-      setMenuOpen(false);
     });
 
     // Ctrl/Cmd+C, X, V arrive as native clipboard events, which supply
     // clipboardData synchronously and need no permission prompt (unlike the
-    // async navigator.clipboard API used by the menu items). The guard defers
+    // async navigator.clipboard API used by the toolbar buttons). The guard defers
     // to normal browser behavior inside inputs/selects and text selections.
     document.addEventListener("copy", (event) => {
       if (!channelShortcutsActive(event, { respectTextSelection: true })) {
@@ -1400,7 +1364,6 @@ export function createChannelTable({ dom, state, log, actions }) {
     rowBuilderHooks,
     channelShortcutsActive,
     moveSelectedChannelRows,
-    setMenuOpen,
     refreshVisibleRows: renderRowWindow,
   };
 }
