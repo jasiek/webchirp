@@ -394,6 +394,13 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       previewCount.hidden = false;
       return;
     }
+    // Nothing was asked, and nothing could be imported either: the caption says
+    // why rather than leaving the map blank next to a filled-in form.
+    if (previewState === "blocked") {
+      previewCount.textContent = "Select a radio to preview repeaters.";
+      previewCount.hidden = false;
+      return;
+    }
     if (!drawn) {
       return;
     }
@@ -662,23 +669,29 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       schedulePreview();
     },
     // Plot what the current filters would return. `state` is "loading" while a
-    // preview is in flight, "ok" with points, or "failed"/"off" when there is
-    // nothing to show — the squares already drawn stay put while the next
-    // answer is fetched, because blanking the map on every edit would make it
-    // flicker through every keystroke of a radius.
+    // preview is in flight, "ok" with points, "blocked" when the app could not
+    // import the answer anyway, or "failed"/"off" when there is nothing to show
+    // — the squares already drawn stay put while the next answer is fetched,
+    // because blanking the map on every edit would make it flicker through
+    // every keystroke of a radius.
     setMarkers: (points, state = "ok", { truncated = false } = {}) => {
       previewState = state;
-      previewTruncated = truncated;
       if (state === "ok") {
+        // Only an answer says how much of the area it covered. "loading" and
+        // "failed" carry no options, so assigning here unconditionally would
+        // drop the qualifier from the caption while the clipped squares it
+        // describes are still the ones on screen.
+        previewTruncated = truncated;
         markers = Array.isArray(points) ? points : [];
         refreshPreview();
         return;
       }
-      // "off" means there is nothing to preview at all, so the squares must go
-      // with the caption. Kept they would be redrawn at the next position the
-      // user enters — the previous location's repeaters, plotted around the new
-      // one, for as long as its own preview takes to arrive.
-      if (state === "off" && markers.length > 0) {
+      // "off" and "blocked" both mean there is nothing to preview, so the
+      // squares must go with the caption. Kept they would be redrawn at the
+      // next position the user enters — the previous location's repeaters,
+      // plotted around the new one, for as long as its own preview takes to
+      // arrive.
+      if ((state === "off" || state === "blocked") && markers.length > 0) {
         markers = [];
         refreshPreview();
         return;

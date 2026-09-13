@@ -136,6 +136,15 @@ export function createRepeaterSources(ctx, { endpoints }) {
   // keyed on the widened range, so one body serves every radius inside it: only
   // which side of the ring each station falls is recomputed, and that is
   // arithmetic rather than a request.
+  // The request identity minus its range, so one fetched body can answer every
+  // radius it covers. Everything else -- country, bands, modes, the only-working
+  // flag, the position -- still separates one cached answer from another.
+  function keyWithoutRange(url) {
+    const key = new URL(url.toString());
+    key.searchParams.delete("range");
+    return key.toString();
+  }
+
   function markInRange(points, position, radiusKm) {
     return points.map((point) => ({
       ...point,
@@ -219,10 +228,17 @@ export function createRepeaterSources(ctx, { endpoints }) {
         return null;
       }
       const url = buildQueryUrl(values, radiusKm * PREVIEW_RANGE_FACTOR);
-      const key = url.toString();
+      // Keyed on the request without its range. The body already covers half
+      // again the radius that fetched it, so every smaller radius is contained
+      // in one already in hand and needs only re-flagging, which markInRange
+      // does without a request -- and nudging the range is the commonest edit
+      // in this form, so keying on the URL whole made the cache miss precisely
+      // where it was meant to help. `range` is recorded alongside, because a
+      // radius wider than the cached body covers genuinely needs more ground.
+      const key = keyWithoutRange(url);
       const cached = cacheGet(previewCache, key);
-      if (cached) {
-        return { ...cached, points: markInRange(cached.points, values.position, radiusKm) };
+      if (cached && cached.rangeKm >= radiusKm) {
+        return { points: markInRange(cached.points, values.position, radiusKm) };
       }
       const text = await withRequestTimeout(`${label} preview`, async (signal) => {
         const response = await fetch(url.toString(), { signal });
@@ -235,7 +251,9 @@ export function createRepeaterSources(ctx, { endpoints }) {
       const points = parsed.repeaters
         .map((repeater) => previewPoint(repeater.latitude, repeater.longitude))
         .filter(Boolean);
-      cacheSet(previewCache, key, { points });
+      // The radius this body actually covers, not the one asked for: a later,
+      // narrower search may reuse it, a wider one may not.
+      cacheSet(previewCache, key, { points, rangeKm: radiusKm * PREVIEW_RANGE_FACTOR });
       return { points: markInRange(points, values.position, radiusKm) };
     }
 
@@ -389,9 +407,20 @@ export function createRepeaterSources(ctx, { endpoints }) {
         for (const locator of missing) {
           squareCache.set(locator, []);
         }
+        // Bucketed by the square each record names, so a later plan that holds
+        // only some of these squares gets only their records.
+        //
+        // The fallback is hardening, not a fix: a record whose locator names a
+        // square outside the plan is by construction outside the radius, so
+        // filterRsgbRecords would drop it on distance anyway and no test can
+        // tell the two behaviours apart. It costs one Set lookup to file it
+        // under the square that was asked for instead of discarding it on an
+        // assumption about the API that nothing here verifies.
+        const requested = new Set(missing);
         for (const record of fetched) {
           const locator = String(record?.locator || "").slice(0, 4).toUpperCase();
-          squareCache.get(locator)?.push(record);
+          const bucket = requested.has(locator) ? locator : missing[0];
+          squareCache.get(bucket).push(record);
         }
       }
       // Read the answer out before making room, not after. A plan can be as

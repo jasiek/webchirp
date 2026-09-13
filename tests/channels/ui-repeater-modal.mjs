@@ -1594,6 +1594,14 @@ function afterPreviewQuery() {
 const PREVIEW_LAT = 49.5;
 const PREVIEW_LON = 20.5;
 
+// The caption under the map preview, which is the field's own element rather
+// than anything dom.js knows about.
+function previewCaption(dom) {
+  const match = descendants(grid(dom)).find((el) => el.className === "modal-map-preview-count");
+  assert.ok(match, "the map preview has a caption");
+  return match;
+}
+
 function previewCalls(calls, match) {
   return calls.filter((call) => call.url.includes(match)
     && !call.url.includes("/meta")
@@ -1835,4 +1843,67 @@ test("making room in the square cache never drops a square the search needs", as
   assert.deepEqual(log.errors, []);
   assert.equal(table.inserted.length, 1);
   assert.equal(table.inserted[0].rows.length, 1, "GB3XP survived the cache making room");
+});
+
+// --- Second review round ------------------------------------------------------
+
+test("no radio loaded means no preview and a caption saying why", async () => {
+  const { dom } = buildHarness({ headers: [] });
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+
+  // Query API refuses this with "No channel schema loaded yet", so plotting
+  // squares and captioning a count would promise results the button cannot
+  // deliver — and spend a directory request to do it.
+  assert.equal(previewCalls(calls, "/przemienniki").length, 0);
+  assert.equal(previewCaption(dom).textContent, "Select a radio to preview repeaters.");
+});
+
+test("nudging the radius reuses the body already fetched", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+  assert.equal(previewCalls(calls, "/przemienniki").length, 1);
+
+  // A body fetched at 1.5x the radius already covers every smaller one, so
+  // narrowing only re-flags which side of the ring each station falls on.
+  // Keying the cache on the whole URL made this miss, which is the commonest
+  // edit in the form.
+  await editField(dom, "radius", "20");
+  await afterPreviewQuery();
+  assert.equal(previewCalls(calls, "/przemienniki").length, 1, "narrowing asks nothing");
+
+  // Wider than the cached body covers, so this one genuinely needs more ground.
+  await editField(dom, "radius", "300");
+  await afterPreviewQuery();
+  assert.equal(previewCalls(calls, "/przemienniki").length, 2);
+});
+
+test("a preview failure reaches the debug panel with its stack", async () => {
+  const { dom, log } = buildHarness();
+  installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", ok: false, status: 503, body: "down" },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+
+  const line = log.debug.find((entry) => /PREVIEW FAILED/.test(entry));
+  assert.ok(line, "the failure is logged");
+  // error.message alone cannot say which step threw.
+  assert.match(line, /at /, "the stack comes with it");
 });

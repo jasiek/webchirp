@@ -259,7 +259,9 @@ export function createRepeaterQuery(ctx) {
         return;
       }
       positionField?.setMarkers(null, "failed");
-      log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW FAILED ${error.message}`);
+      // The whole error, as the city lookup logs it: a preview that fails
+      // inside the XML parser is only diagnosable from the stack.
+      log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW FAILED ${error?.stack || error}`);
       return;
     }
     if (generation !== previewGeneration) {
@@ -285,6 +287,15 @@ export function createRepeaterQuery(ctx) {
       clearTimeout(previewTimer);
     }
     if (!isModalOpen() || typeof activeSource?.previewQuery !== "function") {
+      return;
+    }
+    // The same guard the submit handler applies. Without it the map fetches,
+    // plots squares and captions "23 in range" for a query that Query API
+    // immediately refuses with "No channel schema loaded yet" — promising
+    // results the button cannot deliver, and spending a directory request to
+    // do it.
+    if (!state.currentHeaders.length) {
+      positionField?.setMarkers([], "blocked");
       return;
     }
     const values = collectValues();

@@ -1276,3 +1276,15 @@ test("a repeater across the antimeridian is drawn beside the map, not a world aw
   assert.equal(pinsIn(previewCanvas).length, 1, "about 21 km east, so well inside the map");
   assert.equal(previewCount.textContent, "1 in range");
 });
+
+test("a clipped search keeps saying so while the next preview loads", () => {
+  const { field, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR], "ok", { truncated: true });
+  assert.equal(previewCount.textContent, "1 in range (part of the area only)");
+
+  // The next edit puts the preview back in flight. The squares on screen are
+  // still the clipped ones, so dropping the qualifier would have the map claim
+  // full coverage of a radius it never searched.
+  field.setMarkers(null, "loading");
+  assert.equal(previewCount.textContent, "1 in range (part of the area only)");
+});
