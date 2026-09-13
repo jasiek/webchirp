@@ -334,6 +334,10 @@ export function createBulkEditChannels(ctx) {
   }
 
   function bindEvents() {
+    // Ensure the modal starts hidden (in case it was created by vivify or not
+    // present in the DOM with the hidden class).
+    setModalOpen(false);
+
     dom.bulkEditCancelEl.addEventListener("click", () => {
       setModalOpen(false);
     });
