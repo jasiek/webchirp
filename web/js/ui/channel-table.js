@@ -1087,8 +1087,13 @@ export function createChannelTable({ dom, state, log, actions }) {
   }
 
   // Row elements are recycled by position, so a scroll hands the focused editor
-  // to a different channel. Commit whatever was typed first — there is no blur
-  // to do it, unlike a toolbar click, which blurs the editor before it fires.
+  // to a different channel. What is in the editor travels with the capture as
+  // raw text and goes back verbatim, rather than being committed here: a
+  // half-typed frequency ("146.") does not validate, and committing it would
+  // write the previous value back over the caret on every scroll tick and
+  // ResizeObserver call (issue #94). A value is committed only when the user
+  // really leaves the cell — blur, Enter, or a toolbar click, which blurs the
+  // editor before it fires.
   function captureFocusedCell() {
     const active = globalThis.document?.activeElement;
     // Only an editor holds an uncommitted value. The Location button is
@@ -1105,19 +1110,45 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (!cell) {
       return null;
     }
-    commitCellValue(cell, active);
-    return { ...cell, selectionStart: active.selectionStart, selectionEnd: active.selectionEnd };
+    return {
+      ...cell,
+      // Only a text editor carries an uncommitted draft; a select commits on
+      // change, so there is nothing of its own to put back.
+      draft: active.tagName === "INPUT" ? String(active.value ?? "") : null,
+      selectionStart: active.selectionStart,
+      selectionEnd: active.selectionEnd,
+    };
   }
 
   // Hand focus to whichever element now shows the row that had it, so typing
   // continues in the same channel it started in.
   function restoreFocusedCell(captured) {
-    const editor = captured && cellElement(captured.rowIdx, captured.column)?.children[0];
-    if (!editor || editor === globalThis.document?.activeElement) {
+    if (!captured) {
       return;
     }
-    editor.focus?.({ preventScroll: true });
-    if (Number.isFinite(captured.selectionStart) && editor.setSelectionRange) {
+    const editor = cellElement(captured.rowIdx, captured.column)?.children[0];
+    if (!editor) {
+      // The channel being edited fell out of the rendered window, so there is
+      // no element left to hold the draft. Commit it as a blur would rather
+      // than dropping what was typed.
+      if (captured.draft !== null) {
+        commitRawValue(captured, captured.draft);
+      }
+      return;
+    }
+    // bindRowElement has just written the row's stored value into this
+    // element; put the in-progress text back over it.
+    const restoredDraft = captured.draft !== null && editor.tagName === "INPUT";
+    if (restoredDraft) {
+      editor.value = captured.draft;
+    }
+    const refocused = editor !== globalThis.document?.activeElement;
+    if (refocused) {
+      editor.focus?.({ preventScroll: true });
+    }
+    // Rewriting the value collapses the caret to the end, so the selection is
+    // restored whenever either the text or the focus moved.
+    if ((restoredDraft || refocused) && Number.isFinite(captured.selectionStart) && editor.setSelectionRange) {
       editor.setSelectionRange(captured.selectionStart, captured.selectionEnd);
     }
   }
@@ -1218,12 +1249,25 @@ export function createChannelTable({ dom, state, log, actions }) {
     return { rowIdx, column: td.dataset.column };
   }
 
-  function commitCellValue({ rowIdx, column }, editor) {
+  // Normalize a raw editor string into the row it belongs to and report what
+  // was stored. Split out from commitCellValue because a draft rescued from a
+  // recycled row element has text but no element left to write back to.
+  function commitRawValue({ rowIdx, column }, text) {
     const row = state.currentRows[rowIdx];
+    if (!row) {
+      return null;
+    }
     const meta = state.radioMetadata.columns?.[column] || {};
-    const next = normalizeValue(column, editor.value, meta, row[column]);
+    const next = normalizeValue(column, text, meta, row[column]);
     row[column] = next;
-    editor.value = next;
+    return next;
+  }
+
+  function commitCellValue(cell, editor) {
+    const next = commitRawValue(cell, editor.value);
+    if (next !== null) {
+      editor.value = next;
+    }
   }
 
   // One listener per event type for the whole grid, instead of three per cell.
