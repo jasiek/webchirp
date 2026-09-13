@@ -223,6 +223,13 @@
               <button id="channel-move-down" type="button" class="channel-toolbar-icon" title="Move selected channels down (Alt+ArrowDown)" aria-label="Move selected channels down">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
               </button>
+              <button id="channel-bulk-edit" type="button" class="channel-toolbar-icon" title="Edit the selected channels in bulk" aria-label="Edit selected channels in bulk" disabled>
+                <!-- Pencil over a short baseline: the same stroked shape as the
+                     other editing icons, so it greys out with the button. -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 20h4L19 9a2 2 0 0 0-3-3L5 17v3Z" /><path d="M14.5 6.5 17.5 9.5" />
+                </svg>
+              </button>
               <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
               <button id="channel-cut" type="button" class="channel-toolbar-icon" title="Cut the selected channels to the clipboard" aria-label="Cut selected channels">
                 <!-- Scissors: two handles bottom-left, blades crossing to the upper right. -->
@@ -447,6 +454,35 @@
         <div class="modal-actions">
           <button id="channel-extra-cancel" type="button">Cancel</button>
           <button id="channel-extra-save" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+
+    <!--
+      Bulk channel editor: one form that writes the same value into every
+      selected channel. Its grid is empty on purpose -- the editable columns
+      come from the selected radio's own column metadata and the driver extras
+      come from the runtime, so web/js/ui/channel-bulk-edit.js builds the
+      fields when the modal opens.
+    -->
+    <div
+      id="channel-bulk-edit-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="channel-bulk-edit-title"
+    >
+      <form id="channel-bulk-edit-form" class="modal-card">
+        <h2 id="channel-bulk-edit-title">Edit channels in bulk</h2>
+        <p class="channel-extra-hint">
+          Tick a field to write its value into every selected channel. Fields
+          left unticked are not touched.
+        </p>
+        <p id="channel-bulk-edit-message" class="channel-extra-message" hidden></p>
+        <div id="channel-bulk-edit-grid" class="modal-grid"></div>
+        <div class="modal-actions">
+          <button id="channel-bulk-edit-cancel" type="button">Cancel</button>
+          <button id="channel-bulk-edit-apply" type="submit">Apply</button>
         </div>
       </form>
     </div>

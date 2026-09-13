@@ -15,6 +15,7 @@ import { createIssueReporter } from "./ui/issue-report.js";
 import { createSettingsPanel } from "./ui/settings-panel.js";
 import { createChannelExtra } from "./ui/channel-extra.js";
 import { createChannelTable } from "./ui/channel-table.js";
+import { createChannelBulkEdit } from "./ui/channel-bulk-edit.js";
 import { createRadioCatalog } from "./ui/radio-catalog.js";
 import { createRepeaterQuery } from "./ui/repeater-query.js";
 import { createRepeaterMap } from "./ui/repeater-map.js";
@@ -55,8 +56,12 @@ export function createUiController() {
     isAnyModalOpen: () =>
       ctx.repeaterQuery.isModalOpen()
       || ctx.repeaterMap.isModalOpen()
-      || ctx.channelExtra.isModalOpen(),
+      || ctx.channelExtra.isModalOpen()
+      || ctx.channelBulkEdit.isModalOpen(),
     openChannelExtra: (rowIdx, trigger) => ctx.channelExtra.openForRow(rowIdx, trigger),
+    // The grid reports every selection change here; the bulk-edit button is
+    // live only while something is selected.
+    updateBulkEditState: () => ctx.channelBulkEdit.updateToolbarState(),
     currentViewLabel: () => currentViewLabel(),
   };
 
@@ -67,13 +72,15 @@ export function createUiController() {
   const settings = createSettingsPanel(ctx);
   const table = createChannelTable(ctx);
   const channelExtra = createChannelExtra(ctx);
+  const channelBulkEdit = createChannelBulkEdit(ctx);
   const catalog = createRadioCatalog(ctx);
   const repeaterQuery = createRepeaterQuery(ctx);
   const repeaterMap = createRepeaterMap(ctx);
   const codeplugIo = createCodeplugIo(ctx);
   const serial = createSerialActions(ctx);
   Object.assign(ctx, {
-    settings, table, channelExtra, catalog, repeaterQuery, repeaterMap, codeplugIo, serial,
+    settings, table, channelExtra, channelBulkEdit, catalog, repeaterQuery, repeaterMap,
+    codeplugIo, serial,
   });
 
   exposeCurrentRowsForDebugging(state);
@@ -130,6 +137,7 @@ export function createUiController() {
     log.bindEvents();
     table.bindEvents();
     channelExtra.bindEvents();
+    channelBulkEdit.bindEvents();
     repeaterQuery.bindEvents();
     repeaterMap.bindEvents();
     codeplugIo.bindEvents();
@@ -137,7 +145,7 @@ export function createUiController() {
     serial.bindEvents();
 
     // Escape closes the topmost open surface: the import prompt, then the
-    // channel extras editor, then the repeater modals.
+    // channel extras editor, then the bulk editor, then the repeater modals.
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         if (codeplugIo.isImportChoiceModalOpen()) {
@@ -146,6 +154,10 @@ export function createUiController() {
         }
         if (channelExtra.isModalOpen()) {
           channelExtra.closeModal();
+          return;
+        }
+        if (channelBulkEdit.isModalOpen()) {
+          channelBulkEdit.closeModal();
           return;
         }
         if (repeaterMap.isModalOpen()) {

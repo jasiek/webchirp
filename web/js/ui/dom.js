@@ -72,6 +72,15 @@ export const REQUIRED_ELEMENTS = {
   channelImportPrzemiennikiEl: "#channel-import-przemienniki",
   channelImportRepeaterbookEl: "#channel-import-repeaterbook",
   channelImportIrtsEl: "#channel-import-irts",
+  channelBulkEditEl: "#channel-bulk-edit",
+  // The bulk editor: one form applied to every selected channel.
+  channelBulkEditModalEl: "#channel-bulk-edit-modal",
+  channelBulkEditFormEl: "#channel-bulk-edit-form",
+  channelBulkEditTitleEl: "#channel-bulk-edit-title",
+  channelBulkEditMessageEl: "#channel-bulk-edit-message",
+  channelBulkEditGridEl: "#channel-bulk-edit-grid",
+  channelBulkEditCancelEl: "#channel-bulk-edit-cancel",
+  channelBulkEditApplyEl: "#channel-bulk-edit-apply",
   // The per-channel driver-settings editor behind the grid's Extra column.
   channelExtraModalEl: "#channel-extra-modal",
   channelExtraFormEl: "#channel-extra-form",

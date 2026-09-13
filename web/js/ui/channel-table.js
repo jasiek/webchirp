@@ -106,9 +106,24 @@ export function createChannelTable({ dom, state, log, actions }) {
     return indexes.map((idx) => state.currentRows[idx]).filter(Boolean);
   }
 
+  // The rows the user has explicitly selected, and only those. Distinct from
+  // selectedRowsForOperations(), which falls back to the whole grid so a copy
+  // or export with nothing selected still has something to work on: the bulk
+  // editor must never read "nothing selected" as "every channel".
+  function explicitlySelectedRows() {
+    return sortedSelectedRowIndexes().map((idx) => state.currentRows[idx]).filter(Boolean);
+  }
+
+  // Anything gated on there being a selection is refreshed from here, so no
+  // caller of the selection paths has to remember to do it.
+  function selectionChanged() {
+    actions.updateBulkEditState();
+  }
+
   function resetRowSelection() {
     selectedRowIndexes.clear();
     selectionAnchorIndex = null;
+    selectionChanged();
   }
 
   function invalidCellKey(rowIdx, column) {
@@ -172,6 +187,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
 
     applyRowSelectionVisuals();
+    selectionChanged();
   }
 
   function defaultValueForColumn(column) {
@@ -297,6 +313,7 @@ export function createChannelTable({ dom, state, log, actions }) {
       .filter((index) => index !== undefined);
     selectedRowIndexes = new Set(indexes);
     selectionAnchorIndex = indexes.length > 0 ? Math.min(...indexes) : null;
+    selectionChanged();
     return indexes;
   }
 
@@ -490,6 +507,7 @@ export function createChannelTable({ dom, state, log, actions }) {
       const nextIndex = Math.min(firstIndex, state.currentRows.length - 1);
       selectedRowIndexes = new Set([nextIndex]);
       selectionAnchorIndex = nextIndex;
+      selectionChanged();
     }
     render();
     return removed;
@@ -1353,6 +1371,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     clearInvalidHighlights,
     applyValidationIssues,
     selectedRowsForOperations,
+    explicitlySelectedRows,
     hasRealChannels,
     reconcileLocations,
     sortRowsByLocation,

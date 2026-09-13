@@ -1309,6 +1309,46 @@ button:disabled {
   min-height: 0;
 }
 
+/* The bulk editor shares the extras editor's card and field styling -- same
+   label/control grid, same message and error rows -- because it renders the
+   same kind of fields. Only the tick that arms a field is its own: it sits in
+   the label column ahead of the label, and the control it arms is dimmed until
+   it is ticked, so "what will this write" is readable without reading values. */
+#channel-bulk-edit-modal .modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2rem);
+}
+
+#channel-bulk-edit-modal .modal-grid {
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  align-items: start;
+  row-gap: 0.7rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.channel-bulk-edit-label {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.channel-bulk-edit-label label {
+  font-size: 0.88rem;
+}
+
+.channel-bulk-edit-control.is-idle input,
+.channel-bulk-edit-control.is-idle select {
+  opacity: 0.55;
+}
+
+.channel-bulk-edit-control.is-invalid input,
+.channel-bulk-edit-control.is-invalid select {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+
 .channel-extra-hint,
 .channel-extra-message {
   margin: 0 0 0.8rem;
