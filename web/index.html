@@ -249,6 +249,12 @@
                   <rect x="9" y="2.5" width="6" height="4" rx="1.25" />
                 </svg>
               </button>
+              <button id="channel-bulk-edit" type="button" class="channel-toolbar-icon" title="Edit selected channels in bulk" aria-label="Edit selected channels in bulk">
+                <!-- Pencil over multiple sheets to represent bulk editing. -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 9V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3M5 12h12a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2zm8-3l3 3-1 4h-4l-1-4 3-3z" />
+                </svg>
+              </button>
               <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
               <button
                 id="channel-add-gmrs"
@@ -447,6 +453,34 @@
         <div class="modal-actions">
           <button id="channel-extra-cancel" type="button">Cancel</button>
           <button id="channel-extra-save" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+
+    <!--
+      Bulk-edit modal for editing multiple selected channels at once. The grid
+      shows editable columns from the selected radio's schema plus any extra
+      driver settings. Only fields the user actually changes are applied to the
+      selected channels; the rest are left alone.
+    -->
+    <div
+      id="bulk-edit-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="bulk-edit-title"
+    >
+      <form id="bulk-edit-form" class="modal-card">
+        <h2 id="bulk-edit-title">Edit selected channels</h2>
+        <p class="bulk-edit-hint">
+          Changes to any field below will be applied to all selected channels.
+          Fields you leave blank will not be changed.
+        </p>
+        <p id="bulk-edit-message" class="bulk-edit-message" hidden></p>
+        <div id="bulk-edit-grid" class="modal-grid"></div>
+        <div class="modal-actions">
+          <button id="bulk-edit-cancel" type="button">Cancel</button>
+          <button id="bulk-edit-apply" type="submit">Apply</button>
         </div>
       </form>
     </div>
