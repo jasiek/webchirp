@@ -14,6 +14,7 @@ import { createProgress } from "./ui/progress.js";
 import { createIssueReporter } from "./ui/issue-report.js";
 import { createSettingsPanel } from "./ui/settings-panel.js";
 import { createChannelExtra } from "./ui/channel-extra.js";
+import { createBulkEdit } from "./ui/bulk-edit.js";
 import { createChannelTable } from "./ui/channel-table.js";
 import { createRadioCatalog } from "./ui/radio-catalog.js";
 import { createRepeaterQuery } from "./ui/repeater-query.js";
@@ -55,8 +56,10 @@ export function createUiController() {
     isAnyModalOpen: () =>
       ctx.repeaterQuery.isModalOpen()
       || ctx.repeaterMap.isModalOpen()
-      || ctx.channelExtra.isModalOpen(),
+      || ctx.channelExtra.isModalOpen()
+      || ctx.bulkEdit.isModalOpen(),
     openChannelExtra: (rowIdx, trigger) => ctx.channelExtra.openForRow(rowIdx, trigger),
+    openBulkEdit: (rowIndexes, trigger) => ctx.bulkEdit.openForSelection(rowIndexes, trigger),
     currentViewLabel: () => currentViewLabel(),
   };
 
@@ -67,13 +70,14 @@ export function createUiController() {
   const settings = createSettingsPanel(ctx);
   const table = createChannelTable(ctx);
   const channelExtra = createChannelExtra(ctx);
+  const bulkEdit = createBulkEdit(ctx);
   const catalog = createRadioCatalog(ctx);
   const repeaterQuery = createRepeaterQuery(ctx);
   const repeaterMap = createRepeaterMap(ctx);
   const codeplugIo = createCodeplugIo(ctx);
   const serial = createSerialActions(ctx);
   Object.assign(ctx, {
-    settings, table, channelExtra, catalog, repeaterQuery, repeaterMap, codeplugIo, serial,
+    settings, table, channelExtra, bulkEdit, catalog, repeaterQuery, repeaterMap, codeplugIo, serial,
   });
 
   exposeCurrentRowsForDebugging(state);
@@ -130,6 +134,7 @@ export function createUiController() {
     log.bindEvents();
     table.bindEvents();
     channelExtra.bindEvents();
+    bulkEdit.bindEvents();
     repeaterQuery.bindEvents();
     repeaterMap.bindEvents();
     codeplugIo.bindEvents();

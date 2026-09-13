@@ -1308,6 +1308,12 @@ export function createChannelTable({ dom, state, log, actions }) {
     dom.channelPasteEl.addEventListener("click", async () => {
       await pasteChannelsViaApi();
     });
+    dom.channelBulkEditEl.addEventListener("click", () => {
+      const selected = sortedSelectedRowIndexes();
+      if (selected.length > 0) {
+        actions.openBulkEdit(selected, dom.channelBulkEditEl);
+      }
+    });
     dom.channelAddGmrsEl.addEventListener("click", () => {
       addBandPlanChannels(buildGmrsRows, "GMRS");
     });
