@@ -19,7 +19,7 @@ import {
   squaresForRadius,
 } from "../rsgb.js";
 import { withRequestTimeout } from "../request-timeout.js";
-import { countryDisplayName, flagEmojiFromCountryCode } from "./format.js";
+import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from "./format.js";
 import { trackEvent } from "./analytics.js";
 
 // Per-source configuration for the shared repeater-query modal
@@ -108,18 +108,6 @@ export function createRepeaterSources(ctx, { endpoints }) {
   // previous open already paid for; capped so a long session cannot grow
   // without bound.
   const PREVIEW_CACHE_LIMIT = 24;
-
-  function cacheGet(cache, key) {
-    return cache.get(key);
-  }
-
-  function cacheSet(cache, key, value) {
-    cache.set(key, value);
-    if (cache.size > PREVIEW_CACHE_LIMIT) {
-      cache.delete(cache.keys().next().value);
-    }
-    return value;
-  }
 
   // Every position a preview can draw, whether or not the query would keep it.
   // `inRange` is what the ring is for: a station just outside it is the answer
@@ -268,7 +256,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
       // Every body covers 1.5x the radius that fetched it, so this reduces to
       // "any radius up to the one it was fetched for".
       const key = keyWithoutRange(url);
-      const cached = cacheGet(previewCache, key);
+      const cached = previewCache.get(key);
       if (cached && cached.rangeKm >= radiusKm * PREVIEW_RANGE_FACTOR) {
         return summarizeRemote(cached, values.position, radiusKm);
       }
@@ -301,7 +289,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
         unmapped,
         rangeKm: radiusKm * PREVIEW_RANGE_FACTOR,
       };
-      cacheSet(previewCache, key, body);
+      rememberBounded(previewCache, key, body, PREVIEW_CACHE_LIMIT);
       return summarizeRemote(body, values.position, radiusKm);
     }
 
@@ -436,111 +424,58 @@ export function createRepeaterSources(ctx, { endpoints }) {
     // nothing, and only stepping into a new square costs a request.
     const squareCache = new Map();
 
-    // The plans currently being assembled, as a set per in-flight call.
-    //
-    // recordsForSquares awaits its fetch, and a second call can run in that
-    // gap — the submitted query starting while a superseded preview is still
-    // downloading. A per-call keep-set protects only its own plan, so the one
-    // that finishes first could evict squares the waiting one had already
-    // classified as cached; that one then assembles empty lists for them and
-    // silently omits their repeaters. Every plan still to read its answer out
-    // is off limits until it has.
-    //
-    // Two overlapping 24-square plans can therefore hold the cache above its
-    // cap for as long as both are running. That is the right way round:
-    // exceeding a size hint briefly costs memory, dropping a square costs
-    // repeaters.
-    //
-    // Untested, deliberately. At one position every narrower plan is a subset
-    // of the wider one, so a concurrent pair there can never evict each other;
-    // reproducing the race needs a square cached by an earlier search, an
-    // in-flight plan that excludes it, and a second plan that includes it and
-    // has missing squares of its own -- which takes two position moves during
-    // one preview. The guard costs a Set lookup, so it is cheaper to hold than
-    // the sequence is to stage.
-    const activePlans = new Set();
-
-    function planHolds(locator) {
-      for (const plan of activePlans) {
-        if (plan.has(locator)) {
-          return true;
-        }
-      }
-      return false;
-    }
-
     // Fetch only the squares not already held, then answer from the union.
     //
+    // The cached squares are read out *before* the fetch is awaited. A second
+    // call can run during that await -- the submitted query starting while a
+    // superseded preview is still downloading -- and its eviction must not be
+    // able to empty a square this call has already classified as cached. With
+    // the records in hand up front, nothing that happens to the cache
+    // afterwards can change this plan's answer, so eviction needs no notion
+    // of in-flight plans.
+    //
     // `onSquare` is called once per square of the plan, whether it was fetched
-    // now or served from the cache, and says which. Reporting only the fetches
-    // would mean the debug panel lost a square's line entirely as soon as a
-    // preview had already downloaded it — the plan's coverage has to stay
-    // readable however little of it cost a request this time.
+    // now or served from the cache, and says which, so the debug panel keeps a
+    // line per square however little of the plan cost a request this time.
     async function recordsForSquares(squares, { onSquare } = {}) {
-      const plan = new Set(squares);
-      activePlans.add(plan);
-      try {
-        return await assembleSquares(squares, onSquare);
-      } finally {
-        activePlans.delete(plan);
+      const held = new Map();
+      const missing = [];
+      for (const locator of squares) {
+        if (squareCache.has(locator)) {
+          held.set(locator, squareCache.get(locator));
+        } else {
+          missing.push(locator);
+        }
       }
-    }
-
-    async function assembleSquares(squares, onSquare) {
-      const missing = squares.filter((locator) => !squareCache.has(locator));
-      const fetchedNow = new Set(missing);
       if (missing.length > 0) {
         const fetched = await fetchRsgbRecords({ squares: missing });
         // fetchRsgbRecords returns one flat list, so the records are put back
         // under the square they came from. A square that legitimately holds no
         // repeaters caches as an empty list, which is what stops it being
-        // re-requested on every redraw.
-        for (const locator of missing) {
-          squareCache.set(locator, []);
-        }
-        // Bucketed by the square each record names, so a later plan that holds
-        // only some of these squares gets only their records.
-        //
-        // The fallback is hardening, not a fix: a record whose locator names a
-        // square outside the plan is by construction outside the radius, so
-        // filterRsgbRecords would drop it on distance anyway and no test can
-        // tell the two behaviours apart. It costs one Set lookup to file it
-        // under the square that was asked for instead of discarding it on an
-        // assumption about the API that nothing here verifies.
-        const requested = new Set(missing);
+        // re-requested on every redraw. A record whose locator names a square
+        // outside the request is filed under the first square asked for rather
+        // than dropped on an assumption about the API nothing here verifies;
+        // it is outside the radius either way, so the distance filter drops it.
+        const buckets = new Map(missing.map((locator) => [locator, []]));
         for (const record of fetched) {
           const locator = String(record?.locator || "").slice(0, 4).toUpperCase();
-          const bucket = requested.has(locator) ? locator : missing[0];
-          squareCache.get(bucket).push(record);
+          buckets.get(buckets.has(locator) ? locator : missing[0]).push(record);
+        }
+        for (const [locator, records] of buckets) {
+          held.set(locator, records);
+          rememberBounded(squareCache, locator, records, PREVIEW_CACHE_LIMIT);
         }
       }
-      // Read the answer out before making room, not after. A plan can be as
-      // wide as the cache is deep (both 24), so a second, overlapping plan
-      // pushes the cache over its cap -- and the oldest entries then are
-      // precisely the overlapping ones this plan still needs. Evicting first
-      // would hand back an empty list for a square that was just fetched, and
-      // the preview would quietly omit its repeaters.
-      const records = squares.flatMap((locator) => squareCache.get(locator) || []);
       if (typeof onSquare === "function") {
         for (const locator of squares) {
           onSquare({
             locator,
-            count: (squareCache.get(locator) || []).length,
-            cached: !fetchedNow.has(locator),
+            count: held.get(locator).length,
+            cached: !missing.includes(locator),
           });
         }
       }
-      for (const locator of squareCache.keys()) {
-        if (squareCache.size <= PREVIEW_CACHE_LIMIT) {
-          break;
-        }
-        // This plan is in activePlans too, so one test covers both it and any
-        // other call still waiting on its own fetch.
-        if (!planHolds(locator)) {
-          squareCache.delete(locator);
-        }
-      }
-      return records;
+      return squares.flatMap((locator) => held.get(locator));
     }
 
     // RSGB filters client-side, so the preview is the real filter run over the

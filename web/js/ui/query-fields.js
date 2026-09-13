@@ -1,5 +1,6 @@
 import { decodeMaidenheadBox, encodeMaidenhead } from "../rsgb.js";
 import { latLonToWorldPixel, worldPixelToLatLon, zoomForRadius } from "../staticmap.js";
+import { rememberBounded } from "./format.js";
 import { createMapAttribution, renderStaticMap } from "./static-map-view.js";
 
 // Field components for the shared repeater-query modal. Each factory builds
@@ -355,7 +356,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       height: lastPreviewWidth,
       radiusMetres,
       overscan: PREVIEW_OVERSCAN,
-      markers,
+      markers: plot.points,
     });
     updateCount(drawn);
   }
@@ -372,66 +373,59 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // field entirely (Range/Distance), so the modal shell pushes it in here —
   // see setRangeKm.
   let rangeKm = Number.NaN;
-  // Repeaters to plot, pushed in by the shell after it previews the query the
-  // form currently describes. Held here rather than fetched here for the reason
-  // every other field holds nothing it did not build: this file contacts no
-  // directory. See setMarkers.
-  let markers = [];
-  // What the caption should say about the squares, independent of them:
-  // "ok" once an answer is drawn, "loading" while the next is being fetched,
-  // "failed" when it could not be, "off" when there is nothing to preview.
-  let previewState = "off";
-  // Whether the source could only search part of the area asked for — RSGB
-  // clips its locator fan-out at 24 squares. A count drawn from a clipped
-  // search reads as coverage of the whole radius unless it says otherwise.
-  let previewTruncated = false;
-  // How far the caption's count is from what Query API would insert: repeaters
-  // the query takes but the map cannot place, and repeaters the map places but
-  // the selected radio cannot express. Both stay at zero for most searches; a
-  // caption that ignored them would quietly promise the wrong total.
-  let previewUnmapped = 0;
-  let previewUnsupported = 0;
-  // The tally from the last render, so a caption rewritten without a redraw
-  // (a preview starting or failing) still describes the squares on screen.
-  let lastDrawn = null;
+  // Everything the caption under the map is built from, pushed in by the shell
+  // after it previews the query the form describes (see setMarkers). Held here
+  // rather than fetched here because this file contacts no directory.
+  //   state:      "ok" once an answer is drawn, "loading" while the next is
+  //               fetched, "failed" when it could not be, "blocked" when no
+  //               radio is loaded to import into, "off" when there is nothing
+  //               to preview.
+  //   points:     the repeaters to plot.
+  //   truncated:  the source searched only part of the area (RSGB clips its
+  //               fan-out at 24 squares), so the count is not whole-radius
+  //               coverage.
+  //   unmapped:   repeaters the query inserts but the map cannot place.
+  //   unsupported: repeaters the map places but the selected radio cannot use.
+  //   drawn:      the tally from the last render, so a caption rewritten
+  //               without a redraw still describes the squares on screen.
+  let plot = { state: "off", points: [], truncated: false, unmapped: 0, unsupported: 0, drawn: null };
+
+  // States whose caption does not depend on what is drawn.
+  const FIXED_CAPTIONS = {
+    failed: "Could not preview this search.",
+    blocked: "Select a radio to preview repeaters.",
+  };
 
   // Caption the map with what is drawn on it, not with what was handed in: a
   // station the radius reaches but the viewport does not is real, and promising
   // it under a map that has no square for it is worse than not counting it.
   function updateCount(drawn) {
-    lastDrawn = drawn;
-    previewCount.hidden = previewState === "off" || !drawn;
-    previewCount.classList.toggle("is-loading", previewState === "loading");
-    if (previewState === "failed") {
-      previewCount.textContent = "Could not preview this search.";
+    plot.drawn = drawn;
+    previewCount.classList.toggle("is-loading", plot.state === "loading");
+    if (FIXED_CAPTIONS[plot.state]) {
+      previewCount.textContent = FIXED_CAPTIONS[plot.state];
       previewCount.hidden = false;
       return;
     }
-    // Nothing was asked, and nothing could be imported either: the caption says
-    // why rather than leaving the map blank next to a filled-in form.
-    if (previewState === "blocked") {
-      previewCount.textContent = "Select a radio to preview repeaters.";
-      previewCount.hidden = false;
-      return;
-    }
+    previewCount.hidden = plot.state === "off" || !drawn;
     if (!drawn) {
       return;
     }
-    if (previewState === "loading" && drawn.inRange === 0 && drawn.outOfRange === 0) {
+    if (plot.state === "loading" && drawn.inRange === 0 && drawn.outOfRange === 0) {
       previewCount.textContent = "Looking for repeaters...";
       return;
     }
     const parts = [drawn.outOfRange > 0
       ? `${drawn.inRange} in range, ${drawn.outOfRange} just outside`
       : `${drawn.inRange} in range`];
-    if (previewTruncated) {
+    if (plot.truncated) {
       parts.push("part of the area only");
     }
-    if (previewUnmapped > 0) {
-      parts.push(`${previewUnmapped} with no location`);
+    if (plot.unmapped > 0) {
+      parts.push(`${plot.unmapped} with no location`);
     }
-    if (previewUnsupported > 0) {
-      parts.push(`${previewUnsupported} this radio cannot use`);
+    if (plot.unsupported > 0) {
+      parts.push(`${plot.unsupported} this radio cannot use`);
     }
     previewCount.textContent = parts.length > 1
       ? `${parts[0]} (${parts.slice(1).join("; ")})`
@@ -708,34 +702,25 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     // because blanking the map on every edit would make it flicker through
     // every keystroke of a radius.
     setMarkers: (points, state = "ok", { truncated = false, unmapped = 0, unsupported = 0 } = {}) => {
-      previewState = state;
+      plot.state = state;
       if (state === "ok") {
-        // Only an answer says how much of the area it covered, or how far its
-        // count is from what the query would insert. "loading" and "failed"
-        // carry no options, so assigning here unconditionally would drop those
-        // qualifiers while the squares they describe are still the ones on
-        // screen.
-        previewTruncated = truncated;
-        previewUnmapped = unmapped;
-        previewUnsupported = unsupported;
-        markers = Array.isArray(points) ? points : [];
+        // Only an answer carries the qualifiers; "loading" and "failed" keep
+        // the ones describing the squares still on screen.
+        Object.assign(plot, { truncated, unmapped, unsupported, points: Array.isArray(points) ? points : [] });
         refreshPreview();
         return;
       }
       // "off" and "blocked" both mean there is nothing to preview, so the
-      // squares must go with the caption. Kept they would be redrawn at the
-      // next position the user enters — the previous location's repeaters,
-      // plotted around the new one, for as long as its own preview takes to
-      // arrive.
-      if ((state === "off" || state === "blocked") && markers.length > 0) {
-        markers = [];
+      // squares must go with the caption, or they would be redrawn around the
+      // next position the user enters while its own preview is still on its way.
+      if ((state === "off" || state === "blocked") && plot.points.length > 0) {
+        plot.points = [];
         refreshPreview();
         return;
       }
-      // The other states change only the caption, so the map is left alone
-      // rather than redrawn — a redraw would refetch the tile grid to say
-      // "loading".
-      updateCount(lastDrawn);
+      // The other states change only the caption; a redraw would refetch the
+      // tile grid just to say "loading".
+      updateCount(plot.drawn);
     },
     value: () => currentPosition(),
     setPosition: applyPosition,
@@ -1069,14 +1054,6 @@ export function createCityField({
     setNote(results.length === 0 ? "No matching places." : "");
   }
 
-  function rememberResults(key, results) {
-    cache.set(key, results);
-    if (cache.size > CITY_CACHE_LIMIT) {
-      // Map iterates in insertion order, so the first key is the oldest.
-      cache.delete(cache.keys().next().value);
-    }
-  }
-
   async function runSearch(text) {
     const generation = searchGeneration;
     let results = [];
@@ -1098,7 +1075,7 @@ export function createCityField({
     }
     // A failed lookup is deliberately not cached: the next keystroke should
     // retry rather than replay the outage for the rest of the modal session.
-    rememberResults(text, results);
+    rememberBounded(cache, text, results, CITY_CACHE_LIMIT);
     // Superseded by a later keystroke or by a commit while this was in flight.
     if (generation !== searchGeneration) {
       return;
