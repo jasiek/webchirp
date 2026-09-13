@@ -441,6 +441,23 @@ export function createSerialActions(ctx) {
     };
   }
 
+  // Re-read the selected radio's column metadata now that a clone image is
+  // cached for it. Guarded twice over, because a clone runs long enough for
+  // the user to move on: a selection that has changed belongs to a different
+  // radio's schema, and a metadata call that fails leaves the grid on the
+  // schema it already had -- neither is a reason to report the transfer that
+  // just succeeded as a failure, so both only reach the debug panel.
+  async function refreshMetadataForDownloadedRadio(radio) {
+    if (state.selectedRadio?.key !== radio.key) {
+      return;
+    }
+    try {
+      await ctx.catalog.loadSelectedRadioMetadata();
+    } catch (error) {
+      log.logDebug(`RADIO METADATA refresh after download failed: ${errorSummary(error)}`);
+    }
+  }
+
   async function downloadFromRadio() {
     if (!state.selectedRadio) {
       log.setStatus("Search for and select a radio first.");
@@ -459,10 +476,21 @@ export function createSerialActions(ctx) {
         module: radio.module,
         className: radio.className,
       });
+      state.currentRows = result.rows;
+      // The schema comes after the rows, and only now: the download just
+      // cached this radio's image, and the runtime builds column metadata from
+      // that image (get_radio_column_metadata in
+      // web/python/webchirp_bridge/column_metadata.py). A driver whose
+      // capabilities live in the codeplug -- Retevis RT98 publishes Low/Mid/High
+      // loaded and only the PMR levels blank -- would otherwise leave the grid
+      // on the boot-time blank schema, which lists neither the levels these
+      // rows carry nor the ones the upload preflight would accept, and which
+      // blanks them outright the next time the radio is re-selected
+      // (dropUnsupportedPowerValues in web/js/ui/channel-table.js).
+      await refreshMetadataForDownloadedRadio(radio);
       state.currentHeaders = state.radioMetadata.headers?.length
         ? state.radioMetadata.headers
         : (result.headers || []);
-      state.currentRows = result.rows;
       ctx.table.sortRowsByLocation();
       state.codeplugSource = "radio";
       ctx.settings.replaceState({

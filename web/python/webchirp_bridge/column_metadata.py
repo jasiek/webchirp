@@ -14,7 +14,11 @@ from typing import TYPE_CHECKING
 from chirp import chirp_common
 
 from webchirp_bridge.channel_rows import CSV_HEADERS, _blank_csv_radio, _row_from_memory
-from webchirp_bridge.driver_cache import _blank_radio_instance, _import_radio_class
+from webchirp_bridge.driver_cache import (
+    _blank_radio_instance,
+    _cached_or_blank_radio_instance,
+    _import_radio_class,
+)
 from webchirp_bridge.power_levels import _power_level_watts
 
 if TYPE_CHECKING:
@@ -193,9 +197,27 @@ def _column_metadata_for_radio(radio: chirp_common.Radio) -> dict[str, Any]:
 
 
 def get_radio_column_metadata(module_name: str, class_name: str) -> dict[str, Any]:
-    """Build CHIRP-derived column editability/options metadata for the UI."""
-    radio_cls = _import_radio_class(module_name, class_name)
-    return _column_metadata_for_radio(_blank_radio_instance(radio_cls))
+    """Build CHIRP-derived column editability/options metadata for the UI.
+
+    Read from the cached image once the session has one, for the same reason
+    ``_driver_features`` does (web/python/webchirp_bridge/driver_cache.py): a
+    driver whose capabilities live in the codeplug describes itself differently
+    blank. The grid was the one consumer that disagreed -- it offered a blank
+    ``Rt98Radio``'s PMR power levels while the upload preflight
+    (web/python/webchirp_bridge/row_validation.py), the row builders
+    (web/python/webchirp_bridge/channel_rows.py) and the level resolver
+    (web/python/webchirp_bridge/power_levels.py) all read the loaded image's
+    Low/Mid/High. So a downloaded channel carried a level its own dropdown did
+    not list, and re-selecting the radio silently blanked it
+    (dropUnsupportedPowerValues in web/js/ui/channel-table.js).
+    """
+    radio = _cached_or_blank_radio_instance(module_name, class_name)
+    if radio is None:
+        # Nothing instantiable: go through the blank builder so the driver's
+        # own import or constructor error reaches the debug panel, rather than
+        # reporting a schema the grid would treat as this radio's real one.
+        radio = _blank_radio_instance(_import_radio_class(module_name, class_name))
+    return _column_metadata_for_radio(radio)
 
 
 def get_default_schema() -> dict[str, Any]:
