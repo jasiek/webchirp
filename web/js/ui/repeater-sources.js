@@ -132,10 +132,6 @@ export function createRepeaterSources(ctx, { endpoints }) {
     return { latitude, longitude, inRange, approximate };
   }
 
-  // Re-flag a cached point set against the radius now in the form. The fetch is
-  // keyed on the widened range, so one body serves every radius inside it: only
-  // which side of the ring each station falls is recomputed, and that is
-  // arithmetic rather than a request.
   // The request identity minus its range, so one fetched body can answer every
   // radius it covers. Everything else -- country, bands, modes, the only-working
   // flag, the position -- still separates one cached answer from another.
@@ -145,6 +141,10 @@ export function createRepeaterSources(ctx, { endpoints }) {
     return key.toString();
   }
 
+  // Re-flag a point set against the radius now in the form. The cache is keyed
+  // without the range, so one body serves every radius it covers: only which
+  // side of the ring each station falls on is recomputed, and that is
+  // arithmetic rather than a request.
   function markInRange(points, position, radiusKm) {
     return points.map((point) => ({
       ...point,
@@ -233,11 +233,16 @@ export function createRepeaterSources(ctx, { endpoints }) {
       // in one already in hand and needs only re-flagging, which markInRange
       // does without a request -- and nudging the range is the commonest edit
       // in this form, so keying on the URL whole made the cache miss precisely
-      // where it was meant to help. `range` is recorded alongside, because a
-      // radius wider than the cached body covers genuinely needs more ground.
+      // where it was meant to help. The covered range is recorded alongside, and
+      // the test is against the widened area rather than the radius: a body
+      // fetched for 20 km reaches 30, and reusing it for a 30 km search would
+      // leave nothing beyond the ring to dim -- the map would report nothing
+      // just outside while the ground it never fetched was full of repeaters.
+      // Every body covers 1.5x the radius that fetched it, so this reduces to
+      // "any radius up to the one it was fetched for".
       const key = keyWithoutRange(url);
       const cached = cacheGet(previewCache, key);
-      if (cached && cached.rangeKm >= radiusKm) {
+      if (cached && cached.rangeKm >= radiusKm * PREVIEW_RANGE_FACTOR) {
         return { points: markInRange(cached.points, values.position, radiusKm) };
       }
       const text = await withRequestTimeout(`${label} preview`, async (signal) => {
@@ -432,13 +437,13 @@ export function createRepeaterSources(ctx, { endpoints }) {
       const plan = new Set(squares);
       activePlans.add(plan);
       try {
-        return await assembleSquares(squares, plan, onSquare);
+        return await assembleSquares(squares, onSquare);
       } finally {
         activePlans.delete(plan);
       }
     }
 
-    async function assembleSquares(squares, plan, onSquare) {
+    async function assembleSquares(squares, onSquare) {
       const missing = squares.filter((locator) => !squareCache.has(locator));
       const fetchedNow = new Set(missing);
       if (missing.length > 0) {

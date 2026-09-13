@@ -1907,3 +1907,54 @@ test("a preview failure reaches the debug panel with its stack", async () => {
   // error.message alone cannot say which step threw.
   assert.match(line, /at /, "the stack comes with it");
 });
+
+// Repeaters due north of the preview position. A degree of latitude is ~111 km,
+// and the distances are chosen against what the map can actually show: the ring
+// fills 0.9 of the width, so the viewport reaches radius/0.9 and only that
+// narrow band beyond the ring can hold a square the caption will count as
+// "just outside".
+function previewRepeaterAt(latitude, call) {
+  return `
+    <repeater>
+      <qra>SR${call}</qra><mode>fm</mode>
+      <qrg type="rx">145.6</qrg><qrg type="tx">145</qrg>
+      <location><latitude>${latitude}</latitude><longitude>${PREVIEW_LON}</longitude></location>
+    </repeater>
+  `;
+}
+
+function previewRxf(...repeaters) {
+  return `<rxf><perspective>radio</perspective><repeaters>${repeaters.join("")}</repeaters></rxf>`;
+}
+
+// 11 km: inside a 20 km ring.
+const NEAR_11KM = previewRepeaterAt(PREVIEW_LAT + 0.1, "A");
+// 21 km: outside a 20 km ring, inside the 22.2 km viewport it frames.
+const NEAR_21KM = previewRepeaterAt(PREVIEW_LAT + 0.189, "B");
+// 32 km: outside a 30 km ring, inside the 33.3 km viewport it frames.
+const NEAR_32KM = previewRepeaterAt(PREVIEW_LAT + 0.288, "C");
+
+test("a cached body is only reused when it covers the widened area too", async () => {
+  const { dom } = buildHarness();
+  // The directory filters by distance upstream, so each range gets what that
+  // range would really contain.
+  installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "range=30", body: previewRxf(NEAR_11KM, NEAR_21KM) },
+    { match: "range=45", body: previewRxf(NEAR_11KM, NEAR_21KM, NEAR_32KM) },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await editField(dom, "radius", "20");
+  await afterPreviewQuery();
+  assert.equal(previewCaption(dom).textContent, "1 in range, 1 just outside");
+
+  await editField(dom, "radius", "30");
+  await afterPreviewQuery();
+
+  // The 20 km search fetched 30 km of ground. Reusing it for a 30 km search
+  // leaves nothing beyond that ring to dim, so the map would claim there is
+  // nothing just outside while the repeater at 32 km went unfetched.
+  assert.equal(previewCaption(dom).textContent, "2 in range, 1 just outside");
+});
