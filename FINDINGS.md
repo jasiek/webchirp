@@ -278,7 +278,8 @@ Notes found while wiring the City/Locality autocomplete:
   `{"error":"lat and lon must be given together"}` with **HTTP 200**, so an
   `response.ok` check alone does not catch a bad request. A missing `q` answers
   the same way.
-- `limit` caps at 20 server-side; asking for 50 still returns 20.
+- `limit` defaults to 20 and caps at 20 server-side; asking for 50 still
+  returns 20, so sending the parameter at all is redundant.
 - There is no country filter — neither `cc` nor `country` narrows the results.
 - CORS allows `http://localhost:<port>` origins, so the autocomplete works
   against a local dev server (unlike `/przemienniki` and `/repeaterbook`).

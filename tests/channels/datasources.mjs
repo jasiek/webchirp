@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  CITY_SUGGEST_LIMIT,
   DEFAULT_REPEATER_API_BASE,
   buildPrzemiennikiRows,
   buildRepeaterEndpoints,
@@ -493,16 +492,16 @@ test("parseCitySuggestions surfaces the endpoint's own error body", () => {
   assert.throws(() => parseCitySuggestions("<html>"), /invalid JSON/);
 });
 
-test("fetchCitySuggestions asks for the shown number of results and nothing more", async () => {
+test("fetchCitySuggestions sends the trimmed query and nothing else", async () => {
   const { seen } = await withFetchStub(
     JSON.stringify({ results: [] }),
     () => fetchCitySuggestions("https://api.example.com/cities", "  manch  "),
   );
   const url = new URL(seen[0]);
   assert.equal(url.searchParams.get("q"), "manch");
-  assert.equal(url.searchParams.get("limit"), String(CITY_SUGGEST_LIMIT));
-  assert.equal(url.searchParams.get("lat"), null);
-  assert.equal(url.searchParams.get("lon"), null);
+  // No limit: the endpoint already defaults to the twenty the drop-down shows,
+  // and caps its own limit there, so sending one cannot change the answer.
+  assert.deepEqual([...url.searchParams.keys()], ["q"]);
 });
 
 test("fetchCitySuggestions sends a position hint only when both halves are known", async () => {

@@ -111,9 +111,11 @@ function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
 // slot in the browser's connection pool.
 const CITY_SUGGEST_TIMEOUT_MS = 4000;
 
-// How many suggestions to ask for. The endpoint caps its own limit at 20, so
-// this is both the most the drop-down can show and the most it can receive.
-export const CITY_SUGGEST_LIMIT = 20;
+// The most suggestions a response can contain. The endpoint defaults to 20 and
+// caps its own `limit` there too, so no limit is sent -- asking for the default
+// only adds a parameter that cannot change the answer. This is the ceiling the
+// drop-down is built against, not a request for one.
+const CITY_SUGGEST_MAX = 20;
 
 // Look up place names matching `query` in the api.codeplug.org gazetteer.
 //
@@ -134,7 +136,6 @@ export async function fetchCitySuggestions(citiesUrl, query, near = null) {
   }
   const url = new URL(citiesUrl);
   url.searchParams.set("q", text);
-  url.searchParams.set("limit", String(CITY_SUGGEST_LIMIT));
   const latitude = Number(near?.latitude);
   const longitude = Number(near?.longitude);
   if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
@@ -192,7 +193,10 @@ export function parseCitySuggestions(jsonText) {
     .filter((entry) => entry.name.length > 0
       && Number.isFinite(entry.latitude)
       && Number.isFinite(entry.longitude))
-    .slice(0, CITY_SUGGEST_LIMIT);
+    // The endpoint will not return more than twenty, so this only holds if it
+    // ever changes its mind: the drop-down's height and keyboard handling are
+    // sized for a list this long.
+    .slice(0, CITY_SUGGEST_MAX);
 }
 
 function parseXmlDocument(xmlText) {
