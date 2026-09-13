@@ -1380,13 +1380,34 @@ button:disabled {
      whichever element reads it, so the label (0.88rem) and the checkbox
      (1rem) would have got two different boxes out of one declaration. */
   --bulk-edit-row-line: calc(0.7rem + 2px + 1.2rem);
+  /* The label's own line box, spelled out in parts so the padding that
+     positions it below can be derived from the same numbers the label is set
+     in rather than re-typed and left to drift. */
+  --bulk-edit-label-size: 0.88rem;
+  --bulk-edit-label-leading: 1.3;
+  --bulk-edit-label-line: calc(var(--bulk-edit-label-size) * var(--bulk-edit-label-leading));
 }
 
-.channel-bulk-edit-toggle,
-.channel-bulk-edit-label label {
+.channel-bulk-edit-toggle {
   display: flex;
   align-items: center;
   min-height: var(--bulk-edit-row-line);
+}
+
+/* Half the difference between the two line boxes, above the label cell only.
+   That puts the label's text on the value control's first line -- and so on
+   the checkbox's -- while its description stays immediately under it, one
+   line of a paragraph after another. Stretching the label itself to the
+   taller box would centre it by splitting that slack in two, and the half
+   below would open a gap between the label and its own description. */
+.channel-bulk-edit-label {
+  padding-top: calc((var(--bulk-edit-row-line) - var(--bulk-edit-label-line)) / 2);
+}
+
+.channel-bulk-edit-label label {
+  display: block;
+  font-size: var(--bulk-edit-label-size);
+  line-height: var(--bulk-edit-label-leading);
 }
 
 /* A boolean extra's control is itself a 1rem checkbox, so without this it
@@ -1433,14 +1454,9 @@ button:disabled {
   color: var(--muted);
 }
 
-.channel-bulk-edit-label label {
-  font-size: 0.88rem;
-}
-
 .channel-bulk-edit-doc {
-  margin-top: 0.15rem;
   font-size: 0.78rem;
-  line-height: 1.3;
+  line-height: var(--bulk-edit-label-leading);
   color: var(--muted);
 }
 
