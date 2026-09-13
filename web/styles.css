@@ -1350,6 +1350,63 @@ button:disabled {
   color: var(--error-text);
 }
 
+/* Bulk edit modal for editing multiple selected channels. Uses the same grid
+   layout as channel-extra for consistency. */
+#channel-bulk-edit-modal .modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2rem);
+}
+
+#channel-bulk-edit-modal .modal-grid {
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  align-items: start;
+  row-gap: 0.7rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.channel-bulk-edit-hint,
+.channel-bulk-edit-message {
+  margin: 0 0 0.8rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.channel-bulk-edit-label label {
+  font-size: 0.88rem;
+}
+
+.channel-bulk-edit-doc {
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.channel-bulk-edit-control {
+  min-width: 0;
+}
+
+.channel-bulk-edit-control.is-immutable input,
+.channel-bulk-edit-control.is-immutable select {
+  background: var(--surface-muted);
+  color: var(--disabled-text);
+}
+
+.channel-bulk-edit-control.is-invalid input,
+.channel-bulk-edit-control.is-invalid select {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+
+.channel-bulk-edit-error {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--error-text);
+}
+
 /* A value the modal reports rather than asks for: the fixed RSGB country.
    Styled to read as text, not as a disabled input the user might try to
    edit. */
