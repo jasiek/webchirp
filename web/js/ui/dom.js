@@ -80,6 +80,16 @@ export const REQUIRED_ELEMENTS = {
   channelExtraGridEl: "#channel-extra-grid",
   channelExtraCancelEl: "#channel-extra-cancel",
   channelExtraSaveEl: "#channel-extra-save",
+  // Bulk-editing every attribute (plus extras) of the selected channels at
+  // once (web/js/ui/channel-bulk-edit.js).
+  channelBulkEditEl: "#channel-bulk-edit",
+  channelBulkEditModalEl: "#channel-bulk-edit-modal",
+  channelBulkEditFormEl: "#channel-bulk-edit-form",
+  channelBulkEditTitleEl: "#channel-bulk-edit-title",
+  channelBulkEditMessageEl: "#channel-bulk-edit-message",
+  channelBulkEditGridEl: "#channel-bulk-edit-grid",
+  channelBulkEditCancelEl: "#channel-bulk-edit-cancel",
+  channelBulkEditApplyEl: "#channel-bulk-edit-apply",
   repeaterQueryModalEl: "#repeater-query-modal",
   repeaterQueryFormEl: "#repeater-query-form",
   repeaterQueryTitleEl: "#repeater-query-title",

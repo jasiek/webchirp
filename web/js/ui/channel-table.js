@@ -106,6 +106,14 @@ export function createChannelTable({ dom, state, log, actions }) {
     return indexes.map((idx) => state.currentRows[idx]).filter(Boolean);
   }
 
+  // The rows explicitly selected, or an empty array with none -- unlike
+  // selectedRowsForOperations() above, which falls back to every row and so
+  // is wrong for an action that must never run with no selection (bulk-edit
+  // silently rewriting the whole codeplug because nothing was checked).
+  function selectedChannelRows() {
+    return sortedSelectedRowIndexes().map((idx) => state.currentRows[idx]);
+  }
+
   function resetRowSelection() {
     selectedRowIndexes.clear();
     selectionAnchorIndex = null;
@@ -1397,6 +1405,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     clearInvalidHighlights,
     applyValidationIssues,
     selectedRowsForOperations,
+    selectedChannelRows,
     hasRealChannels,
     reconcileLocations,
     sortRowsByLocation,

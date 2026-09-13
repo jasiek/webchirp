@@ -200,6 +200,12 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
     description: "CHIRP settings group opened in the radio settings editor.",
     scope: "EVENT",
   },
+  {
+    parameterName: "field_count",
+    displayName: "Bulk edit field count",
+    description: "How many attribute or extra-setting fields a bulk channel edit checked and applied.",
+    scope: "EVENT",
+  },
 ].map(Object.freeze));
 
 // Display modes reported through the display-mode media feature, most app-like
