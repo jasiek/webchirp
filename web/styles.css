@@ -1512,6 +1512,27 @@ button:disabled {
   color: var(--muted);
 }
 
+/* How many repeaters the squares on the map add up to. Sits between the map and
+   the attribution, because it is a caption for the map rather than part of the
+   OSM credit. */
+.modal-map-preview-count {
+  margin: 0;
+  padding: 0.25rem 0.45rem 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* While a preview is in flight the squares already drawn stay put -- blanking
+   the map on every edit would flicker through each keystroke of a radius -- so
+   the count is the only thing that says the number is about to change. */
+.modal-map-preview-count.is-loading {
+  opacity: 0.55;
+}
+
+.modal-map-preview-count[hidden] {
+  display: none;
+}
+
 /* Any author `display` beats the user agent's own [hidden] rule, so a flex
    stand-in stays on screen next to the map it was meant to stand in for
    unless the attribute is honoured explicitly here. */
@@ -1905,6 +1926,39 @@ button:disabled {
 /* The search radius a repeater query will use, drawn around the marker.
    web/js/ui/static-map-view.js sizes it in pixels from the ground radius; the
    fill is faint enough to read the map through. */
+/* One repeater the current filters would return, on the query modal's preview
+   map (web/js/ui/static-map-view.js). A square, not a dot, because that is what
+   many of these positions honestly are: a directory that publishes only a
+   4-character locator places a station within a box, and a dot would present
+   that guess as a survey. Small enough that a dense city stays readable as a
+   cluster rather than a blob. */
+.repeater-map-pin {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  transform: translate(-50%, -50%);
+  background: var(--accent);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
+
+/* Inside the map but outside the range ring: what a wider search would add.
+   Drawn faintly, so it reads as context for the radius rather than as a result
+   -- the count under the map is where these are actually tallied. */
+.repeater-map-pin.is-out-of-range {
+  opacity: 0.4;
+}
+
+/* A position derived from a 4-character locator, which names a box some 111 km
+   across rather than a point. Hollow, so the difference between "here" and
+   "somewhere around here" is visible on the map and not only in the row the
+   import later writes. */
+.repeater-map-pin.is-approximate {
+  background: transparent;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75);
+}
+
 .repeater-map-range {
   position: absolute;
   left: 50%;

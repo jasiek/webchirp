@@ -37,6 +37,16 @@ function resolveRepeaterApiBase() {
 // circle, which is why this is one constant rather than a guess per source.
 const RANGE_FIELD_KEY = "radius";
 
+// How long the form must sit still before the map preview asks a directory what
+// is out there. Unlike the city autocomplete -- which dropped its debounce
+// because a lookup is one small request -- this one repeats the query the
+// Query API button would run: a single request for the proxied directories, but
+// up to nine of roughly 75 kB each for RSGB's locator fan-out. A drag also
+// rewrites the coordinates on every pointermove. So the delay is set by what a
+// wasted preview costs rather than by what the user can feel, and it is long
+// enough to let a gesture or a typed number finish first.
+const PREVIEW_QUERY_DEBOUNCE_MS = 600;
+
 const FIELD_FACTORIES = {
   select: createSelectField,
   fixed: createFixedField,
@@ -172,6 +182,7 @@ export function createRepeaterQuery(ctx) {
               cityState.city = null;
               cityField?.clear();
             }
+            schedulePreview();
           },
           // Counted next to repeater_geolocate, so the three ways of setting a
           // position can be compared. Which source was open, never where the
@@ -195,6 +206,14 @@ export function createRepeaterQuery(ctx) {
       fieldInstances.push(instance);
     }
     bindRangeToPreview();
+    // One listener for every control the fields built, rather than a hook per
+    // field factory: the grid is rebuilt on each open, so this re-binds with it,
+    // and a field kind added later is previewed without having to know about
+    // this at all. Both event types, because a checkbox and a select report on
+    // "change" while a text or number box reports on "input".
+    for (const type of ["input", "change"]) {
+      dom.repeaterQueryGridEl.addEventListener(type, schedulePreview);
+    }
   }
 
   // Feed the range filter's value to the position field, which draws it as a
@@ -210,6 +229,63 @@ export function createRepeaterQuery(ctx) {
     const applyRange = () => positionField.setRangeKm(range.value());
     range.input.addEventListener("input", applyRange);
     applyRange();
+  }
+
+  // Ask the active source what its current filters would return, and hand the
+  // positions to the map. Nothing here can fail the form: a preview is a hint,
+  // so a directory that refuses one leaves the map as it was and says so under
+  // it, with the reason in the debug panel and nothing in the status line.
+  //
+  // Generation-counted like openModal, and for the same reason twice over: an
+  // edit during a slow preview supersedes it, and so does switching to another
+  // directory, whose answer must never be drawn under the first one's filters.
+  let previewGeneration = 0;
+  let previewTimer = 0;
+
+  async function runPreview(source, values) {
+    const generation = previewGeneration;
+    positionField?.setMarkers(null, "loading");
+    let result = null;
+    try {
+      result = await source.previewQuery(values);
+    } catch (error) {
+      if (generation !== previewGeneration) {
+        return;
+      }
+      positionField?.setMarkers(null, "failed");
+      log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW FAILED ${error.message}`);
+      return;
+    }
+    if (generation !== previewGeneration) {
+      return;
+    }
+    positionField?.setMarkers(result?.points || [], "ok");
+    log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW ${result?.points?.length ?? 0} repeater(s)`);
+  }
+
+  // Called by every control in the form. The work is deferred, so a drag that
+  // fires this on each pointermove still costs one preview.
+  function schedulePreview() {
+    previewGeneration += 1;
+    if (previewTimer) {
+      clearTimeout(previewTimer);
+    }
+    if (!isModalOpen() || typeof activeSource?.previewQuery !== "function") {
+      return;
+    }
+    const values = collectValues();
+    // No position is not a failed preview, it is a form not yet filled in: the
+    // map is showing its stand-in line, and a count under it would be counting
+    // nothing.
+    if (!values.position) {
+      positionField?.setMarkers([], "off");
+      return;
+    }
+    const source = activeSource;
+    previewTimer = setTimeout(() => {
+      previewTimer = 0;
+      runPreview(source, values);
+    }, PREVIEW_QUERY_DEBOUNCE_MS);
   }
 
   function collectValues() {
@@ -230,6 +306,17 @@ export function createRepeaterQuery(ctx) {
       // element is zero-sized. Same reason web/js/ui/repeater-map.js shows its
       // modal before sizing the map inside it.
       positionField?.refreshPreview();
+      // The position survives a close, so a reopened modal usually already has
+      // one — and the map should show what is out there without waiting to be
+      // touched.
+      schedulePreview();
+    } else {
+      // Nothing in flight may land on a closed modal, or on the next one.
+      previewGeneration += 1;
+      if (previewTimer) {
+        clearTimeout(previewTimer);
+        previewTimer = 0;
+      }
     }
   }
 

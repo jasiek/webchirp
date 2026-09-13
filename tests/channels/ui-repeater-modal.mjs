@@ -1558,3 +1558,177 @@ test("moving the position by hand drops the city name it no longer describes", a
   assert.equal(fieldByName(dom, "city").value, "", "and it stays dropped on reopen");
   assert.equal(fieldByName(dom, "latitude").value, "51.5");
 });
+
+// --- Map preview of what a query would return --------------------------------
+
+// Two repeaters near Kraków: one about 10 km out, one about 40 km. The preview
+// asks the directory for 1.5x the chosen radius, so at 30 km both come back and
+// the second is the one the ring excludes.
+const PREVIEW_RXF = `
+  <rxf><perspective>radio</perspective><repeaters>
+    <repeater>
+      <qra>SR6NEAR</qra><mode>fm</mode>
+      <qrg type="rx">145.6</qrg><qrg type="tx">145</qrg>
+      <location><latitude>50.15</latitude><longitude>19.94</longitude></location>
+    </repeater>
+    <repeater>
+      <qra>SR6FAR</qra><mode>fm</mode>
+      <qrg type="rx">145.7</qrg><qrg type="tx">145.1</qrg>
+      <location><latitude>50.42</latitude><longitude>19.94</longitude></location>
+    </repeater>
+  </repeaters></rxf>
+`;
+
+// The preview waits for the form to settle before asking anything
+// (PREVIEW_QUERY_DEBOUNCE_MS, 600 ms), so a test that edits has to outwait it.
+function afterPreviewQuery() {
+  return new Promise((resolve) => setTimeout(resolve, 750));
+}
+
+// A position no other test in this file uses, so a preview can be attributed to
+// the test that asked for it. Tests here end with their modal still open, and a
+// preview it scheduled fires on a real timer -- into whichever fetch stub is
+// installed by then. That is honest behaviour for a modal that is still on
+// screen, so the tests identify their own request rather than the code
+// pretending an open form stops previewing.
+const PREVIEW_LAT = 49.5;
+const PREVIEW_LON = 20.5;
+
+function previewCalls(calls, match) {
+  return calls.filter((call) => call.url.includes(match)
+    && !call.url.includes("/meta")
+    && call.url.includes(`latitude=${PREVIEW_LAT}&`));
+}
+
+// Edit one control the way a browser reports it. The fields' own listeners sit
+// on the control, while the preview listens once on the grid and relies on the
+// event bubbling there -- and the fake DOM has no bubbling, so the dispatch is
+// repeated at the delegating element with `target` set, which is exactly what a
+// real browser hands that listener.
+async function editField(dom, name, value) {
+  const field = fieldByName(dom, name);
+  field.value = String(value);
+  await field.dispatch("input");
+  await grid(dom).dispatch("input", { target: field });
+}
+
+async function setPreviewPosition(dom) {
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = String(PREVIEW_LAT);
+  await latitude.dispatch("input");
+  const longitude = fieldByName(dom, "longitude");
+  longitude.value = String(PREVIEW_LON);
+  await longitude.dispatch("input");
+}
+
+test("setting a position previews what the filters would return", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+
+  const preview = previewCalls(calls, "/przemienniki");
+  assert.equal(preview.length, 1);
+  // Half again the chosen radius, so the map can show what a wider search
+  // would add rather than only what this one keeps.
+  assert.equal(new URL(preview[0].url).searchParams.get("range"), "45");
+  // The filters are the form's own, not a bare position query.
+  assert.equal(new URL(preview[0].url).searchParams.get("band"), "2m,70cm");
+});
+
+test("a burst of edits costs one preview, not one per keystroke", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  for (const value of ["40", "50", "60"]) {
+    await editField(dom, "radius", value);
+  }
+  await afterPreviewQuery();
+
+  // A drag rewrites the coordinates on every pointermove and RSGB's fan-out is
+  // nine requests wide, so this delay is what makes the feature affordable.
+  assert.equal(previewCalls(calls, "/przemienniki").length, 1);
+  assert.equal(new URL(previewCalls(calls, "/przemienniki")[0].url).searchParams.get("range"), "90");
+});
+
+test("an unchanged search redraws from cache instead of asking again", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+  const first = previewCalls(calls, "/przemienniki").length;
+
+  // Close and reopen on the same position and filters: the request would be
+  // byte for byte the one already answered.
+  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await afterPreviewQuery();
+
+  assert.equal(previewCalls(calls, "/przemienniki").length, first);
+});
+
+test("a preview is never issued for a form with no position", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await editField(dom, "radius", "50");
+  await afterPreviewQuery();
+
+  assert.equal(previewCalls(calls, "/przemienniki").length, 0);
+});
+
+test("a directory that refuses a preview leaves the form usable", async () => {
+  const { dom, log, table } = buildHarness();
+  installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", ok: false, status: 503, body: "down" },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+
+  // A preview is a hint. It must not read as a failed query: nothing was asked
+  // for, the modal stays open, and the status line is left for the real one.
+  assert.deepEqual(log.errors, []);
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false);
+  assert.equal(table.inserted.length, 0);
+  assert.ok(log.debug.some((line) => /PREVIEW FAILED/.test(line)), "the reason reaches the debug panel");
+});
+
+test("closing the modal abandons a preview still in flight", async () => {
+  const { dom } = buildHarness();
+  installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  // Inside the debounce window, so the request has not gone out yet.
+  await dom.repeaterQueryCancelEl.dispatch("click");
+  await afterPreviewQuery();
+
+  // Nothing to assert on the map — the point is that no error and no stray
+  // render follow a modal that is gone.
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
+});

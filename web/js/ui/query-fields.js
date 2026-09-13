@@ -285,10 +285,18 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   previewEmpty.className = "modal-map-preview-empty";
   previewEmpty.textContent = "Set a latitude and longitude to preview the location.";
   const previewAttribution = createMapAttribution();
+  // What the squares on the map add up to. The map shows where they are; this
+  // says how many, which is the number that decides whether to widen the radius
+  // or narrow the filters — and it is the only place the out-of-range ones are
+  // counted rather than merely dimmed.
+  const previewCount = document.createElement("p");
+  previewCount.className = "modal-map-preview-count";
+  previewCount.hidden = true;
   const preview = document.createElement("div");
   preview.className = "modal-map-preview";
   preview.appendChild(previewCanvas);
   preview.appendChild(previewEmpty);
+  preview.appendChild(previewCount);
   preview.appendChild(previewAttribution);
 
   function currentPosition() {
@@ -325,6 +333,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     previewEmpty.hidden = Boolean(position);
     if (!position) {
       previewCanvas.innerHTML = "";
+      updateCount(null);
       return;
     }
     const radiusMetres = Number.isFinite(rangeKm) && rangeKm > 0 ? rangeKm * 1000 : 0;
@@ -333,13 +342,15 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     lastPreviewZoom = zoomForRadius(position.latitude, radiusMetres, lastPreviewWidth, {
       fill: PREVIEW_RANGE_FILL,
     }) ?? PREVIEW_ZOOM;
-    renderStaticMap(previewCanvas, position, {
+    const { drawn } = renderStaticMap(previewCanvas, position, {
       zoom: lastPreviewZoom,
       width: lastPreviewWidth,
       height: lastPreviewWidth,
       radiusMetres,
       overscan: PREVIEW_OVERSCAN,
+      markers,
     });
+    updateCount(drawn);
   }
 
   let previewTimer = 0;
@@ -354,6 +365,42 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // field entirely (Range/Distance), so the modal shell pushes it in here —
   // see setRangeKm.
   let rangeKm = Number.NaN;
+  // Repeaters to plot, pushed in by the shell after it previews the query the
+  // form currently describes. Held here rather than fetched here for the reason
+  // every other field holds nothing it did not build: this file contacts no
+  // directory. See setMarkers.
+  let markers = [];
+  // What the caption should say about the squares, independent of them:
+  // "ok" once an answer is drawn, "loading" while the next is being fetched,
+  // "failed" when it could not be, "off" when there is nothing to preview.
+  let previewState = "off";
+  // The tally from the last render, so a caption rewritten without a redraw
+  // (a preview starting or failing) still describes the squares on screen.
+  let lastDrawn = null;
+
+  // Caption the map with what is drawn on it, not with what was handed in: a
+  // station the radius reaches but the viewport does not is real, and promising
+  // it under a map that has no square for it is worse than not counting it.
+  function updateCount(drawn) {
+    lastDrawn = drawn;
+    previewCount.hidden = previewState === "off" || !drawn;
+    previewCount.classList.toggle("is-loading", previewState === "loading");
+    if (previewState === "failed") {
+      previewCount.textContent = "Could not preview this search.";
+      previewCount.hidden = false;
+      return;
+    }
+    if (!drawn) {
+      return;
+    }
+    if (previewState === "loading" && drawn.inRange === 0 && drawn.outOfRange === 0) {
+      previewCount.textContent = "Looking for repeaters...";
+      return;
+    }
+    previewCount.textContent = drawn.outOfRange > 0
+      ? `${drawn.inRange} in range, ${drawn.outOfRange} just outside`
+      : `${drawn.inRange} in range`;
+  }
 
   function schedulePreview() {
     // A drag writes the coordinate fields on every pointermove; redrawing
@@ -593,6 +640,23 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       }
       rangeKm = next;
       schedulePreview();
+    },
+    // Plot what the current filters would return. `state` is "loading" while a
+    // preview is in flight, "ok" with points, or "failed"/"off" when there is
+    // nothing to show — the squares already drawn stay put while the next
+    // answer is fetched, because blanking the map on every edit would make it
+    // flicker through every keystroke of a radius.
+    setMarkers: (points, state = "ok") => {
+      previewState = state;
+      if (state === "ok") {
+        markers = Array.isArray(points) ? points : [];
+        refreshPreview();
+        return;
+      }
+      // The other states change only the caption, so the map is left alone
+      // rather than redrawn — a redraw would refetch the tile grid to say
+      // "loading".
+      updateCount(lastDrawn);
     },
     value: () => currentPosition(),
     setPosition: applyPosition,

@@ -283,3 +283,35 @@ Notes found while wiring the City/Locality autocomplete:
 - There is no country filter — neither `cc` nor `country` narrows the results.
 - CORS allows `http://localhost:<port>` origins, so the autocomplete works
   against a local dev server (unlike `/przemienniki` and `/repeaterbook`).
+
+## Cost of previewing a repeater query
+
+The query modal's map preview repeats the query the Query API button would run,
+so its affordability is the whole design constraint. Measured against the live
+services:
+
+- `api.codeplug.org/przemienniki` for a 30 km radius: ~9 kB, ~210 ms. A 100 km
+  radius is ~15 kB at the same latency. One request regardless of radius.
+- `api-beta.rsgb.online/locator/<square>`: ~76 kB **per locator square**, ~290 ms.
+  A radius spans several squares (`squaresForRadius`, capped at 24), so an RSGB
+  preview is 1-9 requests of that size. This is why the preview is debounced at
+  600 ms and why RSGB caches per square: nudging the radius or dragging inside
+  the squares already held costs nothing, and widening to 200 km fetched only
+  the 10 genuinely new squares rather than all 24.
+- The proxied directories filter by distance upstream, so a preview asking for
+  exactly the chosen radius could only ever draw stations inside the ring. The
+  preview asks for 1.5x and dims the rest, which costs one larger body on the
+  same single request.
+- The map viewport reaches `radius / PREVIEW_RANGE_FILL` = 1.11x the radius on
+  the cardinal axes, so some of what 1.5x fetches is off-screen. The caption
+  therefore counts what `renderStaticMap` actually drew, not what it was handed.
+
+### Test harness note
+
+`tests/support/fake-dom.mjs` has no event bubbling, so a listener delegated to a
+container never sees an event dispatched at a child. Tests dispatch at the
+delegating element with `target` set (see `editField` in
+`tests/channels/ui-repeater-modal.mjs`). Separately, tests in that file end with
+the modal still open, so a debounced preview they scheduled fires on a real
+timer into whichever fetch stub is installed by then — preview assertions
+identify their own request by a position no other test uses.

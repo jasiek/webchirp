@@ -2,6 +2,7 @@ import {
   OSM_ATTRIBUTION,
   OSM_COPYRIGHT_URL,
   OSM_TILE_SIZE,
+  latLonToWorldPixel,
   metresPerPixel,
   osmTileUrl,
   planStaticMap,
@@ -35,7 +36,17 @@ import {
 // the viewport's own overflow. A map nobody can move needs none; a draggable
 // one needs it, or the first pixel of a drag exposes blank canvas at the
 // trailing edge before any redraw could cover it.
-export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetres = 0, overscan = 0 }) {
+//
+// `markers` are other positions to plot on the map — the repeaters a query
+// would return, for the query modal's preview. Each is
+// { latitude, longitude, inRange?, approximate? }: `inRange` false dims it, so
+// stations just outside the ring show what widening the radius would add, and
+// `approximate` marks a position that is really a locator box rather than a
+// surveyed point. They are drawn as small squares rather than dots for that
+// second reason — a good half of the RSGB directory only publishes a
+// 4-character locator, which places a station within a box some 111 km across,
+// and a dot would present that guess as a survey.
+export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetres = 0, overscan = 0, markers = [] }) {
   canvasEl.innerHTML = "";
   canvasEl.style.width = `${width}px`;
   canvasEl.style.height = `${height}px`;
@@ -76,10 +87,46 @@ export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetr
     range.style.height = `${diameter}px`;
     canvasEl.appendChild(range);
   }
+  // Between the ring and the centre marker: over the ring it is being judged
+  // against, under the marker for the position being chosen.
+  //
+  // Tallied as they are drawn and handed back, so a caller captioning the map
+  // counts what is on it. Counting its own input instead would promise squares
+  // the viewport never had room for.
+  const drawn = { inRange: 0, outOfRange: 0 };
+  if (markers.length > 0) {
+    // The centre of the viewport is the centre of the map, so a marker's offset
+    // from it is the difference between the two world pixels at this zoom.
+    const origin = latLonToWorldPixel(geo.latitude, geo.longitude, zoom);
+    for (const entry of markers) {
+      const point = latLonToWorldPixel(entry.latitude, entry.longitude, zoom);
+      const left = (width / 2) + (point.x - origin.x);
+      const top = (height / 2) + (point.y - origin.y);
+      // Off the viewport entirely. The range ring is framed to fit, so this is
+      // a station the radius reaches but the map does not, and a square pinned
+      // to the edge would read as one sitting on the boundary.
+      if (left < 0 || top < 0 || left > width || top > height) {
+        continue;
+      }
+      const pin = document.createElement("div");
+      pin.className = "repeater-map-pin";
+      if (entry.inRange === false) {
+        pin.classList.add("is-out-of-range");
+      }
+      if (entry.approximate) {
+        pin.classList.add("is-approximate");
+      }
+      pin.style.left = `${left}px`;
+      pin.style.top = `${top}px`;
+      canvasEl.appendChild(pin);
+      drawn[entry.inRange === false ? "outOfRange" : "inRange"] += 1;
+    }
+  }
   // Last, so the point stays legible over both the tiles and the ring.
   const marker = document.createElement("div");
   marker.className = "repeater-map-marker";
   canvasEl.appendChild(marker);
+  return { drawn };
 }
 
 // The OSM tile policy wants the credit to reach the licence, so the

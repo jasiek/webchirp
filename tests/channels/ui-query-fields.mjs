@@ -161,7 +161,7 @@ function buildPositionField(config = {}) {
   });
   const [, latitude, , longitude, , geoRow, preview] = field.nodes;
   const locator = geoRow.children[0];
-  const [previewCanvas, previewEmpty, previewAttribution] = preview.children;
+  const [previewCanvas, previewEmpty, previewCount, previewAttribution] = preview.children;
   return {
     field,
     latitude,
@@ -172,6 +172,7 @@ function buildPositionField(config = {}) {
     preview,
     previewCanvas,
     previewEmpty,
+    previewCount,
     previewAttribution,
     pans,
   };
@@ -1019,4 +1020,88 @@ test("a failed lookup is not cached, so the next keystroke retries", async () =>
 
   assert.deepEqual(calls, ["manch", "manch"]);
   assert.equal(list.hidden, false);
+});
+
+// --- Repeaters plotted on the preview ----------------------------------------
+
+function pinsIn(canvas) {
+  return canvas.children.filter((child) => String(child.className).startsWith("repeater-map-pin"));
+}
+
+// buildDraggableField centres on 52.0, -2.0 at a 30 km radius, so these are
+// placed by hand relative to that: a degree of latitude is ~111 km. The ring
+// fills 0.9 of the map's width (PREVIEW_RANGE_FILL), so the viewport reaches
+// 30/0.9 = 33.3 km north and south -- which leaves only 30-33.3 km for a
+// marker that is outside the ring and still on the map.
+const NEAR = { latitude: 52.05, longitude: -2.0, inRange: true };
+const ALSO_NEAR = { latitude: 51.96, longitude: -2.04, inRange: true };
+const BEYOND_RING = { latitude: 52.28, longitude: -2.0, inRange: false };
+const OFF_MAP = { latitude: 55.0, longitude: -2.0, inRange: false };
+
+test("setMarkers draws one square per repeater and captions the map", () => {
+  const { field, previewCanvas, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR, ALSO_NEAR, BEYOND_RING]);
+
+  assert.equal(pinsIn(previewCanvas).length, 3);
+  assert.equal(previewCount.hidden, false);
+  assert.equal(previewCount.textContent, "2 in range, 1 just outside");
+});
+
+test("a repeater outside the ring is dimmed rather than dropped", () => {
+  const { field, previewCanvas } = buildDraggableField();
+  field.setMarkers([NEAR, BEYOND_RING]);
+
+  const dimmed = pinsIn(previewCanvas).filter((pin) => pin.classList.contains("is-out-of-range"));
+  assert.equal(dimmed.length, 1, "the one the radius excludes shows what widening would add");
+});
+
+test("a position that is really a locator box is marked as approximate", () => {
+  const { field, previewCanvas } = buildDraggableField();
+  field.setMarkers([{ ...NEAR, approximate: true }, ALSO_NEAR]);
+
+  const approximate = pinsIn(previewCanvas).filter((pin) => pin.classList.contains("is-approximate"));
+  assert.equal(approximate.length, 1);
+});
+
+test("the caption counts the squares on the map, not the ones handed in", () => {
+  const { field, previewCanvas, previewCount } = buildDraggableField();
+  // OFF_MAP is inside a wide search but far outside the viewport the ring is
+  // framed to. Counting it would promise a square the map has no room for.
+  field.setMarkers([NEAR, OFF_MAP]);
+
+  assert.equal(pinsIn(previewCanvas).length, 1);
+  assert.equal(previewCount.textContent, "1 in range");
+});
+
+test("a preview in flight keeps the squares already drawn and says so", () => {
+  const { field, previewCanvas, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR, ALSO_NEAR]);
+  field.setMarkers(null, "loading");
+
+  // Blanking the map on every edit would flicker it through each keystroke of
+  // a radius, so only the caption changes.
+  assert.equal(pinsIn(previewCanvas).length, 2);
+  assert.equal(previewCount.classList.contains("is-loading"), true);
+  assert.equal(previewCount.textContent, "2 in range");
+});
+
+test("a preview that could not run says so without clearing the map", () => {
+  const { field, previewCanvas, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR]);
+  field.setMarkers(null, "failed");
+
+  assert.equal(pinsIn(previewCanvas).length, 1);
+  assert.equal(previewCount.hidden, false);
+  assert.equal(previewCount.textContent, "Could not preview this search.");
+});
+
+test("clearing the location takes the squares and the caption with it", async () => {
+  const { field, previewCanvas, previewCount, geoRow } = buildDraggableField();
+  field.setMarkers([NEAR, ALSO_NEAR]);
+
+  await geoRow.children[2].dispatch("click");
+  await afterPreviewDebounce();
+
+  assert.equal(pinsIn(previewCanvas).length, 0);
+  assert.equal(previewCount.hidden, true);
 });
