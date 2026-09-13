@@ -31,6 +31,19 @@ import {
   selectRadioBySearch,
 } from "../support/fake-dom.mjs";
 
+// A dropped file, in the shape the drop handler reads it.
+function fakeFile(name, bytes = [1, 2, 3]) {
+  return {
+    name,
+    text: async () => "Location,Name,Frequency,Power\n1,BEFORE,145.500000,\n",
+    arrayBuffer: async () => new Uint8Array(bytes).buffer,
+  };
+}
+
+function dropEvent(file) {
+  return { dataTransfer: { types: ["Files"], files: [file] } };
+}
+
 const RT98 = {
   vendor: "Retevis",
   model: "RT98",
@@ -152,4 +165,67 @@ test("a download re-reads the schema, so the levels it just read survive", async
   // The row keeps what the radio reported. Before the refresh the grid still
   // held the blank schema, and applying it cleared every level not in it.
   assert.equal(powerSelect.value, "High");
+});
+
+test("an import whose schema refresh fails leaves the previous channels alone", async () => {
+  const { document, window } = installFakeDom();
+  const { createUiController } = await import("../../web/js/ui.js");
+  const ui = createUiController();
+
+  const headers = ["Location", "Name", "Frequency", "Power"];
+  let imageLoaded = false;
+
+  ui.setRuntimeApi({
+    listRadios: async () => ({ radios: [RT98] }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultSchema: async () => ({ headers, columns: {} }),
+    // The image is cached by the time the grid asks for the schema it implies,
+    // so this is that refresh failing with an import already half-applied.
+    getRadioMetadata: async () => {
+      if (imageLoaded) {
+        throw new Error("metadata unavailable");
+      }
+      return { headers, columns: {} };
+    },
+    getRadioSettings: async () => ({
+      supported: false,
+      available: false,
+      requiresImage: false,
+      message: "",
+      groups: [],
+    }),
+    parseCsv: async () => ({
+      headers,
+      rows: [{ Location: "1", Name: "BEFORE", Frequency: "145.500000", Power: "" }],
+      errors: [],
+    }),
+    loadImage: async () => {
+      imageLoaded = true;
+      return {
+        module: RT98.module,
+        className: RT98.className,
+        vendor: RT98.vendor,
+        model: RT98.model,
+        headers,
+        rows: [{ Location: "1", Name: "AFTER", Frequency: "446.006250", Power: "Low" }],
+        settings: [],
+      };
+    },
+  });
+
+  await ui.init(true);
+  await window.emit("drop", dropEvent(fakeFile("before.csv")));
+  await flushMicrotasks();
+  assert.deepEqual(ui.selectedRowsForOperations().map((row) => row.Name), ["BEFORE"]);
+
+  await window.emit("drop", dropEvent(fakeFile("codeplug.img")));
+  await flushMicrotasks();
+
+  // The import is reported as failed and never re-renders, so the rows behind
+  // the grid have to be the ones it is still showing: an editor displaying the
+  // old codeplug while an export or upload wrote the new one is worse than
+  // either outcome on its own.
+  assert.match(document.querySelector("#debug-output").value, /File drop failed/);
+  assert.deepEqual(ui.selectedRowsForOperations().map((row) => row.Name), ["BEFORE"]);
+  assert.deepEqual(channelRows(document).map((tr) => tr.children[1].children[0].value), ["BEFORE"]);
 });
