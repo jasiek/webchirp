@@ -1308,6 +1308,14 @@ export function createChannelTable({ dom, state, log, actions }) {
     dom.channelPasteEl.addEventListener("click", async () => {
       await pasteChannelsViaApi();
     });
+    dom.channelBulkEditEl.addEventListener("click", () => {
+      const selectedRows = sortedSelectedRowIndexes().map((idx) => state.currentRows[idx]);
+      if (selectedRows.length === 0) {
+        log.setStatus("Select one or more channels to edit them in bulk.");
+        return;
+      }
+      actions.openBulkEdit(selectedRows, dom.channelBulkEditEl);
+    });
     dom.channelAddGmrsEl.addEventListener("click", () => {
       addBandPlanChannels(buildGmrsRows, "GMRS");
     });
