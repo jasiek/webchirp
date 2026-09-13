@@ -1,3 +1,4 @@
+import { withRequestTimeout } from "./request-timeout.js";
 import { setRowGeo } from "./row-geo.js";
 
 const PMR446_FREQUENCIES_MHZ = Array.from(
@@ -92,7 +93,106 @@ function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
       apiUrl: `${irtsBase}/irts`,
       metaUrl: `${irtsBase}/irts/meta`,
     },
+    // The gazetteer behind the City/Locality autocomplete. It follows the IRTS
+    // rule rather than the proxy rule: it is a first-party api.codeplug.org
+    // route and it is not a directory at all -- it only turns a place name into
+    // the coordinate pair every source already filters by -- so a deployment
+    // that blanks the base to switch off the two proxied directories keeps its
+    // city lookup.
+    cities: `${irtsBase}/cities`,
   };
+}
+
+// Longest a city suggestion request may run before it is abandoned. Far shorter
+// than REPEATER_REQUEST_TIMEOUT_MS because this one fires on a keystroke: its
+// whole failure mode is a drop-down that stays empty, and a suggestion list that
+// arrives after the user has finished typing is worth nothing, so holding a
+// stalled connection for ten seconds would only cost tile-sized requests their
+// slot in the browser's connection pool.
+const CITY_SUGGEST_TIMEOUT_MS = 4000;
+
+// How many suggestions to ask for. The endpoint caps its own limit at 20, so
+// this is both the most the drop-down can show and the most it can receive.
+export const CITY_SUGGEST_LIMIT = 20;
+
+// Look up place names matching `query` in the api.codeplug.org gazetteer.
+//
+// `near` is an optional { latitude, longitude } the endpoint uses to rank
+// nearby places above distant namesakes -- "London" from Merseyside should not
+// be Londrina. The endpoint takes lat and lon together or not at all (it answers
+// "lat and lon must be given together" otherwise), so a half-known position is
+// sent as no hint rather than as a point on a meridian.
+//
+// Results are normalized to the shape the UI needs, with the endpoint's `lon`
+// renamed to `longitude` so it matches every other position in this app. An
+// entry without a usable coordinate pair is dropped: its only purpose here is
+// to set one.
+export async function fetchCitySuggestions(citiesUrl, query, near = null) {
+  const text = String(query ?? "").trim();
+  if (!citiesUrl || text.length === 0) {
+    return [];
+  }
+  const url = new URL(citiesUrl);
+  url.searchParams.set("q", text);
+  url.searchParams.set("limit", String(CITY_SUGGEST_LIMIT));
+  const latitude = Number(near?.latitude);
+  const longitude = Number(near?.longitude);
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    url.searchParams.set("lat", String(latitude));
+    url.searchParams.set("lon", String(longitude));
+  }
+  // The body is read inside the deadline for the same reason every other
+  // directory request reads it there: fetch() resolves on headers alone.
+  const body = await withRequestTimeout("City lookup", async (signal) => {
+    const response = await fetch(url.toString(), { signal });
+    if (!response.ok) {
+      throw new Error(`City lookup failed: HTTP ${response.status}`);
+    }
+    return response.text();
+  }, CITY_SUGGEST_TIMEOUT_MS);
+  return parseCitySuggestions(body);
+}
+
+// Number(null) and Number("") are both 0, not NaN, so a gazetteer entry with a
+// missing coordinate would otherwise pass every finiteness check and place the
+// city on the equator. Only an actual number, or a string that parses as one,
+// counts as a coordinate here.
+function coordinate(value) {
+  if (value === null || value === undefined || value === "") {
+    return Number.NaN;
+  }
+  return Number(value);
+}
+
+// Split out from the fetch so the parsing is testable without a network stub,
+// and so a malformed body is one readable error rather than a JSON.parse
+// stack. The endpoint reports its own failures as { error: "..." } with a 200,
+// which is why that case is checked before the result list.
+export function parseCitySuggestions(jsonText) {
+  let payload;
+  try {
+    payload = JSON.parse(String(jsonText || ""));
+  } catch (error) {
+    throw new Error(`City lookup returned invalid JSON: ${error.message}`);
+  }
+  if (payload && typeof payload.error === "string") {
+    throw new Error(`City lookup failed: ${payload.error}`);
+  }
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  return results
+    .map((entry) => ({
+      id: String(entry?.id ?? ""),
+      name: String(entry?.name ?? "").trim(),
+      region: String(entry?.region ?? "").trim(),
+      country: String(entry?.country ?? "").trim(),
+      countryCode: String(entry?.cc ?? "").trim().toUpperCase(),
+      latitude: coordinate(entry?.lat),
+      longitude: coordinate(entry?.lon),
+    }))
+    .filter((entry) => entry.name.length > 0
+      && Number.isFinite(entry.latitude)
+      && Number.isFinite(entry.longitude))
+    .slice(0, CITY_SUGGEST_LIMIT);
 }
 
 function parseXmlDocument(xmlText) {

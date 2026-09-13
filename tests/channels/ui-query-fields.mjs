@@ -14,6 +14,7 @@ const {
   createFixedField,
   createCheckboxGroupField,
   createCheckboxField,
+  createCityField,
   createNumberField,
   createPositionField,
 } = await import("../../web/js/ui/query-fields.js");
@@ -756,4 +757,223 @@ test("a queued redraw is not lost to a press that turns out not to be a drag", a
 
   assert.notEqual(previewCanvas.children[0], stale, "the typed position reached the map");
   assert.equal(field.value().longitude, -2.5);
+});
+
+// --- City/Locality autocomplete ---------------------------------------------
+
+// The field debounces its lookup on a real timer (CITY_DEBOUNCE_MS, 180 ms),
+// so a test that types has to outwait it. The module keeps that constant
+// private, so this is the one place the number is written down twice.
+const CITY_DEBOUNCE_MS = 180;
+
+function afterCityDebounce() {
+  return new Promise((resolve) => setTimeout(resolve, CITY_DEBOUNCE_MS + 60));
+}
+
+const MANCHESTER = {
+  id: "2643123",
+  name: "Manchester",
+  region: "England",
+  country: "United Kingdom",
+  countryCode: "GB",
+  latitude: 53.48095,
+  longitude: -2.23743,
+};
+const MANCHESTER_NH = {
+  id: "5089178",
+  name: "Manchester",
+  region: "New Hampshire",
+  country: "United States",
+  countryCode: "US",
+  latitude: 42.99564,
+  longitude: -71.45479,
+};
+
+// Builds the field over a stub lookup and records every call it makes, so the
+// tests can assert both what reached the endpoint and what came back.
+function buildCityField({ results = [MANCHESTER, MANCHESTER_NH], near = null, fail = null } = {}) {
+  const calls = [];
+  const selections = [];
+  const field = createCityField({
+    search: async (query, hint) => {
+      calls.push({ query, hint });
+      if (fail) {
+        throw fail;
+      }
+      return results;
+    },
+    near: () => near,
+    onSelect: (city) => selections.push(city),
+  });
+  const [, wrapper] = field.nodes;
+  const [input, list, note] = wrapper.children;
+  return { field, input, list, note, calls, selections };
+}
+
+async function typeCity(input, text) {
+  input.value = text;
+  await input.dispatch("input");
+  await afterCityDebounce();
+}
+
+test("city field labels a text input and hides its suggestion list until it has one", () => {
+  const { field, input, list } = buildCityField();
+  const [label, wrapper] = field.nodes;
+  assert.equal(label.tagName, "LABEL");
+  assert.equal(label.textContent, "City/Locality");
+  assert.equal(label.htmlFor, input.id);
+  assert.equal(wrapper.className, "modal-city-field");
+  assert.equal(input.type, "text");
+  assert.equal(input.getAttribute("role"), "combobox");
+  assert.equal(list.hidden, true);
+  assert.equal(field.focusTarget, input);
+  assert.equal(field.value(), null);
+});
+
+test("typing queries the lookup once and lists what it returns", async () => {
+  const { input, list, calls } = buildCityField();
+  await typeCity(input, "manch");
+
+  assert.deepEqual(calls, [{ query: "manch", hint: null }]);
+  assert.equal(list.hidden, false);
+  assert.equal(list.children.length, 2);
+  assert.equal(list.children[0].children[0].textContent, "Manchester");
+  assert.equal(list.children[0].children[1].textContent, "England, United Kingdom");
+  assert.equal(list.children[1].children[1].textContent, "New Hampshire, United States");
+});
+
+test("the top suggestion is highlighted as soon as the list opens", async () => {
+  const { input, list } = buildCityField();
+  await typeCity(input, "manch");
+  assert.equal(list.children[0].classList.contains("is-active"), true);
+  assert.equal(list.children[1].classList.contains("is-active"), false);
+  assert.equal(input.getAttribute("aria-activedescendant"), list.children[0].id);
+});
+
+test("a known position is passed to the lookup as a ranking hint", async () => {
+  const { input, calls } = buildCityField({ near: { latitude: 53.4, longitude: -2.9 } });
+  await typeCity(input, "manch");
+  assert.deepEqual(calls[0].hint, { latitude: 53.4, longitude: -2.9 });
+});
+
+test("Enter commits the highlighted suggestion and never submits the form", async () => {
+  const { field, input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  let defaultPrevented = false;
+  await input.dispatch("keydown", { key: "Enter", preventDefault() { defaultPrevented = true; } });
+
+  assert.equal(defaultPrevented, true, "the modal's form must not submit on this Enter");
+  assert.deepEqual(selections, [MANCHESTER]);
+  assert.equal(field.value(), MANCHESTER);
+  assert.equal(input.value, "Manchester, England, United Kingdom");
+  assert.equal(list.hidden, true);
+});
+
+test("the arrow keys move the highlight and wrap around the list", async () => {
+  const { input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  await input.dispatch("keydown", { key: "ArrowDown", preventDefault() {} });
+  assert.equal(list.children[1].classList.contains("is-active"), true);
+  // Past the end and back to the top, so a long list is never a dead end.
+  await input.dispatch("keydown", { key: "ArrowDown", preventDefault() {} });
+  assert.equal(list.children[0].classList.contains("is-active"), true);
+  await input.dispatch("keydown", { key: "ArrowUp", preventDefault() {} });
+  assert.equal(list.children[1].classList.contains("is-active"), true);
+
+  await input.dispatch("keydown", { key: "Enter", preventDefault() {} });
+  assert.deepEqual(selections, [MANCHESTER_NH]);
+});
+
+test("moving focus away commits the top suggestion", async () => {
+  const { input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+  await input.dispatch("blur");
+
+  assert.deepEqual(selections, [MANCHESTER]);
+  assert.equal(input.value, "Manchester, England, United Kingdom");
+  assert.equal(list.hidden, true);
+});
+
+test("pointing at a suggestion and pressing commits that one, not the top one", async () => {
+  const { input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  let defaultPrevented = false;
+  await list.children[1].dispatch("pointerdown", {
+    preventDefault() { defaultPrevented = true; },
+  });
+
+  // Suppressing the default is what keeps focus in the box, so the blur that
+  // would otherwise fire first cannot commit the wrong entry.
+  assert.equal(defaultPrevented, true);
+  assert.deepEqual(selections, [MANCHESTER_NH]);
+});
+
+test("Escape closes the list without committing and without reaching the modal", async () => {
+  const { field, input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  let propagationStopped = false;
+  await input.dispatch("keydown", {
+    key: "Escape",
+    preventDefault() {},
+    stopPropagation() { propagationStopped = true; },
+  });
+
+  assert.equal(propagationStopped, true, "Escape here must not close the whole modal");
+  assert.equal(list.hidden, true);
+  assert.equal(field.value(), null);
+  assert.deepEqual(selections, []);
+});
+
+test("clearing the box closes the list and asks for nothing", async () => {
+  const { input, list, note, calls } = buildCityField();
+  await typeCity(input, "manch");
+  await typeCity(input, "");
+
+  assert.equal(calls.length, 1, "an empty box is not a query");
+  assert.equal(list.hidden, true);
+  assert.equal(note.hidden, true);
+});
+
+test("a lookup that finds nothing says so instead of leaving a stale list", async () => {
+  const { input, list, note } = buildCityField({ results: [] });
+  await typeCity(input, "zzzz");
+  assert.equal(list.hidden, true);
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, "No matching places.");
+});
+
+test("a failed lookup is reported in the field, not thrown at the modal", async () => {
+  const { input, list, note } = buildCityField({ fail: new Error("HTTP 503") });
+  await typeCity(input, "manch");
+  assert.equal(list.hidden, true);
+  assert.equal(note.hidden, false);
+  assert.match(note.textContent, /City lookup unavailable: HTTP 503/);
+});
+
+test("a slow lookup superseded by a later keystroke never reaches the list", async () => {
+  const pending = [];
+  const field = createCityField({
+    search: (query) => new Promise((resolve) => pending.push({ query, resolve })),
+    near: () => null,
+    onSelect: () => {},
+  });
+  const [, wrapper] = field.nodes;
+  const [input, list] = wrapper.children;
+
+  await typeCity(input, "man");
+  await typeCity(input, "manchester");
+  assert.equal(pending.length, 2);
+
+  // The first request answers last, as a slow one can. Its results describe a
+  // prefix the box no longer holds and must be dropped.
+  pending[1].resolve([MANCHESTER]);
+  pending[0].resolve([MANCHESTER_NH]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(list.children.length, 1);
+  assert.equal(list.children[0].children[1].textContent, "England, United Kingdom");
 });

@@ -265,3 +265,20 @@ holds against the pin the app ships.
 
 *Pinned by tests:*
 - Every element `dom.js` declares exists in `index.html`, every collection selector matches markup, `queryUiElements` reports all missing elements at once, and the UI tests' own stubs stay inside what `dom.js` declares — `tests/channels/dom-selectors.mjs`, `tests/channels/ui-radio-loading.mjs`.
+
+## api.codeplug.org /cities (gazetteer)
+
+`GET https://api.codeplug.org/cities?q=<prefix>` returns
+`{ query, results: [{ id, name, region, country, cc, lat, lon, population?, kind, score }] }`.
+Notes found while wiring the City/Locality autocomplete:
+
+- The longitude key is `lon`, not `lng`.
+- `lat` and `lon` are an optional proximity hint that raises the score of nearby
+  places. They must be sent together; a lone `lat` answers
+  `{"error":"lat and lon must be given together"}` with **HTTP 200**, so an
+  `response.ok` check alone does not catch a bad request. A missing `q` answers
+  the same way.
+- `limit` caps at 20 server-side; asking for 50 still returns 20.
+- There is no country filter — neither `cc` nor `country` narrows the results.
+- CORS allows `http://localhost:<port>` origins, so the autocomplete works
+  against a local dev server (unlike `/przemienniki` and `/repeaterbook`).

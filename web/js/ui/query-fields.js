@@ -599,3 +599,307 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     geolocateButton,
   };
 }
+
+// --- City/Locality autocomplete ---------------------------------------------
+
+// How long after the last keystroke the lookup runs. Short enough that the
+// list feels like it is following the typing, long enough that "manchester" is
+// two or three requests rather than ten.
+const CITY_DEBOUNCE_MS = 180;
+
+// Render one suggestion as the drop-down shows it: the place first, then
+// whatever administrative context distinguishes it from its namesakes. Region
+// is often blank for small places and is skipped rather than left as a stray
+// comma.
+function cityContext(city) {
+  return [city.region, city.country].filter((part) => part && part.length > 0).join(", ");
+}
+
+// Full text of a committed choice, which is what the input then holds. It has
+// to carry the context too: "London" alone in the box would not say which of
+// the four the coordinates below it came from.
+function cityLabel(city) {
+  const context = cityContext(city);
+  return context ? `${city.name}, ${context}` : city.name;
+}
+
+// Text input that suggests place names, and hands the chosen one's coordinates
+// to whoever asked for it. It sets no position itself — it reports the
+// selection through `onSelect(city)` and the modal shell pushes it into the
+// position field, which is what owns latitude, longitude, the locator and the
+// map. That keeps this a fifth way *into* the position rather than a second
+// place that stores one.
+//
+// The pieces the shell injects:
+//   search(query, near)  -> Promise of suggestions; `near` is the position
+//                           hint, or null. Injected because this file contacts
+//                           no service of its own.
+//   near()               -> the current { latitude, longitude } to rank by, or
+//                           null when there is none.
+//   onSelect(city)       -> a suggestion was committed.
+//
+// Commit rules, in the order they fire:
+//   - Enter or a click commits the highlighted suggestion.
+//   - Moving focus away commits it too, so a typist who tabs on does not leave
+//     a half-typed name that means nothing.
+//   - Arrow keys move the highlight; the first suggestion starts highlighted,
+//     which is what makes "type and tab away" land on the best match.
+//   - Escape abandons the list and leaves the text alone.
+export function createCityField({
+  key = "city",
+  label = "City/Locality",
+  placeholder = "e.g. Manchester",
+  search,
+  near,
+  onSelect,
+} = {}) {
+  const input = document.createElement("input");
+  input.id = fieldId(key);
+  input.name = key;
+  input.type = "text";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.placeholder = placeholder;
+  // A combobox rather than a plain text box, so a screen reader announces that
+  // there is a list under it and which entry is current.
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+
+  const list = document.createElement("ul");
+  list.id = fieldId(key, "listbox");
+  list.className = "modal-city-suggestions";
+  list.setAttribute("role", "listbox");
+  list.hidden = true;
+  input.setAttribute("aria-controls", list.id);
+
+  // A status line under the box for the two things the list itself cannot say:
+  // that a lookup found nothing, and that the lookup failed. A failed
+  // suggestion request is not a failed query — the user can still type
+  // coordinates — so it is reported here and nowhere else.
+  const note = document.createElement("p");
+  note.className = "modal-city-note";
+  note.hidden = true;
+
+  // The list is absolutely positioned against this wrapper (see
+  // .modal-city-field in web/styles.css), so it overlays the fields below
+  // instead of pushing the whole modal taller on every keystroke.
+  const wrapper = document.createElement("div");
+  wrapper.className = "modal-city-field";
+  wrapper.appendChild(input);
+  wrapper.appendChild(list);
+  wrapper.appendChild(note);
+
+  // Pressing anywhere in the list -- including its scrollbar, once twenty
+  // matches overflow the box -- must not move focus out of the input, because
+  // leaving the input commits whatever is highlighted. The per-option handlers
+  // suppress the default for the same reason; this covers the gaps between
+  // them.
+  list.addEventListener("pointerdown", (event) => event.preventDefault?.());
+
+  let suggestions = [];
+  let activeIndex = -1;
+  let selected = null;
+  let debounceTimer = 0;
+  // Counts lookups so a slow one that lands after a later one has already
+  // rendered can bow out. Responses to separate keystrokes have no ordering
+  // guarantee, and without this the list can end up showing matches for a
+  // prefix the box no longer contains.
+  let searchGeneration = 0;
+
+  function setNote(text) {
+    note.textContent = text || "";
+    note.hidden = !text;
+  }
+
+  function closeList() {
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+    activeIndex = -1;
+  }
+
+  // Move the highlight, in the list and in what a screen reader reads.
+  function setActiveIndex(index) {
+    activeIndex = index;
+    for (let i = 0; i < list.children.length; i += 1) {
+      const option = list.children[i];
+      const isActive = i === index;
+      option.classList.toggle("is-active", isActive);
+      option.setAttribute("aria-selected", isActive ? "true" : "false");
+      if (isActive) {
+        input.setAttribute("aria-activedescendant", option.id);
+        option.scrollIntoView?.({ block: "nearest" });
+      }
+    }
+  }
+
+  function renderSuggestions(entries) {
+    suggestions = entries;
+    list.innerHTML = "";
+    if (entries.length === 0) {
+      closeList();
+      return;
+    }
+    entries.forEach((city, index) => {
+      const option = document.createElement("li");
+      option.id = fieldId(key, `option-${index}`);
+      option.className = "modal-city-suggestion";
+      option.setAttribute("role", "option");
+      const name = document.createElement("span");
+      name.className = "modal-city-name";
+      name.textContent = city.name;
+      option.appendChild(name);
+      const context = cityContext(city);
+      if (context) {
+        const detail = document.createElement("span");
+        detail.className = "modal-city-context";
+        detail.textContent = context;
+        option.appendChild(detail);
+      }
+      // pointerdown, not click, for the ordering: a click on the list would
+      // otherwise blur the input first, and blur commits whatever is
+      // highlighted — which is not necessarily the entry being clicked.
+      // Suppressing the default keeps focus in the box so the highlight the
+      // pointer set is the one that commits.
+      option.addEventListener("pointerdown", (event) => {
+        event.preventDefault?.();
+        setActiveIndex(index);
+        commitActive();
+      });
+      option.addEventListener("pointerenter", () => setActiveIndex(index));
+      list.appendChild(option);
+    });
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    // The top match starts highlighted: it is the one Enter and a blur commit,
+    // and a highlight that only appeared on the first arrow press would make
+    // that invisible until after the fact.
+    setActiveIndex(0);
+  }
+
+  // Take the highlighted suggestion: put its full name in the box, close the
+  // list, and report it. Returns whether anything was committed, so the key
+  // handler knows whether to swallow the Enter.
+  function commitActive() {
+    const city = suggestions[activeIndex];
+    if (!city) {
+      return false;
+    }
+    selected = city;
+    input.value = cityLabel(city);
+    setNote("");
+    closeList();
+    // Nothing is re-queried for the committed text; a lookup already in flight
+    // would reopen the list over a settled choice.
+    cancelPendingSearch();
+    searchGeneration += 1;
+    if (typeof onSelect === "function") {
+      onSelect(city);
+    }
+    return true;
+  }
+
+  function cancelPendingSearch() {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = 0;
+    }
+  }
+
+  async function runSearch(text) {
+    const generation = searchGeneration;
+    let results = [];
+    try {
+      results = await search(text, typeof near === "function" ? near() : null);
+    } catch (error) {
+      if (generation !== searchGeneration) {
+        return;
+      }
+      renderSuggestions([]);
+      setNote(`City lookup unavailable: ${error.message}`);
+      return;
+    }
+    // Superseded by a later keystroke or by a commit while this was in flight.
+    if (generation !== searchGeneration) {
+      return;
+    }
+    renderSuggestions(results);
+    setNote(results.length === 0 ? "No matching places." : "");
+  }
+
+  input.addEventListener("input", () => {
+    // Editing the text abandons the previous choice: the coordinates already
+    // pushed into the position field stay (the user may be refining the name
+    // of the place they picked), but nothing here still claims to describe
+    // them.
+    selected = null;
+    cancelPendingSearch();
+    const text = String(input.value ?? "").trim();
+    // Every new keystroke invalidates whatever is in flight, whether or not a
+    // fresh lookup follows it.
+    searchGeneration += 1;
+    if (text.length === 0) {
+      renderSuggestions([]);
+      setNote("");
+      return;
+    }
+    if (typeof search !== "function") {
+      return;
+    }
+    debounceTimer = setTimeout(() => {
+      debounceTimer = 0;
+      runSearch(text);
+    }, CITY_DEBOUNCE_MS);
+  });
+
+  input.addEventListener("keydown", (event) => {
+    if (list.hidden) {
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault?.();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const count = suggestions.length;
+      setActiveIndex(((activeIndex + step) % count + count) % count);
+      return;
+    }
+    if (event.key === "Enter") {
+      // The modal's form submits on Enter, so committing a suggestion has to
+      // swallow the key or picking a city would run the query at the same time.
+      event.preventDefault?.();
+      commitActive();
+      return;
+    }
+    if (event.key === "Escape") {
+      // Escape on the document closes the whole modal
+      // (web/js/ui.js); with a list open it should only close the list.
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      cancelPendingSearch();
+      searchGeneration += 1;
+      closeList();
+    }
+  });
+
+  // Leaving the field takes the top suggestion, which is the field's whole
+  // promise: type enough of a name, move on, and the position is set.
+  input.addEventListener("blur", () => {
+    cancelPendingSearch();
+    if (!commitActive()) {
+      closeList();
+    }
+  });
+
+  return {
+    key,
+    nodes: [labelledBy(label, input.id), wrapper],
+    focusTarget: input,
+    // The committed place, or null. No source filters by city — every query
+    // consumes the coordinate pair this produced — so this exists for
+    // completeness and for the tests, not for a query parameter.
+    value: () => selected,
+    input,
+    list,
+  };
+}

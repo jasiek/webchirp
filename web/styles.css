@@ -1371,6 +1371,90 @@ button:disabled {
   line-height: 1;
 }
 
+/* The City/Locality autocomplete (web/js/ui/query-fields.js): a text box with
+   a suggestion list that overlays the fields under it. Positioned rather than
+   in flow, so a list that appears on a keystroke does not shove Latitude,
+   Longitude and the map down the card mid-type. */
+.modal-city-field {
+  position: relative;
+}
+
+.modal-city-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  list-style: none;
+  /* Roughly seven rows before it scrolls. The endpoint returns up to twenty and
+     all of them are reachable, but a list that covers the map it is about to
+     move makes the result of choosing invisible. */
+  max-height: 15rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+/* Any author `display` beats the user agent's [hidden] rule, for the same
+   reason .modal-map-preview-empty[hidden] needs saying twice. */
+.modal-city-suggestions[hidden] {
+  display: none;
+}
+
+.modal-city-suggestion {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* One highlight class for the pointer and the arrow keys alike, so hovering and
+   arrowing cannot disagree about which entry Enter or a blur will commit. */
+.modal-city-suggestion.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.modal-city-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-city-context {
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.modal-city-suggestion.is-active .modal-city-context {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* "No matching places", or why the lookup could not run. A failed suggestion
+   request is not a failed query -- coordinates can still be typed -- so it is
+   reported here rather than in the status line. */
+.modal-city-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.modal-city-note[hidden] {
+  display: none;
+}
+
 /* Static OSM preview of the coordinates the repeater-query modal currently
    holds, with the search radius drawn on it (web/js/ui/query-fields.js). It
    spans both grid columns and is pushed right, so it lines up under the values

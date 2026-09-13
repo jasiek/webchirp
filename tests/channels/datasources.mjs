@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CITY_SUGGEST_LIMIT,
   DEFAULT_REPEATER_API_BASE,
   buildPrzemiennikiRows,
   buildRepeaterEndpoints,
+  fetchCitySuggestions,
+  parseCitySuggestions,
 } from "../../web/js/datasources.js";
 import { rowGeo } from "../../web/js/row-geo.js";
 import { makeRowHooks } from "../support/row-hooks.mjs";
@@ -73,6 +76,7 @@ test("buildRepeaterEndpoints derives every remote source URL from a base", () =>
       apiUrl: "https://proxy.example.com/irts",
       metaUrl: "https://proxy.example.com/irts/meta",
     },
+    cities: "https://proxy.example.com/cities",
   });
 });
 
@@ -92,6 +96,10 @@ test("a blank proxy base disables only proxy-dependent sources", () => {
         apiUrl: "https://api.codeplug.org/irts",
         metaUrl: "https://api.codeplug.org/irts/meta",
       },
+      // The city gazetteer follows the IRTS rule, not the proxy rule: it
+      // geocodes the position every source filters by rather than being a
+      // directory itself, so blanking the base must not take it away.
+      cities: "https://api.codeplug.org/cities",
     });
   }
 });
@@ -420,4 +428,111 @@ test("an out-of-band repeater is reported as frequency, not as an unusable mode"
 
   assert.deepEqual(rows, []);
   assert.deepEqual(skipped, [{ repeater: "SRDMR", reason: "frequency" }]);
+});
+
+// --- City gazetteer ---------------------------------------------------------
+
+// Stands in for global fetch for one call and records the URL it was given, so
+// the query-parameter assertions below read the real request rather than a
+// re-derivation of it.
+async function withFetchStub(body, run) {
+  const original = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url) => {
+    seen.push(String(url));
+    return { ok: true, status: 200, text: async () => body };
+  };
+  try {
+    return { result: await run(), seen };
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+test("parseCitySuggestions renames the endpoint's lon to longitude", () => {
+  const [city] = parseCitySuggestions(JSON.stringify({
+    results: [{
+      id: 2643743,
+      name: "London",
+      region: "England",
+      country: "United Kingdom",
+      cc: "gb",
+      lat: 51.50853,
+      lon: -0.12573,
+    }],
+  }));
+  assert.deepEqual(city, {
+    id: "2643743",
+    name: "London",
+    region: "England",
+    country: "United Kingdom",
+    countryCode: "GB",
+    latitude: 51.50853,
+    longitude: -0.12573,
+  });
+});
+
+test("parseCitySuggestions drops entries that cannot set a position", () => {
+  const cities = parseCitySuggestions(JSON.stringify({
+    results: [
+      { name: "Nowhere", lat: null, lon: 1 },
+      { name: "", lat: 1, lon: 1 },
+      { name: "Somewhere", lat: 1, lon: 2 },
+    ],
+  }));
+  assert.deepEqual(cities.map((city) => city.name), ["Somewhere"]);
+});
+
+test("parseCitySuggestions surfaces the endpoint's own error body", () => {
+  // The endpoint answers 200 with { error } for a bad request, so a caller that
+  // only checked response.ok would read that as no matches at all.
+  assert.throws(
+    () => parseCitySuggestions(JSON.stringify({ error: "missing query parameter q" })),
+    /missing query parameter q/,
+  );
+  assert.throws(() => parseCitySuggestions("<html>"), /invalid JSON/);
+});
+
+test("fetchCitySuggestions asks for the shown number of results and nothing more", async () => {
+  const { seen } = await withFetchStub(
+    JSON.stringify({ results: [] }),
+    () => fetchCitySuggestions("https://api.example.com/cities", "  manch  "),
+  );
+  const url = new URL(seen[0]);
+  assert.equal(url.searchParams.get("q"), "manch");
+  assert.equal(url.searchParams.get("limit"), String(CITY_SUGGEST_LIMIT));
+  assert.equal(url.searchParams.get("lat"), null);
+  assert.equal(url.searchParams.get("lon"), null);
+});
+
+test("fetchCitySuggestions sends a position hint only when both halves are known", async () => {
+  const both = await withFetchStub(
+    JSON.stringify({ results: [] }),
+    () => fetchCitySuggestions("https://api.example.com/cities", "lond", {
+      latitude: 53.4,
+      longitude: -2.9,
+    }),
+  );
+  const hinted = new URL(both.seen[0]);
+  assert.equal(hinted.searchParams.get("lat"), "53.4");
+  assert.equal(hinted.searchParams.get("lon"), "-2.9");
+
+  // The endpoint rejects a lone lat with "lat and lon must be given together",
+  // so half a position has to be sent as no position.
+  const half = await withFetchStub(
+    JSON.stringify({ results: [] }),
+    () => fetchCitySuggestions("https://api.example.com/cities", "lond", { latitude: 53.4 }),
+  );
+  const unhinted = new URL(half.seen[0]);
+  assert.equal(unhinted.searchParams.get("lat"), null);
+  assert.equal(unhinted.searchParams.get("lon"), null);
+});
+
+test("fetchCitySuggestions makes no request for a blank query or a missing endpoint", async () => {
+  const blank = await withFetchStub(JSON.stringify({ results: [] }), async () => [
+    await fetchCitySuggestions("https://api.example.com/cities", "   "),
+    await fetchCitySuggestions("", "manch"),
+  ]);
+  assert.deepEqual(blank.seen, []);
+  assert.deepEqual(blank.result, [[], []]);
 });

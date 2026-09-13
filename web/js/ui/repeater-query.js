@@ -1,4 +1,8 @@
-import { DEFAULT_REPEATER_API_BASE, buildRepeaterEndpoints } from "../datasources.js";
+import {
+  DEFAULT_REPEATER_API_BASE,
+  buildRepeaterEndpoints,
+  fetchCitySuggestions,
+} from "../datasources.js";
 import { encodeMaidenhead } from "../rsgb.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
@@ -6,6 +10,7 @@ import { RepeaterInputError, createRepeaterSources } from "./repeater-sources.js
 import {
   createCheckboxField,
   createCheckboxGroupField,
+  createCityField,
   createFixedField,
   createNumberField,
   createPositionField,
@@ -91,13 +96,49 @@ export function createRepeaterQuery(ctx) {
     dom.repeaterQuerySubmitEl.textContent = busy ? "Querying..." : submitIdleLabel;
   }
 
+  // A city was committed in the autocomplete: its coordinates become the
+  // form's position. setPosition() is the same entry point geolocation and the
+  // map drag use, so the locator is recomputed and the preview recentres for
+  // free -- the city field never touches those three inputs itself.
+  function onCitySelected(city) {
+    if (!positionField) {
+      return;
+    }
+    positionField.setPosition(city.latitude, city.longitude);
+    // Counted alongside repeater_geolocate and repeater_map_panned so the ways
+    // of setting a position can be compared. Which source was open and nothing
+    // else: the place name is a search term and the coordinates are a location,
+    // and neither leaves the browser through analytics.
+    trackEvent("repeater_city_selected", { repeater_source: activeSource.key });
+    // The name and the coordinates are fine in the local debug panel, which is
+    // the same detail the geolocate path logs.
+    log.setStatus(`Location set to ${city.name}.`);
+    log.logDebug(`${activeSource.actionLabel.toUpperCase()} CITY ${city.name} ${city.latitude.toFixed(6)},${city.longitude.toFixed(6)}`);
+  }
+
   function buildFields(source, loadedOptions) {
     dom.repeaterQueryGridEl.innerHTML = "";
     fieldInstances = [];
     positionField = null;
     for (const config of source.fields) {
       let instance;
-      if (config.kind === "position") {
+      if (config.kind === "city") {
+        instance = createCityField({
+          ...config,
+          // The field contacts nothing itself; the lookup is handed in here,
+          // which is also where the endpoint is known.
+          search: (query, hint) => fetchCitySuggestions(endpoints.cities, query, hint),
+          // Rank matches near the position the form already holds, so the
+          // London the user means outranks the one on another continent. That
+          // position is whatever is in the coordinate boxes -- geolocated,
+          // typed, dragged off the map or left by the last city picked -- which
+          // is exactly what the map underneath is showing, so the ranking never
+          // depends on something invisible. A half-entered or out-of-range pair
+          // reads as null there and is sent as no hint at all.
+          near: () => positionField?.value() || null,
+          onSelect: (city) => onCitySelected(city),
+        });
+      } else if (config.kind === "position") {
         instance = createPositionField({
           locatorPlaceholder: config.locatorPlaceholder,
           initial: positionState,
