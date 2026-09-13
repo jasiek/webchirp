@@ -250,6 +250,14 @@
                 </svg>
               </button>
               <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
+              <button id="channel-bulk-edit" type="button" class="channel-toolbar-icon" title="Edit the selected channels in bulk" aria-label="Edit selected channels in bulk">
+                <!-- Pencil over a stack of lines: editing several rows at once. -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 6h8M3 12h6M3 18h5" />
+                  <path d="M20.5 7.5 13 15l-3 1 1-3 7.5-7.5a1.8 1.8 0 0 1 2.5 2.5z" />
+                </svg>
+              </button>
+              <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
               <button
                 id="channel-add-gmrs"
                 type="button"
@@ -429,6 +437,33 @@
       the driver and on the channel, so web/js/ui/channel-extra.js builds them
       from what the runtime reports when the modal opens.
     -->
+    <!--
+      The bulk channel editor (web/js/ui/channel-bulk-edit.js). Empty on
+      purpose: the fields are one per grid column plus the driver's per-channel
+      extras, both of which depend on the selected radio.
+    -->
+    <div
+      id="channel-bulk-edit-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="channel-bulk-edit-title"
+    >
+      <form id="channel-bulk-edit-form" class="modal-card">
+        <h2 id="channel-bulk-edit-title">Edit selected channels</h2>
+        <p class="channel-extra-hint">
+          Tick a field to set it on every selected channel. Fields left unticked
+          keep the value each channel already has.
+        </p>
+        <p id="channel-bulk-edit-message" class="channel-extra-message" hidden></p>
+        <div id="channel-bulk-edit-grid" class="modal-grid"></div>
+        <div class="modal-actions">
+          <button id="channel-bulk-edit-cancel" type="button">Cancel</button>
+          <button id="channel-bulk-edit-apply" type="submit">Apply</button>
+        </div>
+      </form>
+    </div>
+
     <div
       id="channel-extra-modal"
       class="modal-overlay hidden"

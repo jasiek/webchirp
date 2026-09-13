@@ -1309,6 +1309,31 @@ button:disabled {
   min-height: 0;
 }
 
+/* The bulk editor reuses the extras editor's two-column layout, but each label
+   leads with the opt-in checkbox that decides whether the field is written at
+   all, so the checkbox and its label sit on one line above any driver note. */
+#channel-bulk-edit-modal .modal-grid {
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  align-items: start;
+  row-gap: 0.7rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.channel-bulk-label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.4rem;
+  font-size: 0.88rem;
+}
+
+/* The note under a driver field spans both columns so it lines up with the
+   label rather than with the checkbox. */
+.channel-bulk-label .channel-extra-doc {
+  grid-column: 2;
+}
+
 .channel-extra-hint,
 .channel-extra-message {
   margin: 0 0 0.8rem;
@@ -2033,7 +2058,8 @@ button:disabled {
   /* The extras editor sets its own label column at a specificity the rule above
      cannot reach, so it needs its own override or it keeps two columns -- a
      220px label beside a squeezed control -- on a phone. */
-  #channel-extra-modal .modal-grid {
+  #channel-extra-modal .modal-grid,
+  #channel-bulk-edit-modal .modal-grid {
     grid-template-columns: 1fr;
   }
 

@@ -106,6 +106,14 @@ export function createChannelTable({ dom, state, log, actions }) {
     return indexes.map((idx) => state.currentRows[idx]).filter(Boolean);
   }
 
+  // The rows the user has actually selected, with no fallback to the whole
+  // grid: a bulk edit that silently applied to every channel because nothing
+  // was selected is not what anyone asked for, which is the opposite of what
+  // selectedRowsForOperations() (export, upload) wants.
+  function selectedChannelRows() {
+    return sortedSelectedRowIndexes().map((idx) => state.currentRows[idx]).filter(Boolean);
+  }
+
   function resetRowSelection() {
     selectedRowIndexes.clear();
     selectionAnchorIndex = null;
@@ -1353,6 +1361,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     clearInvalidHighlights,
     applyValidationIssues,
     selectedRowsForOperations,
+    selectedChannelRows,
     hasRealChannels,
     reconcileLocations,
     sortRowsByLocation,
