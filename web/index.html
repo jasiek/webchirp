@@ -249,6 +249,9 @@
                   <rect x="9" y="2.5" width="6" height="4" rx="1.25" />
                 </svg>
               </button>
+              <button id="channel-bulk-edit" type="button" class="channel-toolbar-icon" title="Edit selected channels in bulk" aria-label="Edit selected channels in bulk">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94m-2.83-2.83L9.94 3m0 0L3 9.94m10.88-2.83l2.83 2.83" /></svg>
+              </button>
               <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
               <button
                 id="channel-add-gmrs"
@@ -447,6 +450,33 @@
         <div class="modal-actions">
           <button id="channel-extra-cancel" type="button">Cancel</button>
           <button id="channel-extra-save" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+
+    <!--
+      Bulk edit modal for editing multiple selected channels at once.
+      The grid is empty on purpose -- web/js/ui/bulk-edit.js builds the fields
+      for all editable columns and driver extras when the modal opens.
+    -->
+    <div
+      id="channel-bulk-edit-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="channel-bulk-edit-title"
+    >
+      <form id="channel-bulk-edit-form" class="modal-card">
+        <h2 id="channel-bulk-edit-title">Edit selected channels</h2>
+        <p class="channel-bulk-edit-hint">
+          Leave a field empty to keep the current value for each channel. Only fields
+          you change will be updated.
+        </p>
+        <p id="channel-bulk-edit-message" class="channel-bulk-edit-message" hidden></p>
+        <div id="channel-bulk-edit-grid" class="modal-grid"></div>
+        <div class="modal-actions">
+          <button id="channel-bulk-edit-cancel" type="button">Cancel</button>
+          <button id="channel-bulk-edit-save" type="submit">Apply to Selected</button>
         </div>
       </form>
     </div>
