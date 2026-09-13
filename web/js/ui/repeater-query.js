@@ -37,14 +37,10 @@ function resolveRepeaterApiBase() {
 // circle, which is why this is one constant rather than a guess per source.
 const RANGE_FIELD_KEY = "radius";
 
-// How long the form must sit still before the map preview asks a directory what
-// is out there. Unlike the city autocomplete -- which dropped its debounce
-// because a lookup is one small request -- this one repeats the query the
-// Query API button would run: a single request for the proxied directories, but
-// up to nine of roughly 75 kB each for RSGB's locator fan-out. A drag also
-// rewrites the coordinates on every pointermove. So the delay is set by what a
-// wasted preview costs rather than by what the user can feel, and it is long
-// enough to let a gesture or a typed number finish first.
+// How long the form must sit still before the map preview queries a directory.
+// A preview repeats the real query (up to nine ~75 kB requests for RSGB, see
+// FINDINGS.md) and a drag rewrites the coordinates on every pointermove, so the
+// delay is set by what a wasted preview costs, not by what the user can feel.
 const PREVIEW_QUERY_DEBOUNCE_MS = 600;
 
 const FIELD_FACTORIES = {
@@ -154,19 +150,12 @@ export function createRepeaterQuery(ctx) {
       if (config.kind === "city") {
         instance = createCityField({
           ...config,
-          // The field contacts nothing itself; the lookup is handed in here,
-          // which is also where the endpoint is known.
-          // No position hint is sent with the lookup: the endpoint accepts one
-          // and ranks nearby places higher for it, but the form's own position
-          // is a location, and the ranking it buys is not yet worth putting one
-          // in a query string on every keystroke. fetchCitySuggestions still
-          // takes the argument, so turning it back on is one parameter here.
+          // The field contacts nothing itself. No position hint is sent: the
+          // ranking it buys is not worth putting the form's location in a query
+          // string on every keystroke. fetchCitySuggestions still takes it.
           search: (query) => fetchCitySuggestions(endpoints.cities, query),
-          // The field shows a one-line note; the whole error belongs in the
-          // debug panel, which is where a timeout, an HTTP status or a
-          // malformed body can actually be diagnosed. Not reportActionError:
-          // a failed suggestion is not a failed action, and it must not take
-          // over the status line the real query uses.
+          // Not reportActionError: a failed suggestion is not a failed action
+          // and must not take over the status line the real query uses.
           onError: (error) => log.logDebug(`CITY LOOKUP FAILED ${error?.stack || error}`),
           onSelect: (city) => onCitySelected(city),
           // Reopening the modal shows the place last chosen, in step with the
@@ -415,14 +404,10 @@ export function createRepeaterQuery(ctx) {
   }
 
   function bindEvents() {
-    // One delegated listener for every control the fields build, rather than a
-    // hook per field factory: a field kind added later is previewed without
-    // having to know about this at all. The grid element outlives the fields
-    // inside it -- buildFields only replaces its contents -- so this belongs
-    // here and not there, where each open would re-register it and leave
-    // correctness resting on the DOM deduplicating identical listeners. Both
-    // event types, because a checkbox and a select report on "change" while a
-    // text or number box reports on "input".
+    // One delegated listener on the grid, which outlives the fields inside it,
+    // so a field kind added later is previewed without knowing about this. Both
+    // event types: checkboxes and selects report on "change", text and number
+    // boxes on "input".
     for (const type of ["input", "change"]) {
       dom.repeaterQueryGridEl.addEventListener(type, schedulePreview);
     }

@@ -37,15 +37,11 @@ import {
 // one needs it, or the first pixel of a drag exposes blank canvas at the
 // trailing edge before any redraw could cover it.
 //
-// `markers` are other positions to plot on the map — the repeaters a query
-// would return, for the query modal's preview. Each is
-// { latitude, longitude, inRange?, approximate? }: `inRange` false dims it, so
-// stations just outside the ring show what widening the radius would add, and
-// `approximate` marks a position that is really a locator box rather than a
-// surveyed point. They are drawn as small squares rather than dots for that
-// second reason — a good half of the RSGB directory only publishes a
-// 4-character locator, which places a station within a box some 111 km across,
-// and a dot would present that guess as a survey.
+// `markers` are other positions to plot: { latitude, longitude, inRange?,
+// approximate? }. `inRange` false dims one, so stations just outside the ring
+// show what widening would add; `approximate` marks a locator-box position
+// rather than a surveyed point. Drawn as squares, not dots, because half the
+// RSGB directory publishes only a 4-character locator (a box ~111 km across).
 export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetres = 0, overscan = 0, markers = [] }) {
   canvasEl.innerHTML = "";
   canvasEl.style.width = `${width}px`;
@@ -87,22 +83,15 @@ export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetr
     range.style.height = `${diameter}px`;
     canvasEl.appendChild(range);
   }
-  // Between the ring and the centre marker: over the ring it is being judged
-  // against, under the marker for the position being chosen.
-  //
-  // Tallied as they are drawn and handed back, so a caller captioning the map
-  // counts what is on it. Counting its own input instead would promise squares
-  // the viewport never had room for.
+  // Drawn between the ring and the centre marker. Tallied as drawn and handed
+  // back, so a caption counts what is on the map, not what was handed in.
   const drawn = { inRange: 0, outOfRange: 0 };
   if (markers.length > 0) {
     // The centre of the viewport is the centre of the map, so a marker's offset
     // from it is the difference between the two world pixels at this zoom.
     const origin = latLonToWorldPixel(geo.latitude, geo.longitude, zoom);
-    // The world wraps in x, so the raw difference between two world pixels
-    // either side of the antimeridian is almost a whole world wide. Taking the
-    // shorter way round is what keeps a repeater at 179.9°E next to a map
-    // centred on 179.9°W, rather than a world's width off the viewport and
-    // dropped from the count.
+    // The world wraps in x: take the shorter way round the antimeridian, or a
+    // repeater at 179.9°E sits a world's width from a map centred on 179.9°W.
     const worldWidth = Math.pow(2, zoom) * OSM_TILE_SIZE;
     for (const entry of markers) {
       const point = latLonToWorldPixel(entry.latitude, entry.longitude, zoom);
@@ -114,9 +103,8 @@ export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetr
       }
       const left = (width / 2) + dx;
       const top = (height / 2) + (point.y - origin.y);
-      // Off the viewport entirely. The range ring is framed to fit, so this is
-      // a station the radius reaches but the map does not, and a square pinned
-      // to the edge would read as one sitting on the boundary.
+      // Off the viewport: a station the radius reaches but the map does not.
+      // Pinned to the edge it would read as sitting on the boundary.
       if (left < 0 || top < 0 || left > width || top > height) {
         continue;
       }

@@ -100,13 +100,10 @@ export function createRepeaterSources(ctx, { endpoints }) {
     return `${entry.mode || entry.reason} not supported by the selected radio`;
   }
 
-  // A preview repeats the query the Query API button would run, so it must not
-  // be issued as freely as a keystroke. These caches hold what was fetched,
-  // keyed by the exact request, so the common edits -- nudging the radius,
-  // dragging the map a little, ticking a band -- redraw from memory. Module
-  // scope rather than per-open, because the cheapest preview is the one the
-  // previous open already paid for; capped so a long session cannot grow
-  // without bound.
+  // A preview repeats the query the Query API button would run, so the fetched
+  // bodies are cached per source and the common edits -- nudging the radius,
+  // dragging a little, ticking a band -- redraw from memory. Per source rather
+  // than per open, so a reopened modal reuses what the last one paid for.
   const PREVIEW_CACHE_LIMIT = 24;
 
   // Every position a preview can draw, whether or not the query would keep it.
@@ -198,18 +195,12 @@ export function createRepeaterSources(ctx, { endpoints }) {
 
     const previewCache = new Map();
 
-    // Turn a fetched body into what the caption needs. The map's numbers have
-    // to agree with the button underneath it, and two things pull them apart:
-    // a repeater the directory publishes without coordinates, which the query
-    // inserts and the map cannot place, and one the selected radio cannot
-    // express, which the map can place and the query drops. Both are counted
-    // here so the caption can name them instead of quietly promising the wrong
-    // total.
-    //
-    // Only the in-range repeaters go to the row builder -- the widened body
-    // reaches half again the radius, and the query will never see that ground.
-    // Building rows allocates but inserts nothing; insertRowsAtSelectionOrEnd
-    // is the step that touches the grid, and it is not called here.
+    // Turn a fetched body into what the caption needs. The map's numbers must
+    // agree with the button under it, and two things pull them apart: a
+    // repeater published without coordinates (inserted, not plottable) and one
+    // the selected radio cannot express (plottable, not inserted). Both are
+    // counted. Only in-range repeaters go through the row builder, which
+    // allocates rows but inserts nothing.
     function summarizeRemote(body, position, radiusKm) {
       // Each plotted entry carries the repeater it came from, because the point
       // list is not index-aligned with the repeater list -- the unmapped ones
@@ -243,18 +234,11 @@ export function createRepeaterSources(ctx, { endpoints }) {
         return null;
       }
       const url = buildQueryUrl(values, radiusKm * PREVIEW_RANGE_FACTOR);
-      // Keyed on the request without its range. The body already covers half
-      // again the radius that fetched it, so every smaller radius is contained
-      // in one already in hand and needs only re-flagging, which markInRange
-      // does without a request -- and nudging the range is the commonest edit
-      // in this form, so keying on the URL whole made the cache miss precisely
-      // where it was meant to help. The covered range is recorded alongside, and
-      // the test is against the widened area rather than the radius: a body
-      // fetched for 20 km reaches 30, and reusing it for a 30 km search would
-      // leave nothing beyond the ring to dim -- the map would report nothing
-      // just outside while the ground it never fetched was full of repeaters.
-      // Every body covers 1.5x the radius that fetched it, so this reduces to
-      // "any radius up to the one it was fetched for".
+      // Keyed without the range, since nudging the range is the commonest edit:
+      // a cached body serves any search whose widened area it covers, and only
+      // the in-range flags are recomputed. The test is against the widened
+      // area, not the radius -- a body fetched for 20 km reaches 30, and reused
+      // for a 30 km search it would have nothing beyond the ring to dim.
       const key = keyWithoutRange(url);
       const cached = previewCache.get(key);
       if (cached && cached.rangeKm >= radiusKm * PREVIEW_RANGE_FACTOR) {
@@ -417,11 +401,9 @@ export function createRepeaterSources(ctx, { endpoints }) {
   // none) — so the modal opens without a network round trip.
   function rsgbSource() {
     const actionLabel = "RSGB ETCC";
-    // Records keyed by locator square. RSGB is the expensive source by a wide
-    // margin -- one request and some 75 kB per square, and a radius spans
-    // several -- so this is what makes the preview affordable at all: nudging
-    // the radius or dragging the map within the squares already fetched costs
-    // nothing, and only stepping into a new square costs a request.
+    // Records keyed by locator square. RSGB costs one ~75 kB request per
+    // square and a radius spans several, so only stepping into a new square
+    // costs a request.
     const squareCache = new Map();
 
     // Fetch only the squares not already held, then answer from the union.
@@ -613,10 +595,8 @@ export function createRepeaterSources(ctx, { endpoints }) {
         log.setStatus(`Querying RSGB ETCC for ${plan.squares.length} locator square(s)...`);
         log.logDebug(`RSGB QUERY ${plan.squares.join(", ")} r=${radiusKm}km`);
 
-        // Through the same cache the preview fills. The normal workflow is to
-        // pause long enough to see the preview and then press Query API, so
-        // fetching directly here downloaded every square a second time -- up to
-        // 24 more responses of roughly 75 kB, for records already in hand.
+        // Through the cache the preview fills, so pressing Query API after
+        // watching the preview does not download every square a second time.
         const records = await recordsForSquares(plan.squares, {
           onSquare: ({ locator, count, cached }) => log.logDebug(
             `RSGB SQUARE ${locator} -> ${count}${cached ? " (cached)" : ""}`,

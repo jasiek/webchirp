@@ -103,32 +103,20 @@ function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
   };
 }
 
-// Longest a city suggestion request may run before it is abandoned. Far shorter
-// than REPEATER_REQUEST_TIMEOUT_MS because this one fires on a keystroke: its
-// whole failure mode is a drop-down that stays empty, and a suggestion list that
-// arrives after the user has finished typing is worth nothing, so holding a
-// stalled connection for ten seconds would only cost tile-sized requests their
-// slot in the browser's connection pool.
+// Shorter than REPEATER_REQUEST_TIMEOUT_MS because this fires on a keystroke: a
+// suggestion list that arrives after the user has finished typing is worth
+// nothing, and a stalled connection would only block tile requests.
 const CITY_SUGGEST_TIMEOUT_MS = 4000;
 
-// The most suggestions a response can contain. The endpoint defaults to 20 and
-// caps its own `limit` there too, so no limit is sent -- asking for the default
-// only adds a parameter that cannot change the answer. This is the ceiling the
-// drop-down is built against, not a request for one.
+// The endpoint defaults to and caps at 20 (see FINDINGS.md), so no limit is
+// sent; this is the ceiling the drop-down is sized for, not a request.
 const CITY_SUGGEST_MAX = 20;
 
 // Look up place names matching `query` in the api.codeplug.org gazetteer.
-//
-// `near` is an optional { latitude, longitude } the endpoint uses to rank
-// nearby places above distant namesakes -- "London" from Merseyside should not
-// be Londrina. The endpoint takes lat and lon together or not at all (it answers
-// "lat and lon must be given together" otherwise), so a half-known position is
-// sent as no hint rather than as a point on a meridian.
-//
-// Results are normalized to the shape the UI needs, with the endpoint's `lon`
-// renamed to `longitude` so it matches every other position in this app. An
-// entry without a usable coordinate pair is dropped: its only purpose here is
-// to set one.
+// `near` is an optional { latitude, longitude } proximity hint; the endpoint
+// takes lat and lon together or not at all, so a half-known position is sent
+// as no hint. Results are normalized to this app's { latitude, longitude }
+// shape, and an entry without a usable coordinate pair is dropped.
 export async function fetchCitySuggestions(citiesUrl, query, near = null) {
   const text = String(query ?? "").trim();
   if (!citiesUrl || text.length === 0) {
@@ -154,10 +142,8 @@ export async function fetchCitySuggestions(citiesUrl, query, near = null) {
   return parseCitySuggestions(body);
 }
 
-// Number(null) and Number("") are both 0, not NaN, so a gazetteer entry with a
-// missing coordinate would otherwise pass every finiteness check and place the
-// city on the equator. Only an actual number, or a string that parses as one,
-// counts as a coordinate here.
+// Number(null) and Number("") are 0, not NaN, so a missing coordinate would
+// otherwise pass the finiteness check and land the city on the equator.
 function coordinate(value) {
   if (value === null || value === undefined || value === "") {
     return Number.NaN;
@@ -165,10 +151,9 @@ function coordinate(value) {
   return Number(value);
 }
 
-// Split out from the fetch so the parsing is testable without a network stub,
-// and so a malformed body is one readable error rather than a JSON.parse
-// stack. The endpoint reports its own failures as { error: "..." } with a 200,
-// which is why that case is checked before the result list.
+// Split out from the fetch so the parsing is testable without a network stub.
+// The endpoint reports its own failures as { error: "..." } with HTTP 200, so
+// that case is checked before the result list.
 export function parseCitySuggestions(jsonText) {
   let payload;
   try {
@@ -193,9 +178,7 @@ export function parseCitySuggestions(jsonText) {
     .filter((entry) => entry.name.length > 0
       && Number.isFinite(entry.latitude)
       && Number.isFinite(entry.longitude))
-    // The endpoint will not return more than twenty, so this only holds if it
-    // ever changes its mind: the drop-down's height and keyboard handling are
-    // sized for a list this long.
+    // Only matters if the endpoint ever raises its own cap.
     .slice(0, CITY_SUGGEST_MAX);
 }
 
