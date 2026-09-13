@@ -2,10 +2,13 @@
 // metadata the Python runtime reports for the selected radio.
 
 // Parse CHIRP-style frequency text (MHz) to integer Hz for validation checks.
+// Blank is not a frequency, so it parses to null like any other unparsable
+// text; callers that give blank its own meaning (an empty Frequency erases the
+// memory on upload) must test for it before calling this.
 export function parseFreqToHz(value) {
   const text = String(value || "").trim();
   if (!text) {
-    return 0;
+    return null;
   }
   if (!/^\d+(\.\d+)?$/.test(text)) {
     return null;
@@ -85,6 +88,14 @@ export function normalizeCellValue(column, value, meta, previous, { allowReadOnl
   }
 
   if (meta.kind === "freq") {
+    // A blank frequency is a value, not a failed edit: the runtime reads an
+    // empty Frequency as "erase this memory" (_prepare_row_change in
+    // web/python/webchirp_bridge/row_validation.py), and a blank Offset is
+    // simply no offset. Rejecting it here snapped the old frequency back into
+    // the cell, leaving no way to clear a channel from the grid (issue #93).
+    if (v.trim() === "") {
+      return stored("");
+    }
     const hz = parseFreqToHz(v);
     if (hz === null) {
       return rejected(previous);
