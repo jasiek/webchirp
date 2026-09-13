@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npm run build:version && node scripts/dev-server.mjs",
+    "dev": "npm run build:version && npm run build:pages && node scripts/dev-server.mjs",
     "build:catalog": "node --experimental-wasm-stack-switching scripts/build-catalog.mjs",
     "build:version": "node scripts/build-version.mjs",
     "build:icons": "node scripts/build-icons.mjs",
