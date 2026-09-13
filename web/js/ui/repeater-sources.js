@@ -388,6 +388,39 @@ export function createRepeaterSources(ctx, { endpoints }) {
     // nothing, and only stepping into a new square costs a request.
     const squareCache = new Map();
 
+    // The plans currently being assembled, as a set per in-flight call.
+    //
+    // recordsForSquares awaits its fetch, and a second call can run in that
+    // gap — the submitted query starting while a superseded preview is still
+    // downloading. A per-call keep-set protects only its own plan, so the one
+    // that finishes first could evict squares the waiting one had already
+    // classified as cached; that one then assembles empty lists for them and
+    // silently omits their repeaters. Every plan still to read its answer out
+    // is off limits until it has.
+    //
+    // Two overlapping 24-square plans can therefore hold the cache above its
+    // cap for as long as both are running. That is the right way round:
+    // exceeding a size hint briefly costs memory, dropping a square costs
+    // repeaters.
+    //
+    // Untested, deliberately. At one position every narrower plan is a subset
+    // of the wider one, so a concurrent pair there can never evict each other;
+    // reproducing the race needs a square cached by an earlier search, an
+    // in-flight plan that excludes it, and a second plan that includes it and
+    // has missing squares of its own -- which takes two position moves during
+    // one preview. The guard costs a Set lookup, so it is cheaper to hold than
+    // the sequence is to stage.
+    const activePlans = new Set();
+
+    function planHolds(locator) {
+      for (const plan of activePlans) {
+        if (plan.has(locator)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     // Fetch only the squares not already held, then answer from the union.
     //
     // `onSquare` is called once per square of the plan, whether it was fetched
@@ -396,6 +429,16 @@ export function createRepeaterSources(ctx, { endpoints }) {
     // preview had already downloaded it — the plan's coverage has to stay
     // readable however little of it cost a request this time.
     async function recordsForSquares(squares, { onSquare } = {}) {
+      const plan = new Set(squares);
+      activePlans.add(plan);
+      try {
+        return await assembleSquares(squares, plan, onSquare);
+      } finally {
+        activePlans.delete(plan);
+      }
+    }
+
+    async function assembleSquares(squares, plan, onSquare) {
       const missing = squares.filter((locator) => !squareCache.has(locator));
       const fetchedNow = new Set(missing);
       if (missing.length > 0) {
@@ -439,12 +482,13 @@ export function createRepeaterSources(ctx, { endpoints }) {
           });
         }
       }
-      const keep = new Set(squares);
       for (const locator of squareCache.keys()) {
         if (squareCache.size <= PREVIEW_CACHE_LIMIT) {
           break;
         }
-        if (!keep.has(locator)) {
+        // This plan is in activePlans too, so one test covers both it and any
+        // other call still waiting on its own fetch.
+        if (!planHolds(locator)) {
           squareCache.delete(locator);
         }
       }
