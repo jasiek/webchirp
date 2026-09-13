@@ -265,7 +265,25 @@ export function createCodeplugIo(ctx) {
         `Loaded image radio ${loaded.module}.${loaded.className} is not available in current radio catalog`,
       );
     }
-    await ctx.catalog.loadSelectedRadioMetadata();
+    // Rows first, then the schema built from them: the load cached this image,
+    // so the metadata call below reports the detected driver as the image
+    // configures it, and the row check it runs (dropUnsupportedPowerValues in
+    // web/js/ui/channel-table.js) has to measure this file's channels rather
+    // than whatever the grid still held from before the import.
+    //
+    // Undone if that call fails, because everything that agrees with these rows
+    // -- the headers, the settings, the rendered grid -- is assigned after it,
+    // and runFileLoad reports a throw from here as a failed import without
+    // re-rendering. Rows left swapped behind a failure notice would show the
+    // user the old codeplug while an export or upload wrote the new one.
+    const previousRows = state.currentRows;
+    state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
+    try {
+      await ctx.catalog.loadSelectedRadioMetadata();
+    } catch (error) {
+      state.currentRows = previousRows;
+      throw error;
+    }
     ctx.settings.replaceState({
       supported: Array.isArray(loaded.settings) && loaded.settings.length > 0,
       available: Array.isArray(loaded.settings) && loaded.settings.length > 0,
@@ -277,7 +295,6 @@ export function createCodeplugIo(ctx) {
     state.currentHeaders = state.radioMetadata.headers?.length
       ? state.radioMetadata.headers
       : (loaded.headers || state.currentHeaders);
-    state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
     state.codeplugSource = "img";
     ctx.table.sortRowsByLocation();
     ctx.table.clearInvalidHighlights();

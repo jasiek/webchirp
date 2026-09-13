@@ -28,7 +28,7 @@ from webchirp_bridge.jsbridge import _make_status_logger
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
 if TYPE_CHECKING:
-    from typing import Iterator, Optional, Sequence
+    from typing import Callable, Iterator, Optional, Sequence
 
 LAST_IMAGE_BY_DRIVER = {}
 # Which class actually produced/parses LAST_IMAGE_BY_DRIVER[key]. Serial
@@ -59,33 +59,64 @@ def _blank_radio_instance(radio_cls: type[chirp_common.Radio]) -> chirp_common.R
         return radio_cls("")
 
 
-def _driver_features(module_name: str, class_name: str) -> Optional[chirp_common.RadioFeatures]:
-    """Return a driver's RadioFeatures, preferring the cached image.
+def _driver_radio_factories(
+    module_name: str, class_name: str
+) -> list[Callable[[], chirp_common.Radio]]:
+    """Ways to instantiate this driver, the most faithful to the radio first.
 
-    Some drivers read their capabilities out of the codeplug: ``Rt98Radio``
-    advertises the PMR power levels (Low = 0.5W) on a blank instance and the
-    full Low/Mid/High set once an image is parsed, so a blank instance reports
-    levels the loaded radio does not have. CHIRP always takes features from the
-    open image, so use the cached one when there is one.
+    A cached image comes first because some drivers read their capabilities out
+    of the codeplug: ``Rt98Radio`` advertises the PMR power levels (Low = 0.5W)
+    on a blank instance and the full Low/Mid/High set once an image is parsed,
+    so a blank instance reports levels the loaded radio does not have. CHIRP
+    always takes features from the open image, so anything describing the
+    selected radio has to do the same. The two blank constructors behind it are
+    the no-image fallbacks (see ``_blank_radio_instance``), kept as separate
+    factories so a driver that refuses one is still reachable through the other.
+    """
+    radio_cls = _import_radio_class(module_name, class_name)
+    factories: list[Callable[[], chirp_common.Radio]] = [
+        lambda: radio_cls(None),
+        lambda: radio_cls(""),
+    ]
+    image = LAST_IMAGE_BY_DRIVER.get(_driver_cache_key(module_name, class_name))
+    if image:
+        image_cls = _cached_image_class(module_name, class_name, radio_cls)
+        factories.insert(0, lambda: _radio_from_image_bytes(image_cls, image))
+    return factories
+
+
+def _cached_or_blank_radio_instance(
+    module_name: str, class_name: str
+) -> Optional[chirp_common.Radio]:
+    """The first instantiation of this driver that can describe itself.
+
+    An instance only counts once ``get_features()`` works on it, because that
+    is the one thing every caller wants from it: a driver that parses the
+    cached image but cannot report features from it is no more usable than one
+    that failed to parse at all, and both have to fall through to blank state.
+    Returns None when nothing works, the module included -- callers that need
+    an instance decide for themselves whether that is an error.
     """
     if not module_name or not class_name:
         return None
     try:
-        radio_cls = _import_radio_class(module_name, class_name)
+        factories = _driver_radio_factories(module_name, class_name)
     except Exception:
         return None
-
-    image = LAST_IMAGE_BY_DRIVER.get(_driver_cache_key(module_name, class_name))
-    factories = [lambda: radio_cls(None), lambda: radio_cls("")]
-    if image:
-        image_cls = _cached_image_class(module_name, class_name, radio_cls)
-        factories.insert(0, lambda: _radio_from_image_bytes(image_cls, image))
     for factory in factories:
         try:
-            return factory().get_features()
+            radio = factory()
+            radio.get_features()
+            return radio
         except Exception:
             continue
     return None
+
+
+def _driver_features(module_name: str, class_name: str) -> Optional[chirp_common.RadioFeatures]:
+    """Return a driver's RadioFeatures, preferring the cached image."""
+    radio = _cached_or_blank_radio_instance(module_name, class_name)
+    return radio.get_features() if radio is not None else None
 
 
 def _import_radio_class(
