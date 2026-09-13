@@ -1732,3 +1732,107 @@ test("closing the modal abandons a preview still in flight", async () => {
   // render follow a modal that is gone.
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
 });
+
+// --- Preview review follow-ups ------------------------------------------------
+
+test("an invalid radius is an inactive preview, not an empty one", async () => {
+  const { dom, log } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await editField(dom, "radius", "");
+  await afterPreviewQuery();
+
+  // No directory was contacted, so captioning the map "0 in range" and logging
+  // a successful zero-result preview would both be inventions.
+  assert.equal(previewCalls(calls, "/przemienniki").length, 0);
+  assert.ok(!log.debug.some((line) => /PREVIEW 0 repeater/.test(line)));
+});
+
+test("a failed city lookup puts the whole error in the debug panel", async () => {
+  const { dom, log } = buildHarness();
+  installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/cities", ok: false, status: 503, body: "down" },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  const city = fieldByName(dom, "city");
+  city.value = "krak";
+  await city.dispatch("input");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.ok(
+    log.debug.some((line) => /CITY LOOKUP FAILED/.test(line)),
+    "a service failure must be diagnosable from Debug Output",
+  );
+  // Still only a hint: the status line belongs to the real query.
+  assert.deepEqual(log.errors, []);
+});
+
+// --- RSGB preview cache -------------------------------------------------------
+
+test("the submitted RSGB query reuses what the preview already downloaded", async () => {
+  const { dom, log } = buildHarness();
+  installGeolocation(LONDON);
+  const calls = installRsgbFetch({
+    IO91: [repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ" })],
+    JO01: [],
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  // Long enough for the automatic preview to run its fan-out.
+  await afterPreviewQuery();
+  const afterPreview = calls.length;
+  assert.ok(afterPreview > 0, "the preview fanned out");
+
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  // The normal workflow is to pause long enough to see the preview and then
+  // press Query API. Fetching again here downloaded every square a second
+  // time — up to 24 more responses of roughly 75 kB, for records in hand.
+  assert.equal(calls.length, afterPreview, "no square is downloaded twice");
+  assert.deepEqual(log.errors, []);
+  // The per-square debug line still comes from the squares actually fetched.
+  assert.ok(log.debug.some((line) => /RSGB SQUARE IO91 -> 1/.test(line)));
+});
+
+test("making room in the square cache never drops a square the search needs", async () => {
+  const { dom, log, table } = buildHarness();
+  // A plan can be as wide as the cache is deep (both 24 squares), so a second
+  // overlapping plan pushes the cache over its cap — and the oldest entries
+  // then are precisely the overlapping ones the new plan still needs.
+  const squares = {};
+  for (const field of ["IO", "JO"]) {
+    for (let lon = 0; lon < 5; lon += 1) {
+      for (let lat = 0; lat < 5; lat += 1) {
+        squares[`${field}${lon}${lat}`] = [];
+      }
+    }
+  }
+  squares.IO91 = [repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ" })];
+  installRsgbFetch(squares);
+  installGeolocation(LONDON);
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  // A wide search first, to fill the cache, then back to a narrow one whose
+  // squares the wide one already holds.
+  await editField(dom, "radius", "500");
+  await afterPreviewQuery();
+  await editField(dom, "radius", "30");
+  await afterPreviewQuery();
+
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  // Evicting before reading would hand back an empty list for a square just
+  // fetched, and the query would quietly omit its repeaters.
+  assert.deepEqual(log.errors, []);
+  assert.equal(table.inserted.length, 1);
+  assert.equal(table.inserted[0].rows.length, 1, "GB3XP survived the cache making room");
+});

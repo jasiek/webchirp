@@ -162,6 +162,12 @@ export function createRepeaterQuery(ctx) {
           // in a query string on every keystroke. fetchCitySuggestions still
           // takes the argument, so turning it back on is one parameter here.
           search: (query) => fetchCitySuggestions(endpoints.cities, query),
+          // The field shows a one-line note; the whole error belongs in the
+          // debug panel, which is where a timeout, an HTTP status or a
+          // malformed body can actually be diagnosed. Not reportActionError:
+          // a failed suggestion is not a failed action, and it must not take
+          // over the status line the real query uses.
+          onError: (error) => log.logDebug(`CITY LOOKUP FAILED ${error?.stack || error}`),
           onSelect: (city) => onCitySelected(city),
           // Reopening the modal shows the place last chosen, in step with the
           // coordinates the position field restores beside it.
@@ -259,8 +265,16 @@ export function createRepeaterQuery(ctx) {
     if (generation !== previewGeneration) {
       return;
     }
-    positionField?.setMarkers(result?.points || [], "ok");
-    log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW ${result?.points?.length ?? 0} repeater(s)`);
+    // null is the sources' "there was nothing to ask" — a blank, zero or
+    // negative radius. Reporting it as an empty answer would caption the map
+    // "0 in range" and log a successful zero-result preview, when in fact no
+    // directory was contacted and the form simply is not filled in yet.
+    if (!result) {
+      positionField?.setMarkers([], "off");
+      return;
+    }
+    positionField?.setMarkers(result.points, "ok", { truncated: result.truncated === true });
+    log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW ${result.points.length} repeater(s)${result.truncated ? " (area clipped)" : ""}`);
   }
 
   // Called by every control in the form. The work is deferred, so a drag that

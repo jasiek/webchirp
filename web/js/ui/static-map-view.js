@@ -98,9 +98,21 @@ export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetr
     // The centre of the viewport is the centre of the map, so a marker's offset
     // from it is the difference between the two world pixels at this zoom.
     const origin = latLonToWorldPixel(geo.latitude, geo.longitude, zoom);
+    // The world wraps in x, so the raw difference between two world pixels
+    // either side of the antimeridian is almost a whole world wide. Taking the
+    // shorter way round is what keeps a repeater at 179.9°E next to a map
+    // centred on 179.9°W, rather than a world's width off the viewport and
+    // dropped from the count.
+    const worldWidth = Math.pow(2, zoom) * OSM_TILE_SIZE;
     for (const entry of markers) {
       const point = latLonToWorldPixel(entry.latitude, entry.longitude, zoom);
-      const left = (width / 2) + (point.x - origin.x);
+      let dx = point.x - origin.x;
+      if (dx > worldWidth / 2) {
+        dx -= worldWidth;
+      } else if (dx < -worldWidth / 2) {
+        dx += worldWidth;
+      }
+      const left = (width / 2) + dx;
       const top = (height / 2) + (point.y - origin.y);
       // Off the viewport entirely. The range ring is framed to fit, so this is
       // a station the radius reaches but the map does not, and a square pinned

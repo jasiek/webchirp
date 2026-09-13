@@ -371,8 +371,15 @@ export function createRepeaterSources(ctx, { endpoints }) {
     const squareCache = new Map();
 
     // Fetch only the squares not already held, then answer from the union.
-    async function recordsForSquares(squares) {
+    //
+    // `onSquare` is called once per square of the plan, whether it was fetched
+    // now or served from the cache, and says which. Reporting only the fetches
+    // would mean the debug panel lost a square's line entirely as soon as a
+    // preview had already downloaded it — the plan's coverage has to stay
+    // readable however little of it cost a request this time.
+    async function recordsForSquares(squares, { onSquare } = {}) {
       const missing = squares.filter((locator) => !squareCache.has(locator));
+      const fetchedNow = new Set(missing);
       if (missing.length > 0) {
         const fetched = await fetchRsgbRecords({ squares: missing });
         // fetchRsgbRecords returns one flat list, so the records are put back
@@ -386,11 +393,33 @@ export function createRepeaterSources(ctx, { endpoints }) {
           const locator = String(record?.locator || "").slice(0, 4).toUpperCase();
           squareCache.get(locator)?.push(record);
         }
-        while (squareCache.size > PREVIEW_CACHE_LIMIT) {
-          squareCache.delete(squareCache.keys().next().value);
+      }
+      // Read the answer out before making room, not after. A plan can be as
+      // wide as the cache is deep (both 24), so a second, overlapping plan
+      // pushes the cache over its cap -- and the oldest entries then are
+      // precisely the overlapping ones this plan still needs. Evicting first
+      // would hand back an empty list for a square that was just fetched, and
+      // the preview would quietly omit its repeaters.
+      const records = squares.flatMap((locator) => squareCache.get(locator) || []);
+      if (typeof onSquare === "function") {
+        for (const locator of squares) {
+          onSquare({
+            locator,
+            count: (squareCache.get(locator) || []).length,
+            cached: !fetchedNow.has(locator),
+          });
         }
       }
-      return squares.flatMap((locator) => squareCache.get(locator) || []);
+      const keep = new Set(squares);
+      for (const locator of squareCache.keys()) {
+        if (squareCache.size <= PREVIEW_CACHE_LIMIT) {
+          break;
+        }
+        if (!keep.has(locator)) {
+          squareCache.delete(locator);
+        }
+      }
+      return records;
     }
 
     // RSGB filters client-side, so the preview is the real filter run over the
@@ -519,9 +548,14 @@ export function createRepeaterSources(ctx, { endpoints }) {
         log.setStatus(`Querying RSGB ETCC for ${plan.squares.length} locator square(s)...`);
         log.logDebug(`RSGB QUERY ${plan.squares.join(", ")} r=${radiusKm}km`);
 
-        const records = await fetchRsgbRecords({
-          squares: plan.squares,
-          onRequest: ({ locator, count }) => log.logDebug(`RSGB SQUARE ${locator} -> ${count}`),
+        // Through the same cache the preview fills. The normal workflow is to
+        // pause long enough to see the preview and then press Query API, so
+        // fetching directly here downloaded every square a second time -- up to
+        // 24 more responses of roughly 75 kB, for records already in hand.
+        const records = await recordsForSquares(plan.squares, {
+          onSquare: ({ locator, count, cached }) => log.logDebug(
+            `RSGB SQUARE ${locator} -> ${count}${cached ? " (cached)" : ""}`,
+          ),
         });
         const deduped = dedupeRsgbRecords(records);
         // An empty selection must not fall through to filterRsgbRecords()'s
