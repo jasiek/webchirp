@@ -875,10 +875,17 @@ export function createCityField({
   // the suppression there: the blur the press causes is ignored, and the tap
   // commits through the option's click handler instead.
   list.addEventListener("pointerdown", (event) => {
-    listPointerActive = true;
     if ((event.pointerType || "mouse") === "mouse") {
       event.preventDefault?.();
+      // Never for a mouse. The suppression above is what keeps focus in the
+      // box, so no blur needs suppressing -- and an option's own handler has
+      // already committed and hidden the list by the time this one runs, which
+      // means the release and click land on the page instead. The flag would
+      // then never be cleared, and every later blur would return early: the
+      // next city would not commit and its list would sit open over the form.
+      return;
     }
+    listPointerActive = true;
   });
   // Cleared whichever way the gesture ends, including a scroll that produces no
   // click at all -- a flag left set would swallow the next blur's commit.
@@ -1025,6 +1032,9 @@ export function createCityField({
     input.value = cityLabel(city);
     setNote("");
     closeList();
+    // Whatever gesture led here is over, and the list it was pressed on is
+    // gone, so nothing is left that could clear this later.
+    listPointerActive = false;
     // Nothing is re-queried for the committed text; a lookup already in flight
     // would reopen the list over a settled choice.
     searchGeneration += 1;
@@ -1097,6 +1107,9 @@ export function createCityField({
   }
 
   input.addEventListener("input", () => {
+    // Typing means any pointer gesture on the list finished, however it ended
+    // -- a touch that lifted off the list never reaches its pointerup handler.
+    listPointerActive = false;
     // Editing the text abandons the previous choice: the coordinates already
     // pushed into the position field stay (the user may be refining the name
     // of the place they picked), but nothing here still claims to describe

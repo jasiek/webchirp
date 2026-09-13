@@ -779,6 +779,15 @@ const MANCHESTER = {
   latitude: 53.48095,
   longitude: -2.23743,
 };
+const LONDON = {
+  id: "2643743",
+  name: "London",
+  region: "England",
+  country: "United Kingdom",
+  countryCode: "GB",
+  latitude: 51.50853,
+  longitude: -0.12573,
+};
 const MANCHESTER_NH = {
   id: "5089178",
   name: "Manchester",
@@ -1376,4 +1385,54 @@ test("a new lookup clears the previous one's verdict", async () => {
   assert.equal(note.hidden, true);
   assert.equal(note.textContent, "");
   pending[0]([MANCHESTER]);
+});
+
+// A real browser runs an option's own pointerdown handler first, then bubbles
+// the same event to the list. The fake DOM has no bubbling, so a test that
+// wants that sequence dispatches at both, which is what each listener would
+// have been handed.
+async function pressOption(list, index, init = {}) {
+  const event = { pointerType: "mouse", preventDefault() {}, ...init };
+  await list.children[index].dispatch("pointerdown", event);
+  await list.dispatch("pointerdown", { ...event, target: list.children[index] });
+}
+
+test("a mouse press on the list never suppresses a later blur commit", async () => {
+  const { input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  // The press is suppressed for a mouse, so focus never leaves the box and no
+  // blur needs ignoring. Marking the gesture active anyway strands the flag,
+  // because an option's handler has already hidden the list by the time the
+  // event bubbles here — the release and click then land on the page, and the
+  // listeners that would clear it are on an element nothing is pointing at.
+  await list.dispatch("pointerdown", { pointerType: "mouse", preventDefault() {} });
+  await input.dispatch("blur");
+
+  assert.deepEqual(selections, [MANCHESTER], "the blur still commits");
+  assert.equal(list.hidden, true);
+});
+
+test("picking one city by mouse does not strand the next one", async () => {
+  const byQuery = { lond: [LONDON], manch: [MANCHESTER, MANCHESTER_NH] };
+  const selections = [];
+  const field = createCityField({
+    search: async (query) => byQuery[query] || [],
+    onSelect: (city) => selections.push(city),
+  });
+  const [, wrapper] = field.nodes;
+  const [input, list] = wrapper.children;
+
+  // The reported sequence: click London, type Manchester, press Tab.
+  await input.dispatch("focus");
+  await typeCity(input, "lond");
+  await pressOption(list, 0);
+  assert.deepEqual(selections, [LONDON]);
+
+  await typeCity(input, "manch");
+  await input.dispatch("blur");
+
+  assert.deepEqual(selections, [LONDON, MANCHESTER], "Tab commits the new city");
+  assert.equal(field.value(), MANCHESTER);
+  assert.equal(list.hidden, true, "and its list does not sit open over the form");
 });
