@@ -1459,3 +1459,102 @@ test("a request answering inside the deadline is unaffected by it", async (t) =>
   assert.deepEqual(log.errors, []);
   assert.equal(table.inserted.length, 1);
 });
+
+// --- City/Locality across opens ---------------------------------------------
+
+const KRAKOW_JSON = JSON.stringify({
+  query: "krak",
+  results: [{
+    id: 3094802,
+    name: "Kraków",
+    region: "Lesser Poland",
+    country: "Poland",
+    cc: "PL",
+    lat: 50.06143,
+    lon: 19.93658,
+  }],
+});
+
+// Type into the City/Locality box and take the top suggestion the way a user
+// leaving the field does. The lookup fires on the keystroke, so the only wait
+// is for the stubbed fetch to settle.
+async function pickCity(dom, text) {
+  const city = fieldByName(dom, "city");
+  city.value = text;
+  await city.dispatch("input");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await city.dispatch("blur");
+  return city;
+}
+
+test("a chosen city fills the position, the locator and the box itself", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  const city = await pickCity(dom, "krak");
+
+  assert.equal(city.value, "Kraków, Lesser Poland, Poland");
+  assert.equal(fieldByName(dom, "latitude").value, "50.061430");
+  assert.equal(fieldByName(dom, "longitude").value, "19.936580");
+  assert.equal(fieldByName(dom, "locator").value, "JO90XB");
+});
+
+test("the chosen city persists across a reopen and a source switch", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await pickCity(dom, "krak");
+  await dom.repeaterQueryCancelEl.dispatch("click");
+
+  // Same source again: the name is back in the box, in step with the
+  // coordinates the position field restores beside it.
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.equal(fieldByName(dom, "city").value, "Kraków, Lesser Poland, Poland");
+  assert.equal(fieldByName(dom, "latitude").value, "50.061430");
+  await dom.repeaterQueryCancelEl.dispatch("click");
+
+  // A different directory is still the same place, so the name carries over
+  // exactly as the coordinates already did.
+  await dom.channelImportRepeaterbookEl.dispatch("click");
+  assert.equal(fieldByName(dom, "city").value, "Kraków, Lesser Poland, Poland");
+  assert.equal(fieldByName(dom, "latitude").value, "50.061430");
+});
+
+test("restoring a city costs no lookup", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/cities", body: KRAKOW_JSON },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await pickCity(dom, "krak");
+  const afterPick = calls.filter((call) => call.url.includes("/cities")).length;
+  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+
+  // The coordinates the name produced are already in the form; asking the
+  // gazetteer to rediscover them would be a request whose answer is on screen.
+  assert.equal(calls.filter((call) => call.url.includes("/cities")).length, afterPick);
+});
+
+test("moving the position by hand drops the city name it no longer describes", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await pickCity(dom, "krak");
+
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = "51.5";
+  await latitude.dispatch("input");
+
+  // The box would otherwise still claim these coordinates are Kraków.
+  assert.equal(fieldByName(dom, "city").value, "");
+  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.equal(fieldByName(dom, "city").value, "", "and it stays dropped on reopen");
+  assert.equal(fieldByName(dom, "latitude").value, "51.5");
+});

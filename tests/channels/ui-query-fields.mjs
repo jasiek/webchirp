@@ -761,13 +761,12 @@ test("a queued redraw is not lost to a press that turns out not to be a drag", a
 
 // --- City/Locality autocomplete ---------------------------------------------
 
-// The field debounces its lookup on a real timer (CITY_DEBOUNCE_MS, 180 ms),
-// so a test that types has to outwait it. The module keeps that constant
-// private, so this is the one place the number is written down twice.
-const CITY_DEBOUNCE_MS = 180;
-
-function afterCityDebounce() {
-  return new Promise((resolve) => setTimeout(resolve, CITY_DEBOUNCE_MS + 60));
+// The lookup fires on the keystroke, so typing only has to outrun the stub's
+// own promise rather than a timer. A macrotask is enough for that and keeps the
+// tests honest about the ordering: anything the field defers past this would
+// show up as a failure rather than be papered over by a generous sleep.
+function afterCityLookup() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 const MANCHESTER = {
@@ -791,18 +790,17 @@ const MANCHESTER_NH = {
 
 // Builds the field over a stub lookup and records every call it makes, so the
 // tests can assert both what reached the endpoint and what came back.
-function buildCityField({ results = [MANCHESTER, MANCHESTER_NH], near = null, fail = null } = {}) {
+function buildCityField({ results = [MANCHESTER, MANCHESTER_NH], fail = null } = {}) {
   const calls = [];
   const selections = [];
   const field = createCityField({
-    search: async (query, hint) => {
-      calls.push({ query, hint });
+    search: async (query) => {
+      calls.push({ query });
       if (fail) {
         throw fail;
       }
       return results;
     },
-    near: () => near,
     onSelect: (city) => selections.push(city),
   });
   const [, wrapper] = field.nodes;
@@ -813,7 +811,7 @@ function buildCityField({ results = [MANCHESTER, MANCHESTER_NH], near = null, fa
 async function typeCity(input, text) {
   input.value = text;
   await input.dispatch("input");
-  await afterCityDebounce();
+  await afterCityLookup();
 }
 
 test("city field labels a text input and hides its suggestion list until it has one", () => {
@@ -834,7 +832,7 @@ test("typing queries the lookup once and lists what it returns", async () => {
   const { input, list, calls } = buildCityField();
   await typeCity(input, "manch");
 
-  assert.deepEqual(calls, [{ query: "manch", hint: null }]);
+  assert.deepEqual(calls, [{ query: "manch" }]);
   assert.equal(list.hidden, false);
   assert.equal(list.children.length, 2);
   assert.equal(list.children[0].children[0].textContent, "Manchester");
@@ -850,10 +848,13 @@ test("the top suggestion is highlighted as soon as the list opens", async () => 
   assert.equal(input.getAttribute("aria-activedescendant"), list.children[0].id);
 });
 
-test("a known position is passed to the lookup as a ranking hint", async () => {
-  const { input, calls } = buildCityField({ near: { latitude: 53.4, longitude: -2.9 } });
+test("the lookup is the typed text and nothing else", async () => {
+  // The endpoint accepts a lat/lon ranking hint and the field deliberately
+  // sends none: a position in a query string on every keystroke is not yet
+  // worth the ordering it buys.
+  const { input, calls } = buildCityField();
   await typeCity(input, "manch");
-  assert.deepEqual(calls[0].hint, { latitude: 53.4, longitude: -2.9 });
+  assert.deepEqual(calls, [{ query: "manch" }]);
 });
 
 test("Enter commits the highlighted suggestion and never submits the form", async () => {
@@ -958,7 +959,6 @@ test("a slow lookup superseded by a later keystroke never reaches the list", asy
   const pending = [];
   const field = createCityField({
     search: (query) => new Promise((resolve) => pending.push({ query, resolve })),
-    near: () => null,
     onSelect: () => {},
   });
   const [, wrapper] = field.nodes;
@@ -976,4 +976,47 @@ test("a slow lookup superseded by a later keystroke never reaches the list", asy
 
   assert.equal(list.children.length, 1);
   assert.equal(list.children[0].children[1].textContent, "England, United Kingdom");
+});
+
+test("a query already answered is replayed without waiting or asking again", async () => {
+  const { input, list, calls } = buildCityField();
+  await typeCity(input, "man");
+  await typeCity(input, "manc");
+  assert.equal(calls.length, 2);
+
+  // Backspacing lands on a query the field already has an answer for, so it
+  // renders from memory with no request and nothing to await.
+  input.value = "man";
+  await input.dispatch("input");
+  assert.equal(list.hidden, false, "the cached list is on screen synchronously");
+  assert.equal(list.children.length, 2);
+  assert.equal(calls.length, 2, "a cache hit asks the endpoint nothing");
+});
+
+test("a failed lookup is not cached, so the next keystroke retries", async () => {
+  let failure = new Error("HTTP 503");
+  const calls = [];
+  const field = createCityField({
+    search: async (query) => {
+      calls.push(query);
+      if (failure) {
+        throw failure;
+      }
+      return [MANCHESTER];
+    },
+    onSelect: () => {},
+  });
+  const [, wrapper] = field.nodes;
+  const [input, list] = wrapper.children;
+
+  await typeCity(input, "manch");
+  assert.equal(list.hidden, true);
+
+  // Same text again, now that the endpoint is back. A cached failure would
+  // replay the outage for the rest of the modal session instead of retrying.
+  failure = null;
+  await typeCity(input, "manch");
+
+  assert.deepEqual(calls, ["manch", "manch"]);
+  assert.equal(list.hidden, false);
 });

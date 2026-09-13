@@ -602,10 +602,26 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
 
 // --- City/Locality autocomplete ---------------------------------------------
 
-// How long after the last keystroke the lookup runs. Short enough that the
-// list feels like it is following the typing, long enough that "manchester" is
-// two or three requests rather than ten.
-const CITY_DEBOUNCE_MS = 180;
+// The lookup runs on the keystroke, with no debounce in front of it. A debounce
+// is worth having when it collapses a burst into one request, but ordinary
+// typing leaves 150-250 ms between characters, so any window short enough not
+// to be felt is also too short to collapse anything -- it would have charged
+// every keystroke a delay to save a request it rarely saved. What a debounce is
+// usually there to protect against is handled directly instead: searchGeneration
+// drops a response that a later keystroke has already superseded, and the cache
+// below means a prefix typed twice costs one request.
+//
+// Most of the typing in this box is a prefix of a prefix, and backspacing over
+// an overshot letter returns to a query already answered. Replaying those from
+// memory is what makes the list feel instant rather than merely quick: a cache
+// hit skips the round-trip entirely.
+//
+// Per field instance, so it lives exactly as long as one open modal and can
+// never serve a stale answer into a later session. Capped, because a fast
+// typist in a long session would otherwise accumulate an entry per keystroke;
+// at the cap the oldest goes, which is the query furthest from what is being
+// typed now.
+const CITY_CACHE_LIMIT = 60;
 
 // Render one suggestion as the drop-down shows it: the place first, then
 // whatever administrative context distinguishes it from its namesakes. Region
@@ -631,12 +647,17 @@ function cityLabel(city) {
 // place that stores one.
 //
 // The pieces the shell injects:
-//   search(query, near)  -> Promise of suggestions; `near` is the position
-//                           hint, or null. Injected because this file contacts
-//                           no service of its own.
-//   near()               -> the current { latitude, longitude } to rank by, or
-//                           null when there is none.
-//   onSelect(city)       -> a suggestion was committed.
+//   search(query)        -> Promise of suggestions. Injected because this file
+//                           contacts no service of its own.
+//   onSelect(city)       -> a suggestion was committed, or null when the choice
+//                           was abandoned. The modal shell persists it, so the
+//                           place survives a close and a source switch exactly
+//                           as the coordinates it set do.
+//
+// `initial.city` is the place the field opens holding -- the one the shell kept
+// from last time. The box shows its name and value() returns it straight away,
+// with no lookup: the coordinates it produced are already in the form, so
+// re-deriving them would be a request whose answer is on screen.
 //
 // Commit rules, in the order they fire:
 //   - Enter or a click commits the highlighted suggestion.
@@ -649,8 +670,8 @@ export function createCityField({
   key = "city",
   label = "City/Locality",
   placeholder = "e.g. Manchester",
+  initial = {},
   search,
-  near,
   onSelect,
 } = {}) {
   const input = document.createElement("input");
@@ -699,13 +720,14 @@ export function createCityField({
 
   let suggestions = [];
   let activeIndex = -1;
-  let selected = null;
-  let debounceTimer = 0;
+  let selected = initial.city || null;
   // Counts lookups so a slow one that lands after a later one has already
   // rendered can bow out. Responses to separate keystrokes have no ordering
   // guarantee, and without this the list can end up showing matches for a
   // prefix the box no longer contains.
   let searchGeneration = 0;
+  // Answered queries, keyed by the typed text. See CITY_CACHE_LIMIT.
+  const cache = new Map();
 
   function setNote(text) {
     note.textContent = text || "";
@@ -792,7 +814,6 @@ export function createCityField({
     closeList();
     // Nothing is re-queried for the committed text; a lookup already in flight
     // would reopen the list over a settled choice.
-    cancelPendingSearch();
     searchGeneration += 1;
     if (typeof onSelect === "function") {
       onSelect(city);
@@ -800,10 +821,35 @@ export function createCityField({
     return true;
   }
 
-  function cancelPendingSearch() {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-      debounceTimer = 0;
+  // Wipe the box and the choice it held. Called when the position is set by
+  // some other route -- geolocation, a typed coordinate, a map drag -- because
+  // at that moment the name in the box no longer describes the coordinates
+  // underneath it, and a label that lies about the position is worse than no
+  // label. Silent by design: the shell is the caller, so telling it what it
+  // just did would only risk a loop.
+  function clear() {
+    if (!selected && String(input.value ?? "") === "") {
+      return;
+    }
+    selected = null;
+    input.value = "";
+    setNote("");
+    closeList();
+    searchGeneration += 1;
+  }
+
+  // Show a result set, from wherever it came. One place, so a cached answer and
+  // a fresh one put the list into exactly the same state.
+  function showResults(results) {
+    renderSuggestions(results);
+    setNote(results.length === 0 ? "No matching places." : "");
+  }
+
+  function rememberResults(key, results) {
+    cache.set(key, results);
+    if (cache.size > CITY_CACHE_LIMIT) {
+      // Map iterates in insertion order, so the first key is the oldest.
+      cache.delete(cache.keys().next().value);
     }
   }
 
@@ -811,7 +857,7 @@ export function createCityField({
     const generation = searchGeneration;
     let results = [];
     try {
-      results = await search(text, typeof near === "function" ? near() : null);
+      results = await search(text);
     } catch (error) {
       if (generation !== searchGeneration) {
         return;
@@ -820,12 +866,14 @@ export function createCityField({
       setNote(`City lookup unavailable: ${error.message}`);
       return;
     }
+    // A failed lookup is deliberately not cached: the next keystroke should
+    // retry rather than replay the outage for the rest of the modal session.
+    rememberResults(text, results);
     // Superseded by a later keystroke or by a commit while this was in flight.
     if (generation !== searchGeneration) {
       return;
     }
-    renderSuggestions(results);
-    setNote(results.length === 0 ? "No matching places." : "");
+    showResults(results);
   }
 
   input.addEventListener("input", () => {
@@ -834,7 +882,6 @@ export function createCityField({
     // of the place they picked), but nothing here still claims to describe
     // them.
     selected = null;
-    cancelPendingSearch();
     const text = String(input.value ?? "").trim();
     // Every new keystroke invalidates whatever is in flight, whether or not a
     // fresh lookup follows it.
@@ -847,10 +894,12 @@ export function createCityField({
     if (typeof search !== "function") {
       return;
     }
-    debounceTimer = setTimeout(() => {
-      debounceTimer = 0;
-      runSearch(text);
-    }, CITY_DEBOUNCE_MS);
+    const cached = cache.get(text);
+    if (cached) {
+      showResults(cached);
+      return;
+    }
+    runSearch(text);
   });
 
   input.addEventListener("keydown", (event) => {
@@ -876,8 +925,7 @@ export function createCityField({
       // (web/js/ui.js); with a list open it should only close the list.
       event.preventDefault?.();
       event.stopPropagation?.();
-      cancelPendingSearch();
-      searchGeneration += 1;
+        searchGeneration += 1;
       closeList();
     }
   });
@@ -885,20 +933,27 @@ export function createCityField({
   // Leaving the field takes the top suggestion, which is the field's whole
   // promise: type enough of a name, move on, and the position is set.
   input.addEventListener("blur", () => {
-    cancelPendingSearch();
     if (!commitActive()) {
       closeList();
     }
   });
+
+  // Show the place the field was handed, if any. Assigning the value fires no
+  // input event, so this cannot trigger the lookup that a typed character
+  // would.
+  if (selected) {
+    input.value = cityLabel(selected);
+  }
 
   return {
     key,
     nodes: [labelledBy(label, input.id), wrapper],
     focusTarget: input,
     // The committed place, or null. No source filters by city — every query
-    // consumes the coordinate pair this produced — so this exists for
-    // completeness and for the tests, not for a query parameter.
+    // consumes the coordinate pair this produced — so this exists for the
+    // shell's persistence and for the tests, not for a query parameter.
     value: () => selected,
+    clear,
     input,
     list,
   };

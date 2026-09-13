@@ -77,7 +77,19 @@ export function createRepeaterQuery(ctx) {
   let openGeneration = 0;
   let fieldInstances = [];
   let positionField = null;
+  let cityField = null;
   const positionState = { latitudeText: "", longitudeText: "" };
+  // The place the City/Locality box last settled on. Kept for the same reason
+  // the coordinates are: it is where the user is, which does not change with
+  // the directory they ask. Held here rather than in the field because the
+  // field is rebuilt on every open.
+  const cityState = { city: null };
+  // True only while onCitySelected is writing the position it just chose.
+  // setPosition() reports through the position field's onChange, which is also
+  // how a geolocate, a typed digit or a map drag arrives -- and those must wipe
+  // the city name, because it would no longer describe the coordinates. Without
+  // this flag, choosing a city would immediately erase its own name.
+  let applyingCity = false;
   // True while a query is awaiting its network round-trip. The submit handler
   // is async, so without this a second submit re-enters it while the first is
   // suspended, and both resolved queries insert their rows — every repeater
@@ -101,10 +113,16 @@ export function createRepeaterQuery(ctx) {
   // map drag use, so the locator is recomputed and the preview recentres for
   // free -- the city field never touches those three inputs itself.
   function onCitySelected(city) {
+    cityState.city = city;
     if (!positionField) {
       return;
     }
-    positionField.setPosition(city.latitude, city.longitude);
+    applyingCity = true;
+    try {
+      positionField.setPosition(city.latitude, city.longitude);
+    } finally {
+      applyingCity = false;
+    }
     // Counted alongside repeater_geolocate and repeater_map_panned so the ways
     // of setting a position can be compared. Which source was open and nothing
     // else: the place name is a search term and the coordinates are a location,
@@ -120,6 +138,7 @@ export function createRepeaterQuery(ctx) {
     dom.repeaterQueryGridEl.innerHTML = "";
     fieldInstances = [];
     positionField = null;
+    cityField = null;
     for (const config of source.fields) {
       let instance;
       if (config.kind === "city") {
@@ -127,17 +146,18 @@ export function createRepeaterQuery(ctx) {
           ...config,
           // The field contacts nothing itself; the lookup is handed in here,
           // which is also where the endpoint is known.
-          search: (query, hint) => fetchCitySuggestions(endpoints.cities, query, hint),
-          // Rank matches near the position the form already holds, so the
-          // London the user means outranks the one on another continent. That
-          // position is whatever is in the coordinate boxes -- geolocated,
-          // typed, dragged off the map or left by the last city picked -- which
-          // is exactly what the map underneath is showing, so the ranking never
-          // depends on something invisible. A half-entered or out-of-range pair
-          // reads as null there and is sent as no hint at all.
-          near: () => positionField?.value() || null,
+          // No position hint is sent with the lookup: the endpoint accepts one
+          // and ranks nearby places higher for it, but the form's own position
+          // is a location, and the ranking it buys is not yet worth putting one
+          // in a query string on every keystroke. fetchCitySuggestions still
+          // takes the argument, so turning it back on is one parameter here.
+          search: (query) => fetchCitySuggestions(endpoints.cities, query),
           onSelect: (city) => onCitySelected(city),
+          // Reopening the modal shows the place last chosen, in step with the
+          // coordinates the position field restores beside it.
+          initial: cityState,
         });
+        cityField = instance;
       } else if (config.kind === "position") {
         instance = createPositionField({
           locatorPlaceholder: config.locatorPlaceholder,
@@ -145,6 +165,13 @@ export function createRepeaterQuery(ctx) {
           onChange: (latitudeText, longitudeText) => {
             positionState.latitudeText = latitudeText;
             positionState.longitudeText = longitudeText;
+            // The position moved by some route other than the city picker, so
+            // whatever place name is in the box is now describing coordinates
+            // that are no longer its own.
+            if (!applyingCity) {
+              cityState.city = null;
+              cityField?.clear();
+            }
           },
           // Counted next to repeater_geolocate, so the three ways of setting a
           // position can be compared. Which source was open, never where the
