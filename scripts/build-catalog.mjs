@@ -9,6 +9,12 @@ const execFileAsync = promisify(execFile);
 
 const REPO_ROOT = process.cwd();
 const OUTPUT_PATH = path.join(REPO_ROOT, "web", "radio-catalog.json");
+// Deliberately outside web/: the per-model page generator reads this at build
+// time and no browser ever fetches it, so keeping it out of the deployed tree
+// spares every visitor a file they would never use. The catalog next to it is
+// the opposite -- the app downloads that on every load, which is why the
+// per-radio capabilities live here instead of being folded into it.
+const FEATURES_PATH = path.join(REPO_ROOT, "radio-features.json");
 
 // Match the catalog ordering used by the browser runtime (runtime-rpc.js).
 function sortRadioCatalog(radios) {
@@ -68,10 +74,30 @@ async function main() {
   };
 
   await writeFile(OUTPUT_PATH, `${JSON.stringify(catalog, null, 0)}\n`, "utf8");
+
+  // What each catalogued radio can do, read from the driver's own
+  // RadioFeatures. Written from the same sweep because the drivers are already
+  // imported here; doing it in a second pass would repeat the expensive part.
+  const featureSweep = await harness.runPythonJson(
+    "json.dumps(list_radio_features(_modules))",
+    { _modules: modules },
+  );
+  for (const key of Object.keys(featureSweep.failed).sort()) {
+    console.warn(`Radio could not describe itself, absent from features: ${key} (${featureSweep.failed[key]})`);
+  }
+  await writeFile(
+    FEATURES_PATH,
+    `${JSON.stringify({ chirpRevision, features: featureSweep.features }, null, 0)}\n`,
+    "utf8",
+  );
   // eslint-disable-next-line no-console
   const failureCount = Object.keys(importFailures).length;
   console.log(
     `Wrote ${sorted.length} radios from ${modules.length} driver modules to ${path.relative(REPO_ROOT, OUTPUT_PATH)} (chirp ${chirpRevision.slice(0, 12)}${failureCount ? `, ${failureCount} modules unimportable` : ""}).`,
+  );
+  const described = Object.keys(featureSweep.features).length;
+  console.log(
+    `Wrote features for ${described} of ${sorted.length} radios to ${path.relative(REPO_ROOT, FEATURES_PATH)}.`,
   );
 }
 

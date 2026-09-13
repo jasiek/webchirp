@@ -70,6 +70,15 @@ export function listRegisteredRadios(harness, moduleNames) {
   });
 }
 
+// What each registered radio can do, from the same sweep that backs
+// radio-features.json. Companion to listRegisteredRadios above: that says
+// which radios exist, this says what they are capable of.
+export function listRadioFeatures(harness, moduleNames) {
+  return harness.runPythonJson("json.dumps(list_radio_features(_mods))", {
+    _mods: moduleNames,
+  });
+}
+
 // The browser's image-load path for one upstream test image: read its
 // metadata, resolve the catalog radio, import that driver, then load the
 // image. Returns the resolved catalog entry, the loaded codeplug and the raw
