@@ -1,5 +1,6 @@
 import { withRequestTimeout } from "./request-timeout.js";
 import { setRowGeo } from "./row-geo.js";
+import { highestPowerOption, setHighestPower } from "./row-power.js";
 
 const PMR446_FREQUENCIES_MHZ = Array.from(
   { length: 16 },
@@ -473,7 +474,7 @@ function findBandwidthMode(findEnumOption, bandwidthKhz) {
 
 function findPowerTier(findEnumOption, powerTier) {
   if (powerTier === "high") {
-    return findEnumOption("Power", ["High", "50W", "25W", "10W", "8W", "7W"], true);
+    return highestPowerOption(findEnumOption);
   }
   return findEnumOption("Power", ["Low", "0.5W", "500mW", "2W", "2.0W", "5W", "5.0W"], true);
 }
@@ -588,6 +589,10 @@ export function buildPrzemiennikiRows(
       continue;
     }
     setRowValue(row, "Mode", mappedMode);
+    // A repeater channel reaches for a distant machine, so it carries the
+    // driver's highest tier rather than whatever the blank row defaulted to -
+    // the same rule buildRsgbRows applies in web/js/rsgb.js.
+    setHighestPower(row, { setRowValue, findEnumOption });
     setRowGeo(row, repeater.latitude, repeater.longitude);
     rows.push(row);
   }

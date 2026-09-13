@@ -11,6 +11,7 @@
 
 import { REPEATER_REQUEST_TIMEOUT_MS, withRequestTimeout } from "./request-timeout.js";
 import { setRowGeo } from "./row-geo.js";
+import { setHighestPower } from "./row-power.js";
 
 // No CORS proxy is involved: the API sends Access-Control-Allow-Origin: * on
 // every response, unlike przemienniki.net and repeaterbook.com. The request
@@ -552,17 +553,9 @@ export function buildRsgbRows(entries, { createBlankRow, setRowValue, findEnumOp
 
     // These are repeater channels, so the radio is reaching for a distant
     // machine: the highest tier the driver advertises is the only sensible
-    // default. Without this the column keeps the blank row's value, which is
-    // whatever the driver happens to list first (`defaultValueForColumn` in
-    // channel-table.js takes options[0]) — and drivers disagree: anytone.py
-    // starts at High, anytone778uv.py at Low. "Hi"/"H" are in the list because
-    // 38 driver classes spell it that way and would otherwise fall through to
-    // that arbitrary default. A driver whose labels match none of these keeps
-    // it, which is no worse than before.
-    const power = findEnumOption("Power", ["High", "Hi", "H", "50W", "25W", "10W", "8W", "7W", "5W", "5.0W"], true);
-    if (power) {
-      setRowValue(row, "Power", power);
-    }
+    // default. The ranking lives in web/js/row-power.js because every repeater
+    // directory needs the same answer.
+    setHighestPower(row, { setRowValue, findEnumOption });
 
     const distance = Number(entry?.distanceKm);
     const commentParts = [
