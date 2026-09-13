@@ -220,6 +220,48 @@ body {
   font-weight: 600;
 }
 
+/* Static per-model pages (web/radios/, built by scripts/build-model-pages.mjs),
+   which reuse the about-page shell above. Only the parts the about page has no
+   equivalent for live here: the call to action into the app, the model list and
+   the sibling-model footer. */
+
+.radio-page h2 {
+  font-size: 1.05rem;
+  margin: 1.4rem 0 0.4rem;
+}
+
+.radio-page h3 {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.3rem;
+}
+
+.radio-page-cta {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.55rem 1rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.radio-page-cta:hover {
+  filter: brightness(1.08);
+}
+
+/* Two columns of model names rather than one 55-item ribbon down the page. */
+.radio-page-list {
+  columns: 2;
+  gap: 1.2rem;
+}
+
+.radio-page-related {
+  margin-top: 1.4rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
 /* Adapter loopback diagnostics (serial-test.html), which reuses the about-page
    shell above for its card and layout. */
 

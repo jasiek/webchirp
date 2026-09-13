@@ -284,13 +284,20 @@ def _describe_features(features: chirp_common.RadioFeatures) -> dict[str, Any]:
     return {
         "memoryBounds": [int(bounds[0]), int(bounds[1])],
         "nameLength": int(getattr(features, "valid_name_length", 0) or 0),
-        "modes": [str(mode) for mode in getattr(features, "valid_modes", None) or []],
+        # Sorted, not in the driver's order, because several drivers build these
+        # as ``list(set(...))`` (``ft817.py:443``, ``id31.py:212``) and a set of
+        # strings iterates in a different order in every Python process. Left
+        # alone, the artifact and the pages generated from it would change on
+        # every rebuild with nothing behind the diff. Nothing downstream reads
+        # order as meaning -- this describes a radio rather than driving a
+        # dropdown, which is what ``column_metadata`` is for.
+        "modes": sorted(str(mode) for mode in getattr(features, "valid_modes", None) or []),
         "bands": bands,
         # The empty string in valid_tmodes is "no tone", which is not a
         # capability worth listing next to Tone/TSQL/DTCS.
-        "toneModes": [
+        "toneModes": sorted(
             str(tmode) for tmode in getattr(features, "valid_tmodes", None) or [] if tmode
-        ],
+        ),
         "powerLevels": _power_level_watts(getattr(features, "valid_power_levels", None)),
         "hasSettings": bool(getattr(features, "has_settings", False)),
     }

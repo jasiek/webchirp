@@ -52,6 +52,19 @@ test("recorded features are usable as page copy", async () => {
   }
 });
 
+// Several drivers build these lists as list(set(...)), which iterates in a
+// different order in every Python process, so an unsorted artifact churns on
+// every rebuild and drags the generated pages with it. Sorting is what makes
+// the build reproducible; this is the cheap check that it still happens.
+test("descriptive lists are sorted, so a rebuild is byte-identical", async () => {
+  const { features } = await readJson(repoRoot, "radio-features.json");
+
+  for (const [key, entry] of Object.entries(features)) {
+    assert.deepEqual(entry.modes, [...entry.modes].sort(), `${key} has unsorted modes`);
+    assert.deepEqual(entry.toneModes, [...entry.toneModes].sort(), `${key} has unsorted tone modes`);
+  }
+});
+
 // The generator's own skip rule, pinned here so a CHIRP bump that guts a
 // driver's advertised capabilities shows up as a failing build rather than as
 // a page claiming a radio holds zero channels.

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Same analytics wiring as index.html; the module owns the production-host gate. -->
+    <script type="module" src="../js/analytics.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Baofeng BF-T20D programming software | WebCHIRP</title>
+    <meta name="description" content="Program a Baofeng BF-T20D from your browser: 30 channels, no CPS download and no USB driver install. Runs CHIRP's own driver." />
+    <link rel="canonical" href="https://codeplug.org/radios/baofeng-bf-t20d.html" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="WebCHIRP" />
+    <meta property="og:title" content="Baofeng BF-T20D programming software" />
+    <meta property="og:description" content="Program a Baofeng BF-T20D from your browser: 30 channels, no CPS download and no USB driver install. Runs CHIRP's own driver." />
+    <meta property="og:url" content="https://codeplug.org/radios/baofeng-bf-t20d.html" />
+    <meta property="og:image" content="https://codeplug.org/images/social-preview.png" />
+    <link rel="icon" href="../favicon.ico" sizes="any" />
+    <link rel="manifest" href="../manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="../images/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0d5ea8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need to install a USB driver to program the Baofeng BF-T20D?","acceptedAnswer":{"@type":"Answer","text":"No. WebCHIRP talks to CH340, CP2102, PL2303 or FTDI programming cables from the browser, so there is nothing to install on Windows, macOS or Linux."}},{"@type":"Question","name":"Do I need the Baofeng CPS software?","acceptedAnswer":{"@type":"Answer","text":"No. WebCHIRP runs CHIRP's own Baofeng BF-T20D driver in the browser, so it reads and writes the same codeplug the desktop software does."}},{"@type":"Question","name":"How many channels does the Baofeng BF-T20D hold?","acceptedAnswer":{"@type":"Answer","text":"30, numbered 1 to 30 in the channel table."}}]}
+    </script>
+  </head>
+  <body class="about-page">
+    <main class="about-shell">
+      <article class="about-card radio-page">
+        <div class="about-header">
+          <h1>Baofeng BF-T20D programming software</h1>
+          <a class="toolbar-link" href="../index.html">Open WebCHIRP</a>
+        </div>
+        <p>
+          WebCHIRP programs the Baofeng BF-T20D in your browser. It runs the
+          <a href="https://chirp.danplanet.com/">CHIRP</a> project's own driver for this
+          radio, so it reads and writes the same codeplug the desktop software does —
+          without installing anything.
+        </p>
+        <p>
+          <a class="radio-page-cta" href="../index.html?radio=baofeng_digital%3ABaofengBFT20D"
+            >Program my BF-T20D now</a
+          >
+        </p>
+
+        <h2>No driver install needed</h2>
+        <p>
+          Baofeng programming cables use a CH340, CP2102, PL2303 or FTDI USB-serial
+          chip. WebCHIRP speaks to all four directly from the browser, so there is no driver
+          package to download and no Windows version to match. Plug the cable in and pick the
+          port when the browser asks.
+        </p>
+
+        <h2>What you can edit on the BF-T20D</h2>
+        <ul>
+          <li>30 memory channels, numbered 1 to 30</li>
+          <li>Channel names up to 6 characters</li>
+          <li>Transmit power: Low 0.5W, High 2.0W</li>
+          <li>Modes: FM, NFM</li>
+          <li>Bands: 400–480 MHz</li>
+          <li>Tone squelch: Cross, DTCS, TSQL, Tone</li>
+        </ul>
+
+        <h2>How to program a Baofeng BF-T20D</h2>
+        <ol>
+          <li>Plug the programming cable into the radio and the computer.</li>
+          <li>Open WebCHIRP, check Baofeng BF-T20D is selected, and press Download.</li>
+          <li>Edit the channels, or pull in nearby repeaters from a directory.</li>
+          <li>Press Upload to write the result back to the radio.</li>
+        </ol>
+
+        <h2>Questions</h2>
+        <h3>Do I need to install a USB driver to program the Baofeng BF-T20D?</h3>
+        <p>No. WebCHIRP talks to CH340, CP2102, PL2303 or FTDI programming cables from the browser, so there is nothing to install on Windows, macOS or Linux.</p>
+        <h3>Do I need the Baofeng CPS software?</h3>
+        <p>No. WebCHIRP runs CHIRP's own Baofeng BF-T20D driver in the browser, so it reads and writes the same codeplug the desktop software does.</p>
+        <h3>How many channels does the Baofeng BF-T20D hold?</h3>
+        <p>30, numbered 1 to 30 in the channel table.</p>
+
+        <p class="radio-page-related"><a href="./baofeng-bf-t20.html">BF-T20</a> · <a href="./index.html">All Baofeng radios</a> · <a href="./baofeng-bf-t20frs.html">BF-T20FRS</a></p>
+      </article>
+    </main>
+  </body>
+</html>
