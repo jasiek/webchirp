@@ -105,6 +105,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 
 ## Other considerations
 - This is currently hosted on GitHub Pages = we can't set custom http headers on files, and can't control cache time.
+- We do not aim to support screen readers at this time.
 
 ## Change Process
 - Commit after every change.
@@ -112,8 +113,12 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Include clear commit messages that describe user-visible behavior or architectural impact.
 - Never include agent session ID links in any commit message.
 - Never use backticks (`) anywhere in any generated command to execute.
-- Include LLM model information in the commit message.
 - Never modify RELEASE_NOTES.md when on a branch. When on master, update RELEASE_NOTES.md based on PRs which were merged in with current date. Each entry is a single line: the user-visible change plus the PR number, no multi-sentence detail. At the same time run `npm run screenshots` to regenerate images/screenshot.png, images/screenshot-for-opengraph.png, and web/images/social-preview.png from the current version of the app. When generating a screenshot, query the RSGB API channels for locator IO82MM. When you do this, also consolidate/update FINDINGS.md so that it is always up to date.
+
+## Code Review
+- If you are an OpenAI agent, use Astra Medium when performing code review.
+- If you're an Anthropic model, use Fable Medium.
+- Always post a response to each comment when you receive feedback.
 
 # PR Behaviour
 - When submitting a PR, in the PR description include any new dependencies which were added.
