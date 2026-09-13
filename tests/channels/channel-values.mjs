@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeCellValue, normalizeValue } from "../../web/js/ui/channel-values.js";
+import { normalizeCellValue, normalizeValue, parseFreqToHz } from "../../web/js/ui/channel-values.js";
 
 // The column metadata the Python runtime reports, trimmed to what each case
 // needs. CTCSS tables are the interesting enums: every driver publishes its
@@ -87,4 +87,27 @@ test("normalizeValue is the value half of the same call", () => {
   // Every existing call site takes the value alone; it must not have moved.
   assert.equal(normalizeValue("rToneFreq", "141.3", TONE_TABLE, "67.0"), "67.0");
   assert.equal(normalizeValue("rToneFreq", "110.9", TONE_TABLE, "67.0"), "110.9");
+});
+
+// Issue #93: clearing a Frequency cell has to stick, because a blank Frequency
+// is how the runtime is told to erase that memory on upload. The band check
+// used to reject it (blank parsed to 0 Hz, in no band) and the grid wrote the
+// old frequency straight back into the input.
+test("a blank frequency is accepted as the erase value", () => {
+  assert.deepEqual(
+    normalizeCellValue("Frequency", "", TWO_METRES, "145.000000"),
+    { value: "", accepted: true },
+  );
+  assert.deepEqual(
+    normalizeCellValue("Frequency", "   ", TWO_METRES, "145.000000"),
+    { value: "", accepted: true },
+  );
+  assert.deepEqual(
+    normalizeCellValue("Offset", "", TWO_METRES, "600.000000"),
+    { value: "", accepted: true },
+  );
+  assert.equal(normalizeValue("Frequency", "", TWO_METRES, "145.000000"), "");
+  // Blank is no longer a 0 Hz frequency to anything that parses one.
+  assert.equal(parseFreqToHz(""), null);
+  assert.equal(parseFreqToHz("145.5"), 145_500_000);
 });
