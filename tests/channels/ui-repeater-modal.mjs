@@ -1595,7 +1595,7 @@ const PREVIEW_LAT = 49.5;
 const PREVIEW_LON = 20.5;
 
 // The caption under the map preview, which is the field's own element rather
-// than anything dom.js knows about.
+// than anything web/js/ui/dom.js knows about.
 function previewCaption(dom) {
   const match = descendants(grid(dom)).find((el) => el.className === "modal-map-preview-count");
   assert.ok(match, "the map preview has a caption");

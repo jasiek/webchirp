@@ -210,6 +210,33 @@ export function createRepeaterSources(ctx, { endpoints }) {
 
     const previewCache = new Map();
 
+    // Turn a fetched body into what the caption needs. The map's numbers have
+    // to agree with the button underneath it, and two things pull them apart:
+    // a repeater the directory publishes without coordinates, which the query
+    // inserts and the map cannot place, and one the selected radio cannot
+    // express, which the map can place and the query drops. Both are counted
+    // here so the caption can name them instead of quietly promising the wrong
+    // total.
+    //
+    // Only the in-range repeaters go to the row builder -- the widened body
+    // reaches half again the radius, and the query will never see that ground.
+    // Building rows allocates but inserts nothing; insertRowsAtSelectionOrEnd
+    // is the step that touches the grid, and it is not called here.
+    function summarizeRemote(body, position, radiusKm) {
+      // Each plotted entry carries the repeater it came from, because the point
+      // list is not index-aligned with the repeater list -- the unmapped ones
+      // have no point at all.
+      const points = markInRange(body.plotted.map((entry) => entry.point), position, radiusKm);
+      const importable = body.plotted
+        .filter((entry, index) => points[index].inRange)
+        .map((entry) => entry.repeater)
+        .concat(body.unmapped);
+      const { skipped } = buildPrzemiennikiRows(importable, ctx.table.rowBuilderHooks(), {
+        perspective: body.perspective,
+      });
+      return { points, unmapped: body.unmapped.length, unsupported: skipped.length };
+    }
+
     // These directories filter by distance upstream, so a preview asking for
     // exactly the chosen radius could only ever draw stations inside the ring —
     // and the one thing the form cannot tell you is whether a slightly wider
@@ -243,7 +270,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
       const key = keyWithoutRange(url);
       const cached = cacheGet(previewCache, key);
       if (cached && cached.rangeKm >= radiusKm * PREVIEW_RANGE_FACTOR) {
-        return { points: markInRange(cached.points, values.position, radiusKm) };
+        return summarizeRemote(cached, values.position, radiusKm);
       }
       const text = await withRequestTimeout(`${label} preview`, async (signal) => {
         const response = await fetch(url.toString(), { signal });
@@ -253,13 +280,29 @@ export function createRepeaterSources(ctx, { endpoints }) {
         return response.text();
       });
       const parsed = parsePrzemiennikiXml(text);
-      const points = parsed.repeaters
-        .map((repeater) => previewPoint(repeater.latitude, repeater.longitude))
-        .filter(Boolean);
+      const plotted = [];
+      const unmapped = [];
+      for (const repeater of parsed.repeaters) {
+        const point = previewPoint(repeater.latitude, repeater.longitude);
+        if (point) {
+          plotted.push({ point, repeater });
+        } else {
+          // The query inserts this one; only the map cannot place it. Counted
+          // rather than dropped, or the caption would undercount what pressing
+          // Query API is about to do.
+          unmapped.push(repeater);
+        }
+      }
       // The radius this body actually covers, not the one asked for: a later,
       // narrower search may reuse it, a wider one may not.
-      cacheSet(previewCache, key, { points, rangeKm: radiusKm * PREVIEW_RANGE_FACTOR });
-      return { points: markInRange(points, values.position, radiusKm) };
+      const body = {
+        perspective: parsed.perspective,
+        plotted,
+        unmapped,
+        rangeKm: radiusKm * PREVIEW_RANGE_FACTOR,
+      };
+      cacheSet(previewCache, key, body);
+      return summarizeRemote(body, values.position, radiusKm);
     }
 
     return {
@@ -534,7 +577,16 @@ export function createRepeaterSources(ctx, { endpoints }) {
           approximate: entry.approximate,
         }))
         .filter(Boolean);
-      return { points, truncated: plan.truncated };
+      // What the radio cannot express, over the in-range entries only -- the
+      // ones beyond the ring are context for widening the search, not results
+      // the query would insert. Every RSGB position comes from a locator, so
+      // there is nothing unmapped here.
+      const { skipped } = buildRsgbRows(
+        entries.filter((entry) => entry.distanceKm <= radiusKm),
+        ctx.table.rowBuilderHooks(),
+        { modes },
+      );
+      return { points, truncated: plan.truncated, unmapped: 0, unsupported: skipped.length };
     }
 
     return {

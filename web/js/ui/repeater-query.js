@@ -212,14 +212,6 @@ export function createRepeaterQuery(ctx) {
       fieldInstances.push(instance);
     }
     bindRangeToPreview();
-    // One listener for every control the fields built, rather than a hook per
-    // field factory: the grid is rebuilt on each open, so this re-binds with it,
-    // and a field kind added later is previewed without having to know about
-    // this at all. Both event types, because a checkbox and a select report on
-    // "change" while a text or number box reports on "input".
-    for (const type of ["input", "change"]) {
-      dom.repeaterQueryGridEl.addEventListener(type, schedulePreview);
-    }
   }
 
   // Feed the range filter's value to the position field, which draws it as a
@@ -275,8 +267,15 @@ export function createRepeaterQuery(ctx) {
       positionField?.setMarkers([], "off");
       return;
     }
-    positionField?.setMarkers(result.points, "ok", { truncated: result.truncated === true });
-    log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW ${result.points.length} repeater(s)${result.truncated ? " (area clipped)" : ""}`);
+    positionField?.setMarkers(result.points, "ok", {
+      truncated: result.truncated === true,
+      // The two ways the map and the Query API button can disagree about a
+      // total: one the query inserts but the map cannot place, one the map
+      // places but the radio cannot use.
+      unmapped: result.unmapped || 0,
+      unsupported: result.unsupported || 0,
+    });
+    log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW ${result.points.length} repeater(s)${result.truncated ? " (area clipped)" : ""}${result.unsupported ? `, ${result.unsupported} unsupported` : ""}${result.unmapped ? `, ${result.unmapped} unmapped` : ""}`);
   }
 
   // Called by every control in the form. The work is deferred, so a drag that
@@ -416,6 +415,17 @@ export function createRepeaterQuery(ctx) {
   }
 
   function bindEvents() {
+    // One delegated listener for every control the fields build, rather than a
+    // hook per field factory: a field kind added later is previewed without
+    // having to know about this at all. The grid element outlives the fields
+    // inside it -- buildFields only replaces its contents -- so this belongs
+    // here and not there, where each open would re-register it and leave
+    // correctness resting on the DOM deduplicating identical listeners. Both
+    // event types, because a checkbox and a select report on "change" while a
+    // text or number box reports on "input".
+    for (const type of ["input", "change"]) {
+      dom.repeaterQueryGridEl.addEventListener(type, schedulePreview);
+    }
     for (const source of sources) {
       dom[source.toolbarButton].addEventListener("click", async () => {
         try {

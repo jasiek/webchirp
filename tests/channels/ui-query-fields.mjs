@@ -1288,3 +1288,92 @@ test("a clipped search keeps saying so while the next preview loads", () => {
   field.setMarkers(null, "loading");
   assert.equal(previewCount.textContent, "1 in range (part of the area only)");
 });
+
+test("the caption names what the query would drop or could not place", () => {
+  const { field, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR, ALSO_NEAR], "ok", { unsupported: 2 });
+  assert.equal(previewCount.textContent, "2 in range (2 this radio cannot use)");
+
+  field.setMarkers([NEAR], "ok", { unmapped: 1 });
+  assert.equal(previewCount.textContent, "1 in range (1 with no location)");
+
+  // All three qualifiers at once still read as one parenthetical.
+  field.setMarkers([NEAR, BEYOND_RING], "ok", { truncated: true, unmapped: 1, unsupported: 3 });
+  assert.equal(
+    previewCount.textContent,
+    "1 in range, 1 just outside (part of the area only; 1 with no location; 3 this radio cannot use)",
+  );
+
+  // And they clear with the next clean answer.
+  field.setMarkers([NEAR], "ok");
+  assert.equal(previewCount.textContent, "1 in range");
+});
+
+test("the map caption announces itself to a screen reader", () => {
+  const { previewCount } = buildDraggableField();
+  assert.equal(previewCount.getAttribute("role"), "status");
+  assert.equal(previewCount.getAttribute("aria-live"), "polite");
+});
+
+test("an answer arriving mid-drag waits for the gesture to end", async () => {
+  const { field, previewCanvas } = buildDraggableField();
+  const before = previewCanvas.children[0];
+
+  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 140, clientY: 100 });
+  // The preview query fires 600 ms after the form settles, and holding the
+  // pointer still is exactly how that happens. Recentring now would leave the
+  // drag measuring from an origin the map no longer has.
+  field.setMarkers([NEAR, ALSO_NEAR]);
+  assert.equal(previewCanvas.children[0], before, "the tiles were not recentred under the pointer");
+
+  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  assert.notEqual(previewCanvas.children[0], before, "release draws them");
+  assert.equal(pinsIn(previewCanvas).length, 2, "and the markers that arrived are there");
+});
+
+test("a touch scroll that commits nothing still closes the list", async () => {
+  const { input, list, selections } = buildCityField();
+  await input.dispatch("focus");
+  await typeCity(input, "manch");
+
+  // Press, blur (ignored because the gesture might be a tap), then lift with no
+  // click: the gesture was a scroll. No second blur will ever come, so nothing
+  // else would close the list.
+  await list.dispatch("pointerdown", { pointerType: "touch", preventDefault() {} });
+  await input.dispatch("blur");
+  await list.dispatch("pointerup", { pointerType: "touch" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(list.hidden, true);
+  assert.equal(input.getAttribute("aria-expanded"), "false");
+  assert.deepEqual(selections, [], "a scroll commits nothing");
+});
+
+test("a new lookup clears the previous one's verdict", async () => {
+  const pending = [];
+  let results = [];
+  const field = createCityField({
+    search: (query) => {
+      if (results === null) {
+        return new Promise((resolve) => pending.push(resolve));
+      }
+      return Promise.resolve(results);
+    },
+    onSelect: () => {},
+  });
+  const [, wrapper] = field.nodes;
+  const [input, , note] = wrapper.children;
+
+  await typeCity(input, "zzzz");
+  assert.equal(note.textContent, "No matching places.");
+
+  // The next request is slow. Leaving the old verdict up presents it as the
+  // answer for what is being typed now.
+  results = null;
+  input.value = "manch";
+  await input.dispatch("input");
+  assert.equal(note.hidden, true);
+  assert.equal(note.textContent, "");
+  pending[0]([MANCHESTER]);
+});

@@ -17,8 +17,9 @@ import { createMapAttribution, renderStaticMap } from "./static-map-view.js";
 // already typed into it — no directory is contacted and nothing is reported.)
 //
 // Elements get generated ids under this prefix so <label for> association
-// works. They are deliberately not in dom.js: the fields exist only between
-// one modal open and the next, so nothing outside this file may look them up.
+// works. They are deliberately not in web/js/ui/dom.js: the fields exist only
+// between one modal open and the next, so nothing outside this file may look
+// them up.
 const FIELD_ID_PREFIX = "repeater-query-field-";
 
 function fieldId(key, suffix = "") {
@@ -291,6 +292,12 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // counted rather than merely dimmed.
   const previewCount = document.createElement("p");
   previewCount.className = "modal-map-preview-count";
+  // A live region, for the same reason the city lookup's note is one: every
+  // message here -- the count, "looking", the failure, the blocked state --
+  // arrives asynchronously while focus is still on the control that triggered
+  // it, so a screen reader would otherwise announce none of them.
+  previewCount.setAttribute("role", "status");
+  previewCount.setAttribute("aria-live", "polite");
   previewCount.hidden = true;
   const preview = document.createElement("div");
   preview.className = "modal-map-preview";
@@ -378,6 +385,12 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // clips its locator fan-out at 24 squares. A count drawn from a clipped
   // search reads as coverage of the whole radius unless it says otherwise.
   let previewTruncated = false;
+  // How far the caption's count is from what Query API would insert: repeaters
+  // the query takes but the map cannot place, and repeaters the map places but
+  // the selected radio cannot express. Both stay at zero for most searches; a
+  // caption that ignored them would quietly promise the wrong total.
+  let previewUnmapped = 0;
+  let previewUnsupported = 0;
   // The tally from the last render, so a caption rewritten without a redraw
   // (a preview starting or failing) still describes the squares on screen.
   let lastDrawn = null;
@@ -408,12 +421,21 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       previewCount.textContent = "Looking for repeaters...";
       return;
     }
-    const tally = drawn.outOfRange > 0
+    const parts = [drawn.outOfRange > 0
       ? `${drawn.inRange} in range, ${drawn.outOfRange} just outside`
-      : `${drawn.inRange} in range`;
-    previewCount.textContent = previewTruncated
-      ? `${tally} (part of the area only)`
-      : tally;
+      : `${drawn.inRange} in range`];
+    if (previewTruncated) {
+      parts.push("part of the area only");
+    }
+    if (previewUnmapped > 0) {
+      parts.push(`${previewUnmapped} with no location`);
+    }
+    if (previewUnsupported > 0) {
+      parts.push(`${previewUnsupported} this radio cannot use`);
+    }
+    previewCount.textContent = parts.length > 1
+      ? `${parts[0]} (${parts.slice(1).join("; ")})`
+      : parts[0];
   }
 
   function schedulePreview() {
@@ -443,7 +465,18 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // Redraw now, dropping any debounced redraw it pre-empts. The shell calls
   // this once the modal is on screen, which is the first moment the canvas has
   // a width to measure.
+  //
+  // Never during a drag. A directory answer can land mid-gesture -- the preview
+  // query fires 600 ms after the form settles, and holding the pointer still is
+  // exactly how that happens -- and recentring the tiles then leaves the drag
+  // measuring from an origin the map no longer has, so the next pointermove
+  // translates the freshly centred map by the whole displacement and the
+  // basemap jumps away from the pointer until release. The markers are already
+  // stored, so deferring costs nothing: endDrag redraws anyway.
   function refreshPreview() {
+    if (drag) {
+      return;
+    }
     cancelScheduledPreview();
     renderPreview();
   }
@@ -674,14 +707,17 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     // — the squares already drawn stay put while the next answer is fetched,
     // because blanking the map on every edit would make it flicker through
     // every keystroke of a radius.
-    setMarkers: (points, state = "ok", { truncated = false } = {}) => {
+    setMarkers: (points, state = "ok", { truncated = false, unmapped = 0, unsupported = 0 } = {}) => {
       previewState = state;
       if (state === "ok") {
-        // Only an answer says how much of the area it covered. "loading" and
-        // "failed" carry no options, so assigning here unconditionally would
-        // drop the qualifier from the caption while the clipped squares it
-        // describes are still the ones on screen.
+        // Only an answer says how much of the area it covered, or how far its
+        // count is from what the query would insert. "loading" and "failed"
+        // carry no options, so assigning here unconditionally would drop those
+        // qualifiers while the squares they describe are still the ones on
+        // screen.
         previewTruncated = truncated;
+        previewUnmapped = unmapped;
+        previewUnsupported = unsupported;
         markers = Array.isArray(points) ? points : [];
         refreshPreview();
         return;
@@ -846,7 +882,22 @@ export function createCityField({
   });
   // Cleared whichever way the gesture ends, including a scroll that produces no
   // click at all -- a flag left set would swallow the next blur's commit.
-  const endListPointer = () => { listPointerActive = false; };
+  //
+  // A scroll also has to close the list itself. The press already blurred the
+  // input, and that blur was ignored precisely because this gesture might have
+  // been a tap; when it turns out not to be, no click follows and no second
+  // blur ever will, so the drop-down would sit open over the form with
+  // aria-expanded="true" while the user fills in the fields underneath it. The
+  // check runs after the click a tap would have produced, and does nothing if
+  // that click already closed the list.
+  const endListPointer = () => {
+    listPointerActive = false;
+    setTimeout(() => {
+      if (!list.hidden && !inputFocused && !listPointerActive) {
+        closeList();
+      }
+    }, 0);
+  };
   list.addEventListener("pointerup", endListPointer);
   list.addEventListener("pointercancel", endListPointer);
 
@@ -860,6 +911,10 @@ export function createCityField({
   // touchscreen the press is as likely to be the start of a scroll as a tap,
   // and either way the blur it causes must not commit the highlighted entry.
   let listPointerActive = false;
+  // Whether the box still holds focus. Tracked rather than read from
+  // document.activeElement so the check works the same in the headless tests,
+  // whose DOM has no active element.
+  let inputFocused = false;
   let activeIndex = -1;
   let selected = initial.city || null;
   // Counts lookups so a slow one that lands after a later one has already
@@ -1065,6 +1120,12 @@ export function createCityField({
       showResults(cached, text);
       return;
     }
+    // "No matching places" or a lookup failure belongs to the text that
+    // produced it. Left up while the next request runs -- as long as the
+    // four-second deadline, if the service is stalling -- it reads as the
+    // verdict on what is being typed now, and a search that would have
+    // succeeded looks like one that already failed.
+    setNote("");
     runSearch(text);
   });
 
@@ -1102,7 +1163,10 @@ export function createCityField({
 
   // Leaving the field takes the top suggestion, which is the field's whole
   // promise: type enough of a name, move on, and the position is set.
+  input.addEventListener("focus", () => { inputFocused = true; });
+
   input.addEventListener("blur", () => {
+    inputFocused = false;
     // Focus left because a finger landed in the list. That gesture decides for
     // itself — a tap commits the entry it hit, a scroll commits nothing — and
     // committing the highlighted one here would pre-empt both.
