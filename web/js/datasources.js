@@ -1,3 +1,4 @@
+import { withRequestTimeout } from "./request-timeout.js";
 import { setRowGeo } from "./row-geo.js";
 
 const PMR446_FREQUENCIES_MHZ = Array.from(
@@ -92,7 +93,93 @@ function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
       apiUrl: `${irtsBase}/irts`,
       metaUrl: `${irtsBase}/irts/meta`,
     },
+    // The gazetteer behind the City/Locality autocomplete. It follows the IRTS
+    // rule rather than the proxy rule: it is a first-party api.codeplug.org
+    // route and it is not a directory at all -- it only turns a place name into
+    // the coordinate pair every source already filters by -- so a deployment
+    // that blanks the base to switch off the two proxied directories keeps its
+    // city lookup.
+    cities: `${irtsBase}/cities`,
   };
+}
+
+// Shorter than REPEATER_REQUEST_TIMEOUT_MS because this fires on a keystroke: a
+// suggestion list that arrives after the user has finished typing is worth
+// nothing, and a stalled connection would only block tile requests.
+const CITY_SUGGEST_TIMEOUT_MS = 4000;
+
+// The endpoint defaults to and caps at 20 (see FINDINGS.md), so no limit is
+// sent; this is the ceiling the drop-down is sized for, not a request.
+const CITY_SUGGEST_MAX = 20;
+
+// Look up place names matching `query` in the api.codeplug.org gazetteer.
+// `near` is an optional { latitude, longitude } proximity hint; the endpoint
+// takes lat and lon together or not at all, so a half-known position is sent
+// as no hint. Results are normalized to this app's { latitude, longitude }
+// shape, and an entry without a usable coordinate pair is dropped.
+export async function fetchCitySuggestions(citiesUrl, query, near = null) {
+  const text = String(query ?? "").trim();
+  if (!citiesUrl || text.length === 0) {
+    return [];
+  }
+  const url = new URL(citiesUrl);
+  url.searchParams.set("q", text);
+  const latitude = Number(near?.latitude);
+  const longitude = Number(near?.longitude);
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    url.searchParams.set("lat", String(latitude));
+    url.searchParams.set("lon", String(longitude));
+  }
+  // The body is read inside the deadline for the same reason every other
+  // directory request reads it there: fetch() resolves on headers alone.
+  const body = await withRequestTimeout("City lookup", async (signal) => {
+    const response = await fetch(url.toString(), { signal });
+    if (!response.ok) {
+      throw new Error(`City lookup failed: HTTP ${response.status}`);
+    }
+    return response.text();
+  }, CITY_SUGGEST_TIMEOUT_MS);
+  return parseCitySuggestions(body);
+}
+
+// Number(null) and Number("") are 0, not NaN, so a missing coordinate would
+// otherwise pass the finiteness check and land the city on the equator.
+function coordinate(value) {
+  if (value === null || value === undefined || value === "") {
+    return Number.NaN;
+  }
+  return Number(value);
+}
+
+// Split out from the fetch so the parsing is testable without a network stub.
+// The endpoint reports its own failures as { error: "..." } with HTTP 200, so
+// that case is checked before the result list.
+export function parseCitySuggestions(jsonText) {
+  let payload;
+  try {
+    payload = JSON.parse(String(jsonText || ""));
+  } catch (error) {
+    throw new Error(`City lookup returned invalid JSON: ${error.message}`);
+  }
+  if (payload && typeof payload.error === "string") {
+    throw new Error(`City lookup failed: ${payload.error}`);
+  }
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  return results
+    .map((entry) => ({
+      id: String(entry?.id ?? ""),
+      name: String(entry?.name ?? "").trim(),
+      region: String(entry?.region ?? "").trim(),
+      country: String(entry?.country ?? "").trim(),
+      countryCode: String(entry?.cc ?? "").trim().toUpperCase(),
+      latitude: coordinate(entry?.lat),
+      longitude: coordinate(entry?.lon),
+    }))
+    .filter((entry) => entry.name.length > 0
+      && Number.isFinite(entry.latitude)
+      && Number.isFinite(entry.longitude))
+    // Only matters if the endpoint ever raises its own cap.
+    .slice(0, CITY_SUGGEST_MAX);
 }
 
 function parseXmlDocument(xmlText) {

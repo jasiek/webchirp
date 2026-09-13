@@ -2,6 +2,7 @@ import {
   OSM_ATTRIBUTION,
   OSM_COPYRIGHT_URL,
   OSM_TILE_SIZE,
+  latLonToWorldPixel,
   metresPerPixel,
   osmTileUrl,
   planStaticMap,
@@ -35,7 +36,13 @@ import {
 // the viewport's own overflow. A map nobody can move needs none; a draggable
 // one needs it, or the first pixel of a drag exposes blank canvas at the
 // trailing edge before any redraw could cover it.
-export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetres = 0, overscan = 0 }) {
+//
+// `markers` are other positions to plot: { latitude, longitude, inRange?,
+// approximate? }. `inRange` false dims one, so stations just outside the ring
+// show what widening would add; `approximate` marks a locator-box position
+// rather than a surveyed point. Drawn as squares, not dots, because half the
+// RSGB directory publishes only a 4-character locator (a box ~111 km across).
+export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetres = 0, overscan = 0, markers = [] }) {
   canvasEl.innerHTML = "";
   canvasEl.style.width = `${width}px`;
   canvasEl.style.height = `${height}px`;
@@ -76,10 +83,50 @@ export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetr
     range.style.height = `${diameter}px`;
     canvasEl.appendChild(range);
   }
+  // Drawn between the ring and the centre marker. Tallied as drawn and handed
+  // back, so a caption counts what is on the map, not what was handed in.
+  const drawn = { inRange: 0, outOfRange: 0 };
+  if (markers.length > 0) {
+    // The centre of the viewport is the centre of the map, so a marker's offset
+    // from it is the difference between the two world pixels at this zoom.
+    const origin = latLonToWorldPixel(geo.latitude, geo.longitude, zoom);
+    // The world wraps in x: take the shorter way round the antimeridian, or a
+    // repeater at 179.9°E sits a world's width from a map centred on 179.9°W.
+    const worldWidth = Math.pow(2, zoom) * OSM_TILE_SIZE;
+    for (const entry of markers) {
+      const point = latLonToWorldPixel(entry.latitude, entry.longitude, zoom);
+      let dx = point.x - origin.x;
+      if (dx > worldWidth / 2) {
+        dx -= worldWidth;
+      } else if (dx < -worldWidth / 2) {
+        dx += worldWidth;
+      }
+      const left = (width / 2) + dx;
+      const top = (height / 2) + (point.y - origin.y);
+      // Off the viewport: a station the radius reaches but the map does not.
+      // Pinned to the edge it would read as sitting on the boundary.
+      if (left < 0 || top < 0 || left > width || top > height) {
+        continue;
+      }
+      const pin = document.createElement("div");
+      pin.className = "repeater-map-pin";
+      if (entry.inRange === false) {
+        pin.classList.add("is-out-of-range");
+      }
+      if (entry.approximate) {
+        pin.classList.add("is-approximate");
+      }
+      pin.style.left = `${left}px`;
+      pin.style.top = `${top}px`;
+      canvasEl.appendChild(pin);
+      drawn[entry.inRange === false ? "outOfRange" : "inRange"] += 1;
+    }
+  }
   // Last, so the point stays legible over both the tiles and the ring.
   const marker = document.createElement("div");
   marker.className = "repeater-map-marker";
   canvasEl.appendChild(marker);
+  return { drawn };
 }
 
 // The OSM tile policy wants the credit to reach the licence, so the

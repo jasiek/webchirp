@@ -15,10 +15,11 @@ import {
   dedupeRsgbRecords,
   fetchRsgbRecords,
   filterRsgbRecords,
+  haversineKm,
   squaresForRadius,
 } from "../rsgb.js";
 import { withRequestTimeout } from "../request-timeout.js";
-import { countryDisplayName, flagEmojiFromCountryCode } from "./format.js";
+import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from "./format.js";
 import { trackEvent } from "./analytics.js";
 
 // Per-source configuration for the shared repeater-query modal
@@ -99,6 +100,43 @@ export function createRepeaterSources(ctx, { endpoints }) {
     return `${entry.mode || entry.reason} not supported by the selected radio`;
   }
 
+  // A preview repeats the query the Query API button would run, so the fetched
+  // bodies are cached per source and the common edits -- nudging the radius,
+  // dragging a little, ticking a band -- redraw from memory. Per source rather
+  // than per open, so a reopened modal reuses what the last one paid for.
+  const PREVIEW_CACHE_LIMIT = 24;
+
+  // Every position a preview can draw, whether or not the query would keep it.
+  // `inRange` is what the ring is for: a station just outside it is the answer
+  // to "would a wider search find me anything", which the numbers in the form
+  // cannot say on their own.
+  function previewPoint(latitude, longitude, { inRange = true, approximate = false } = {}) {
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+    return { latitude, longitude, inRange, approximate };
+  }
+
+  // The request identity minus its range, so one fetched body can answer every
+  // radius it covers. Everything else -- country, bands, modes, the only-working
+  // flag, the position -- still separates one cached answer from another.
+  function keyWithoutRange(url) {
+    const key = new URL(url.toString());
+    key.searchParams.delete("range");
+    return key.toString();
+  }
+
+  // Re-flag a point set against the radius now in the form. The cache is keyed
+  // without the range, so one body serves every radius it covers: only which
+  // side of the ring each station falls on is recomputed, and that is
+  // arithmetic rather than a request.
+  function markInRange(points, position, radiusKm) {
+    return points.map((point) => ({
+      ...point,
+      inRange: haversineKm(position.latitude, position.longitude, point.latitude, point.longitude) <= radiusKm,
+    }));
+  }
+
   function normalized(values) {
     return Array.from(values || [])
       .map((value) => String(value || "").trim().toLowerCase())
@@ -124,6 +162,121 @@ export function createRepeaterSources(ctx, { endpoints }) {
     // bricked behind a rejected promise.
     let optionsPromise = null;
 
+    // The query URL for one set of form values, with the range taken as an
+    // argument so the preview can ask for a wider area than the query will keep
+    // (see previewRemote).
+    function buildQueryUrl(values, rangeKm) {
+      const url = new URL(apiUrl);
+      const country = String(values.country || "").trim().toLowerCase();
+      if (country) {
+        url.searchParams.set("country", country);
+      }
+      const bands = normalized(values.bands);
+      if (bands.length > 0) {
+        url.searchParams.set("band", bands.join(","));
+      }
+      normalized(values.modes).forEach((mode) => {
+        url.searchParams.append("mode", mode);
+      });
+      if (values.only) {
+        url.searchParams.set("onlyworking", "true");
+      }
+      // Only a validated position is sent — out-of-range coordinate text no
+      // longer leaks upstream as raw query parameters.
+      if (values.position) {
+        url.searchParams.set("latitude", String(values.position.latitude));
+        url.searchParams.set("longitude", String(values.position.longitude));
+      }
+      if (Number.isFinite(rangeKm)) {
+        url.searchParams.set("range", String(rangeKm));
+      }
+      return url;
+    }
+
+    const previewCache = new Map();
+
+    // Turn a fetched body into what the caption needs. The map's numbers must
+    // agree with the button under it, and two things pull them apart: a
+    // repeater published without coordinates (inserted, not plottable) and one
+    // the selected radio cannot express (plottable, not inserted). Both are
+    // counted. Only in-range repeaters go through the row builder, which
+    // allocates rows but inserts nothing.
+    function summarizeRemote(body, position, radiusKm) {
+      // Each plotted entry carries the repeater it came from, because the point
+      // list is not index-aligned with the repeater list -- the unmapped ones
+      // have no point at all.
+      const points = markInRange(body.plotted.map((entry) => entry.point), position, radiusKm);
+      const importable = body.plotted
+        .filter((entry, index) => points[index].inRange)
+        .map((entry) => entry.repeater)
+        .concat(body.unmapped);
+      const { skipped } = buildPrzemiennikiRows(importable, ctx.table.rowBuilderHooks(), {
+        perspective: body.perspective,
+      });
+      return { points, unmapped: body.unmapped.length, unsupported: skipped.length };
+    }
+
+    // These directories filter by distance upstream, so a preview asking for
+    // exactly the chosen radius could only ever draw stations inside the ring —
+    // and the one thing the form cannot tell you is whether a slightly wider
+    // search would find anything. So the preview asks for half again the
+    // radius and dims what falls outside it. The extra ground costs one larger
+    // body on the same single request, not a second one.
+    const PREVIEW_RANGE_FACTOR = 1.5;
+
+    // What the current filters would return, as positions only. Never throws
+    // at the caller as a query failure would: a preview that cannot be drawn is
+    // a map without squares on it, not a reason to stop the user filling in the
+    // form. The shell reports the reason in the debug panel.
+    async function previewRemote(values) {
+      const radiusKm = Number(values.radius);
+      if (!values.position || !Number.isFinite(radiusKm) || radiusKm <= 0) {
+        return null;
+      }
+      const url = buildQueryUrl(values, radiusKm * PREVIEW_RANGE_FACTOR);
+      // Keyed without the range, since nudging the range is the commonest edit:
+      // a cached body serves any search whose widened area it covers, and only
+      // the in-range flags are recomputed. The test is against the widened
+      // area, not the radius -- a body fetched for 20 km reaches 30, and reused
+      // for a 30 km search it would have nothing beyond the ring to dim.
+      const key = keyWithoutRange(url);
+      const cached = previewCache.get(key);
+      if (cached && cached.rangeKm >= radiusKm * PREVIEW_RANGE_FACTOR) {
+        return summarizeRemote(cached, values.position, radiusKm);
+      }
+      const text = await withRequestTimeout(`${label} preview`, async (signal) => {
+        const response = await fetch(url.toString(), { signal });
+        if (!response.ok) {
+          throw new Error(`${actionLabel} preview failed: HTTP ${response.status}`);
+        }
+        return response.text();
+      });
+      const parsed = parsePrzemiennikiXml(text);
+      const plotted = [];
+      const unmapped = [];
+      for (const repeater of parsed.repeaters) {
+        const point = previewPoint(repeater.latitude, repeater.longitude);
+        if (point) {
+          plotted.push({ point, repeater });
+        } else {
+          // The query inserts this one; only the map cannot place it. Counted
+          // rather than dropped, or the caption would undercount what pressing
+          // Query API is about to do.
+          unmapped.push(repeater);
+        }
+      }
+      // The radius this body actually covers, not the one asked for: a later,
+      // narrower search may reuse it, a wider one may not.
+      const body = {
+        perspective: parsed.perspective,
+        plotted,
+        unmapped,
+        rangeKm: radiusKm * PREVIEW_RANGE_FACTOR,
+      };
+      rememberBounded(previewCache, key, body, PREVIEW_CACHE_LIMIT);
+      return summarizeRemote(body, values.position, radiusKm);
+    }
+
     return {
       key,
       toolbarButton,
@@ -142,6 +295,11 @@ export function createRepeaterSources(ctx, { endpoints }) {
         { kind: "checkboxGroup", key: "bands", label: "Band", name: "band", optionsKey: "bands", defaults: ["2m", "70cm"] },
         { kind: "checkboxGroup", key: "modes", label: "Mode", name: "mode", optionsKey: "modes", defaults: ["fm"] },
         { kind: "checkbox", key: "only", label: "Only working", checked: true },
+        // Above the coordinates because it is how most people know where they
+        // are: picking a place fills latitude, longitude and the locator and
+        // recentres the preview, so the three inputs below read as the result
+        // of this one rather than as something to fill in by hand.
+        { kind: "city", key: "city", label: "City/Locality", placeholder: "e.g. Warszawa" },
         { kind: "position", locatorPlaceholder: "e.g. JO91GG" },
         { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30 },
       ],
@@ -173,31 +331,10 @@ export function createRepeaterSources(ctx, { endpoints }) {
         }
         return optionsPromise;
       },
+      previewQuery: (values) => previewRemote(values),
       runQuery: async (values) => {
-        const url = new URL(apiUrl);
         const country = String(values.country || "").trim().toLowerCase();
-        if (country) {
-          url.searchParams.set("country", country);
-        }
-        const bands = normalized(values.bands);
-        if (bands.length > 0) {
-          url.searchParams.set("band", bands.join(","));
-        }
-        normalized(values.modes).forEach((mode) => {
-          url.searchParams.append("mode", mode);
-        });
-        if (values.only) {
-          url.searchParams.set("onlyworking", "true");
-        }
-        // Only a validated position is sent — out-of-range coordinate text no
-        // longer leaks upstream as raw query parameters.
-        if (values.position) {
-          url.searchParams.set("latitude", String(values.position.latitude));
-          url.searchParams.set("longitude", String(values.position.longitude));
-        }
-        if (Number.isFinite(values.radius)) {
-          url.searchParams.set("range", String(values.radius));
-        }
+        const url = buildQueryUrl(values, values.radius);
         log.setStatus(`Querying ${label}...`);
         // Both the request and the body read sit inside the deadline: the
         // error-path read of a failed response can stall exactly as the success
@@ -264,6 +401,111 @@ export function createRepeaterSources(ctx, { endpoints }) {
   // none) — so the modal opens without a network round trip.
   function rsgbSource() {
     const actionLabel = "RSGB ETCC";
+    // Records keyed by locator square. RSGB costs one ~75 kB request per
+    // square and a radius spans several, so only stepping into a new square
+    // costs a request.
+    const squareCache = new Map();
+
+    // Fetch only the squares not already held, then answer from the union.
+    //
+    // The cached squares are read out *before* the fetch is awaited. A second
+    // call can run during that await -- the submitted query starting while a
+    // superseded preview is still downloading -- and its eviction must not be
+    // able to empty a square this call has already classified as cached. With
+    // the records in hand up front, nothing that happens to the cache
+    // afterwards can change this plan's answer, so eviction needs no notion
+    // of in-flight plans.
+    //
+    // `onSquare` is called once per square of the plan, whether it was fetched
+    // now or served from the cache, and says which, so the debug panel keeps a
+    // line per square however little of the plan cost a request this time.
+    async function recordsForSquares(squares, { onSquare } = {}) {
+      const held = new Map();
+      const missing = [];
+      for (const locator of squares) {
+        if (squareCache.has(locator)) {
+          held.set(locator, squareCache.get(locator));
+        } else {
+          missing.push(locator);
+        }
+      }
+      if (missing.length > 0) {
+        const fetched = await fetchRsgbRecords({ squares: missing });
+        // fetchRsgbRecords returns one flat list, so the records are put back
+        // under the square they came from. A square that legitimately holds no
+        // repeaters caches as an empty list, which is what stops it being
+        // re-requested on every redraw. A record whose locator names a square
+        // outside the request is filed under the first square asked for rather
+        // than dropped on an assumption about the API nothing here verifies;
+        // it is outside the radius either way, so the distance filter drops it.
+        const buckets = new Map(missing.map((locator) => [locator, []]));
+        for (const record of fetched) {
+          const locator = String(record?.locator || "").slice(0, 4).toUpperCase();
+          buckets.get(buckets.has(locator) ? locator : missing[0]).push(record);
+        }
+        for (const [locator, records] of buckets) {
+          held.set(locator, records);
+          rememberBounded(squareCache, locator, records, PREVIEW_CACHE_LIMIT);
+        }
+      }
+      if (typeof onSquare === "function") {
+        for (const locator of squares) {
+          onSquare({
+            locator,
+            count: held.get(locator).length,
+            cached: !missing.includes(locator),
+          });
+        }
+      }
+      return squares.flatMap((locator) => held.get(locator));
+    }
+
+    // RSGB filters client-side, so the preview is the real filter run over the
+    // squares in reach -- no widened request needed. Everything the fan-out
+    // covers is offered to the map, with the ones the radius excludes dimmed.
+    async function previewRsgb(values) {
+      const position = values.position;
+      const radiusKm = Number(values.radius);
+      if (!position || !Number.isFinite(radiusKm) || radiusKm <= 0) {
+        return null;
+      }
+      const plan = squaresForRadius(position.latitude, position.longitude, radiusKm);
+      if (plan.squares.length === 0) {
+        return { points: [] };
+      }
+      const deduped = dedupeRsgbRecords(await recordsForSquares(plan.squares));
+      const modes = values.modes.length > 0 ? values.modes : ["A"];
+      // No radius: the distance filter is what the ring already draws, and
+      // applying it here would throw away the out-of-range stations that are
+      // the most useful thing on the map.
+      const entries = filterRsgbRecords(deduped, {
+        latitude: position.latitude,
+        longitude: position.longitude,
+        bands: values.bands,
+        modes,
+        onlyOperational: values.only,
+      });
+      const points = entries
+        .map((entry) => previewPoint(entry.latitude, entry.longitude, {
+          inRange: entry.distanceKm <= radiusKm,
+          // A 4-character locator is a box some 111 km across, so the position
+          // drawn is the middle of a guess. The map says so rather than
+          // presenting it as surveyed.
+          approximate: entry.approximate,
+        }))
+        .filter(Boolean);
+      // What the radio cannot express, over the in-range entries only -- the
+      // ones beyond the ring are context for widening the search, not results
+      // the query would insert. Every RSGB position comes from a locator, so
+      // there is nothing unmapped here.
+      const { skipped } = buildRsgbRows(
+        entries.filter((entry) => entry.distanceKm <= radiusKm),
+        ctx.table.rowBuilderHooks(),
+        { modes },
+      );
+      return { points, truncated: plan.truncated, unmapped: 0, unsupported: skipped.length };
+    }
+
     return {
       key: "rsgb",
       toolbarButton: "channelImportRsgbEl",
@@ -310,6 +552,11 @@ export function createRepeaterSources(ctx, { endpoints }) {
           defaults: RSGB_DEFAULT_MODES,
         },
         { kind: "checkbox", key: "only", label: "Only operational", checked: true },
+        // Above the coordinates because it is how most people know where they
+        // are: picking a place fills latitude, longitude and the locator and
+        // recentres the preview, so the three inputs below read as the result
+        // of this one rather than as something to fill in by hand.
+        { kind: "city", key: "city", label: "City/Locality", placeholder: "e.g. Manchester" },
         { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
         {
           kind: "number",
@@ -322,6 +569,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
         },
       ],
       loadOptions: null,
+      previewQuery: (values) => previewRsgb(values),
       runQuery: async (values) => {
         const position = values.position;
         if (!position) {
@@ -347,9 +595,12 @@ export function createRepeaterSources(ctx, { endpoints }) {
         log.setStatus(`Querying RSGB ETCC for ${plan.squares.length} locator square(s)...`);
         log.logDebug(`RSGB QUERY ${plan.squares.join(", ")} r=${radiusKm}km`);
 
-        const records = await fetchRsgbRecords({
-          squares: plan.squares,
-          onRequest: ({ locator, count }) => log.logDebug(`RSGB SQUARE ${locator} -> ${count}`),
+        // Through the cache the preview fills, so pressing Query API after
+        // watching the preview does not download every square a second time.
+        const records = await recordsForSquares(plan.squares, {
+          onSquare: ({ locator, count, cached }) => log.logDebug(
+            `RSGB SQUARE ${locator} -> ${count}${cached ? " (cached)" : ""}`,
+          ),
         });
         const deduped = dedupeRsgbRecords(records);
         // An empty selection must not fall through to filterRsgbRecords()'s

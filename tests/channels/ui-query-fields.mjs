@@ -14,6 +14,7 @@ const {
   createFixedField,
   createCheckboxGroupField,
   createCheckboxField,
+  createCityField,
   createNumberField,
   createPositionField,
 } = await import("../../web/js/ui/query-fields.js");
@@ -160,7 +161,7 @@ function buildPositionField(config = {}) {
   });
   const [, latitude, , longitude, , geoRow, preview] = field.nodes;
   const locator = geoRow.children[0];
-  const [previewCanvas, previewEmpty, previewAttribution] = preview.children;
+  const [previewCanvas, previewEmpty, previewCount, previewAttribution] = preview.children;
   return {
     field,
     latitude,
@@ -171,6 +172,7 @@ function buildPositionField(config = {}) {
     preview,
     previewCanvas,
     previewEmpty,
+    previewCount,
     previewAttribution,
     pans,
   };
@@ -756,4 +758,681 @@ test("a queued redraw is not lost to a press that turns out not to be a drag", a
 
   assert.notEqual(previewCanvas.children[0], stale, "the typed position reached the map");
   assert.equal(field.value().longitude, -2.5);
+});
+
+// --- City/Locality autocomplete ---------------------------------------------
+
+// The lookup fires on the keystroke, so typing only has to outrun the stub's
+// own promise rather than a timer. A macrotask is enough for that and keeps the
+// tests honest about the ordering: anything the field defers past this would
+// show up as a failure rather than be papered over by a generous sleep.
+function afterCityLookup() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+const MANCHESTER = {
+  id: "2643123",
+  name: "Manchester",
+  region: "England",
+  country: "United Kingdom",
+  countryCode: "GB",
+  latitude: 53.48095,
+  longitude: -2.23743,
+};
+const LONDON = {
+  id: "2643743",
+  name: "London",
+  region: "England",
+  country: "United Kingdom",
+  countryCode: "GB",
+  latitude: 51.50853,
+  longitude: -0.12573,
+};
+const MANCHESTER_NH = {
+  id: "5089178",
+  name: "Manchester",
+  region: "New Hampshire",
+  country: "United States",
+  countryCode: "US",
+  latitude: 42.99564,
+  longitude: -71.45479,
+};
+
+// Builds the field over a stub lookup and records every call it makes, so the
+// tests can assert both what reached the endpoint and what came back.
+function buildCityField({ results = [MANCHESTER, MANCHESTER_NH], fail = null } = {}) {
+  const calls = [];
+  const selections = [];
+  const field = createCityField({
+    search: async (query) => {
+      calls.push({ query });
+      if (fail) {
+        throw fail;
+      }
+      return results;
+    },
+    onSelect: (city) => selections.push(city),
+  });
+  const [, wrapper] = field.nodes;
+  const [input, list, note] = wrapper.children;
+  return { field, input, list, note, calls, selections };
+}
+
+async function typeCity(input, text) {
+  input.value = text;
+  await input.dispatch("input");
+  await afterCityLookup();
+}
+
+test("city field labels a text input and hides its suggestion list until it has one", () => {
+  const { field, input, list } = buildCityField();
+  const [label, wrapper] = field.nodes;
+  assert.equal(label.tagName, "LABEL");
+  assert.equal(label.textContent, "City/Locality");
+  assert.equal(label.htmlFor, input.id);
+  assert.equal(wrapper.className, "modal-city-field");
+  assert.equal(input.type, "text");
+  assert.equal(input.getAttribute("role"), "combobox");
+  assert.equal(list.hidden, true);
+  assert.equal(field.focusTarget, input);
+  assert.equal(field.value(), null);
+});
+
+test("typing queries the lookup once and lists what it returns", async () => {
+  const { input, list, calls } = buildCityField();
+  await typeCity(input, "manch");
+
+  assert.deepEqual(calls, [{ query: "manch" }]);
+  assert.equal(list.hidden, false);
+  assert.equal(list.children.length, 2);
+  assert.equal(list.children[0].children[0].textContent, "Manchester");
+  assert.equal(list.children[0].children[1].textContent, "England, United Kingdom");
+  assert.equal(list.children[1].children[1].textContent, "New Hampshire, United States");
+});
+
+test("the top suggestion is highlighted as soon as the list opens", async () => {
+  const { input, list } = buildCityField();
+  await typeCity(input, "manch");
+  assert.equal(list.children[0].classList.contains("is-active"), true);
+  assert.equal(list.children[1].classList.contains("is-active"), false);
+  assert.equal(input.getAttribute("aria-activedescendant"), list.children[0].id);
+});
+
+test("the lookup is the typed text and nothing else", async () => {
+  // The endpoint accepts a lat/lon ranking hint and the field deliberately
+  // sends none: a position in a query string on every keystroke is not yet
+  // worth the ordering it buys.
+  const { input, calls } = buildCityField();
+  await typeCity(input, "manch");
+  assert.deepEqual(calls, [{ query: "manch" }]);
+});
+
+test("Enter commits the highlighted suggestion and never submits the form", async () => {
+  const { field, input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  let defaultPrevented = false;
+  await input.dispatch("keydown", { key: "Enter", preventDefault() { defaultPrevented = true; } });
+
+  assert.equal(defaultPrevented, true, "the modal's form must not submit on this Enter");
+  assert.deepEqual(selections, [MANCHESTER]);
+  assert.equal(field.value(), MANCHESTER);
+  assert.equal(input.value, "Manchester, England, United Kingdom");
+  assert.equal(list.hidden, true);
+});
+
+test("the arrow keys move the highlight and wrap around the list", async () => {
+  const { input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  await input.dispatch("keydown", { key: "ArrowDown", preventDefault() {} });
+  assert.equal(list.children[1].classList.contains("is-active"), true);
+  // Past the end and back to the top, so a long list is never a dead end.
+  await input.dispatch("keydown", { key: "ArrowDown", preventDefault() {} });
+  assert.equal(list.children[0].classList.contains("is-active"), true);
+  await input.dispatch("keydown", { key: "ArrowUp", preventDefault() {} });
+  assert.equal(list.children[1].classList.contains("is-active"), true);
+
+  await input.dispatch("keydown", { key: "Enter", preventDefault() {} });
+  assert.deepEqual(selections, [MANCHESTER_NH]);
+});
+
+test("moving focus away commits the top suggestion", async () => {
+  const { input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+  await input.dispatch("blur");
+
+  assert.deepEqual(selections, [MANCHESTER]);
+  assert.equal(input.value, "Manchester, England, United Kingdom");
+  assert.equal(list.hidden, true);
+});
+
+test("pointing at a suggestion and pressing commits that one, not the top one", async () => {
+  const { input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  let defaultPrevented = false;
+  await list.children[1].dispatch("pointerdown", {
+    preventDefault() { defaultPrevented = true; },
+  });
+
+  // Suppressing the default is what keeps focus in the box, so the blur that
+  // would otherwise fire first cannot commit the wrong entry.
+  assert.equal(defaultPrevented, true);
+  assert.deepEqual(selections, [MANCHESTER_NH]);
+});
+
+test("Escape closes the list without committing and without reaching the modal", async () => {
+  const { field, input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  let propagationStopped = false;
+  await input.dispatch("keydown", {
+    key: "Escape",
+    preventDefault() {},
+    stopPropagation() { propagationStopped = true; },
+  });
+
+  assert.equal(propagationStopped, true, "Escape here must not close the whole modal");
+  assert.equal(list.hidden, true);
+  assert.equal(field.value(), null);
+  assert.deepEqual(selections, []);
+});
+
+test("clearing the box closes the list and asks for nothing", async () => {
+  const { input, list, note, calls } = buildCityField();
+  await typeCity(input, "manch");
+  await typeCity(input, "");
+
+  assert.equal(calls.length, 1, "an empty box is not a query");
+  assert.equal(list.hidden, true);
+  assert.equal(note.hidden, true);
+});
+
+test("a lookup that finds nothing says so instead of leaving a stale list", async () => {
+  const { input, list, note } = buildCityField({ results: [] });
+  await typeCity(input, "zzzz");
+  assert.equal(list.hidden, true);
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, "No matching places.");
+});
+
+test("a failed lookup is reported in the field, not thrown at the modal", async () => {
+  const { input, list, note } = buildCityField({ fail: new Error("HTTP 503") });
+  await typeCity(input, "manch");
+  assert.equal(list.hidden, true);
+  assert.equal(note.hidden, false);
+  assert.match(note.textContent, /City lookup unavailable: HTTP 503/);
+});
+
+test("a slow lookup superseded by a later keystroke never reaches the list", async () => {
+  const pending = [];
+  const field = createCityField({
+    search: (query) => new Promise((resolve) => pending.push({ query, resolve })),
+    onSelect: () => {},
+  });
+  const [, wrapper] = field.nodes;
+  const [input, list] = wrapper.children;
+
+  await typeCity(input, "man");
+  await typeCity(input, "manchester");
+  assert.equal(pending.length, 2);
+
+  // The first request answers last, as a slow one can. Its results describe a
+  // prefix the box no longer holds and must be dropped.
+  pending[1].resolve([MANCHESTER]);
+  pending[0].resolve([MANCHESTER_NH]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(list.children.length, 1);
+  assert.equal(list.children[0].children[1].textContent, "England, United Kingdom");
+});
+
+test("a query already answered is replayed without waiting or asking again", async () => {
+  const { input, list, calls } = buildCityField();
+  await typeCity(input, "man");
+  await typeCity(input, "manc");
+  assert.equal(calls.length, 2);
+
+  // Backspacing lands on a query the field already has an answer for, so it
+  // renders from memory with no request and nothing to await.
+  input.value = "man";
+  await input.dispatch("input");
+  assert.equal(list.hidden, false, "the cached list is on screen synchronously");
+  assert.equal(list.children.length, 2);
+  assert.equal(calls.length, 2, "a cache hit asks the endpoint nothing");
+});
+
+test("a failed lookup is not cached, so the next keystroke retries", async () => {
+  let failure = new Error("HTTP 503");
+  const calls = [];
+  const field = createCityField({
+    search: async (query) => {
+      calls.push(query);
+      if (failure) {
+        throw failure;
+      }
+      return [MANCHESTER];
+    },
+    onSelect: () => {},
+  });
+  const [, wrapper] = field.nodes;
+  const [input, list] = wrapper.children;
+
+  await typeCity(input, "manch");
+  assert.equal(list.hidden, true);
+
+  // Same text again, now that the endpoint is back. A cached failure would
+  // replay the outage for the rest of the modal session instead of retrying.
+  failure = null;
+  await typeCity(input, "manch");
+
+  assert.deepEqual(calls, ["manch", "manch"]);
+  assert.equal(list.hidden, false);
+});
+
+// --- Repeaters plotted on the preview ----------------------------------------
+
+function pinsIn(canvas) {
+  return canvas.children.filter((child) => String(child.className).startsWith("repeater-map-pin"));
+}
+
+// buildDraggableField centres on 52.0, -2.0 at a 30 km radius, so these are
+// placed by hand relative to that: a degree of latitude is ~111 km. The ring
+// fills 0.9 of the map's width (PREVIEW_RANGE_FILL), so the viewport reaches
+// 30/0.9 = 33.3 km north and south -- which leaves only 30-33.3 km for a
+// marker that is outside the ring and still on the map.
+const NEAR = { latitude: 52.05, longitude: -2.0, inRange: true };
+const ALSO_NEAR = { latitude: 51.96, longitude: -2.04, inRange: true };
+const BEYOND_RING = { latitude: 52.28, longitude: -2.0, inRange: false };
+const OFF_MAP = { latitude: 55.0, longitude: -2.0, inRange: false };
+
+test("setMarkers draws one square per repeater and captions the map", () => {
+  const { field, previewCanvas, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR, ALSO_NEAR, BEYOND_RING]);
+
+  assert.equal(pinsIn(previewCanvas).length, 3);
+  assert.equal(previewCount.hidden, false);
+  assert.equal(previewCount.textContent, "2 in range, 1 just outside");
+});
+
+test("a repeater outside the ring is dimmed rather than dropped", () => {
+  const { field, previewCanvas } = buildDraggableField();
+  field.setMarkers([NEAR, BEYOND_RING]);
+
+  const dimmed = pinsIn(previewCanvas).filter((pin) => pin.classList.contains("is-out-of-range"));
+  assert.equal(dimmed.length, 1, "the one the radius excludes shows what widening would add");
+});
+
+test("a position that is really a locator box is marked as approximate", () => {
+  const { field, previewCanvas } = buildDraggableField();
+  field.setMarkers([{ ...NEAR, approximate: true }, ALSO_NEAR]);
+
+  const approximate = pinsIn(previewCanvas).filter((pin) => pin.classList.contains("is-approximate"));
+  assert.equal(approximate.length, 1);
+});
+
+test("the caption counts the squares on the map, not the ones handed in", () => {
+  const { field, previewCanvas, previewCount } = buildDraggableField();
+  // OFF_MAP is inside a wide search but far outside the viewport the ring is
+  // framed to. Counting it would promise a square the map has no room for.
+  field.setMarkers([NEAR, OFF_MAP]);
+
+  assert.equal(pinsIn(previewCanvas).length, 1);
+  assert.equal(previewCount.textContent, "1 in range");
+});
+
+test("a preview in flight keeps the squares already drawn and says so", () => {
+  const { field, previewCanvas, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR, ALSO_NEAR]);
+  field.setMarkers(null, "loading");
+
+  // Blanking the map on every edit would flicker it through each keystroke of
+  // a radius, so only the caption changes.
+  assert.equal(pinsIn(previewCanvas).length, 2);
+  assert.equal(previewCount.classList.contains("is-loading"), true);
+  assert.equal(previewCount.textContent, "2 in range");
+});
+
+test("a preview that could not run says so without clearing the map", () => {
+  const { field, previewCanvas, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR]);
+  field.setMarkers(null, "failed");
+
+  assert.equal(pinsIn(previewCanvas).length, 1);
+  assert.equal(previewCount.hidden, false);
+  assert.equal(previewCount.textContent, "Could not preview this search.");
+});
+
+test("clearing the location takes the squares and the caption with it", async () => {
+  const { field, previewCanvas, previewCount, geoRow } = buildDraggableField();
+  field.setMarkers([NEAR, ALSO_NEAR]);
+
+  await geoRow.children[2].dispatch("click");
+  await afterPreviewDebounce();
+
+  assert.equal(pinsIn(previewCanvas).length, 0);
+  assert.equal(previewCount.hidden, true);
+});
+
+// --- City field: review follow-ups -------------------------------------------
+
+test("a failed lookup reaches the shell whole, not just as a one-line note", async () => {
+  const failure = new Error("City lookup timed out after 4 s");
+  const reported = [];
+  const field = createCityField({
+    search: async () => { throw failure; },
+    onError: (error) => reported.push(error),
+    onSelect: () => {},
+  });
+  const [, wrapper] = field.nodes;
+  const [input, , note] = wrapper.children;
+  await typeCity(input, "manch");
+
+  // The note is for the user; the debug panel needs the error itself, stack
+  // and all, or a service failure cannot be investigated.
+  assert.deepEqual(reported, [failure]);
+  assert.match(note.textContent, /City lookup timed out/);
+});
+
+test("the lookup note announces itself to a screen reader", () => {
+  const { note } = buildCityField();
+  assert.equal(note.getAttribute("role"), "status");
+  assert.equal(note.getAttribute("aria-live"), "polite");
+});
+
+test("a list answering an older prefix is not committed by moving on", async () => {
+  const pending = [];
+  const selections = [];
+  const field = createCityField({
+    search: (query) => new Promise((resolve) => pending.push({ query, resolve })),
+    onSelect: (city) => selections.push(city),
+  });
+  const [, wrapper] = field.nodes;
+  const [input, list] = wrapper.children;
+
+  input.value = "lond";
+  await input.dispatch("input");
+  pending[0].resolve([MANCHESTER]);
+  await afterCityLookup();
+  assert.equal(list.hidden, false);
+
+  // Typing on leaves the old list up so the box never blinks empty. Committing
+  // it now would set London's coordinates for a box reading "londonderry".
+  input.value = "londonderry";
+  await input.dispatch("input");
+  await input.dispatch("blur");
+
+  assert.deepEqual(selections, []);
+  assert.equal(field.value(), null);
+  assert.equal(input.value, "londonderry", "the typed text is left alone");
+});
+
+test("leaving the field abandons a lookup that has not answered yet", async () => {
+  const pending = [];
+  const field = createCityField({
+    search: (query) => new Promise((resolve) => pending.push({ query, resolve })),
+    onSelect: () => {},
+  });
+  const [, wrapper] = field.nodes;
+  const [input, list] = wrapper.children;
+
+  input.value = "manch";
+  await input.dispatch("input");
+  await input.dispatch("blur");
+  pending[0].resolve([MANCHESTER, MANCHESTER_NH]);
+  await afterCityLookup();
+
+  // Without invalidating it, the answer arrives and opens a drop-down under a
+  // field the user has already moved on from.
+  assert.equal(list.hidden, true);
+});
+
+test("a touch press on a suggestion scrolls; the tap that follows commits", async () => {
+  const { input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  let defaultPrevented = false;
+  await list.children[1].dispatch("pointerdown", {
+    pointerType: "touch",
+    preventDefault() { defaultPrevented = true; },
+  });
+  // Suppressing a touch press also cancels the browser's scrolling, and the
+  // list shows about seven of twenty rows — so a finger could never reach the
+  // eighth.
+  assert.equal(defaultPrevented, false);
+  assert.deepEqual(selections, [], "a press alone commits nothing on touch");
+
+  await list.children[1].dispatch("click");
+  assert.deepEqual(selections, [MANCHESTER_NH]);
+});
+
+test("the blur a touch press causes does not commit the highlighted entry", async () => {
+  const { input, selections, list } = buildCityField();
+  await typeCity(input, "manch");
+
+  await list.dispatch("pointerdown", { pointerType: "touch", preventDefault() {} });
+  await input.dispatch("blur");
+
+  // The gesture decides for itself: a tap commits what it hit, a scroll commits
+  // nothing. Either way the top entry must not be committed behind it.
+  assert.deepEqual(selections, []);
+});
+
+test("Enter mid-composition belongs to the IME, not the suggestion list", async () => {
+  const { input, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  let defaultPrevented = false;
+  await input.dispatch("keydown", {
+    key: "Enter",
+    isComposing: true,
+    preventDefault() { defaultPrevented = true; },
+  });
+
+  assert.equal(defaultPrevented, false, "the IME needs this Enter to confirm its characters");
+  assert.deepEqual(selections, []);
+});
+
+// --- Map preview: review follow-ups ------------------------------------------
+
+test("switching the preview off takes the squares with it", () => {
+  const { field, previewCanvas, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR, ALSO_NEAR]);
+  field.setMarkers([], "off");
+
+  // Kept, they would be redrawn around the next position the user enters — the
+  // previous location's repeaters, plotted over a different town.
+  assert.equal(pinsIn(previewCanvas).length, 0);
+  assert.equal(previewCount.hidden, true);
+});
+
+test("a clipped search says so rather than reading as full coverage", () => {
+  const { field, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR], "ok", { truncated: true });
+  assert.equal(previewCount.textContent, "1 in range (part of the area only)");
+
+  field.setMarkers([NEAR], "ok");
+  assert.equal(previewCount.textContent, "1 in range");
+});
+
+test("repeater squares travel with the map under a drag", async () => {
+  const { field, previewCanvas } = buildDraggableField();
+  field.setMarkers([NEAR, ALSO_NEAR]);
+
+  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 140, clientY: 120 });
+
+  // They mark places on the ground. Left behind, every one slides off its town
+  // for the length of the gesture and jumps back on release.
+  const shifted = pinsIn(previewCanvas).map((pin) => pin.style.transform);
+  assert.deepEqual(shifted, [
+    "translate(calc(-50% + 40px), calc(-50% + 20px))",
+    "translate(calc(-50% + 40px), calc(-50% + 20px))",
+  ]);
+  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+});
+
+test("a repeater across the antimeridian is drawn beside the map, not a world away", () => {
+  // Fiji, hard against the line. The raw difference between two world pixels
+  // either side of it is almost a whole world wide, which would put this
+  // repeater far off the viewport and out of the count.
+  const { field, previewCanvas, previewCount } = buildDraggableField({
+    initial: { latitudeText: "-17.800000", longitudeText: "179.900000" },
+  });
+  field.setMarkers([{ latitude: -17.8, longitude: -179.9, inRange: true }]);
+
+  assert.equal(pinsIn(previewCanvas).length, 1, "about 21 km east, so well inside the map");
+  assert.equal(previewCount.textContent, "1 in range");
+});
+
+test("a clipped search keeps saying so while the next preview loads", () => {
+  const { field, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR], "ok", { truncated: true });
+  assert.equal(previewCount.textContent, "1 in range (part of the area only)");
+
+  // The next edit puts the preview back in flight. The squares on screen are
+  // still the clipped ones, so dropping the qualifier would have the map claim
+  // full coverage of a radius it never searched.
+  field.setMarkers(null, "loading");
+  assert.equal(previewCount.textContent, "1 in range (part of the area only)");
+});
+
+test("the caption names what the query would drop or could not place", () => {
+  const { field, previewCount } = buildDraggableField();
+  field.setMarkers([NEAR, ALSO_NEAR], "ok", { unsupported: 2 });
+  assert.equal(previewCount.textContent, "2 in range (2 this radio cannot use)");
+
+  field.setMarkers([NEAR], "ok", { unmapped: 1 });
+  assert.equal(previewCount.textContent, "1 in range (1 with no location)");
+
+  // All three qualifiers at once still read as one parenthetical.
+  field.setMarkers([NEAR, BEYOND_RING], "ok", { truncated: true, unmapped: 1, unsupported: 3 });
+  assert.equal(
+    previewCount.textContent,
+    "1 in range, 1 just outside (part of the area only; 1 with no location; 3 this radio cannot use)",
+  );
+
+  // And they clear with the next clean answer.
+  field.setMarkers([NEAR], "ok");
+  assert.equal(previewCount.textContent, "1 in range");
+});
+
+test("the map caption announces itself to a screen reader", () => {
+  const { previewCount } = buildDraggableField();
+  assert.equal(previewCount.getAttribute("role"), "status");
+  assert.equal(previewCount.getAttribute("aria-live"), "polite");
+});
+
+test("an answer arriving mid-drag waits for the gesture to end", async () => {
+  const { field, previewCanvas } = buildDraggableField();
+  const before = previewCanvas.children[0];
+
+  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 140, clientY: 100 });
+  // The preview query fires 600 ms after the form settles, and holding the
+  // pointer still is exactly how that happens. Recentring now would leave the
+  // drag measuring from an origin the map no longer has.
+  field.setMarkers([NEAR, ALSO_NEAR]);
+  assert.equal(previewCanvas.children[0], before, "the tiles were not recentred under the pointer");
+
+  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  assert.notEqual(previewCanvas.children[0], before, "release draws them");
+  assert.equal(pinsIn(previewCanvas).length, 2, "and the markers that arrived are there");
+});
+
+test("a touch scroll that commits nothing still closes the list", async () => {
+  const { input, list, selections } = buildCityField();
+  await input.dispatch("focus");
+  await typeCity(input, "manch");
+
+  // Press, blur (ignored because the gesture might be a tap), then lift with no
+  // click: the gesture was a scroll. No second blur will ever come, so nothing
+  // else would close the list.
+  await list.dispatch("pointerdown", { pointerType: "touch", preventDefault() {} });
+  await input.dispatch("blur");
+  await list.dispatch("pointerup", { pointerType: "touch" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(list.hidden, true);
+  assert.equal(input.getAttribute("aria-expanded"), "false");
+  assert.deepEqual(selections, [], "a scroll commits nothing");
+});
+
+test("a new lookup clears the previous one's verdict", async () => {
+  const pending = [];
+  let results = [];
+  const field = createCityField({
+    search: (query) => {
+      if (results === null) {
+        return new Promise((resolve) => pending.push(resolve));
+      }
+      return Promise.resolve(results);
+    },
+    onSelect: () => {},
+  });
+  const [, wrapper] = field.nodes;
+  const [input, , note] = wrapper.children;
+
+  await typeCity(input, "zzzz");
+  assert.equal(note.textContent, "No matching places.");
+
+  // The next request is slow. Leaving the old verdict up presents it as the
+  // answer for what is being typed now.
+  results = null;
+  input.value = "manch";
+  await input.dispatch("input");
+  assert.equal(note.hidden, true);
+  assert.equal(note.textContent, "");
+  pending[0]([MANCHESTER]);
+});
+
+// A real browser runs an option's own pointerdown handler first, then bubbles
+// the same event to the list. The fake DOM has no bubbling, so a test that
+// wants that sequence dispatches at both, which is what each listener would
+// have been handed.
+async function pressOption(list, index, init = {}) {
+  const event = { pointerType: "mouse", preventDefault() {}, ...init };
+  await list.children[index].dispatch("pointerdown", event);
+  await list.dispatch("pointerdown", { ...event, target: list.children[index] });
+}
+
+test("a mouse press on the list never suppresses a later blur commit", async () => {
+  const { input, list, selections } = buildCityField();
+  await typeCity(input, "manch");
+
+  // The press is suppressed for a mouse, so focus never leaves the box and no
+  // blur needs ignoring. Marking the gesture active anyway strands the flag,
+  // because an option's handler has already hidden the list by the time the
+  // event bubbles here — the release and click then land on the page, and the
+  // listeners that would clear it are on an element nothing is pointing at.
+  await list.dispatch("pointerdown", { pointerType: "mouse", preventDefault() {} });
+  await input.dispatch("blur");
+
+  assert.deepEqual(selections, [MANCHESTER], "the blur still commits");
+  assert.equal(list.hidden, true);
+});
+
+test("picking one city by mouse does not strand the next one", async () => {
+  const byQuery = { lond: [LONDON], manch: [MANCHESTER, MANCHESTER_NH] };
+  const selections = [];
+  const field = createCityField({
+    search: async (query) => byQuery[query] || [],
+    onSelect: (city) => selections.push(city),
+  });
+  const [, wrapper] = field.nodes;
+  const [input, list] = wrapper.children;
+
+  // The reported sequence: click London, type Manchester, press Tab.
+  await input.dispatch("focus");
+  await typeCity(input, "lond");
+  await pressOption(list, 0);
+  assert.deepEqual(selections, [LONDON]);
+
+  await typeCity(input, "manch");
+  await input.dispatch("blur");
+
+  assert.deepEqual(selections, [LONDON, MANCHESTER], "Tab commits the new city");
+  assert.equal(field.value(), MANCHESTER);
+  assert.equal(list.hidden, true, "and its list does not sit open over the form");
 });

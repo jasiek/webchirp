@@ -1371,6 +1371,90 @@ button:disabled {
   line-height: 1;
 }
 
+/* The City/Locality autocomplete (web/js/ui/query-fields.js): a text box with
+   a suggestion list that overlays the fields under it. Positioned rather than
+   in flow, so a list that appears on a keystroke does not shove Latitude,
+   Longitude and the map down the card mid-type. */
+.modal-city-field {
+  position: relative;
+}
+
+.modal-city-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  list-style: none;
+  /* Roughly seven rows before it scrolls. The endpoint returns up to twenty and
+     all of them are reachable, but a list that covers the map it is about to
+     move makes the result of choosing invisible. */
+  max-height: 15rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+/* Any author `display` beats the user agent's [hidden] rule, for the same
+   reason .modal-map-preview-empty[hidden] needs saying twice. */
+.modal-city-suggestions[hidden] {
+  display: none;
+}
+
+.modal-city-suggestion {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* One highlight class for the pointer and the arrow keys alike, so hovering and
+   arrowing cannot disagree about which entry Enter or a blur will commit. */
+.modal-city-suggestion.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.modal-city-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-city-context {
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.modal-city-suggestion.is-active .modal-city-context {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* "No matching places", or why the lookup could not run. A failed suggestion
+   request is not a failed query -- coordinates can still be typed -- so it is
+   reported here rather than in the status line. */
+.modal-city-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.modal-city-note[hidden] {
+  display: none;
+}
+
 /* Static OSM preview of the coordinates the repeater-query modal currently
    holds, with the search radius drawn on it (web/js/ui/query-fields.js). It
    spans both grid columns and is pushed right, so it lines up under the values
@@ -1426,6 +1510,27 @@ button:disabled {
   text-align: center;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+/* How many repeaters the squares on the map add up to. Sits between the map and
+   the attribution, because it is a caption for the map rather than part of the
+   OSM credit. */
+.modal-map-preview-count {
+  margin: 0;
+  padding: 0.25rem 0.45rem 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* While a preview is in flight the squares already drawn stay put -- blanking
+   the map on every edit would flicker through each keystroke of a radius -- so
+   the count is the only thing that says the number is about to change. */
+.modal-map-preview-count.is-loading {
+  opacity: 0.55;
+}
+
+.modal-map-preview-count[hidden] {
+  display: none;
 }
 
 /* Any author `display` beats the user agent's own [hidden] rule, so a flex
@@ -1821,6 +1926,39 @@ button:disabled {
 /* The search radius a repeater query will use, drawn around the marker.
    web/js/ui/static-map-view.js sizes it in pixels from the ground radius; the
    fill is faint enough to read the map through. */
+/* One repeater the current filters would return, on the query modal's preview
+   map (web/js/ui/static-map-view.js). A square, not a dot, because that is what
+   many of these positions honestly are: a directory that publishes only a
+   4-character locator places a station within a box, and a dot would present
+   that guess as a survey. Small enough that a dense city stays readable as a
+   cluster rather than a blob. */
+.repeater-map-pin {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  transform: translate(-50%, -50%);
+  background: var(--accent);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
+
+/* Inside the map but outside the range ring: what a wider search would add.
+   Drawn faintly, so it reads as context for the radius rather than as a result
+   -- the count under the map is where these are actually tallied. */
+.repeater-map-pin.is-out-of-range {
+  opacity: 0.4;
+}
+
+/* A position derived from a 4-character locator, which names a box some 111 km
+   across rather than a point. Hollow, so the difference between "here" and
+   "somewhere around here" is visible on the map and not only in the row the
+   import later writes. */
+.repeater-map-pin.is-approximate {
+  background: transparent;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75);
+}
+
 .repeater-map-range {
   position: absolute;
   left: 50%;

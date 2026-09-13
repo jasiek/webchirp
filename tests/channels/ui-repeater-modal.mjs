@@ -1459,3 +1459,502 @@ test("a request answering inside the deadline is unaffected by it", async (t) =>
   assert.deepEqual(log.errors, []);
   assert.equal(table.inserted.length, 1);
 });
+
+// --- City/Locality across opens ---------------------------------------------
+
+const KRAKOW_JSON = JSON.stringify({
+  query: "krak",
+  results: [{
+    id: 3094802,
+    name: "Kraków",
+    region: "Lesser Poland",
+    country: "Poland",
+    cc: "PL",
+    lat: 50.06143,
+    lon: 19.93658,
+  }],
+});
+
+// Type into the City/Locality box and take the top suggestion the way a user
+// leaving the field does. The lookup fires on the keystroke, so the only wait
+// is for the stubbed fetch to settle.
+async function pickCity(dom, text) {
+  const city = fieldByName(dom, "city");
+  city.value = text;
+  await city.dispatch("input");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await city.dispatch("blur");
+  return city;
+}
+
+test("a chosen city fills the position, the locator and the box itself", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  const city = await pickCity(dom, "krak");
+
+  assert.equal(city.value, "Kraków, Lesser Poland, Poland");
+  assert.equal(fieldByName(dom, "latitude").value, "50.061430");
+  assert.equal(fieldByName(dom, "longitude").value, "19.936580");
+  assert.equal(fieldByName(dom, "locator").value, "JO90XB");
+});
+
+test("the chosen city persists across a reopen and a source switch", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await pickCity(dom, "krak");
+  await dom.repeaterQueryCancelEl.dispatch("click");
+
+  // Same source again: the name is back in the box, in step with the
+  // coordinates the position field restores beside it.
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.equal(fieldByName(dom, "city").value, "Kraków, Lesser Poland, Poland");
+  assert.equal(fieldByName(dom, "latitude").value, "50.061430");
+  await dom.repeaterQueryCancelEl.dispatch("click");
+
+  // A different directory is still the same place, so the name carries over
+  // exactly as the coordinates already did.
+  await dom.channelImportRepeaterbookEl.dispatch("click");
+  assert.equal(fieldByName(dom, "city").value, "Kraków, Lesser Poland, Poland");
+  assert.equal(fieldByName(dom, "latitude").value, "50.061430");
+});
+
+test("restoring a city costs no lookup", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/cities", body: KRAKOW_JSON },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await pickCity(dom, "krak");
+  const afterPick = calls.filter((call) => call.url.includes("/cities")).length;
+  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+
+  // The coordinates the name produced are already in the form; asking the
+  // gazetteer to rediscover them would be a request whose answer is on screen.
+  assert.equal(calls.filter((call) => call.url.includes("/cities")).length, afterPick);
+});
+
+test("moving the position by hand drops the city name it no longer describes", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await pickCity(dom, "krak");
+
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = "51.5";
+  await latitude.dispatch("input");
+
+  // The box would otherwise still claim these coordinates are Kraków.
+  assert.equal(fieldByName(dom, "city").value, "");
+  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.equal(fieldByName(dom, "city").value, "", "and it stays dropped on reopen");
+  assert.equal(fieldByName(dom, "latitude").value, "51.5");
+});
+
+// --- Map preview of what a query would return --------------------------------
+
+// Two repeaters near Kraków: one about 10 km out, one about 40 km. The preview
+// asks the directory for 1.5x the chosen radius, so at 30 km both come back and
+// the second is the one the ring excludes.
+const PREVIEW_RXF = `
+  <rxf><perspective>radio</perspective><repeaters>
+    <repeater>
+      <qra>SR6NEAR</qra><mode>fm</mode>
+      <qrg type="rx">145.6</qrg><qrg type="tx">145</qrg>
+      <location><latitude>50.15</latitude><longitude>19.94</longitude></location>
+    </repeater>
+    <repeater>
+      <qra>SR6FAR</qra><mode>fm</mode>
+      <qrg type="rx">145.7</qrg><qrg type="tx">145.1</qrg>
+      <location><latitude>50.42</latitude><longitude>19.94</longitude></location>
+    </repeater>
+  </repeaters></rxf>
+`;
+
+// The preview waits for the form to settle before asking anything
+// (PREVIEW_QUERY_DEBOUNCE_MS, 600 ms), so a test that edits has to outwait it.
+function afterPreviewQuery() {
+  return new Promise((resolve) => setTimeout(resolve, 750));
+}
+
+// A position no other test in this file uses, so a preview can be attributed to
+// the test that asked for it. Tests here end with their modal still open, and a
+// preview it scheduled fires on a real timer -- into whichever fetch stub is
+// installed by then. That is honest behaviour for a modal that is still on
+// screen, so the tests identify their own request rather than the code
+// pretending an open form stops previewing.
+const PREVIEW_LAT = 49.5;
+const PREVIEW_LON = 20.5;
+
+// The caption under the map preview, which is the field's own element rather
+// than anything web/js/ui/dom.js knows about.
+function previewCaption(dom) {
+  const match = descendants(grid(dom)).find((el) => el.className === "modal-map-preview-count");
+  assert.ok(match, "the map preview has a caption");
+  return match;
+}
+
+function previewCalls(calls, match) {
+  return calls.filter((call) => call.url.includes(match)
+    && !call.url.includes("/meta")
+    && call.url.includes(`latitude=${PREVIEW_LAT}&`));
+}
+
+// Edit one control the way a browser reports it. The fields' own listeners sit
+// on the control, while the preview listens once on the grid and relies on the
+// event bubbling there -- and the fake DOM has no bubbling, so the dispatch is
+// repeated at the delegating element with `target` set, which is exactly what a
+// real browser hands that listener.
+async function editField(dom, name, value) {
+  const field = fieldByName(dom, name);
+  field.value = String(value);
+  await field.dispatch("input");
+  await grid(dom).dispatch("input", { target: field });
+}
+
+async function setPreviewPosition(dom) {
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = String(PREVIEW_LAT);
+  await latitude.dispatch("input");
+  const longitude = fieldByName(dom, "longitude");
+  longitude.value = String(PREVIEW_LON);
+  await longitude.dispatch("input");
+}
+
+test("setting a position previews what the filters would return", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+
+  const preview = previewCalls(calls, "/przemienniki");
+  assert.equal(preview.length, 1);
+  // Half again the chosen radius, so the map can show what a wider search
+  // would add rather than only what this one keeps.
+  assert.equal(new URL(preview[0].url).searchParams.get("range"), "45");
+  // The filters are the form's own, not a bare position query.
+  assert.equal(new URL(preview[0].url).searchParams.get("band"), "2m,70cm");
+});
+
+test("a burst of edits costs one preview, not one per keystroke", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  for (const value of ["40", "50", "60"]) {
+    await editField(dom, "radius", value);
+  }
+  await afterPreviewQuery();
+
+  // A drag rewrites the coordinates on every pointermove and RSGB's fan-out is
+  // nine requests wide, so this delay is what makes the feature affordable.
+  assert.equal(previewCalls(calls, "/przemienniki").length, 1);
+  assert.equal(new URL(previewCalls(calls, "/przemienniki")[0].url).searchParams.get("range"), "90");
+});
+
+test("an unchanged search redraws from cache instead of asking again", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+  const first = previewCalls(calls, "/przemienniki").length;
+
+  // Close and reopen on the same position and filters: the request would be
+  // byte for byte the one already answered.
+  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await afterPreviewQuery();
+
+  assert.equal(previewCalls(calls, "/przemienniki").length, first);
+});
+
+test("a preview is never issued for a form with no position", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await editField(dom, "radius", "50");
+  await afterPreviewQuery();
+
+  assert.equal(previewCalls(calls, "/przemienniki").length, 0);
+});
+
+test("a directory that refuses a preview leaves the form usable", async () => {
+  const { dom, log, table } = buildHarness();
+  installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", ok: false, status: 503, body: "down" },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+
+  // A preview is a hint. It must not read as a failed query: nothing was asked
+  // for, the modal stays open, and the status line is left for the real one.
+  assert.deepEqual(log.errors, []);
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false);
+  assert.equal(table.inserted.length, 0);
+  assert.ok(log.debug.some((line) => /PREVIEW FAILED/.test(line)), "the reason reaches the debug panel");
+});
+
+test("closing the modal abandons a preview still in flight", async () => {
+  const { dom } = buildHarness();
+  installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  // Inside the debounce window, so the request has not gone out yet.
+  await dom.repeaterQueryCancelEl.dispatch("click");
+  await afterPreviewQuery();
+
+  // Nothing to assert on the map — the point is that no error and no stray
+  // render follow a modal that is gone.
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
+});
+
+// --- Preview review follow-ups ------------------------------------------------
+
+test("an invalid radius is an inactive preview, not an empty one", async () => {
+  const { dom, log } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await editField(dom, "radius", "");
+  await afterPreviewQuery();
+
+  // No directory was contacted, so captioning the map "0 in range" and logging
+  // a successful zero-result preview would both be inventions.
+  assert.equal(previewCalls(calls, "/przemienniki").length, 0);
+  assert.ok(!log.debug.some((line) => /PREVIEW 0 repeater/.test(line)));
+});
+
+test("a failed city lookup puts the whole error in the debug panel", async () => {
+  const { dom, log } = buildHarness();
+  installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/cities", ok: false, status: 503, body: "down" },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  const city = fieldByName(dom, "city");
+  city.value = "krak";
+  await city.dispatch("input");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.ok(
+    log.debug.some((line) => /CITY LOOKUP FAILED/.test(line)),
+    "a service failure must be diagnosable from Debug Output",
+  );
+  // Still only a hint: the status line belongs to the real query.
+  assert.deepEqual(log.errors, []);
+});
+
+// --- RSGB preview cache -------------------------------------------------------
+
+test("the submitted RSGB query reuses what the preview already downloaded", async () => {
+  const { dom, log } = buildHarness();
+  installGeolocation(LONDON);
+  const calls = installRsgbFetch({
+    IO91: [repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ" })],
+    JO01: [],
+  });
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  // Long enough for the automatic preview to run its fan-out.
+  await afterPreviewQuery();
+  const afterPreview = calls.length;
+  assert.ok(afterPreview > 0, "the preview fanned out");
+
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  // The normal workflow is to pause long enough to see the preview and then
+  // press Query API. Fetching again here downloaded every square a second
+  // time — up to 24 more responses of roughly 75 kB, for records in hand.
+  assert.equal(calls.length, afterPreview, "no square is downloaded twice");
+  assert.deepEqual(log.errors, []);
+  // The per-square debug line still comes from the squares actually fetched.
+  assert.ok(log.debug.some((line) => /RSGB SQUARE IO91 -> 1/.test(line)));
+});
+
+test("making room in the square cache never drops a square the search needs", async () => {
+  const { dom, log, table } = buildHarness();
+  // A plan can be as wide as the cache is deep (both 24 squares), so a second
+  // overlapping plan pushes the cache over its cap — and the oldest entries
+  // then are precisely the overlapping ones the new plan still needs.
+  const squares = {};
+  for (const field of ["IO", "JO"]) {
+    for (let lon = 0; lon < 5; lon += 1) {
+      for (let lat = 0; lat < 5; lat += 1) {
+        squares[`${field}${lon}${lat}`] = [];
+      }
+    }
+  }
+  squares.IO91 = [repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ" })];
+  installRsgbFetch(squares);
+  installGeolocation(LONDON);
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  // A wide search first, to fill the cache, then back to a narrow one whose
+  // squares the wide one already holds.
+  await editField(dom, "radius", "500");
+  await afterPreviewQuery();
+  await editField(dom, "radius", "30");
+  await afterPreviewQuery();
+
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  // Evicting before reading would hand back an empty list for a square just
+  // fetched, and the query would quietly omit its repeaters.
+  assert.deepEqual(log.errors, []);
+  assert.equal(table.inserted.length, 1);
+  assert.equal(table.inserted[0].rows.length, 1, "GB3XP survived the cache making room");
+});
+
+// --- Second review round ------------------------------------------------------
+
+test("no radio loaded means no preview and a caption saying why", async () => {
+  const { dom } = buildHarness({ headers: [] });
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+
+  // Query API refuses this with "No channel schema loaded yet", so plotting
+  // squares and captioning a count would promise results the button cannot
+  // deliver — and spend a directory request to do it.
+  assert.equal(previewCalls(calls, "/przemienniki").length, 0);
+  assert.equal(previewCaption(dom).textContent, "Select a radio to preview repeaters.");
+});
+
+test("nudging the radius reuses the body already fetched", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", body: PREVIEW_RXF },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+  assert.equal(previewCalls(calls, "/przemienniki").length, 1);
+
+  // A body fetched at 1.5x the radius already covers every smaller one, so
+  // narrowing only re-flags which side of the ring each station falls on.
+  // Keying the cache on the whole URL made this miss, which is the commonest
+  // edit in the form.
+  await editField(dom, "radius", "20");
+  await afterPreviewQuery();
+  assert.equal(previewCalls(calls, "/przemienniki").length, 1, "narrowing asks nothing");
+
+  // Wider than the cached body covers, so this one genuinely needs more ground.
+  await editField(dom, "radius", "300");
+  await afterPreviewQuery();
+  assert.equal(previewCalls(calls, "/przemienniki").length, 2);
+});
+
+test("a preview failure reaches the debug panel with its stack", async () => {
+  const { dom, log } = buildHarness();
+  installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "/przemienniki", ok: false, status: 503, body: "down" },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+
+  const line = log.debug.find((entry) => /PREVIEW FAILED/.test(entry));
+  assert.ok(line, "the failure is logged");
+  // error.message alone cannot say which step threw.
+  assert.match(line, /at /, "the stack comes with it");
+});
+
+// Repeaters due north of the preview position. A degree of latitude is ~111 km,
+// and the distances are chosen against what the map can actually show: the ring
+// fills 0.9 of the width, so the viewport reaches radius/0.9 and only that
+// narrow band beyond the ring can hold a square the caption will count as
+// "just outside".
+function previewRepeaterAt(latitude, call) {
+  return `
+    <repeater>
+      <qra>SR${call}</qra><mode>fm</mode>
+      <qrg type="rx">145.6</qrg><qrg type="tx">145</qrg>
+      <location><latitude>${latitude}</latitude><longitude>${PREVIEW_LON}</longitude></location>
+    </repeater>
+  `;
+}
+
+function previewRxf(...repeaters) {
+  return `<rxf><perspective>radio</perspective><repeaters>${repeaters.join("")}</repeaters></rxf>`;
+}
+
+// 11 km: inside a 20 km ring.
+const NEAR_11KM = previewRepeaterAt(PREVIEW_LAT + 0.1, "A");
+// 21 km: outside a 20 km ring, inside the 22.2 km viewport it frames.
+const NEAR_21KM = previewRepeaterAt(PREVIEW_LAT + 0.189, "B");
+// 32 km: outside a 30 km ring, inside the 33.3 km viewport it frames.
+const NEAR_32KM = previewRepeaterAt(PREVIEW_LAT + 0.288, "C");
+
+test("a cached body is only reused when it covers the widened area too", async () => {
+  const { dom } = buildHarness();
+  // The directory filters by distance upstream, so each range gets what that
+  // range would really contain.
+  installFetch([
+    { match: "/meta", body: META_JSON },
+    { match: "range=30", body: previewRxf(NEAR_11KM, NEAR_21KM) },
+    { match: "range=45", body: previewRxf(NEAR_11KM, NEAR_21KM, NEAR_32KM) },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await setPreviewPosition(dom);
+  await editField(dom, "radius", "20");
+  await afterPreviewQuery();
+  assert.equal(previewCaption(dom).textContent, "1 in range, 1 just outside");
+
+  await editField(dom, "radius", "30");
+  await afterPreviewQuery();
+
+  // The 20 km search fetched 30 km of ground. Reusing it for a 30 km search
+  // leaves nothing beyond that ring to dim, so the map would claim there is
+  // nothing just outside while the repeater at 32 km went unfetched.
+  assert.equal(previewCaption(dom).textContent, "2 in range, 1 just outside");
+});

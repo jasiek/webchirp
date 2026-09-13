@@ -297,3 +297,16 @@ export function undecodedChannelsNote(unreadableChannels) {
   }
   return ` ${count} channel${count === 1 ? "" : "s"} could not be decoded and ${count === 1 ? "is" : "are"} not shown; see Debug Output.`;
 }
+
+// Insert into a Map that must not grow past `limit` entries, evicting the
+// oldest first. Map iterates in insertion order, so the first key is the
+// oldest. Used by every preview cache in web/js/ui/repeater-sources.js and by
+// the city autocomplete's answer cache in web/js/ui/query-fields.js, so the
+// eviction rule is written once.
+export function rememberBounded(map, key, value, limit) {
+  map.set(key, value);
+  while (map.size > limit) {
+    map.delete(map.keys().next().value);
+  }
+  return value;
+}

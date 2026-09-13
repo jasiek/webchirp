@@ -1,5 +1,6 @@
 import { decodeMaidenheadBox, encodeMaidenhead } from "../rsgb.js";
 import { latLonToWorldPixel, worldPixelToLatLon, zoomForRadius } from "../staticmap.js";
+import { rememberBounded } from "./format.js";
 import { createMapAttribution, renderStaticMap } from "./static-map-view.js";
 
 // Field components for the shared repeater-query modal. Each factory builds
@@ -17,8 +18,9 @@ import { createMapAttribution, renderStaticMap } from "./static-map-view.js";
 // already typed into it — no directory is contacted and nothing is reported.)
 //
 // Elements get generated ids under this prefix so <label for> association
-// works. They are deliberately not in dom.js: the fields exist only between
-// one modal open and the next, so nothing outside this file may look them up.
+// works. They are deliberately not in web/js/ui/dom.js: the fields exist only
+// between one modal open and the next, so nothing outside this file may look
+// them up.
 const FIELD_ID_PREFIX = "repeater-query-field-";
 
 function fieldId(key, suffix = "") {
@@ -285,10 +287,19 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   previewEmpty.className = "modal-map-preview-empty";
   previewEmpty.textContent = "Set a latitude and longitude to preview the location.";
   const previewAttribution = createMapAttribution();
+  // Caption counting the squares on the map. A live region because every
+  // message here arrives asynchronously while focus is still on the control
+  // that triggered it.
+  const previewCount = document.createElement("p");
+  previewCount.className = "modal-map-preview-count";
+  previewCount.setAttribute("role", "status");
+  previewCount.setAttribute("aria-live", "polite");
+  previewCount.hidden = true;
   const preview = document.createElement("div");
   preview.className = "modal-map-preview";
   preview.appendChild(previewCanvas);
   preview.appendChild(previewEmpty);
+  preview.appendChild(previewCount);
   preview.appendChild(previewAttribution);
 
   function currentPosition() {
@@ -325,6 +336,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     previewEmpty.hidden = Boolean(position);
     if (!position) {
       previewCanvas.innerHTML = "";
+      updateCount(null);
       return;
     }
     const radiusMetres = Number.isFinite(rangeKm) && rangeKm > 0 ? rangeKm * 1000 : 0;
@@ -333,13 +345,15 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     lastPreviewZoom = zoomForRadius(position.latitude, radiusMetres, lastPreviewWidth, {
       fill: PREVIEW_RANGE_FILL,
     }) ?? PREVIEW_ZOOM;
-    renderStaticMap(previewCanvas, position, {
+    const { drawn } = renderStaticMap(previewCanvas, position, {
       zoom: lastPreviewZoom,
       width: lastPreviewWidth,
       height: lastPreviewWidth,
       radiusMetres,
       overscan: PREVIEW_OVERSCAN,
+      markers: plot.points,
     });
+    updateCount(drawn);
   }
 
   let previewTimer = 0;
@@ -354,6 +368,64 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // field entirely (Range/Distance), so the modal shell pushes it in here —
   // see setRangeKm.
   let rangeKm = Number.NaN;
+  // Everything the caption under the map is built from, pushed in by the shell
+  // after it previews the query the form describes (see setMarkers). Held here
+  // rather than fetched here because this file contacts no directory.
+  //   state:      "ok" once an answer is drawn, "loading" while the next is
+  //               fetched, "failed" when it could not be, "blocked" when no
+  //               radio is loaded to import into, "off" when there is nothing
+  //               to preview.
+  //   points:     the repeaters to plot.
+  //   truncated:  the source searched only part of the area (RSGB clips its
+  //               fan-out at 24 squares), so the count is not whole-radius
+  //               coverage.
+  //   unmapped:   repeaters the query inserts but the map cannot place.
+  //   unsupported: repeaters the map places but the selected radio cannot use.
+  //   drawn:      the tally from the last render, so a caption rewritten
+  //               without a redraw still describes the squares on screen.
+  let plot = { state: "off", points: [], truncated: false, unmapped: 0, unsupported: 0, drawn: null };
+
+  // States whose caption does not depend on what is drawn.
+  const FIXED_CAPTIONS = {
+    failed: "Could not preview this search.",
+    blocked: "Select a radio to preview repeaters.",
+  };
+
+  // Caption the map with what is drawn on it, not with what was handed in: a
+  // station the radius reaches but the viewport does not is real, and promising
+  // it under a map that has no square for it is worse than not counting it.
+  function updateCount(drawn) {
+    plot.drawn = drawn;
+    previewCount.classList.toggle("is-loading", plot.state === "loading");
+    if (FIXED_CAPTIONS[plot.state]) {
+      previewCount.textContent = FIXED_CAPTIONS[plot.state];
+      previewCount.hidden = false;
+      return;
+    }
+    previewCount.hidden = plot.state === "off" || !drawn;
+    if (!drawn) {
+      return;
+    }
+    if (plot.state === "loading" && drawn.inRange === 0 && drawn.outOfRange === 0) {
+      previewCount.textContent = "Looking for repeaters...";
+      return;
+    }
+    const parts = [drawn.outOfRange > 0
+      ? `${drawn.inRange} in range, ${drawn.outOfRange} just outside`
+      : `${drawn.inRange} in range`];
+    if (plot.truncated) {
+      parts.push("part of the area only");
+    }
+    if (plot.unmapped > 0) {
+      parts.push(`${plot.unmapped} with no location`);
+    }
+    if (plot.unsupported > 0) {
+      parts.push(`${plot.unsupported} this radio cannot use`);
+    }
+    previewCount.textContent = parts.length > 1
+      ? `${parts[0]} (${parts.slice(1).join("; ")})`
+      : parts[0];
+  }
 
   function schedulePreview() {
     // A drag writes the coordinate fields on every pointermove; redrawing
@@ -382,7 +454,14 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // Redraw now, dropping any debounced redraw it pre-empts. The shell calls
   // this once the modal is on screen, which is the first moment the canvas has
   // a width to measure.
+  //
+  // Never during a drag: a directory answer landing mid-gesture would recentre
+  // the tiles under a drag still measuring from the old origin, and the basemap
+  // would jump away from the pointer. endDrag redraws anyway.
   function refreshPreview() {
+    if (drag) {
+      return;
+    }
     cancelScheduledPreview();
     renderPreview();
   }
@@ -413,13 +492,22 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // to count. Null whenever no drag is running.
   let drag = null;
 
-  // Offset the tiles without redrawing them. Only the tiles move: the marker
-  // and the range ring mark the position being chosen, which is always the
-  // centre of the viewport.
+  // Offset the map without redrawing it. The tiles and the repeater squares
+  // move (they mark places on the ground); the centre marker and the range
+  // ring do not (they mark the position being chosen, always the viewport
+  // centre). A pin is centred on its coordinate by a transform of its own, so
+  // the pan composes with that rather than replacing it.
   function panTiles(dx, dy) {
+    const tileShift = dx || dy ? `translate(${dx}px, ${dy}px)` : "";
+    const pinShift = dx || dy
+      ? `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`
+      : "";
     for (const child of previewCanvas.children) {
-      if (child.className === "repeater-map-tile") {
-        child.style.transform = dx || dy ? `translate(${dx}px, ${dy}px)` : "";
+      const className = String(child.className || "");
+      if (className === "repeater-map-tile") {
+        child.style.transform = tileShift;
+      } else if (className.startsWith("repeater-map-pin")) {
+        child.style.transform = pinShift;
       }
     }
   }
@@ -594,8 +682,418 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       rangeKm = next;
       schedulePreview();
     },
+    // Plot what the current filters would return. `state` is "loading" while a
+    // preview is in flight, "ok" with points, "blocked" when the app could not
+    // import the answer anyway, or "failed"/"off" when there is nothing to show
+    // — the squares already drawn stay put while the next answer is fetched,
+    // because blanking the map on every edit would make it flicker through
+    // every keystroke of a radius.
+    setMarkers: (points, state = "ok", { truncated = false, unmapped = 0, unsupported = 0 } = {}) => {
+      plot.state = state;
+      if (state === "ok") {
+        // Only an answer carries the qualifiers; "loading" and "failed" keep
+        // the ones describing the squares still on screen.
+        Object.assign(plot, { truncated, unmapped, unsupported, points: Array.isArray(points) ? points : [] });
+        refreshPreview();
+        return;
+      }
+      // "off" and "blocked" both mean there is nothing to preview, so the
+      // squares must go with the caption, or they would be redrawn around the
+      // next position the user enters while its own preview is still on its way.
+      if ((state === "off" || state === "blocked") && plot.points.length > 0) {
+        plot.points = [];
+        refreshPreview();
+        return;
+      }
+      // The other states change only the caption; a redraw would refetch the
+      // tile grid just to say "loading".
+      updateCount(plot.drawn);
+    },
     value: () => currentPosition(),
     setPosition: applyPosition,
     geolocateButton,
+  };
+}
+
+// --- City/Locality autocomplete ---------------------------------------------
+
+// The lookup runs on every keystroke with no debounce: typing leaves 150-250 ms
+// between characters, so a window short enough not to be felt collapses
+// nothing. Instead searchGeneration drops superseded responses and a per-field
+// cache of answered queries makes backspacing over an overshot letter free.
+// Capped so a long session cannot accumulate an entry per keystroke.
+const CITY_CACHE_LIMIT = 60;
+
+// The administrative context that distinguishes a place from its namesakes.
+// Region is often blank for small places and is skipped, not left as a comma.
+function cityContext(city) {
+  return [city.region, city.country].filter((part) => part && part.length > 0).join(", ");
+}
+
+// Full text of a committed choice: "London" alone would not say which of the
+// four the coordinates below it came from.
+function cityLabel(city) {
+  const context = cityContext(city);
+  return context ? `${city.name}, ${context}` : city.name;
+}
+
+// Text input that suggests place names. It stores no position itself: it
+// reports the chosen city through `onSelect(city)` and the modal shell pushes
+// the coordinates into the position field, which owns latitude, longitude,
+// the locator and the map.
+//
+// Injected by the shell, because this file contacts no service and has no
+// logger: `search(query)` -> Promise of suggestions; `onError(error)` for the
+// debug panel (the field shows its own one-line note); `onSelect(city)`.
+// `initial.city` is the place kept from last time, shown without a lookup.
+//
+// Commit rules: Enter, a click, or moving focus away commits the highlighted
+// suggestion (the first starts highlighted, so "type and tab away" lands on
+// the best match); arrows move the highlight; Escape closes the list and
+// leaves the text alone.
+export function createCityField({
+  key = "city",
+  label = "City/Locality",
+  placeholder = "e.g. Manchester",
+  initial = {},
+  search,
+  onError,
+  onSelect,
+} = {}) {
+  const input = document.createElement("input");
+  input.id = fieldId(key);
+  input.name = key;
+  input.type = "text";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.placeholder = placeholder;
+  // A combobox rather than a plain text box, so a screen reader announces that
+  // there is a list under it and which entry is current.
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+
+  const list = document.createElement("ul");
+  list.id = fieldId(key, "listbox");
+  list.className = "modal-city-suggestions";
+  list.setAttribute("role", "listbox");
+  list.hidden = true;
+  input.setAttribute("aria-controls", list.id);
+
+  // Status line for "no matches" and "lookup failed". A failed suggestion is
+  // not a failed query, so it is reported here and nowhere else. A live region,
+  // because both messages arrive after the keystroke and open no list.
+  const note = document.createElement("p");
+  note.className = "modal-city-note";
+  note.setAttribute("role", "status");
+  note.setAttribute("aria-live", "polite");
+  note.hidden = true;
+
+  // The list is absolutely positioned against this wrapper (see
+  // .modal-city-field in web/styles.css), so it overlays the fields below
+  // instead of pushing the whole modal taller on every keystroke.
+  const wrapper = document.createElement("div");
+  wrapper.className = "modal-city-field";
+  wrapper.appendChild(input);
+  wrapper.appendChild(list);
+  wrapper.appendChild(note);
+
+  // A mouse press anywhere in the list (scrollbar included) must not move focus
+  // out of the input, because blur commits the highlighted entry. A touch press
+  // cannot be suppressed the same way without cancelling scrolling, so it sets
+  // a flag instead: the blur it causes is ignored and a tap commits through the
+  // option's click handler. The flag is never set for a mouse -- its option
+  // handler has already committed and closed the list, so no click would follow
+  // to clear it, and every later blur would return early.
+  list.addEventListener("pointerdown", (event) => {
+    if ((event.pointerType || "mouse") === "mouse") {
+      event.preventDefault?.();
+      return;
+    }
+    listPointerActive = true;
+  });
+  // Cleared whichever way the gesture ends. A touch scroll produces no click,
+  // and the blur it caused was ignored, so the list must close itself here;
+  // the check runs after the click a tap would have produced.
+  const endListPointer = () => {
+    listPointerActive = false;
+    setTimeout(() => {
+      if (!list.hidden && !inputFocused && !listPointerActive) {
+        closeList();
+      }
+    }, 0);
+  };
+  list.addEventListener("pointerup", endListPointer);
+  list.addEventListener("pointercancel", endListPointer);
+
+  let suggestions = [];
+  // The text the visible list answers. The previous prefix's results stay on
+  // screen while the next lookup runs, and committing them then would be wrong.
+  let suggestionsQuery = "";
+  // True between a press inside the list and the end of that gesture. On a
+  // touchscreen the press is as likely to be the start of a scroll as a tap,
+  // and either way the blur it causes must not commit the highlighted entry.
+  let listPointerActive = false;
+  // Whether the box still holds focus. Tracked rather than read from
+  // document.activeElement so the check works the same in the headless tests,
+  // whose DOM has no active element.
+  let inputFocused = false;
+  let activeIndex = -1;
+  let selected = initial.city || null;
+  // Bumped on every keystroke, commit and cancel, so a response that lands
+  // after a later one has rendered can bow out.
+  let searchGeneration = 0;
+  // Answered queries, keyed by the typed text. See CITY_CACHE_LIMIT.
+  const cache = new Map();
+
+  function setNote(text) {
+    note.textContent = text || "";
+    note.hidden = !text;
+  }
+
+  function closeList() {
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+    activeIndex = -1;
+  }
+
+  // Move the highlight, in the list and in what a screen reader reads.
+  function setActiveIndex(index) {
+    activeIndex = index;
+    for (let i = 0; i < list.children.length; i += 1) {
+      const option = list.children[i];
+      const isActive = i === index;
+      option.classList.toggle("is-active", isActive);
+      option.setAttribute("aria-selected", isActive ? "true" : "false");
+      if (isActive) {
+        input.setAttribute("aria-activedescendant", option.id);
+        option.scrollIntoView?.({ block: "nearest" });
+      }
+    }
+  }
+
+  function renderSuggestions(entries) {
+    suggestions = entries;
+    list.innerHTML = "";
+    if (entries.length === 0) {
+      closeList();
+      return;
+    }
+    entries.forEach((city, index) => {
+      const option = document.createElement("li");
+      option.id = fieldId(key, `option-${index}`);
+      option.className = "modal-city-suggestion";
+      option.setAttribute("role", "option");
+      const name = document.createElement("span");
+      name.className = "modal-city-name";
+      name.textContent = city.name;
+      option.appendChild(name);
+      const context = cityContext(city);
+      if (context) {
+        const detail = document.createElement("span");
+        detail.className = "modal-city-context";
+        detail.textContent = context;
+        option.appendChild(detail);
+      }
+      // A mouse commits on pointerdown: a click would blur the input first, and
+      // blur commits whatever is highlighted, not necessarily this entry. A
+      // touch press may yet become a scroll, so it waits for the click.
+      option.addEventListener("pointerdown", (event) => {
+        if ((event.pointerType || "mouse") !== "mouse") {
+          return;
+        }
+        event.preventDefault?.();
+        setActiveIndex(index);
+        commitActive();
+      });
+      // The touch path. A mouse reaches here after its pointerdown has
+      // already committed and closed the list, so there is nothing to commit.
+      option.addEventListener("click", () => {
+        listPointerActive = false;
+        setActiveIndex(index);
+        commitActive();
+      });
+      option.addEventListener("pointerenter", () => setActiveIndex(index));
+      list.appendChild(option);
+    });
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    // The top match starts highlighted: it is the one Enter and a blur commit,
+    // and a highlight that only appeared on the first arrow press would make
+    // that invisible until after the fact.
+    setActiveIndex(0);
+  }
+
+  // Take the highlighted suggestion: put its full name in the box, close the
+  // list, and report it. Returns whether anything was committed, so the key
+  // handler knows whether to swallow the Enter.
+  function commitActive() {
+    const city = suggestions[activeIndex];
+    // A list still answering a shorter prefix must not be committed: it would
+    // set "London" for a box reading "londonderry".
+    if (!city || suggestionsQuery !== String(input.value ?? "").trim()) {
+      return false;
+    }
+    selected = city;
+    input.value = cityLabel(city);
+    setNote("");
+    closeList();
+    listPointerActive = false;
+    // A lookup still in flight would reopen the list over a settled choice.
+    searchGeneration += 1;
+    if (typeof onSelect === "function") {
+      onSelect(city);
+    }
+    return true;
+  }
+
+  // Wipe the box and the choice it held, because the position was set by some
+  // other route and the name no longer describes the coordinates under it.
+  // Silent: the shell is the caller, so reporting back would risk a loop.
+  function clear() {
+    if (!selected && String(input.value ?? "") === "") {
+      return;
+    }
+    selected = null;
+    input.value = "";
+    setNote("");
+    closeList();
+    searchGeneration += 1;
+  }
+
+  // Show a result set, from wherever it came. One place, so a cached answer and
+  // a fresh one put the list into exactly the same state.
+  function showResults(results, query) {
+    suggestionsQuery = query;
+    renderSuggestions(results);
+    setNote(results.length === 0 ? "No matching places." : "");
+  }
+
+  async function runSearch(text) {
+    const generation = searchGeneration;
+    let results = [];
+    try {
+      results = await search(text);
+    } catch (error) {
+      if (generation !== searchGeneration) {
+        return;
+      }
+      suggestionsQuery = "";
+      renderSuggestions([]);
+      // One line for the user; the whole error, stack included, goes to the
+      // debug panel through the shell — this file has no logger of its own.
+      setNote(`City lookup unavailable: ${error.message}`);
+      if (typeof onError === "function") {
+        onError(error);
+      }
+      return;
+    }
+    // A failed lookup is deliberately not cached: the next keystroke should
+    // retry rather than replay the outage for the rest of the modal session.
+    rememberBounded(cache, text, results, CITY_CACHE_LIMIT);
+    // Superseded by a later keystroke or by a commit while this was in flight.
+    if (generation !== searchGeneration) {
+      return;
+    }
+    showResults(results, text);
+  }
+
+  input.addEventListener("input", () => {
+    // Typing means any pointer gesture on the list finished, however it ended
+    // -- a touch that lifted off the list never reaches its pointerup handler.
+    listPointerActive = false;
+    // Editing the text abandons the previous choice: the coordinates already
+    // pushed into the position field stay (the user may be refining the name
+    // of the place they picked), but nothing here still claims to describe
+    // them.
+    selected = null;
+    const text = String(input.value ?? "").trim();
+    // Every new keystroke invalidates whatever is in flight, whether or not a
+    // fresh lookup follows it.
+    searchGeneration += 1;
+    if (text.length === 0) {
+      suggestionsQuery = "";
+      renderSuggestions([]);
+      setNote("");
+      return;
+    }
+    if (typeof search !== "function") {
+      return;
+    }
+    const cached = cache.get(text);
+    if (cached) {
+      showResults(cached, text);
+      return;
+    }
+    // The previous verdict belongs to the previous text; left up while the
+    // next request runs it reads as the verdict on what is being typed now.
+    setNote("");
+    runSearch(text);
+  });
+
+  input.addEventListener("keydown", (event) => {
+    // Mid-composition, Enter and the arrows belong to the IME.
+    if (list.hidden || event.isComposing) {
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault?.();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const count = suggestions.length;
+      setActiveIndex(((activeIndex + step) % count + count) % count);
+      return;
+    }
+    if (event.key === "Enter") {
+      // The modal's form submits on Enter, so committing a suggestion has to
+      // swallow the key or picking a city would run the query at the same time.
+      event.preventDefault?.();
+      commitActive();
+      return;
+    }
+    if (event.key === "Escape") {
+      // Escape on the document closes the whole modal
+      // (web/js/ui.js); with a list open it should only close the list.
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      searchGeneration += 1;
+      closeList();
+    }
+  });
+
+  // Leaving the field takes the top suggestion, which is the field's whole
+  // promise: type enough of a name, move on, and the position is set.
+  input.addEventListener("focus", () => { inputFocused = true; });
+
+  input.addEventListener("blur", () => {
+    inputFocused = false;
+    // Focus left because a finger landed in the list; that gesture decides
+    // for itself whether it is a tap or a scroll.
+    if (listPointerActive) {
+      return;
+    }
+    if (!commitActive()) {
+      closeList();
+      // A lookup still in flight would otherwise reopen the list under a
+      // field the user has moved on from.
+      searchGeneration += 1;
+    }
+  });
+
+  // Assigning the value fires no input event, so this triggers no lookup.
+  if (selected) {
+    input.value = cityLabel(selected);
+  }
+
+  return {
+    key,
+    nodes: [labelledBy(label, input.id), wrapper],
+    focusTarget: input,
+    // The committed place, or null. No source filters by city; this exists
+    // for the shell's persistence and the tests, not for a query parameter.
+    value: () => selected,
+    clear,
+    input,
+    list,
   };
 }
