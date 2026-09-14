@@ -381,6 +381,47 @@ test("opening przemienniki builds the form from the dictionary, once", async () 
   assert.equal(calls.length, 1);
 });
 
+test("przemienniki digital modes are shown disabled, matching RSGB", async () => {
+  const { dom } = buildHarness();
+  installFetch([{
+    match: "/przemienniki/meta",
+    // The live /meta vocabulary as of 2026-09-14: fm and dstar plus the six
+    // digital modes a channel row cannot express usefully.
+    body: JSON.stringify({
+      filters: {
+        country: ["PL"],
+        band: ["2m", "70cm"],
+        mode: ["apco25", "atv", "c4fm", "dstar", "fm", "m17", "mototrbo", "tetra"],
+      },
+    }),
+  }]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+
+  const [, modeBox] = descendants(grid(dom)).filter((el) => el.className === "modal-modes");
+  const modeInputs = grid(dom).querySelectorAll('input[name="mode"]');
+  // Dictionary order is label-sorted, so the digital names sit among fm/dstar
+  // rather than after them the way RSGB appends its unsupported flags.
+  assert.deepEqual(
+    modeInputs.map((el) => el.value),
+    ["apco25", "atv", "c4fm", "dstar", "fm", "m17", "mototrbo", "tetra"],
+  );
+  assert.deepEqual(
+    modeInputs.filter((el) => el.disabled).map((el) => el.value),
+    ["apco25", "atv", "c4fm", "m17", "mototrbo", "tetra"],
+  );
+  assert.deepEqual(
+    modeInputs.filter((el) => el.checked).map((el) => el.value),
+    ["fm"],
+  );
+  assert.deepEqual(
+    modeBox.children
+      .filter((option) => option.title === "Only analogue modes and dstar are supported fully")
+      .map((option) => option.children[1].textContent),
+    ["apco25", "atv", "c4fm", "m17", "mototrbo", "tetra"],
+  );
+});
+
 test("a failed dictionary fetch reports the error and retries on the next open", async () => {
   const { dom, log } = buildHarness();
   let failFirst = true;
@@ -502,9 +543,14 @@ test("IRTS loads its dictionary and submits through the shared RXF flow", async 
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query IRTS");
   assert.deepEqual(countrySelect(dom).children.slice(1).map((option) => option.value), ["IE", "GB"]);
   assert.deepEqual(grid(dom).querySelectorAll('input[name="band"]').map((el) => el.value), ["10m", "2m", "4m", "70cm"]);
+  const irtsModes = grid(dom).querySelectorAll('input[name="mode"]');
   assert.deepEqual(
-    grid(dom).querySelectorAll('input[name="mode"]').map((el) => el.value),
+    irtsModes.map((el) => el.value),
     ["dmr", "dstar", "fm", "fusion", "nxdn"],
+  );
+  assert.deepEqual(
+    irtsModes.filter((el) => el.disabled).map((el) => el.value),
+    ["dmr", "fusion", "nxdn"],
   );
 
   countrySelect(dom).value = "IE";

@@ -143,6 +143,27 @@ export function createRepeaterSources(ctx, { endpoints }) {
       .filter((value) => value.length > 0);
   }
 
+  // Modes a channel row can actually express. Everything else a directory
+  // dictionary advertises is shown disabled rather than hidden, so its
+  // absence reads as a decision and not a gap — the same presentation RSGB
+  // uses for dmr/p25/nxdn/m17. The tooltip is shared so every modal says
+  // the same thing.
+  const SUPPORTED_DIRECTORY_MODES = new Set(["fm", "dstar"]);
+  const UNSUPPORTED_MODE_TOOLTIP = "Only analogue modes and dstar are supported fully";
+
+  // Tag dictionary modes the import cannot offer. `parsed.modes` is already
+  // `{ value, label, title }` (web/js/datasources.js); disabled ones keep
+  // their label and swap their title for the shared tooltip.
+  function markUnsupportedModes(modes) {
+    return Array.from(modes || []).map((mode) => {
+      const value = String(mode.value || "").trim().toLowerCase();
+      if (SUPPORTED_DIRECTORY_MODES.has(value)) {
+        return mode;
+      }
+      return { ...mode, disabled: true, title: UNSUPPORTED_MODE_TOOLTIP };
+    });
+  }
+
   // przemienniki.net, RepeaterBook and IRTS share everything but their labels
   // and endpoints: same field set, same /meta dictionary shape, same
   // query-parameter API, same XML response format.
@@ -322,7 +343,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
             return {
               country: countryOptions(parsed.countries),
               bands: bandOptions(parsed.bands),
-              modes: Array.from(parsed.modes),
+              modes: markUnsupportedModes(parsed.modes),
             };
           })().catch((error) => {
             optionsPromise = null;
@@ -391,7 +412,6 @@ export function createRepeaterSources(ctx, { endpoints }) {
     { value: "N", label: "nxdn" },
     { value: "7", label: "m17" },
   ];
-  const RSGB_UNSUPPORTED_TOOLTIP = "Only analogue modes and dstar are supported fully";
 
   // RSGB/ETCC: the API only knows how to return a locator square, so distance,
   // band and mode are all applied client-side after a square fan-out. It also
@@ -546,7 +566,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
             ...RSGB_UNSUPPORTED_MODES.map((mode) => ({
               ...mode,
               disabled: true,
-              title: RSGB_UNSUPPORTED_TOOLTIP,
+              title: UNSUPPORTED_MODE_TOOLTIP,
             })),
           ],
           defaults: RSGB_DEFAULT_MODES,
