@@ -106,9 +106,25 @@ export function createChannelTable({ dom, state, log, actions }) {
     return indexes.map((idx) => state.currentRows[idx]).filter(Boolean);
   }
 
+  // The rows the user actually selected, and only those -- never the
+  // select-nothing-means-all-rows fallback above. Anything that writes to the
+  // selection has to read it this way: the bulk editor asked for "the selected
+  // channels" through the fallback would silently rewrite the whole codeplug.
+  function selectedChannelRows() {
+    return sortedSelectedRowIndexes().map((idx) => state.currentRows[idx]).filter(Boolean);
+  }
+
+  // Tell the controls that gate on a selection that it moved. The selection
+  // lives here, so every path that touches it reports through this one call --
+  // the click handler below, and every row operation by way of render().
+  function notifySelectionChanged() {
+    actions.channelSelectionChanged();
+  }
+
   function resetRowSelection() {
     selectedRowIndexes.clear();
     selectionAnchorIndex = null;
+    notifySelectionChanged();
   }
 
   function invalidCellKey(rowIdx, column) {
@@ -126,6 +142,28 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
     invalidCellKeys.delete(key);
     cellElement(Number(rowIdx), String(column || ""))?.classList.remove("is-invalid");
+  }
+
+  // Drop the preflight highlight from the given columns of the given rows and
+  // leave every other flagged cell marked. For a caller that rewrites part of
+  // the grid rather than replacing it: the bulk editor (web/js/ui/channel-bulk-edit.js)
+  // writes a few columns across a selection, and clearing the whole set there
+  // would take the markers off cells whose values it never touched, leaving
+  // them invalid but no longer visibly so until the next upload attempt.
+  function clearInvalidHighlightsForCells(rows, columns) {
+    const columnList = (columns || []).map((column) => String(column || ""));
+    if (columnList.length === 0) {
+      return;
+    }
+    for (const row of rows || []) {
+      const rowIdx = state.currentRows.indexOf(row);
+      if (rowIdx < 0) {
+        continue;
+      }
+      for (const column of columnList) {
+        clearInvalidCell(rowIdx, column);
+      }
+    }
   }
 
   // Selection is a per-row class, so it can be repainted without rebinding the
@@ -172,6 +210,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
 
     applyRowSelectionVisuals();
+    notifySelectionChanged();
   }
 
   function defaultValueForColumn(column) {
@@ -1216,6 +1255,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
     renderEmptyState();
     renderRowWindow();
+    notifySelectionChanged();
   }
 
   // Record per-cell issues reported by the upload preflight. Returns how many
@@ -1395,8 +1435,10 @@ export function createChannelTable({ dom, state, log, actions }) {
     render,
     resetRowSelection,
     clearInvalidHighlights,
+    clearInvalidHighlightsForCells,
     applyValidationIssues,
     selectedRowsForOperations,
+    selectedChannelRows,
     hasRealChannels,
     reconcileLocations,
     sortRowsByLocation,

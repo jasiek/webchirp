@@ -901,7 +901,8 @@ button:disabled {
 /* One stroke style for the whole icon set. currentColor is the point: the
    icons follow the button's text colour, so they grey out with a disabled
    button and stay legible in the dark theme, neither of which emoji did. */
-.channel-toolbar-icon svg {
+.channel-toolbar-icon svg,
+.channel-bulk-edit svg {
   width: 1.15rem;
   height: 1.15rem;
   fill: none;
@@ -1386,6 +1387,96 @@ button:disabled {
 }
 
 .channel-extra-error {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--error-text);
+}
+
+/* The bulk channel editor (web/js/ui/channel-bulk-edit.js). It shares the
+   extras editor's shape -- an unknown number of fields, so the card is capped
+   at the viewport and the fields scroll inside it rather than the whole dialog
+   scrolling in the overlay -- but scrolls a wrapper rather than one grid,
+   because it stacks two grids with a heading between them. */
+#channel-bulk-edit-modal .modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2rem);
+}
+
+/* The two grids and the heading between them scroll as one block, so the title
+   and the actions stay put. */
+.bulk-edit-body {
+  overflow-y: auto;
+  /* A flex child's default minimum is its content height, which would defeat
+     the cap above by refusing to shrink. */
+  min-height: 0;
+}
+
+#channel-bulk-edit-modal .bulk-edit-grid {
+  /* Wider label column than the shared 160px: a checkbox, the attribute name
+     and the "multiple values" note share it. */
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  align-items: start;
+  row-gap: 0.7rem;
+}
+
+.bulk-edit-hint {
+  margin: 0 0 0.8rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Separates the driver's per-channel extras from the grid's own columns. */
+.bulk-edit-subhead {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+/* The checkbox and the attribute's name are one click target. */
+.bulk-edit-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.bulk-edit-toggle input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+/* Says the selected channels disagree about this attribute, so whatever the
+   control shows is one channel's value rather than the selection's. */
+.bulk-edit-mixed {
+  margin-top: 0.15rem;
+  margin-left: 1.4rem;
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.bulk-edit-doc {
+  margin-top: 0.15rem;
+  margin-left: 1.4rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.bulk-edit-control {
+  min-width: 0;
+}
+
+.bulk-edit-control.is-invalid input,
+.bulk-edit-control.is-invalid select {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+
+.bulk-edit-error {
   margin-top: 0.25rem;
   font-size: 0.78rem;
   line-height: 1.3;
@@ -2214,6 +2305,12 @@ button:disabled {
      cannot reach, so it needs its own override or it keeps two columns -- a
      220px label beside a squeezed control -- on a phone. */
   #channel-extra-modal .modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Same reason as the rule above: the bulk editor sets its own label column at
+     a specificity the shared .modal-grid override cannot reach. */
+  #channel-bulk-edit-modal .bulk-edit-grid {
     grid-template-columns: 1fr;
   }
 

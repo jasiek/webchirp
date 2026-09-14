@@ -195,6 +195,12 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
     scope: "EVENT",
   },
   {
+    parameterName: "field_count",
+    displayName: "Field count",
+    description: "How many channel attributes one bulk edit wrote to every selected channel.",
+    scope: "EVENT",
+  },
+  {
     parameterName: "tab",
     displayName: "Settings tab",
     description: "CHIRP settings group opened in the radio settings editor.",

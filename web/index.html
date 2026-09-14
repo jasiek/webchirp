@@ -231,6 +231,28 @@
               <button id="channel-move-down" type="button" class="channel-toolbar-icon" title="Move selected channels down (Alt+ArrowDown)" aria-label="Move selected channels down">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
               </button>
+              <!--
+                Bulk edit ships disabled and follows the grid selection
+                (web/js/ui/channel-bulk-edit.js). Labelled rather than
+                icon-only: nothing about a pencil says it edits every selected
+                channel at once, and this is the toolbar's only action whose
+                scope is not obvious from the row it lands on.
+              -->
+              <button
+                id="channel-bulk-edit"
+                type="button"
+                class="channel-bulk-edit"
+                title="Select one or more channels to edit them together"
+                aria-label="Edit selected channels in bulk"
+                disabled
+              >
+                <!-- Three list rows with a pencil across the last of them. -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 6h13M4 11h8M4 16h6" />
+                  <path d="M18.6 11.4 20.6 13.4 15 19h-2v-2z" />
+                </svg>
+                Edit in bulk
+              </button>
               <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
               <button id="channel-cut" type="button" class="channel-toolbar-icon" title="Cut the selected channels to the clipboard" aria-label="Cut selected channels">
                 <!-- Scissors: two handles bottom-left, blades crossing to the upper right. -->
@@ -455,6 +477,52 @@
         <div class="modal-actions">
           <button id="channel-extra-cancel" type="button">Cancel</button>
           <button id="channel-extra-save" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+
+    <!--
+      Bulk channel editor (issue #146): the modal behind the toolbar's "Edit in
+      bulk" button. Both grids are empty on purpose -- the column list depends
+      on the loaded schema and the extras on the driver, so
+      web/js/ui/channel-bulk-edit.js builds them when the modal opens.
+    -->
+    <div
+      id="channel-bulk-edit-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="channel-bulk-edit-title"
+    >
+      <!--
+        novalidate: every field here is optional until its apply box is ticked,
+        and the browser does not know that -- an out-of-range number left in an
+        unticked field would make the form invalid and suppress the submit
+        event, so applying some other field would do nothing at all. Bounds are
+        checked on the ticked fields only, in readSettingControl
+        (web/js/ui/setting-fields.js) and normalizeCellValue
+        (web/js/ui/channel-values.js), and reported on the field itself.
+      -->
+      <form id="channel-bulk-edit-form" class="modal-card" novalidate>
+        <h2 id="channel-bulk-edit-title">Edit selected channels</h2>
+        <p id="channel-bulk-edit-message" class="bulk-edit-hint" hidden></p>
+        <!--
+          One scroll container for both grids. A driver decides how many extras
+          a channel has and the schema decides how many columns there are, so
+          this dialog's height is not something the markup knows; capping the
+          card and scrolling this keeps the title and the Apply button in place
+          on a phone, where scrolling the whole card in the overlay would take
+          both off screen.
+        -->
+        <div class="bulk-edit-body">
+          <div id="channel-bulk-edit-grid" class="modal-grid bulk-edit-grid"></div>
+          <h3 class="bulk-edit-subhead">Extra settings</h3>
+          <p id="channel-bulk-edit-extra-message" class="bulk-edit-hint" hidden></p>
+          <div id="channel-bulk-edit-extra-grid" class="modal-grid bulk-edit-grid"></div>
+        </div>
+        <div class="modal-actions">
+          <button id="channel-bulk-edit-cancel" type="button">Cancel</button>
+          <button id="channel-bulk-edit-apply" type="submit">Apply to selected</button>
         </div>
       </form>
     </div>
