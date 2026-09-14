@@ -5,6 +5,7 @@ import {
 } from "../datasources.js";
 import { encodeMaidenhead } from "../rsgb.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
+import { errorDetails } from "./format.js";
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
 import { RepeaterInputError, createRepeaterSources } from "./repeater-sources.js";
 import {
@@ -50,6 +51,20 @@ const FIELD_FACTORIES = {
   checkbox: createCheckboxField,
   number: createNumberField,
 };
+
+// A browser geolocation failure arrives as a GeolocationPositionError, which
+// is a WebIDL platform object rather than an Error instance: its only readable
+// field is a numeric `code` (1 = permission denied, 2 = position unavailable,
+// 3 = timeout) and, on Firefox, no `message` at all, so stringifying one reads
+// "[object GeolocationPositionError]". These sentences stand in for it so the
+// failure says what actually happened everywhere it is surfaced. The wording
+// doubles as the analytics classification: a denial reports as
+// permission_denied and a stall as timeout instead of the catch-all "other".
+const GEOLOCATION_FAILURE_TEXT = Object.freeze({
+  1: "Location permission was denied by the browser.",
+  2: "The browser could not determine a position.",
+  3: "Getting the location timed out.",
+});
 
 // Online repeater directory imports. One modal serves every source: each
 // source config (web/js/ui/repeater-sources.js) declares its fields, and the grid is
@@ -375,6 +390,17 @@ export function createRepeaterQuery(ctx) {
         timeout: 10000,
         maximumAge: 0,
       });
+    }).catch((error) => {
+      // See GEOLOCATION_FAILURE_TEXT: a GeolocationPositionError is not an
+      // Error and carries only a numeric code, so pass every code we know
+      // through as a real Error with the code's sentence -- anything with a
+      // message of its own (a genuine Error, or a future browser shape)
+      // already reads fine and goes back untouched.
+      const failureText = GEOLOCATION_FAILURE_TEXT[Number(error?.code)];
+      if (failureText) {
+        throw new Error(failureText);
+      }
+      throw error;
     });
     const latitude = Number(position?.coords?.latitude);
     const longitude = Number(position?.coords?.longitude);
@@ -399,7 +425,17 @@ export function createRepeaterQuery(ctx) {
         outcome: "failed",
         error_kind: classifyErrorKind(error),
       });
-      log.reportActionError(`${activeSource.actionLabel} geolocation`, error);
+      // A location service that refuses to answer is the user's decision or
+      // the environment's, never a defect in this app: they denied the
+      // permission prompt, the OS could not produce a fix, or the request
+      // stalled. Such a failure is reported like a cancelled action -- the
+      // status line and the debug panel, not Sentry, which would stringify a
+      // code-only failure into a title nobody could read -- while the GA
+      // event above keeps the failure rate measurable.
+      log.reportActionCancelled(
+        `${activeSource.actionLabel} geolocation`,
+        error.message || errorDetails(error),
+      );
     }
   }
 

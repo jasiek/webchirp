@@ -224,7 +224,7 @@ function buildHarness({
   // The modal starts closed, exactly as index.html ships it.
   dom.repeaterQueryModalEl.classList.add("hidden");
 
-  const log = { statuses: [], debug: [], errors: [] };
+  const log = { statuses: [], debug: [], errors: [], cancelled: [] };
   const table = { inserted: [] };
 
   const ctx = {
@@ -234,6 +234,7 @@ function buildHarness({
       setStatus: (message) => log.statuses.push(String(message)),
       logDebug: (message) => log.debug.push(String(message)),
       reportActionError: (label, error) => log.errors.push(`${label}: ${error?.message || error}`),
+      reportActionCancelled: (label, message) => log.cancelled.push(`${label}: ${message}`),
     },
     table: {
       insertRowsAtSelectionOrEnd: (rows, label) => table.inserted.push({ rows, label }),
@@ -291,7 +292,7 @@ function installGeolocation(result) {
     value: {
       geolocation: result === null ? undefined : {
         getCurrentPosition(resolve, reject) {
-          if (result instanceof Error) {
+          if (result instanceof Error || result instanceof PositionError) {
             reject(result);
           } else {
             resolve(result);
@@ -300,6 +301,16 @@ function installGeolocation(result) {
       },
     },
   });
+}
+
+// Stand-in for the browser's GeolocationPositionError: a platform object that
+// is not an Error instance, carries only a numeric `code`, and stringifies to
+// "[object GeolocationPositionError]". The real thing is not constructible by
+// page script, so the tests build the shape the browser rejects with.
+class PositionError {
+  constructor(code) {
+    this.code = code;
+  }
 }
 
 function grid(dom) {
@@ -789,7 +800,7 @@ test("geolocate fills the position fields and reports the locator", async () => 
   assert.ok(log.statuses.includes("Location set to IO91WM."));
 });
 
-test("a geolocation failure is reported with the active source's label", async () => {
+test("a geolocation refusal is reported like a cancellation, never filed as an error", async () => {
   const { dom, log } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }]);
   installGeolocation(new Error("User denied Geolocation"));
@@ -798,8 +809,29 @@ test("a geolocation failure is reported with the active source's label", async (
   await geolocateButton(dom).dispatch("click");
 
   assert.equal(fieldByName(dom, "latitude").value, "");
-  assert.equal(log.errors.length, 1);
-  assert.match(log.errors[0], /^RepeaterBook geolocation: User denied Geolocation/);
+  assert.equal(log.errors.length, 0, "a geolocation refusal is the user's call, not a Sentry-worthy defect");
+  assert.equal(log.cancelled.length, 1);
+  assert.match(log.cancelled[0], /^RepeaterBook geolocation: User denied Geolocation/);
+});
+
+test("a GeolocationPositionError is rewritten into its code's sentence", async () => {
+  const { dom, log } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }]);
+  // The real Firefox 155 shape: a platform object with a numeric code and no
+  // message, no stack -- stringifying it reads "[object
+  // GeolocationPositionError]". Code 1 is the user denying the prompt.
+  installGeolocation(new PositionError(1));
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await geolocateButton(dom).dispatch("click");
+
+  assert.equal(fieldByName(dom, "latitude").value, "", "refusing permission sets no position");
+  assert.equal(log.errors.length, 0);
+  assert.equal(log.cancelled.length, 1);
+  assert.match(
+    log.cancelled[0],
+    /Przemienniki geolocation: Location permission was denied by the browser\.$/,
+  );
 });
 
 test("submitting without a channel schema fetches nothing", async () => {
@@ -1066,7 +1098,10 @@ test("an unavailable geolocation API is reported, not swallowed", async () => {
   await openRsgb(dom);
   await geolocateButton(dom).dispatch("click");
   assert.equal(fieldByName(dom, "latitude").value, "");
-  assert.match(log.errors.join("\n"), /^RSGB ETCC geolocation: .*not available in this browser/);
+  // The browser having no geolocation at all is not a defect either; it is
+  // reported with the cancellation rather than filed.
+  assert.equal(log.errors.length, 0);
+  assert.match(log.cancelled.join("\n"), /^RSGB ETCC geolocation: .*not available in this browser/);
 });
 
 test("a coordinate-free or ill-formed RSGB query never reaches the network", async () => {
