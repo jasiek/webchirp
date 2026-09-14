@@ -47,6 +47,20 @@ test("classifyErrorKind maps radio failures onto the fixed vocabulary", () => {
   assert.equal(classifyErrorKind(new Error("Checksum mismatch in block 4")), "checksum");
 });
 
+test("classifyErrorKind recognizes the geolocation failure sentences", () => {
+  // The sentences web/js/ui/repeater-query.js writes for GeolocationPositionError
+  // codes must land in the bucket the GA event promises, or a deny would read
+  // as the catch-all "other" next to the ones that mapped.
+  assert.equal(
+    classifyErrorKind(new Error("Location permission was denied by the browser.")),
+    "permission_denied",
+  );
+  assert.equal(
+    classifyErrorKind(new Error("Getting the location timed out.")),
+    "timeout",
+  );
+});
+
 test("classifyErrorKind falls back to other rather than leaking the message", () => {
   assert.equal(classifyErrorKind(new Error("something nobody anticipated")), "other");
   assert.equal(classifyErrorKind(null), "other");

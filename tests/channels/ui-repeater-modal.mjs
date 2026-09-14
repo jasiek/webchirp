@@ -800,21 +800,7 @@ test("geolocate fills the position fields and reports the locator", async () => 
   assert.ok(log.statuses.includes("Location set to IO91WM."));
 });
 
-test("a geolocation refusal is reported like a cancellation, never filed as an error", async () => {
-  const { dom, log } = buildHarness();
-  installFetch([{ match: "/meta", body: META_JSON }]);
-  installGeolocation(new Error("User denied Geolocation"));
-
-  await dom.channelImportRepeaterbookEl.dispatch("click");
-  await geolocateButton(dom).dispatch("click");
-
-  assert.equal(fieldByName(dom, "latitude").value, "");
-  assert.equal(log.errors.length, 0, "a geolocation refusal is the user's call, not a Sentry-worthy defect");
-  assert.equal(log.cancelled.length, 1);
-  assert.match(log.cancelled[0], /^RepeaterBook geolocation: User denied Geolocation/);
-});
-
-test("a GeolocationPositionError is rewritten into its code's sentence", async () => {
+test("a denied geolocation prompt is reported like a cancellation, never filed as an error", async () => {
   const { dom, log } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }]);
   // The real Firefox 155 shape: a platform object with a numeric code and no
@@ -822,16 +808,45 @@ test("a GeolocationPositionError is rewritten into its code's sentence", async (
   // GeolocationPositionError]". Code 1 is the user denying the prompt.
   installGeolocation(new PositionError(1));
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dom.channelImportRepeaterbookEl.dispatch("click");
   await geolocateButton(dom).dispatch("click");
 
   assert.equal(fieldByName(dom, "latitude").value, "", "refusing permission sets no position");
-  assert.equal(log.errors.length, 0);
+  assert.equal(log.errors.length, 0, "a permission refusal is the user's call, not a Sentry-worthy defect");
   assert.equal(log.cancelled.length, 1);
   assert.match(
     log.cancelled[0],
-    /Przemienniki geolocation: Location permission was denied by the browser\.$/,
+    /^RepeaterBook geolocation: Location permission was denied by the browser\.$/,
   );
+});
+
+test("a geolocation timeout maps to its code's sentence and stays a cancellation", async () => {
+  const { dom, log } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }]);
+  installGeolocation(new PositionError(3));
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await geolocateButton(dom).dispatch("click");
+
+  assert.equal(log.errors.length, 0);
+  assert.equal(log.cancelled.length, 1);
+  assert.match(log.cancelled[0], /Przemienniki geolocation: Getting the location timed out\.$/);
+});
+
+test("an unexpected geolocation result keeps the error funnel", async () => {
+  const { dom, log } = buildHarness();
+  installFetch([{ match: "/meta", body: META_JSON }]);
+  // The browser resolved but with coordinates that make no sense: not a
+  // refusal the user chose, so the traceback keeps its Sentry capture.
+  installGeolocation({ coords: { latitude: "nonsense", longitude: 0 } });
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await geolocateButton(dom).dispatch("click");
+
+  assert.equal(fieldByName(dom, "latitude").value, "");
+  assert.equal(log.cancelled.length, 0, "only the refusal codes are cancellations");
+  assert.equal(log.errors.length, 1);
+  assert.match(log.errors[0], /Geolocation did not return valid coordinates/);
 });
 
 test("submitting without a channel schema fetches nothing", async () => {
@@ -1098,10 +1113,11 @@ test("an unavailable geolocation API is reported, not swallowed", async () => {
   await openRsgb(dom);
   await geolocateButton(dom).dispatch("click");
   assert.equal(fieldByName(dom, "latitude").value, "");
-  // The browser having no geolocation at all is not a defect either; it is
-  // reported with the cancellation rather than filed.
-  assert.equal(log.errors.length, 0);
-  assert.match(log.cancelled.join("\n"), /^RSGB ETCC geolocation: .*not available in this browser/);
+  // The browser having no geolocation at all is a capability gap, not a
+  // refusal by the user, so it keeps the error funnel rather than reading as
+  // an action the user called off.
+  assert.equal(log.cancelled.length, 0);
+  assert.match(log.errors.join("\n"), /^RSGB ETCC geolocation: .*not available in this browser/);
 });
 
 test("a coordinate-free or ill-formed RSGB query never reaches the network", async () => {

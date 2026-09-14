@@ -5,7 +5,6 @@ import {
 } from "../datasources.js";
 import { encodeMaidenhead } from "../rsgb.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
-import { errorDetails } from "./format.js";
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
 import { RepeaterInputError, createRepeaterSources } from "./repeater-sources.js";
 import {
@@ -393,12 +392,16 @@ export function createRepeaterQuery(ctx) {
     }).catch((error) => {
       // See GEOLOCATION_FAILURE_TEXT: a GeolocationPositionError is not an
       // Error and carries only a numeric code, so pass every code we know
-      // through as a real Error with the code's sentence -- anything with a
-      // message of its own (a genuine Error, or a future browser shape)
-      // already reads fine and goes back untouched.
-      const failureText = GEOLOCATION_FAILURE_TEXT[Number(error?.code)];
+      // through as a real Error carrying the code's sentence. The code rides
+      // along on the rewrite so the caller can tell a refusal (1-3) from
+      // anything thrown later in this function; a genuine Error or a future
+      // browser shape already reads fine and goes back untouched.
+      const code = Number(error?.code);
+      const failureText = GEOLOCATION_FAILURE_TEXT[code];
       if (failureText) {
-        throw new Error(failureText);
+        const refusal = new Error(failureText);
+        refusal.code = code;
+        throw refusal;
       }
       throw error;
     });
@@ -425,17 +428,20 @@ export function createRepeaterQuery(ctx) {
         outcome: "failed",
         error_kind: classifyErrorKind(error),
       });
-      // A location service that refuses to answer is the user's decision or
-      // the environment's, never a defect in this app: they denied the
-      // permission prompt, the OS could not produce a fix, or the request
-      // stalled. Such a failure is reported like a cancelled action -- the
-      // status line and the debug panel, not Sentry, which would stringify a
-      // code-only failure into a title nobody could read -- while the GA
-      // event above keeps the failure rate measurable.
-      log.reportActionCancelled(
-        `${activeSource.actionLabel} geolocation`,
-        error.message || errorDetails(error),
-      );
+      // A refusal (codes 1-3) is the user's decision or the environment's,
+      // never a defect in this app: they denied the permission prompt, the OS
+      // could not produce a fix, or the request stalled. Such a failure is
+      // reported like a cancelled action -- the status line and the debug
+      // panel, not Sentry, which would stringify a code-only failure into a
+      // title nobody could read -- while the GA event above keeps the failure
+      // rate measurable. Anything else thrown from geolocate() (coordinates
+      // the browser resolved that make no sense, a setPosition that failed)
+      // is a genuine surprise and keeps the error funnel with its traceback.
+      if (GEOLOCATION_FAILURE_TEXT[Number(error?.code)]) {
+        log.reportActionCancelled(`${activeSource.actionLabel} geolocation`, error.message);
+        return;
+      }
+      log.reportActionError(`${activeSource.actionLabel} geolocation`, error);
     }
   }
 

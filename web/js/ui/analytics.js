@@ -80,7 +80,7 @@ export function codeplugParams(state) {
 // patterns come before the general ones.
 const ERROR_KINDS = [
   ["port_not_selected", /no port selected|no device selected|notfounderror/i],
-  ["permission_denied", /notallowederror|securityerror|permission denied|access denied/i],
+  ["permission_denied", /notallowederror|securityerror|permission (?:was )?denied|access denied/i],
   ["serial_disconnect", /device has been lost|device lost|port is (?:closed|already open)|networkerror/i],
   ["no_response", /did not respond|not responding|no response|no data received/i],
   ["timeout", /timed out|timeout/i],
