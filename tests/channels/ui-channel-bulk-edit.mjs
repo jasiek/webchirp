@@ -11,6 +11,7 @@ import {
   flushMicrotasks,
   installFakeDom,
   keydownEvent,
+  selectRadioBySearch,
   tableNames,
 } from "../support/fake-dom.mjs";
 
@@ -43,6 +44,28 @@ const RADIO = {
   className: "H777Radio",
   key: "h777:H777Radio",
   isLiveRadio: false,
+};
+
+// A second driver to switch to while the modal is open, publishing a narrower
+// schema: no Mode column at all, and Name read-only. Both are columns the modal
+// offers under RADIO, which is what makes a stale apply worth refusing.
+const OTHER_RADIO = {
+  vendor: "Retevis",
+  model: "RT22",
+  module: "rt22",
+  className: "RT22Radio",
+  key: "rt22:RT22Radio",
+  isLiveRadio: false,
+};
+
+const OTHER_HEADERS = ["Location", "Name", "Frequency", "Power", "Comment"];
+
+const OTHER_COLUMNS = {
+  Location: COLUMNS.Location,
+  Name: { kind: "text", editable: false },
+  Frequency: COLUMNS.Frequency,
+  Power: COLUMNS.Power,
+  Comment: COLUMNS.Comment,
 };
 
 const EXTRA_FIELDS = [
@@ -101,16 +124,18 @@ const IMAGE_ROWS = [
   },
 ];
 
-async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
+async function boot({ rows = IMAGE_ROWS, getChannelExtra, radios = [RADIO], uploadIssues = [] } = {}) {
   const { document } = installFakeDom();
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
   const extraCalls = [];
   ui.setRuntimeApi({
-    listRadios: async () => ({ radios: [RADIO] }),
+    listRadios: async () => ({ radios }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: HEADERS }),
-    getRadioMetadata: async () => ({ headers: HEADERS, columns: COLUMNS }),
+    getRadioMetadata: async (payload) => (payload?.module === OTHER_RADIO.module
+      ? { headers: OTHER_HEADERS, columns: OTHER_COLUMNS }
+      : { headers: HEADERS, columns: COLUMNS }),
     getRadioSettings: async () => ({
       supported: false, available: false, requiresImage: false, message: "", groups: [],
     }),
@@ -123,6 +148,12 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
       rows: rows.map((row) => ({ ...row })),
       settings: [],
     }),
+    // The upload preflight, which is what marks cells invalid. Only interesting
+    // when a test asks for issues; the early return in uploadToRadio
+    // (web/js/ui/serial-actions.js) means a blocked upload never reaches the
+    // serial port, so driving it needs no connection.
+    validateRowsForUpload: async () => ({ valid: uploadIssues.length === 0, issues: uploadIssues, warnings: [] }),
+    validateRadioSettings: async () => ({ valid: true, issues: [], settings: [] }),
     getChannelExtra: async (payload) => {
       extraCalls.push(payload);
       return getChannelExtra
@@ -161,7 +192,22 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
     loadedRows = ui.selectedRowsForOperations();
   }
   await loadImage();
-  return { document, extraCalls, rows: () => loadedRows, loadImage };
+
+  // Runs the upload far enough to highlight what the preflight rejected. It
+  // stops there: an upload with issues returns before it touches the radio.
+  async function runBlockedUpload() {
+    document.querySelector("#radio-upload").dispatchEvent({ type: "click" });
+    await flushMicrotasks();
+  }
+  return { document, extraCalls, rows: () => loadedRows, loadImage, runBlockedUpload };
+}
+
+// Which channel cells are currently marked by the preflight, as
+// "<row index>:<column>".
+function markedCells(document) {
+  return channelRows(document).flatMap((tr) => tr.children
+    .map((td, index) => (td.classList.contains("is-invalid") ? `${tr.dataset.rowIdx}:${HEADERS[index]}` : null))
+    .filter(Boolean));
 }
 
 function bulkButton(document) {
@@ -468,6 +514,75 @@ test("an apply is refused once the channel list has been replaced under it", asy
   assert.deepEqual(rows().map((row) => row.Mode), ["FM", "NFM", "FM"]);
 });
 
+// The other half of what the fields were built from. Picking a radio leaves the
+// rows alone -- reloadForSelectedRadio in web/js/ui/radio-catalog.js mutates
+// them in place and swaps only the schema -- so the rows-still-present check
+// above cannot see this one, and without its own check the apply would write
+// Mode through a driver that has no Mode column (silently skipped, still
+// counted) and Name through one that marks it read-only.
+test("an apply is refused once another radio has been selected under it", async () => {
+  const { document, rows } = await boot({ radios: [RADIO, OTHER_RADIO] });
+  await openBulkEditor(document, [0, 1]);
+  setField(columnField(document, "Mode"), "NFM");
+  setField(columnField(document, "Name"), "ZULU");
+
+  selectRadioBySearch(document, "Retevis RT22");
+  await flushMicrotasks();
+  await applyModal(document);
+
+  assert.equal(modalIsOpen(document), false);
+  assert.deepEqual(rows().map((row) => row.Mode), ["FM", "NFM", "FM"]);
+  assert.deepEqual(rows().map((row) => row.Name), ["ALPHA", "BRAVO", "CHARLIE"]);
+});
+
+// A value the first selected channel carries and this driver no longer offers
+// is shown, because that is what that channel holds -- but this dialog copies
+// whatever is shown onto every other selected channel, and those never had it.
+test("an extra value the driver no longer offers is refused rather than copied", async () => {
+  const { document, rows } = await boot({
+    rows: [{ ...IMAGE_ROWS[0], __extra: { scode: "9" } }, ...IMAGE_ROWS.slice(1)],
+  });
+  await openBulkEditor(document, [0, 1]);
+
+  assert.equal(extraField(document, "scode").control.value, "9", "the stored value is shown, not snapped");
+  extraField(document, "scode").apply.checked = true;
+  await applyModal(document);
+
+  assert.equal(modalIsOpen(document), true);
+  assert.match(
+    document.querySelector("#channel-bulk-edit-extra-grid").textContent,
+    /does not offer this value/,
+  );
+  assert.equal(rows()[1].__extra, undefined, "a channel that never had it must not gain it");
+  assert.deepEqual(rows()[0].__extra, { scode: "9" }, "and the channel that did keeps it unchanged");
+});
+
+// Both checkboxes of a boolean extra sit under the same visible label, so
+// without a name of its own the apply box is announced exactly like the value
+// box beside it and nothing says which one is which.
+test("the apply box is named apart from the value it arms", async () => {
+  const { document } = await boot();
+  await openBulkEditor(document, [0]);
+
+  const bcl = extraField(document, "bcl");
+  assert.equal(bcl.control.type, "checkbox", "this test only means anything for a boolean extra");
+  assert.equal(bcl.apply.getAttribute("aria-label"), "Apply Busy Channel Lockout");
+  assert.equal(bcl.control.getAttribute("aria-label"), "Busy Channel Lockout");
+  assert.equal(columnField(document, "Mode").apply.getAttribute("aria-label"), "Apply Mode");
+});
+
+// Every field here is optional until its box is ticked, which the browser has
+// no way to know: an out-of-range number abandoned in an unticked field would
+// make the form invalid, suppress the submit event, and make applying some
+// other field do nothing at all -- with no message, because the module's own
+// validation never runs.
+test("the dialog opts out of the browser's own form validation", () => {
+  const html = fs.readFileSync(path.join(repoRoot, "web", "index.html"), "utf8");
+  const form = html.match(/<form id="channel-bulk-edit-form"[^>]*>/);
+  assert.ok(form, "the bulk editor's form must still be a form");
+  assert.match(form[0], /\bnovalidate\b/);
+});
+
 test("Escape closes the editor without touching the selection", async () => {
   const { document, rows } = await boot();
   await openBulkEditor(document, [0, 1]);
@@ -539,4 +654,45 @@ test("the bulk editor caps its card and scrolls the fields inside it", () => {
   // A flex child's default minimum is its content height, which would defeat
   // the cap above by refusing to shrink.
   assert.match(body[1], /min-height:\s*0/);
+});
+
+// A failed upload marks issues across the whole grid. A bulk edit rewrites a
+// few columns of a few rows, so it can only speak for those: clearing every
+// highlight would leave the cells it never touched invalid but no longer
+// visibly so, until another upload attempt reran the preflight.
+test("a bulk edit clears the highlights on the cells it rewrote, and only those", async () => {
+  const { document, runBlockedUpload } = await boot({
+    uploadIssues: [
+      { rowIndex: 0, column: "Mode", message: "bad mode" },
+      { rowIndex: 0, column: "Name", message: "bad name" },
+      { rowIndex: 2, column: "Name", message: "bad name" },
+    ],
+  });
+  await runBlockedUpload();
+  assert.deepEqual(markedCells(document), ["0:Name", "0:Mode", "2:Name"]);
+
+  await openBulkEditor(document, [0, 1]);
+  setField(columnField(document, "Mode"), "NFM");
+  await applyModal(document);
+
+  assert.deepEqual(
+    markedCells(document),
+    ["0:Name", "2:Name"],
+    "the Name cells this edit never touched still hold the values the radio refused",
+  );
+});
+
+// Ticking only extras writes no column, and a bulk edit that changed no cell
+// has nothing to say about any highlight.
+test("a bulk edit of extras alone leaves every highlight in place", async () => {
+  const { document, runBlockedUpload } = await boot({
+    uploadIssues: [{ rowIndex: 1, column: "Mode", message: "bad mode" }],
+  });
+  await runBlockedUpload();
+
+  await openBulkEditor(document, [0, 1]);
+  setField(extraField(document, "scode"), "2");
+  await applyModal(document);
+
+  assert.deepEqual(markedCells(document), ["1:Mode"]);
 });

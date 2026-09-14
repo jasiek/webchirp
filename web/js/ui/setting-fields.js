@@ -70,12 +70,26 @@ export function createSettingControl(field, current) {
 // wrong with it. Bounds are re-checked here rather than left to the number
 // input's min/max, which browsers enforce only on form submission and not at
 // all for a value typed then read by script.
-export function readSettingControl(field, control) {
+//
+// rejectUnlistedValue is for a caller that copies the value somewhere else: see
+// the enum branch.
+export function readSettingControl(field, control, { rejectUnlistedValue = false } = {}) {
   if (field.type === "boolean") {
     return { value: Boolean(control.checked), error: "" };
   }
   if (field.type === "enum") {
-    return { value: String(control.value ?? ""), error: "" };
+    const value = String(control.value ?? "");
+    // createSettingControl above offers a stored value the driver no longer
+    // lists, so the single-channel editor shows what a channel actually
+    // carries; saving it back leaves that channel as it was. A bulk edit is
+    // the other case: the value would be copied onto channels that never had
+    // it, and the upload preflight would be the first thing to say no. Callers
+    // that copy ask for it to be refused here instead.
+    const options = Array.isArray(field.options) ? field.options.map(String) : [];
+    if (rejectUnlistedValue && options.length > 0 && !options.includes(value)) {
+      return { value, error: "The selected radio does not offer this value." };
+    }
+    return { value, error: "" };
   }
   if (field.type === "integer" || field.type === "float") {
     const text = String(control.value ?? "").trim();

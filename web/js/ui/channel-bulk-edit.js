@@ -35,6 +35,8 @@ export function createChannelBulkEdit(ctx) {
   let editedRows = [];
   let columnFields = [];
   let extraFields = [];
+  // What the fields were built from, checked again on apply. See schemaSnapshot.
+  let editedSchema = null;
   // The toolbar button the open came from, refocused when the modal closes.
   let triggerElement = null;
   // Bumped on every open so the response to a superseded open cannot render
@@ -54,6 +56,7 @@ export function createChannelBulkEdit(ctx) {
       editedRows = [];
       columnFields = [];
       extraFields = [];
+      editedSchema = null;
       // Hand the keyboard back to where it came from; without this it is left
       // inside a hidden dialog and the next Tab starts from the top of the page.
       triggerElement?.focus?.();
@@ -86,6 +89,25 @@ export function createChannelBulkEdit(ctx) {
     dom.channelBulkEditEl.title = count === 0
       ? "Select one or more channels to edit them together"
       : `Edit the ${count} selected channel(s) together`;
+  }
+
+  // The driver and schema the fields were built from, as two things that can be
+  // compared later: the radio the user had selected, and the identity of the
+  // metadata object itself.
+  //
+  // Picking another radio while this modal is open does not disturb the rows --
+  // reloadForSelectedRadio in web/js/ui/radio-catalog.js keeps them and swaps
+  // the schema underneath, asynchronously -- so the rows-still-present check in
+  // apply() cannot see it. What it changes is exactly what the fields were
+  // derived from: a column the new driver does not publish is written by
+  // setRowValueIfPresent as a silent no-op and still counted as applied, and a
+  // column it marks read-only is written anyway, because the validation here
+  // passes allowReadOnly.
+  function schemaSnapshot() {
+    return {
+      radioKey: state.selectedRadio?.key || "",
+      metadata: state.radioMetadata,
+    };
   }
 
   // The columns a bulk edit may write. Location is excluded because a memory
@@ -186,6 +208,12 @@ export function createChannelBulkEdit(ctx) {
     apply.type = "checkbox";
     apply.className = "bulk-edit-apply";
     apply.name = `${name}__apply`;
+    // The wrapping label names the field, which is the right visible text and
+    // the wrong accessible name for this box: a boolean extra puts a second
+    // checkbox beside it -- its value -- and a screen reader would announce
+    // both as "Busy Channel Lockout, checkbox" with nothing to say which one
+    // decides that the field is written and which one is what gets written.
+    apply.setAttribute("aria-label", `Apply ${label}`);
     toggle.appendChild(apply);
     const text = document.createElement("span");
     text.textContent = label;
@@ -363,6 +391,7 @@ export function createChannelBulkEdit(ctx) {
     const token = openToken + 1;
     openToken = token;
     editedRows = rows;
+    editedSchema = schemaSnapshot();
     dom.channelBulkEditTitleEl.textContent =
       `Edit ${rows.length} selected channel${rows.length === 1 ? "" : "s"}`;
     setMessage("Tick an attribute to give every selected channel the same value. "
@@ -406,6 +435,15 @@ export function createChannelBulkEdit(ctx) {
       log.setStatus("The channel list changed while the bulk editor was open; nothing was changed.");
       return;
     }
+    // The same refusal for the other half of what these fields were built from:
+    // the driver and its schema. See schemaSnapshot for what a late metadata
+    // load would otherwise let through.
+    const schema = schemaSnapshot();
+    if (schema.radioKey !== editedSchema?.radioKey || schema.metadata !== editedSchema?.metadata) {
+      setModalOpen(false);
+      log.setStatus("The selected radio changed while the bulk editor was open; nothing was changed.");
+      return;
+    }
 
     const columnWrites = [];
     const extraWrites = {};
@@ -432,7 +470,13 @@ export function createChannelBulkEdit(ctx) {
       if (!entry.apply.checked) {
         continue;
       }
-      const { value, error } = readSettingControl(entry.field, entry.control);
+      // rejectUnlistedValue: the control may be showing a value the first
+      // selected channel carries and this driver no longer offers, which is
+      // right for that one channel and wrong for every other channel in the
+      // selection. Copying it is what this dialog does, so it is refused here.
+      const { value, error } = readSettingControl(entry.field, entry.control, {
+        rejectUnlistedValue: true,
+      });
       if (error) {
         entry.setError(error);
         invalid += 1;
@@ -462,9 +506,12 @@ export function createChannelBulkEdit(ctx) {
         setRowExtras(row, { ...extraWrites });
       }
     }
-    // The values the preflight objected to are no longer the values in the
-    // rows, so its highlights no longer describe them.
-    ctx.table.clearInvalidHighlights();
+    // The values the preflight objected to in these cells are no longer the
+    // values in them, so their highlights no longer describe anything. Every
+    // other flagged cell is left marked: a failed upload highlights issues
+    // across the whole grid, and one bulk edit is no reason to stop showing the
+    // ones it did not touch.
+    ctx.table.clearInvalidHighlightsForCells(rows, columnWrites.map(({ column }) => column));
     ctx.table.render();
     setModalOpen(false);
     trackEvent("channels_bulk_edited", {

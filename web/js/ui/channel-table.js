@@ -144,6 +144,28 @@ export function createChannelTable({ dom, state, log, actions }) {
     cellElement(Number(rowIdx), String(column || ""))?.classList.remove("is-invalid");
   }
 
+  // Drop the preflight highlight from the given columns of the given rows and
+  // leave every other flagged cell marked. For a caller that rewrites part of
+  // the grid rather than replacing it: the bulk editor (web/js/ui/channel-bulk-edit.js)
+  // writes a few columns across a selection, and clearing the whole set there
+  // would take the markers off cells whose values it never touched, leaving
+  // them invalid but no longer visibly so until the next upload attempt.
+  function clearInvalidHighlightsForCells(rows, columns) {
+    const columnList = (columns || []).map((column) => String(column || ""));
+    if (columnList.length === 0) {
+      return;
+    }
+    for (const row of rows || []) {
+      const rowIdx = state.currentRows.indexOf(row);
+      if (rowIdx < 0) {
+        continue;
+      }
+      for (const column of columnList) {
+        clearInvalidCell(rowIdx, column);
+      }
+    }
+  }
+
   // Selection is a per-row class, so it can be repainted without rebinding the
   // cells. Only the rows currently in the window need touching; rows outside it
   // pick the class up from bindRowElement when they scroll back in.
@@ -1369,6 +1391,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     render,
     resetRowSelection,
     clearInvalidHighlights,
+    clearInvalidHighlightsForCells,
     applyValidationIssues,
     selectedRowsForOperations,
     selectedChannelRows,

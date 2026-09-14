@@ -486,7 +486,16 @@
       aria-modal="true"
       aria-labelledby="channel-bulk-edit-title"
     >
-      <form id="channel-bulk-edit-form" class="modal-card">
+      <!--
+        novalidate: every field here is optional until its apply box is ticked,
+        and the browser does not know that -- an out-of-range number left in an
+        unticked field would make the form invalid and suppress the submit
+        event, so applying some other field would do nothing at all. Bounds are
+        checked on the ticked fields only, in readSettingControl
+        (web/js/ui/setting-fields.js) and normalizeCellValue
+        (web/js/ui/channel-values.js), and reported on the field itself.
+      -->
+      <form id="channel-bulk-edit-form" class="modal-card" novalidate>
         <h2 id="channel-bulk-edit-title">Edit selected channels</h2>
         <p id="channel-bulk-edit-message" class="bulk-edit-hint" hidden></p>
         <!--
