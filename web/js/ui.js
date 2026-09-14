@@ -236,7 +236,12 @@ export function createUiController() {
       state.radioCatalog = catalogResponse.radios || [];
       state.runtimeInfo = (await requireRuntimeApi(state).getRuntimeInfo()) || state.runtimeInfo;
       catalog.refreshCatalog();
-      catalog.restoreSelectedRadioCookie();
+      // A ?radio= link is an explicit choice for this visit and outranks the
+      // cookie's memory of the last one; the cookie only answers when the
+      // visitor arrived without naming a radio.
+      if (!catalog.selectRadioByLinkParam()) {
+        catalog.restoreSelectedRadioCookie();
+      }
       await catalog.loadSelectedRadioMetadata();
       await settings.load();
       // Schema only: the grid starts empty and shows its own "load something"

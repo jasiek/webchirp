@@ -412,6 +412,32 @@ export function createRadioCatalog(ctx) {
     return true;
   }
 
+  // Preselect the radio a ?radio=<catalog key> link names, so a per-model page
+  // (web/radios/, built by scripts/build-model-pages.mjs) can hand its visitor
+  // an app already pointed at the radio the page is about. The key is the
+  // catalog's own module:class, which is what those pages are generated from,
+  // so an unknown one means the driver went away between the two -- fall
+  // through to the cookie rather than clearing what the user had.
+  // The default reads the live URL; the argument is what lets a test drive it.
+  // Optional all the way down because the headless DOM the tests install has no
+  // location, and a boot-time throw here would take the whole app with it.
+  function selectRadioByLinkParam(search = window.location?.search || "") {
+    const key = new URLSearchParams(search).get("radio");
+    if (!key) {
+      return false;
+    }
+    const target = state.radioCatalog.find((r) => r.key === key);
+    if (!target) {
+      log.logDebug(`RADIO LINK no catalog entry for ${key}`);
+      return false;
+    }
+    commitSelectedRadio(target);
+    trackRadioSelected(target, "link");
+    persistSelectedRadioCookie();
+    log.logDebug(`RADIO LINK ${makeModelLabel(target)} (${target.module}.${target.className})`);
+    return true;
+  }
+
   function selectRadioByDetectedImage(loaded) {
     if (selectRadioByDriver(loaded.module, loaded.className)) {
       trackRadioSelected(state.selectedRadio, "image");
@@ -529,6 +555,7 @@ export function createRadioCatalog(ctx) {
     bindEvents,
     refreshCatalog,
     restoreSelectedRadioCookie,
+    selectRadioByLinkParam,
     setRadioSelectPlaceholder,
     selectRadioByDetectedImage,
     loadSelectedRadioMetadata,

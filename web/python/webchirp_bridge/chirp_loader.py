@@ -24,7 +24,9 @@ from chirp import (
 )
 from js import fetch_chirp_source
 
+from webchirp_bridge.driver_cache import _driver_features
 from webchirp_bridge.jsbridge import _await_js, _js_to_py, _log_debug
+from webchirp_bridge.power_levels import _power_level_watts
 
 if TYPE_CHECKING:
     import types
@@ -251,3 +253,85 @@ def list_registered_radios(module_short_names: Iterable[Any]) -> list[dict[str, 
 
     radios.sort(key=lambda r: (r["vendor"], r["model"], r["className"]))
     return radios
+
+
+def _describe_features(features: chirp_common.RadioFeatures) -> dict[str, Any]:
+    """Flatten the RadioFeatures fields that describe a radio to a reader.
+
+    Only the fields that say something about the radio itself rather than about
+    how the grid should behave: how many channels it holds, how long a channel
+    name may be, which modes and bands it covers, whether it has CTCSS/DCS, what
+    it transmits at, and whether it exposes radio-wide settings. The tuning
+    steps, cross modes and skip values that ``column_metadata`` needs are left
+    out -- they constrain an edit, they do not describe the model.
+    """
+    bounds = tuple(getattr(features, "memory_bounds", None) or (0, 0))
+    bands = []
+    for band in getattr(features, "valid_bands", None) or []:
+        try:
+            low, high = int(band[0]), int(band[1])
+        except Exception:
+            continue
+        # A degenerate range is a driver that does not know its limits without
+        # an image rather than a radio that covers nothing: ``icw32`` reads
+        # them out of the codeplug and reports (0, 0) blank (FINDINGS:
+        # blank-instances-misreport-state). Recording it would put "0 Hz" on a
+        # page; leaving it out lets the caller see the radio has nothing to say
+        # about its coverage.
+        if high <= low:
+            continue
+        bands.append([low, high])
+    return {
+        "memoryBounds": [int(bounds[0]), int(bounds[1])],
+        "nameLength": int(getattr(features, "valid_name_length", 0) or 0),
+        # Sorted, not in the driver's order, because several drivers build these
+        # as ``list(set(...))`` (``ft817.py:443``, ``id31.py:212``) and a set of
+        # strings iterates in a different order in every Python process. Left
+        # alone, the artifact and the pages generated from it would change on
+        # every rebuild with nothing behind the diff. Nothing downstream reads
+        # order as meaning -- this describes a radio rather than driving a
+        # dropdown, which is what ``column_metadata`` is for.
+        "modes": sorted(str(mode) for mode in getattr(features, "valid_modes", None) or []),
+        "bands": bands,
+        # The empty string in valid_tmodes is "no tone", which is not a
+        # capability worth listing next to Tone/TSQL/DTCS.
+        "toneModes": sorted(
+            str(tmode) for tmode in getattr(features, "valid_tmodes", None) or [] if tmode
+        ),
+        "powerLevels": _power_level_watts(getattr(features, "valid_power_levels", None)),
+        "hasSettings": bool(getattr(features, "has_settings", False)),
+    }
+
+
+def list_radio_features(
+    module_short_names: Iterable[Any],
+) -> dict[str, dict[str, Any]]:
+    """Describe every catalogued radio from its driver's own RadioFeatures.
+
+    A companion sweep to ``list_registered_radios``: that one records which
+    radios exist, this one records what each can do. Built for the static
+    per-model pages, which need per-model facts rather than a shared template,
+    and which must not invent them -- every value here is what the driver
+    itself advertises.
+
+    Failures are returned rather than raised: a driver that cannot describe
+    itself on a blank instance is a page the generator should skip, not a build
+    that stops on radio 300 of 554.
+    """
+    features_by_key: dict[str, Any] = {}
+    failed: dict[str, str] = {}
+    for entry in list_registered_radios(module_short_names):
+        key = entry["key"]
+        try:
+            features = _driver_features(entry["module"], entry["className"])
+        except Exception as exc:
+            failed[key] = f"{type(exc).__name__}: {exc}"
+            continue
+        if features is None:
+            failed[key] = "driver could not be instantiated"
+            continue
+        try:
+            features_by_key[key] = _describe_features(features)
+        except Exception as exc:
+            failed[key] = f"{type(exc).__name__}: {exc}"
+    return {"features": features_by_key, "failed": failed}
