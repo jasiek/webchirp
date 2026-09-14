@@ -50,7 +50,8 @@ async function tableWithMetadata(columns, rows = []) {
     dom,
     state,
     log: { setStatus() {}, logDebug() {} },
-    actions: {},
+    // render() reports the selection outward; the bulk editor is what listens.
+    actions: { channelSelectionChanged() {} },
   });
 }
 

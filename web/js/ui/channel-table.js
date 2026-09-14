@@ -106,9 +106,25 @@ export function createChannelTable({ dom, state, log, actions }) {
     return indexes.map((idx) => state.currentRows[idx]).filter(Boolean);
   }
 
+  // The rows the user actually selected, and only those -- never the
+  // select-nothing-means-all-rows fallback above. Anything that writes to the
+  // selection has to read it this way: the bulk editor asked for "the selected
+  // channels" through the fallback would silently rewrite the whole codeplug.
+  function selectedChannelRows() {
+    return sortedSelectedRowIndexes().map((idx) => state.currentRows[idx]).filter(Boolean);
+  }
+
+  // Tell the controls that gate on a selection that it moved. The selection
+  // lives here, so every path that touches it reports through this one call --
+  // the click handler below, and every row operation by way of render().
+  function notifySelectionChanged() {
+    actions.channelSelectionChanged();
+  }
+
   function resetRowSelection() {
     selectedRowIndexes.clear();
     selectionAnchorIndex = null;
+    notifySelectionChanged();
   }
 
   function invalidCellKey(rowIdx, column) {
@@ -172,6 +188,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
 
     applyRowSelectionVisuals();
+    notifySelectionChanged();
   }
 
   function defaultValueForColumn(column) {
@@ -1185,6 +1202,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
     renderEmptyState();
     renderRowWindow();
+    notifySelectionChanged();
   }
 
   // Record per-cell issues reported by the upload preflight. Returns how many
@@ -1353,6 +1371,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     clearInvalidHighlights,
     applyValidationIssues,
     selectedRowsForOperations,
+    selectedChannelRows,
     hasRealChannels,
     reconcileLocations,
     sortRowsByLocation,

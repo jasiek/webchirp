@@ -94,7 +94,8 @@ test("the grid spells out the driver's power table on hover", async () => {
     dom,
     state,
     log: { setStatus() {}, logDebug() {} },
-    actions: {},
+    // render() reports the selection outward; the bulk editor is what listens.
+    actions: { channelSelectionChanged() {} },
   });
   table.render();
 
@@ -120,7 +121,8 @@ test("no legend without wattages to show", async () => {
     dom,
     state,
     log: { setStatus() {}, logDebug() {} },
-    actions: {},
+    // render() reports the selection outward; the bulk editor is what listens.
+    actions: { channelSelectionChanged() {} },
   });
   table.render();
 
