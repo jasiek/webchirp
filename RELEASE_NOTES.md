@@ -1,5 +1,14 @@
 # Release Notes
 
+## 2026-09-14
+- Every repeater query form now opens with a City/Locality box that fills the position from a gazetteer, and the modal's map previews the repeaters the current filters would actually return — in range solid, just outside dimmed — so a search that would find nothing is visible before it is run (#171).
+- Added an Edit in bulk button to the channel toolbar: one dialog writes the same value to every selected channel, across the grid's editable columns and the driver's own per-channel extras, with each field applied only when its box is ticked (#176, closes #146).
+- The site now carries a static page per Baofeng radio, 55 of them plus a vendor index, describing each model from its own driver — channel count, name length, bands, modes, power levels, and the rebadges it covers — with a link that opens the app with that radio already selected (#174).
+- Drivers that read their capabilities out of the codeplug now describe the grid correctly: a Retevis RT98 download no longer keeps a High power level its own dropdown does not list, and re-selecting the radio no longer blanks it (#165, fixes #86).
+- Typing a frequency while the mouse rests over the grid works again: a scroll or resize re-render no longer commits the half-typed value and writes the normalised old one back over the caret (#172, fixes #94).
+- Deleting a Frequency cell now leaves it blank, which is how a memory is erased on upload, instead of snapping back to the previous frequency (#166, fixes #93).
+- Repeaters imported from przemienniki.net, RepeaterBook and IRTS now get the radio's highest power level like RSGB imports already did, instead of whatever the driver lists first — Low on roughly half of CHIRP's drivers (#173).
+
 ## 2026-09-10
 - The channel Actions dropdown is gone: insert/remove/move and cut/copy/paste are now icon buttons on the toolbar itself, and the three band plans and four repeater directories are flagged buttons whose tooltips say what each import contains (#164).
 - The repeater query modal now draws the search position and range filter on a map that can be dragged to move the position, so a mistyped coordinate or a locator from the wrong square is visible before the query runs (#163).
