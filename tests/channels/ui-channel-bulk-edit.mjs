@@ -43,25 +43,30 @@ const EXTRA_FIELDS = [
     mutable: true,
     current: false,
   },
+  {
+    name: "scode",
+    label: "S-CODE",
+    doc: "DTMF signalling code sent when the PTT is pressed",
+    type: "enum",
+    options: ["1", "2", "3"],
+    mutable: true,
+    current: "1",
+  },
   { name: "voxlevel", label: "VOX level", type: "integer", min: 0, max: 5, mutable: false, current: 3 },
 ];
 
-async function boot() {
+const RADIOS = [
+  { vendor: "Baofeng", model: "BF-888", module: "h777", className: "H777Radio", key: "h777:H777Radio", isLiveRadio: false },
+  { vendor: "Acme", model: "Two", module: "two", className: "TwoRadio", key: "two:TwoRadio", isLiveRadio: false },
+];
+
+async function boot({ getChannelExtra } = {}) {
   const { document } = installFakeDom();
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
   const extraCalls = [];
   ui.setRuntimeApi({
-    listRadios: async () => ({
-      radios: [{
-        vendor: "Baofeng",
-        model: "BF-888",
-        module: "h777",
-        className: "H777Radio",
-        key: "h777:H777Radio",
-        isLiveRadio: false,
-      }],
-    }),
+    listRadios: async () => ({ radios: RADIOS }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: HEADERS, columns: COLUMNS }),
     getRadioMetadata: async () => ({ headers: HEADERS, columns: COLUMNS }),
@@ -71,7 +76,9 @@ async function boot() {
     parseCsv: async () => ({ headers: HEADERS, rows: SAMPLE_ROWS.map((row) => ({ ...row })), errors: [] }),
     getChannelExtra: async (payload) => {
       extraCalls.push(payload);
-      return { available: true, message: "", fields: EXTRA_FIELDS };
+      return getChannelExtra
+        ? getChannelExtra(payload)
+        : { available: true, message: "", fields: EXTRA_FIELDS };
     },
   });
   await ui.init(true);
@@ -251,5 +258,56 @@ test("a checked field with an invalid value blocks the whole apply", async () =>
     allRows([0, 1]).map((row) => row.Mode),
     ["FM", "FM", "FM"],
     "one bad field must not let the good ones through",
+  );
+});
+
+test("an extra opens on the row's own stored value, not the memory slot's", async () => {
+  const { document, allRows } = await boot();
+  // The representative row was edited through the per-channel extras editor:
+  // its sidecar says bcl is on, while the driver still reports the slot as off.
+  allRows()[0].__extra = { bcl: true };
+  await openBulkEdit(document, [0, 1]);
+
+  assert.equal(fieldRow(document, "bcl").control.checked, true);
+  // A field the row carries nothing for still opens on what the driver said.
+  assert.equal(fieldRow(document, "scode").control.value, "1");
+});
+
+test("an unavailable extras payload shows what the runtime says is missing", async () => {
+  const { document } = await boot({
+    getChannelExtra: async () => ({
+      available: false,
+      message: "Download or load a codeplug to edit extra settings.",
+      fields: [],
+    }),
+  });
+  await openBulkEdit(document, [0, 1]);
+
+  const message = document.querySelector("#channel-bulk-edit-message");
+  assert.equal(message.textContent, "Download or load a codeplug to edit extra settings.");
+  assert.equal(message.hidden, false, "a modal missing every extra control must say why");
+  // The channel columns are unaffected: they never depended on that call.
+  assert.ok(fieldRow(document, "Mode").control);
+});
+
+test("a radio picked while the modal is open blocks the apply", async () => {
+  const { document, allRows } = await boot();
+  await openBulkEdit(document, [0, 1]);
+  const mode = fieldRow(document, "Mode");
+  mode.control.value = "NFM";
+  mode.control.dispatchEvent({ type: "change", target: mode.control });
+
+  // The fields on screen were built from the first radio's schema; picking
+  // another swaps state.radioMetadata for one they were never validated
+  // against.
+  selectRadioBySearch(document, "Acme Two");
+  await flushMicrotasks();
+  await apply(document);
+
+  assert.equal(modalIsOpen(document), false, "a refused apply still closes the modal");
+  assert.deepEqual(
+    allRows([0, 1]).map((row) => row.Mode),
+    ["FM", "FM", "FM"],
+    "nothing may be written against a schema the grid no longer runs on",
   );
 });

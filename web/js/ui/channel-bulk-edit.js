@@ -32,11 +32,21 @@ export function createChannelBulkEdit(ctx) {
   // Bumped on every open so a slow get_channel_extra reply for a superseded
   // open cannot render extra fields over the ones the user is looking at.
   let openToken = 0;
+  // The schema every attribute field was built from. Selecting a radio leaves
+  // the previous one in place while the new metadata loads, so a modal opened
+  // in that window renders the old columns, options and bounds -- and applying
+  // it afterwards would validate against a schema the grid no longer runs on.
+  // Held by identity because applyRadioMetadata (web/js/ui/radio-catalog.js)
+  // assigns a fresh object rather than mutating this one.
+  let schemaAtOpen = null;
 
+  // Whether the modal is on screen. ui.js reads this to route Escape.
   function isModalOpen() {
     return !dom.channelBulkEditModalEl.classList.contains("hidden");
   }
 
+  // Show or hide the modal. Closing drops everything the open was about, so a
+  // reply that arrives afterwards has nothing to render into.
   function setModalOpen(open) {
     dom.channelBulkEditModalEl.classList.toggle("hidden", !open);
     if (!open) {
@@ -44,13 +54,17 @@ export function createChannelBulkEdit(ctx) {
       fieldEntries = [];
       triggerElement?.focus?.();
       triggerElement = null;
+      schemaAtOpen = null;
     }
   }
 
+  // Close without applying, for Escape and the overlay click ui.js owns.
   function closeModal() {
     setModalOpen(false);
   }
 
+  // The one line above the field list that explains why an Apply did not
+  // happen, or what the driver says is missing. Blank hides it.
   function setMessage(text) {
     const message = String(text || "");
     dom.channelBulkEditMessageEl.textContent = message;
@@ -197,6 +211,8 @@ export function createChannelBulkEdit(ctx) {
     });
   }
 
+  // One field row per offerable grid column, built from the schema in hand so
+  // the modal has something to show before any runtime call returns.
   function renderAttributeFields() {
     const columns = attributeColumns();
     if (columns.length === 0) {
@@ -217,10 +233,18 @@ export function createChannelBulkEdit(ctx) {
     }
   }
 
+  // One field row per writable driver extra, seeded from the representative
+  // row's own sidecar where it has one. field.current describes the memory
+  // slot, which is not the same thing: a row edited through
+  // web/js/ui/channel-extra.js, or moved to another Location, carries a value
+  // the slot does not know about -- and since checking a box without touching
+  // the control applies exactly what is displayed, showing the slot's value
+  // there would copy a stale setting onto every selected channel.
   function renderExtraFields(fields) {
     if (!fields.length) {
       return;
     }
+    const stored = rowExtras(editedRows[0]) || {};
     appendSectionTitle("Extra settings");
     for (const field of fields) {
       // An immutable field (the driver refuses to write it back) has nothing
@@ -230,7 +254,8 @@ export function createChannelBulkEdit(ctx) {
       if (field.mutable === false) {
         continue;
       }
-      const control = createExtraFieldControl(field, field.current);
+      const current = Object.hasOwn(stored, field.name) ? stored[field.name] : field.current;
+      const control = createExtraFieldControl(field, current);
       const entry = appendFieldRow(
         "channel-bulk-edit-extra-",
         field.name,
@@ -269,7 +294,13 @@ export function createChannelBulkEdit(ctx) {
     }
     if (payload?.available) {
       renderExtraFields(payload.fields || []);
+      return;
     }
+    // Unavailable is not the same as "this driver has no extras": it is
+    // usually "load or download a codeplug first", and the runtime says which.
+    // Dropping that left the modal looking complete while silently missing
+    // every extra-setting control (web/js/ui/channel-extra.js shows it too).
+    setMessage(payload?.message || "");
   }
 
   // Open the editor for the currently selected channels. Attribute columns
@@ -287,6 +318,7 @@ export function createChannelBulkEdit(ctx) {
     openToken = token;
     editedRows = rows;
     fieldEntries = [];
+    schemaAtOpen = state.radioMetadata;
     dom.channelBulkEditGridEl.innerHTML = "";
     dom.channelBulkEditTitleEl.textContent =
       `Bulk edit ${rows.length} channel${rows.length === 1 ? "" : "s"}`;
@@ -353,7 +385,20 @@ export function createChannelBulkEdit(ctx) {
     return { attributeChanges, extraValues };
   }
 
+  // Write every checked field onto every still-live selected row, or explain
+  // why nothing was written. All or nothing: one rejected value stops the lot.
   function apply() {
+    // Picking a radio swaps state.radioMetadata once the new metadata lands,
+    // and the fields on screen were built from whatever was current at open --
+    // options, bounds and editability all included. Validating those against
+    // the new schema is how an enum value this driver does not publish would
+    // get written, so a swap mid-edit is refused rather than reconciled, the
+    // same way a replaced row list is below.
+    if (schemaAtOpen && state.radioMetadata !== schemaAtOpen) {
+      setModalOpen(false);
+      log.setStatus("The radio's columns changed while bulk edit was open; nothing was applied.");
+      return;
+    }
     const { invalid, attributeChanges, extraValues } = collectChanges();
     if (invalid > 0) {
       setMessage(`Fix ${invalid} highlighted value${invalid === 1 ? "" : "s"} before applying.`);
@@ -398,6 +443,8 @@ export function createChannelBulkEdit(ctx) {
     log.setStatus(`Updated ${fieldCount} field(s) on ${rows.length} channel(s).`);
   }
 
+  // Wires the toolbar button, Cancel, the overlay click and the form's submit.
+  // ui.js owns only Escape, which every modal shares.
   function bindEvents() {
     dom.channelBulkEditEl.addEventListener("click", () => {
       openModal(dom.channelBulkEditEl).catch((error) => {
