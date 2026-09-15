@@ -466,9 +466,11 @@ test("submitting sends the selected filters as URL parameters", async () => {
   const band = grid(dom).querySelectorAll('input[name="band"]')[0];
   band.checked = true;
   // Mode options come back label-sorted from the dictionary: dstar, fm.
-  const mode = grid(dom).querySelectorAll('input[name="mode"]')[0];
-  assert.equal(mode.value, "dstar");
-  mode.checked = true;
+  // Tick both: the union must go as one comma-joined value, not repeated
+  // mode= keys of which the API would keep only the last.
+  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+    el.checked = true;
+  }
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "52.2297";
   await latitude.dispatch("input");
@@ -482,7 +484,7 @@ test("submitting sends the selected filters as URL parameters", async () => {
   assert.equal(url.pathname, "/przemienniki");
   assert.equal(url.searchParams.get("country"), "pl");
   assert.equal(url.searchParams.get("band"), "2m");
-  assert.deepEqual(url.searchParams.getAll("mode"), ["dstar"]);
+  assert.equal(url.searchParams.get("mode"), "dstar,fm");
   assert.equal(url.searchParams.get("onlyworking"), "true");
   assert.equal(url.searchParams.get("latitude"), "52.2297");
   assert.equal(url.searchParams.get("longitude"), "21.0122");

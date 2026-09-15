@@ -200,11 +200,11 @@ export function createRepeaterSources(ctx, { endpoints }) {
       // mode" behaviour: the form presents every digital mode as unavailable,
       // and "any" would admit them on a radio that advertises DMR/DN. No
       // selection means analogue only -- the same fallback the RSGB flow
-      // applies below.
+      // applies below. Several modes go as one comma-joined value, as bands
+      // already do: the API reads a single mode parameter, so repeated
+      // mode= keys would silently keep only the last one.
       const modes = normalized(values.modes);
-      (modes.length > 0 ? modes : ["fm"]).forEach((mode) => {
-        url.searchParams.append("mode", mode);
-      });
+      url.searchParams.set("mode", (modes.length > 0 ? modes : ["fm"]).join(","));
       if (values.only) {
         url.searchParams.set("onlyworking", "true");
       }
