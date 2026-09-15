@@ -50,9 +50,16 @@ const RUNTIME_PYTHON_URLS = Object.freeze({
   "webchirp_bridge/serial_pipe.py": "./python/webchirp_bridge/serial_pipe.py",
 });
 
+// Assigned by createRuntimeRpcClient(). The provider is built at module load,
+// but a retry only runs once boot has begun -- long after the client wired the
+// debug panel -- so the callback reads the current binding rather than a
+// captured null.
+let debugLog = null;
+
 const pythonSource = createBrowserCdnPythonSource({
   chirpRevision: CHIRP_REVISION,
   runtimeFileUrls: RUNTIME_PYTHON_URLS,
+  onRetry: (message) => debugLog?.(message),
 });
 
 let pyodide;
@@ -64,7 +71,6 @@ let radioCatalogCache = null;
 let radioCatalogSource = "";
 let allDriverModulesPromise = null;
 let handleSerialRpc = null;
-let debugLog = null;
 let beginProgress = null;
 
 // One debug line per driver would bury every other diagnostic in the panel, and
