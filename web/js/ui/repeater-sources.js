@@ -143,6 +143,27 @@ export function createRepeaterSources(ctx, { endpoints }) {
       .filter((value) => value.length > 0);
   }
 
+  // Modes a channel row can actually express. Everything else a directory
+  // dictionary advertises is shown disabled rather than hidden, so its
+  // absence reads as a decision and not a gap — the same presentation RSGB
+  // uses for dmr/p25/nxdn/m17. The tooltip is shared so every modal says
+  // the same thing.
+  const SUPPORTED_DIRECTORY_MODES = new Set(["fm", "dstar"]);
+  const UNSUPPORTED_MODE_TOOLTIP = "Only analogue modes and dstar are supported fully";
+
+  // Tag dictionary modes the import cannot offer. `parsed.modes` is already
+  // `{ value, label, title }` (web/js/datasources.js); disabled ones keep
+  // their label and swap their title for the shared tooltip.
+  function markUnsupportedModes(modes) {
+    return Array.from(modes || []).map((mode) => {
+      const value = String(mode.value || "").trim().toLowerCase();
+      if (SUPPORTED_DIRECTORY_MODES.has(value)) {
+        return mode;
+      }
+      return { ...mode, disabled: true, title: UNSUPPORTED_MODE_TOOLTIP };
+    });
+  }
+
   // przemienniki.net, RepeaterBook and IRTS share everything but their labels
   // and endpoints: same field set, same /meta dictionary shape, same
   // query-parameter API, same XML response format.
@@ -175,9 +196,15 @@ export function createRepeaterSources(ctx, { endpoints }) {
       if (bands.length > 0) {
         url.searchParams.set("band", bands.join(","));
       }
-      normalized(values.modes).forEach((mode) => {
-        url.searchParams.append("mode", mode);
-      });
+      // An empty selection must not fall through to the directory's "any
+      // mode" behaviour: the form presents every digital mode as unavailable,
+      // and "any" would admit them on a radio that advertises DMR/DN. No
+      // selection means analogue only -- the same fallback the RSGB flow
+      // applies below. Several modes go as one comma-joined value, as bands
+      // already do: the API reads a single mode parameter, so repeated
+      // mode= keys would silently keep only the last one.
+      const modes = normalized(values.modes);
+      url.searchParams.set("mode", (modes.length > 0 ? modes : ["fm"]).join(","));
       if (values.only) {
         url.searchParams.set("onlyworking", "true");
       }
@@ -322,7 +349,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
             return {
               country: countryOptions(parsed.countries),
               bands: bandOptions(parsed.bands),
-              modes: Array.from(parsed.modes),
+              modes: markUnsupportedModes(parsed.modes),
             };
           })().catch((error) => {
             optionsPromise = null;
@@ -391,7 +418,6 @@ export function createRepeaterSources(ctx, { endpoints }) {
     { value: "N", label: "nxdn" },
     { value: "7", label: "m17" },
   ];
-  const RSGB_UNSUPPORTED_TOOLTIP = "Only analogue modes and dstar are supported fully";
 
   // RSGB/ETCC: the API only knows how to return a locator square, so distance,
   // band and mode are all applied client-side after a square fan-out. It also
@@ -546,7 +572,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
             ...RSGB_UNSUPPORTED_MODES.map((mode) => ({
               ...mode,
               disabled: true,
-              title: RSGB_UNSUPPORTED_TOOLTIP,
+              title: UNSUPPORTED_MODE_TOOLTIP,
             })),
           ],
           defaults: RSGB_DEFAULT_MODES,

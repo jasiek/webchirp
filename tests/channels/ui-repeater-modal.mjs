@@ -381,6 +381,47 @@ test("opening przemienniki builds the form from the dictionary, once", async () 
   assert.equal(calls.length, 1);
 });
 
+test("przemienniki digital modes are shown disabled, matching RSGB", async () => {
+  const { dom } = buildHarness();
+  installFetch([{
+    match: "/przemienniki/meta",
+    // The live /meta vocabulary as of 2026-09-14: fm and dstar plus the six
+    // digital modes a channel row cannot express usefully.
+    body: JSON.stringify({
+      filters: {
+        country: ["PL"],
+        band: ["2m", "70cm"],
+        mode: ["apco25", "atv", "c4fm", "dstar", "fm", "m17", "mototrbo", "tetra"],
+      },
+    }),
+  }]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+
+  const [, modeBox] = descendants(grid(dom)).filter((el) => el.className === "modal-modes");
+  const modeInputs = grid(dom).querySelectorAll('input[name="mode"]');
+  // Dictionary order is label-sorted, so the digital names sit among fm/dstar
+  // rather than after them the way RSGB appends its unsupported flags.
+  assert.deepEqual(
+    modeInputs.map((el) => el.value),
+    ["apco25", "atv", "c4fm", "dstar", "fm", "m17", "mototrbo", "tetra"],
+  );
+  assert.deepEqual(
+    modeInputs.filter((el) => el.disabled).map((el) => el.value),
+    ["apco25", "atv", "c4fm", "m17", "mototrbo", "tetra"],
+  );
+  assert.deepEqual(
+    modeInputs.filter((el) => el.checked).map((el) => el.value),
+    ["fm"],
+  );
+  assert.deepEqual(
+    modeBox.children
+      .filter((option) => option.title === "Only analogue modes and dstar are supported fully")
+      .map((option) => option.children[1].textContent),
+    ["apco25", "atv", "c4fm", "m17", "mototrbo", "tetra"],
+  );
+});
+
 test("a failed dictionary fetch reports the error and retries on the next open", async () => {
   const { dom, log } = buildHarness();
   let failFirst = true;
@@ -425,9 +466,11 @@ test("submitting sends the selected filters as URL parameters", async () => {
   const band = grid(dom).querySelectorAll('input[name="band"]')[0];
   band.checked = true;
   // Mode options come back label-sorted from the dictionary: dstar, fm.
-  const mode = grid(dom).querySelectorAll('input[name="mode"]')[0];
-  assert.equal(mode.value, "dstar");
-  mode.checked = true;
+  // Tick both: the union must go as one comma-joined value, not repeated
+  // mode= keys of which the API would keep only the last.
+  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+    el.checked = true;
+  }
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "52.2297";
   await latitude.dispatch("input");
@@ -441,7 +484,7 @@ test("submitting sends the selected filters as URL parameters", async () => {
   assert.equal(url.pathname, "/przemienniki");
   assert.equal(url.searchParams.get("country"), "pl");
   assert.equal(url.searchParams.get("band"), "2m");
-  assert.deepEqual(url.searchParams.getAll("mode"), ["dstar"]);
+  assert.equal(url.searchParams.get("mode"), "dstar,fm");
   assert.equal(url.searchParams.get("onlyworking"), "true");
   assert.equal(url.searchParams.get("latitude"), "52.2297");
   assert.equal(url.searchParams.get("longitude"), "21.0122");
@@ -462,21 +505,40 @@ test("blank optional filters are omitted from the query", async () => {
   await dom.channelImportRepeaterbookEl.dispatch("click");
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query repeaterbook.com");
   fieldByName(dom, "only").checked = false;
-  // Untick the default band/mode selection to make every optional filter blank.
+  // Untick the default band selection to make every optional filter blank.
+  // The modes stay on their fm default: an empty mode selection is not blank,
+  // it falls back (see the fallback test below).
   for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
-    el.checked = false;
-  }
-  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
     el.checked = false;
   }
 
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   const url = queryUrl(calls);
-  for (const param of ["country", "band", "mode", "onlyworking", "latitude", "longitude"]) {
+  for (const param of ["country", "band", "onlyworking", "latitude", "longitude"]) {
     assert.equal(url.searchParams.get(param), null, `no ${param} parameter`);
   }
   assert.equal(url.searchParams.get("range"), "30");
+});
+
+test("an RXF query with no mode selected falls back to analogue only", async () => {
+  // The form presents every digital mode as unavailable, so an empty mode
+  // selection must not omit the parameter and let the directory return them
+  // all — even on a radio that advertises DMR, a digital row must stay out.
+  const { dom } = buildHarness({ modeOptions: ["FM", "NFM", "DV", "DMR"] });
+  const calls = installFetch([
+    { match: "/przemienniki/meta", body: META_JSON },
+    { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+    el.checked = false;
+  }
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  const url = queryUrl(calls);
+  assert.deepEqual(url.searchParams.getAll("mode"), ["fm"]);
 });
 
 test("IRTS loads its dictionary and submits through the shared RXF flow", async () => {
@@ -502,9 +564,14 @@ test("IRTS loads its dictionary and submits through the shared RXF flow", async 
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query IRTS");
   assert.deepEqual(countrySelect(dom).children.slice(1).map((option) => option.value), ["IE", "GB"]);
   assert.deepEqual(grid(dom).querySelectorAll('input[name="band"]').map((el) => el.value), ["10m", "2m", "4m", "70cm"]);
+  const irtsModes = grid(dom).querySelectorAll('input[name="mode"]');
   assert.deepEqual(
-    grid(dom).querySelectorAll('input[name="mode"]').map((el) => el.value),
+    irtsModes.map((el) => el.value),
     ["dmr", "dstar", "fm", "fusion", "nxdn"],
+  );
+  assert.deepEqual(
+    irtsModes.filter((el) => el.disabled).map((el) => el.value),
+    ["dmr", "fusion", "nxdn"],
   );
 
   countrySelect(dom).value = "IE";
