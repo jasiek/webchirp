@@ -196,7 +196,13 @@ export function createRepeaterSources(ctx, { endpoints }) {
       if (bands.length > 0) {
         url.searchParams.set("band", bands.join(","));
       }
-      normalized(values.modes).forEach((mode) => {
+      // An empty selection must not fall through to the directory's "any
+      // mode" behaviour: the form presents every digital mode as unavailable,
+      // and "any" would admit them on a radio that advertises DMR/DN. No
+      // selection means analogue only -- the same fallback the RSGB flow
+      // applies below.
+      const modes = normalized(values.modes);
+      (modes.length > 0 ? modes : ["fm"]).forEach((mode) => {
         url.searchParams.append("mode", mode);
       });
       if (values.only) {

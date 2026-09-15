@@ -503,21 +503,40 @@ test("blank optional filters are omitted from the query", async () => {
   await dom.channelImportRepeaterbookEl.dispatch("click");
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query repeaterbook.com");
   fieldByName(dom, "only").checked = false;
-  // Untick the default band/mode selection to make every optional filter blank.
+  // Untick the default band selection to make every optional filter blank.
+  // The modes stay on their fm default: an empty mode selection is not blank,
+  // it falls back (see the fallback test below).
   for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
-    el.checked = false;
-  }
-  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
     el.checked = false;
   }
 
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   const url = queryUrl(calls);
-  for (const param of ["country", "band", "mode", "onlyworking", "latitude", "longitude"]) {
+  for (const param of ["country", "band", "onlyworking", "latitude", "longitude"]) {
     assert.equal(url.searchParams.get(param), null, `no ${param} parameter`);
   }
   assert.equal(url.searchParams.get("range"), "30");
+});
+
+test("an RXF query with no mode selected falls back to analogue only", async () => {
+  // The form presents every digital mode as unavailable, so an empty mode
+  // selection must not omit the parameter and let the directory return them
+  // all — even on a radio that advertises DMR, a digital row must stay out.
+  const { dom } = buildHarness({ modeOptions: ["FM", "NFM", "DV", "DMR"] });
+  const calls = installFetch([
+    { match: "/przemienniki/meta", body: META_JSON },
+    { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
+  ]);
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+    el.checked = false;
+  }
+  await dom.repeaterQueryFormEl.dispatch("submit");
+
+  const url = queryUrl(calls);
+  assert.deepEqual(url.searchParams.getAll("mode"), ["fm"]);
 });
 
 test("IRTS loads its dictionary and submits through the shared RXF flow", async () => {
