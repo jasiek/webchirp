@@ -1,7 +1,7 @@
 import {
-  DEFAULT_REPEATER_API_BASE,
   buildRepeaterEndpoints,
   fetchCitySuggestions,
+  resolveRepeaterApiBase,
 } from "../datasources.js";
 import { encodeMaidenhead } from "../rsgb.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
@@ -16,20 +16,6 @@ import {
   createPositionField,
   createSelectField,
 } from "./query-fields.js";
-
-const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
-
-// Resolve the repeater-query API base for this deployment. A
-// <meta name="webchirp-repeater-api-base"> tag overrides the built-in default:
-// its content (a proxy base URL, or blank to disable the online-query
-// features) wins when the tag is present; without the tag the default applies.
-function resolveRepeaterApiBase() {
-  const meta = document.querySelector(`meta[name="${REPEATER_API_BASE_META}"]`);
-  if (meta) {
-    return String(meta.getAttribute("content") || "").trim();
-  }
-  return DEFAULT_REPEATER_API_BASE;
-}
 
 // The key every source gives its "repeaters within N km" filter. The position
 // field's map preview draws that radius, so the shell has to know which field

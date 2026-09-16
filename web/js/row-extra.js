@@ -1,6 +1,5 @@
 // Driver-specific per-channel settings ride along on channel rows under a key
-// that is not a CSV header, the same way repeater coordinates do in
-// web/js/row-geo.js. Everything that serializes rows (TSV clipboard, CSV
+// that is not a CSV header. Everything that serializes rows (TSV clipboard, CSV
 // export, the Python upload path) reads header keys only, so the sidecar never
 // leaks into a codeplug; it travels with the row while the grid is open.
 //

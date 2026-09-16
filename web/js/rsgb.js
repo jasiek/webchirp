@@ -10,7 +10,6 @@
 // standing in.
 
 import { REPEATER_REQUEST_TIMEOUT_MS, withRequestTimeout } from "./request-timeout.js";
-import { setRowGeo } from "./row-geo.js";
 import { setHighestPower } from "./row-power.js";
 
 // No CORS proxy is involved: the API sends Access-Control-Allow-Origin: * on
@@ -569,16 +568,6 @@ export function buildRsgbRows(entries, { createBlankRow, setRowValue, findEnumOp
         : String(record?.status || "").trim(),
     ].filter((part) => part.length > 0);
     setRowValue(row, "Comment", commentParts.join(" | "));
-
-    // The map sidecar, from the locator's box centre — this directory carries
-    // no coordinates of its own (FINDINGS **rsgb-has-no-lat-lon**). A
-    // 6-character box is 4.6 x 5.2 km, close enough for a context map at the
-    // zoom repeater-map.js uses; a 4-character one is 111 x 130 km, so its
-    // centre can be 70 km from the station and gets no map rather than a
-    // confidently wrong one.
-    if (!entry?.approximate) {
-      setRowGeo(row, entry?.latitude, entry?.longitude);
-    }
 
     rows.push(row);
   }

@@ -8,7 +8,6 @@ import {
   fetchCitySuggestions,
   parseCitySuggestions,
 } from "../../web/js/datasources.js";
-import { rowGeo } from "../../web/js/row-geo.js";
 import { makeRowHooks } from "../support/row-hooks.mjs";
 
 // toneModes/crossModes stand in for the driver's valid_tmodes and
@@ -76,6 +75,7 @@ test("buildRepeaterEndpoints derives every remote source URL from a base", () =>
       metaUrl: "https://proxy.example.com/irts/meta",
     },
     cities: "https://proxy.example.com/cities",
+    lookup: "https://proxy.example.com/lookup",
   });
 });
 
@@ -99,6 +99,9 @@ test("a blank proxy base disables only proxy-dependent sources", () => {
       // geocodes the position every source filters by rather than being a
       // directory itself, so blanking the base must not take it away.
       cities: "https://api.codeplug.org/cities",
+      // Same rule for the hover map's callsign lookup: it is a first-party
+      // route, not a proxied directory, so blanking the base keeps the maps.
+      lookup: "https://api.codeplug.org/lookup",
     });
   }
 });
@@ -140,7 +143,6 @@ test("IRTS radio-perspective frequencies build a usable CHIRP channel", () => {
   assert.equal(row.Tone, "Tone");
   assert.equal(row.rToneFreq, "88.5");
   assert.equal(row.Mode, "FM");
-  assert.deepEqual(rowGeo(row), { latitude: 53.229167, longitude: -6.208333 });
   assert.deepEqual(skipped, []);
 });
 

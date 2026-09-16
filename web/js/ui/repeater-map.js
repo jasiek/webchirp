@@ -1,16 +1,29 @@
+import { callsignFromName, createCallsignLookup, pickLookupEntry } from "../callsign-lookup.js";
+import { buildRepeaterEndpoints, resolveRepeaterApiBase } from "../datasources.js";
 import { formatCoordinates } from "../staticmap.js";
-import { rowGeo } from "../row-geo.js";
 import { trackEvent } from "./analytics.js";
 import { fillMapAttribution, renderStaticMap } from "./static-map-view.js";
 
-// Static OSM context map for imported repeater channels (issue #57). Rows that
-// arrived from a repeater directory carry coordinates (web/js/row-geo.js);
-// hovering their Location cell shows the map as a tooltip on hover-capable
-// (desktop) devices, and tapping it opens a dismissable modal on touch
+// Static OSM context map for repeater channels (issue #57). Hovering a
+// Location cell whose channel name is a callsign asks api.codeplug.org where
+// that repeater is (web/js/callsign-lookup.js) and draws the answer: a tooltip
+// on hover-capable (desktop) devices, a dismissable modal on tap for touch
 // devices. The map is non-interactive: tiles positioned so the repeater sits
 // dead-center under a red dot, with the coordinates as a header.
-export function createRepeaterMap(ctx) {
+//
+// The position is looked up per hover rather than carried on the row, so a map
+// is available for any channel named after a repeater -- one read off a radio,
+// loaded from a .img file or typed by hand -- and not only for the rows this
+// session happened to import from a directory. A callsign the directory does
+// not know answers 404 and simply gets no map; both answers are cached for 24h
+// by the endpoint, so a re-hover costs no request.
+export function createRepeaterMap(ctx, { lookup = null } = {}) {
   const { dom, state } = ctx;
+
+  // Injected by the tests, which have no network; production resolves the same
+  // deployment-configured base the query modal uses.
+  const lookupCallsign = lookup
+    || createCallsignLookup(buildRepeaterEndpoints(resolveRepeaterApiBase()).lookup).lookup;
 
   const MAP_ZOOM = 12;
   // Tooltip matches the left sidebar's 280px column (issue #57: "no bigger
@@ -57,7 +70,33 @@ export function createRepeaterMap(ctx) {
     renderStaticMap(canvasEl, geo, { zoom: MAP_ZOOM, width, height });
   }
 
-  function geoForEventTarget(target) {
+  // How long the pointer has to rest on a cell before a request leaves. A
+  // pointer crossing the Location column on its way somewhere else sweeps
+  // through every row in the window, and without this each of those would be a
+  // lookup. Short enough that a deliberate hover still feels immediate.
+  const HOVER_LOOKUP_DELAY_MS = 180;
+
+  // Identifies the hover a lookup belongs to. Lookups are asynchronous and the
+  // pointer does not wait for them, so a reply has to prove it is still wanted
+  // before it draws anything: by the time a cold request returns, the pointer
+  // may be two rows down, off the table, or on a cell whose row has been
+  // recycled underneath it by the virtualized grid.
+  let hoverToken = 0;
+  let hoverTimer = 0;
+
+  function cancelPendingLookup() {
+    hoverToken += 1;
+    if (hoverTimer) {
+      clearTimeout(hoverTimer);
+      hoverTimer = 0;
+    }
+  }
+
+  // What a Location cell is asking about: the channel's callsign and the
+  // frequency that tells same-callsign entries apart. Null for anything that
+  // is not a Location cell, or whose name is not a callsign -- those rows never
+  // reach the network.
+  function queryForEventTarget(target) {
     const button = target?.closest?.(".channel-location-button");
     if (!button) {
       return null;
@@ -66,7 +105,29 @@ export function createRepeaterMap(ctx) {
     if (!Number.isInteger(rowIdx)) {
       return null;
     }
-    return rowGeo(state.currentRows[rowIdx]);
+    const row = state.currentRows[rowIdx];
+    const callsign = callsignFromName(row?.Name);
+    if (!callsign) {
+      return null;
+    }
+    return { button, callsign, frequency: Number(row?.Frequency) };
+  }
+
+  // Resolve a cell's position and hand it to `show`, unless the hover it
+  // belongs to has been superseded. A lookup failure is swallowed rather than
+  // surfaced: the map is an unasked-for convenience, so a directory that is
+  // down or unreachable costs the map and nothing else -- no modal, no error
+  // banner, no Sentry report for a network the user never invoked.
+  function resolveAndShow(query, show) {
+    const token = hoverToken;
+    lookupCallsign(query.callsign)
+      .then((entries) => {
+        const entry = pickLookupEntry(entries, query.frequency);
+        if (entry && token === hoverToken) {
+          show(entry);
+        }
+      })
+      .catch(() => {});
   }
 
   // --- Desktop tooltip ------------------------------------------------------
@@ -76,6 +137,10 @@ export function createRepeaterMap(ctx) {
   // attribution link. Entering the tooltip cancels the pending hide.
   const TOOLTIP_HIDE_DELAY_MS = 250;
   let hideTimer = 0;
+  // The Location button the pointer is inside. mouseover fires again for every
+  // element boundary crossed within one cell, and each of those would
+  // otherwise cancel and restart the lookup the first one began.
+  let hoverButton = null;
 
   function cancelPendingHide() {
     if (hideTimer) {
@@ -111,11 +176,23 @@ export function createRepeaterMap(ctx) {
     beginDwell("tooltip");
   }
 
-  function hideTooltip() {
+  // Take the picture down without touching any lookup in flight. This is the
+  // hand-off case: the pointer has moved to another Location cell, so the map
+  // on screen now belongs to the wrong row and must go, while the request for
+  // the row under the pointer has to survive.
+  function clearTooltipDisplay() {
     cancelPendingHide();
     cancelDwell("tooltip");
     dom.repeaterMapTooltipEl.classList.add("hidden");
     dom.repeaterMapTooltipCanvasEl.innerHTML = "";
+  }
+
+  // The full stop: the pointer has left the cells altogether (or the grid
+  // scrolled out from under it), so a reply still on its way must not draw.
+  function hideTooltip() {
+    cancelPendingLookup();
+    hoverButton = null;
+    clearTooltipDisplay();
   }
 
   // --- Mobile modal ---------------------------------------------------------
@@ -165,14 +242,34 @@ export function createRepeaterMap(ctx) {
       if (!hoverCapable()) {
         return;
       }
-      const geo = geoForEventTarget(event.target);
-      if (geo) {
-        showTooltip(geo, event.target.closest(".channel-location-button"));
+      const button = event.target?.closest?.(".channel-location-button");
+      if (!button || button === hoverButton) {
+        return;
       }
+      hoverButton = button;
+      // A new cell supersedes the last, including one with no callsign: moving
+      // from a repeater row onto a plain one must cancel the request in flight,
+      // or its reply would draw a map beside the wrong row.
+      cancelPendingLookup();
+      const query = queryForEventTarget(event.target);
+      if (!query) {
+        // Nothing to show here. The hide the previous cell's mouseout
+        // scheduled stands, which is what takes the old map down.
+        return;
+      }
+      // The pointer is still inside the Location column, so the previous
+      // cell's pending hide is wrong -- but its map is too, so it goes now
+      // rather than waiting to be overwritten.
+      clearTooltipDisplay();
+      hoverTimer = setTimeout(() => {
+        hoverTimer = 0;
+        resolveAndShow(query, (entry) => showTooltip(entry, query.button));
+      }, HOVER_LOOKUP_DELAY_MS);
     });
     dom.tableBody.addEventListener("mouseout", (event) => {
       const button = event.target?.closest?.(".channel-location-button");
       if (button && !button.contains(event.relatedTarget)) {
+        hoverButton = null;
         scheduleHideTooltip();
       }
     });
@@ -193,10 +290,15 @@ export function createRepeaterMap(ctx) {
       if (hoverCapable()) {
         return;
       }
-      const geo = geoForEventTarget(event.target);
-      if (geo) {
-        openModal(geo, event.target.closest(".channel-location-button"));
+      const query = queryForEventTarget(event.target);
+      if (!query) {
+        return;
       }
+      // A tap is a deliberate ask, so it skips the hover delay -- but it still
+      // carries a token, because a second tap elsewhere while the first is in
+      // flight must win.
+      cancelPendingLookup();
+      resolveAndShow(query, (entry) => openModal(entry, query.button));
     });
     dom.repeaterMapCloseEl.addEventListener("click", closeModal);
     dom.repeaterMapModalEl.addEventListener("click", (event) => {

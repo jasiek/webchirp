@@ -12,7 +12,6 @@ import {
   worldPixelToLatLon,
   zoomForRadius,
 } from "../../web/js/staticmap.js";
-import { rowGeo, setRowGeo } from "../../web/js/row-geo.js";
 
 test("latLonToWorldPixel puts 0,0 at the center of the world map", () => {
   const zoom = 3;
@@ -73,30 +72,6 @@ test("osmTileUrl fills the template", () => {
 test("formatCoordinates renders decimal degrees with 5 decimals", () => {
   assert.equal(formatCoordinates(52.737737, 14.705231), "52.73774, 14.70523");
   assert.equal(formatCoordinates(-33.9, -70.6), "-33.90000, -70.60000");
-});
-
-test("setRowGeo stores valid coordinates and rowGeo reads them back", () => {
-  const row = {};
-  setRowGeo(row, "52.737737", "14.705231");
-  assert.deepEqual(rowGeo(row), { latitude: 52.737737, longitude: 14.705231 });
-});
-
-test("setRowGeo rejects missing, out-of-range and 0,0 placeholder coordinates", () => {
-  for (const [lat, lon] of [[NaN, 10], ["", ""], [95, 10], [10, 200], [0, 0]]) {
-    const row = {};
-    setRowGeo(row, lat, lon);
-    assert.equal(rowGeo(row), null, `expected no geo for ${lat},${lon}`);
-  }
-  assert.equal(rowGeo(null), null);
-});
-
-test("the geo sidecar never reaches header-driven serialization", async () => {
-  const { serializeRowsToTsv } = await import("../../web/js/clipboard.js");
-  const row = { Location: "0", Name: "SR1D" };
-  setRowGeo(row, 52.737737, 14.705231);
-  const tsv = serializeRowsToTsv([row]);
-  assert.ok(!tsv.includes("52.737737"));
-  assert.ok(!tsv.includes("__geo"));
 });
 
 test("ground resolution halves with every zoom level and shrinks away from the equator", () => {

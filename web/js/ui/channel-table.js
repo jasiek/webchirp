@@ -12,7 +12,7 @@ import {
 } from "../clipboard.js";
 import { normalizeCellValue, normalizeValue } from "./channel-values.js";
 import { rowExtras } from "../row-extra.js";
-import { rowGeo } from "../row-geo.js";
+import { callsignFromName } from "../callsign-lookup.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
 
 // The editable channel grid: rendering, row selection, the row operations
@@ -974,9 +974,11 @@ export function createChannelTable({ dom, state, log, actions }) {
     const locationButton = locationButtonIn(tr);
     if (locationButton) {
       locationButton.setAttribute("aria-pressed", isSelected ? "true" : "false");
-      // Rows imported from a repeater directory carry coordinates; mark their
-      // Location cell so the map affordance (web/js/ui/repeater-map.js) is visible.
-      locationButton.classList.toggle("has-geo", Boolean(rowGeo(row)));
+      // Mark the cells the context map (web/js/ui/repeater-map.js) will look up
+      // on hover -- the ones whose channel name is a callsign. Whether the
+      // directory actually knows that callsign is only answerable over the
+      // network, so this marks what is worth hovering, not what has a map.
+      locationButton.classList.toggle("has-callsign", Boolean(callsignFromName(row.Name)));
     }
   }
 

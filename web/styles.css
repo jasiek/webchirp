@@ -2137,10 +2137,12 @@ button:disabled {
     -3px 0 5px -3px var(--shadow-color);
 }
 
-/* Static OSM context map for imported repeater channels (issue #57): rows
-   with coordinates mark their Location cell, hover shows the tooltip map on
-   desktop, tap opens the modal map on touch devices (ui/repeater-map.js). */
-#mem-table .channel-location-button.has-geo {
+/* Static OSM context map for repeater channels (issue #57): a channel named
+   after a callsign marks its Location cell, hover looks the callsign up and
+   shows the tooltip map on desktop, tap opens the modal map on touch devices
+   (web/js/ui/repeater-map.js). The mark says the cell is worth hovering, not
+   that a map exists -- only the lookup can answer that. */
+#mem-table .channel-location-button.has-callsign {
   text-decoration: underline dotted;
   text-underline-offset: 2px;
 }

@@ -34,11 +34,10 @@ if TYPE_CHECKING:
     from typing import Any, Optional
     from webchirp_bridge.channel_rows import Row
 
-# Driver extras ride on channel rows under a key that is not a CSV header, the
-# same way repeater coordinates do in web/js/row-geo.js (the browser side of
-# this key is web/js/row-extra.js). Everything that serializes rows reads
-# header keys only, so the sidecar never reaches a CSV or a codeplug; it
-# travels with the row object while the grid is open.
+# Driver extras ride on channel rows under a key that is not a CSV header (the
+# browser side of this key is web/js/row-extra.js). Everything that serializes
+# rows reads header keys only, so the sidecar never reaches a CSV or a
+# codeplug; it travels with the row object while the grid is open.
 ROW_EXTRA_KEY = "__extra"
 
 

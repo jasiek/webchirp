@@ -1,6 +1,6 @@
 import { withRequestTimeout } from "./request-timeout.js";
-import { setRowGeo } from "./row-geo.js";
 import { highestPowerOption, setHighestPower } from "./row-power.js";
+import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.js";
 
 const PMR446_FREQUENCIES_MHZ = Array.from(
   { length: 16 },
@@ -101,7 +101,29 @@ function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
     // that blanks the base to switch off the two proxied directories keeps its
     // city lookup.
     cities: `${irtsBase}/cities`,
+    // Per-callsign position lookup for the channel grid's context map
+    // (web/js/callsign-lookup.js). Same rule as cities and IRTS: a first-party
+    // api.codeplug.org route rather than a proxied directory, so a deployment
+    // that blanks the base to switch off przemienniki.net and RepeaterBook
+    // keeps its maps.
+    lookup: `${irtsBase}/lookup`,
   };
+}
+
+const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
+
+// Resolve the repeater API base for this deployment. A
+// <meta name="webchirp-repeater-api-base"> tag overrides the built-in default:
+// its content (a proxy base URL, or blank to disable the online-query
+// features) wins when the tag is present; without the tag the default applies.
+// Shared rather than owned by the query modal, because the hover map reads the
+// same deployment setting and the two must not disagree about it.
+export function resolveRepeaterApiBase() {
+  const meta = document.querySelector(`meta[name="${REPEATER_API_BASE_META}"]`);
+  if (meta) {
+    return String(meta.getAttribute("content") || "").trim();
+  }
+  return DEFAULT_REPEATER_API_BASE;
 }
 
 // Shorter than REPEATER_REQUEST_TIMEOUT_MS because this fires on a keystroke: a
@@ -181,31 +203,6 @@ export function parseCitySuggestions(jsonText) {
       && Number.isFinite(entry.longitude))
     // Only matters if the endpoint ever raises its own cap.
     .slice(0, CITY_SUGGEST_MAX);
-}
-
-function parseXmlDocument(xmlText) {
-  const doc = new DOMParser().parseFromString(String(xmlText || ""), "application/xml");
-  const parserErrorNode = doc.querySelector("parsererror");
-  if (parserErrorNode) {
-    throw new Error(`Invalid XML response: ${parserErrorNode.textContent?.trim() || "parsererror"}`);
-  }
-  return doc;
-}
-
-function firstText(parent, selector) {
-  return String(parent?.querySelector(selector)?.textContent || "").trim();
-}
-
-// Read an RXF <qrg> body as a frequency in MHz, yielding NaN for anything that
-// is not a usable one. Number("") is 0 rather than NaN, so a plain
-// Number(firstText(...)) turned an absent or empty element into a finite 0 that
-// passed every Number.isFinite guard downstream: it defeated the
-// receive/transmit fallbacks in buildPrzemiennikiRows and turned a one-sided
-// entry into a bogus multi-MHz Duplex/Offset. A literal 0 in the feed is
-// rejected for the same reason -- no repeater works on 0 Hz.
-function parseQrgMhz(text) {
-  const numeric = Number(text || NaN);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : NaN;
 }
 
 // Read an RXF <ctcss> body as a CTCSS frequency, yielding "" for anything that
@@ -593,7 +590,6 @@ export function buildPrzemiennikiRows(
     // driver's highest tier rather than whatever the blank row defaulted to -
     // the same rule buildRsgbRows applies in web/js/rsgb.js.
     setHighestPower(row, { setRowValue, findEnumOption });
-    setRowGeo(row, repeater.latitude, repeater.longitude);
     rows.push(row);
   }
   return { rows, skipped };

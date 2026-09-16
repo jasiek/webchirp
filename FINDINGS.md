@@ -300,6 +300,36 @@ Notes found while wiring the City/Locality autocomplete:
 - CORS allows `http://localhost:<port>` origins, so the autocomplete works
   against a local dev server (unlike `/przemienniki` and `/repeaterbook`).
 
+## api.codeplug.org /lookup (per-callsign position)
+
+`GET https://api.codeplug.org/lookup/<CALLSIGN>` answers with the same RXF XML
+the directory endpoints serve — an `<rxf>` document whose `<repeaters>` list
+holds every machine registered under that callsign. Found while replacing the
+channel grid's map sidecar with a hover lookup (`web/js/callsign-lookup.js`):
+
+- **The callsign is case-sensitive.** `/lookup/GB3KM` answers; `/lookup/gb3km`
+  is a 404. The gate in `callsignFromName()` upper-cases for this reason.
+- **404 is the ordinary "not in any directory" answer**, not a failure, and it
+  carries `cache-control: public, max-age=86400` exactly like a 200 does. The
+  24h caching the hover map depends on is therefore the browser's HTTP cache,
+  for misses as much as hits — no application-level cache is needed, and none
+  was added beyond an in-memory promise map that collapses concurrent hovers.
+- **One callsign can answer with several repeaters.** `W1AW` returns two sites
+  2 km apart; only the frequency tells them apart, which is what
+  `pickLookupEntry()` matches on.
+- **`<perspective>` differs by upstream**, so which of `qrg type="rx"` /
+  `qrg type="tx"` holds the output frequency depends on who answered:
+  przemienniki.net-sourced entries say `repeater`, RepeaterBook-sourced ones
+  say `radio`. Matching against both sides sidesteps it.
+- **A placeholder `0.000000 / 0.000000` position is common** for entries whose
+  site is unpublished (`GB3IC` is one). Treated as "no position" rather than
+  mapping the Gulf of Guinea.
+- CORS follows the `/cities` rule, not the proxy rule: `https://codeplug.org`
+  and any `http://localhost:<port>` or `http://127.0.0.1:<port>` origin are
+  allowed, so the hover map works against a dev server on any port. Other
+  origins (including `https://jasiek.github.io`) get **HTTP 403 with an empty
+  body**, not a CORS-header omission.
+
 ## Cost of previewing a repeater query
 
 The query modal's map preview repeats the query the Query API button would run,
