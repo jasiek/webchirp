@@ -31,7 +31,7 @@ from webchirp_bridge.radio_memories import (
     _read_radio_payload,
 )
 from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
-from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
+from webchirp_bridge.runtime_errors import RuntimePreconditionError, RuntimeUnsupportedError
 from webchirp_bridge.serial_pipe import WebSerialPipe, _serial_pipe_timeout_seconds
 
 if TYPE_CHECKING:
@@ -179,7 +179,7 @@ def _upload_selected_radio_sync(
     driver_key = _driver_cache_key(module_name, class_name)
     base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
     if not base_image:
-        raise RuntimeUnsupportedError(
+        raise RuntimePreconditionError(
             "No cached radio image for this model. Download from radio first, then upload."
         )
     # CHIRP does not re-detect on upload -- the class that downloaded the image

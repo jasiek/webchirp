@@ -25,7 +25,7 @@ from chirp import (
 )
 
 from webchirp_bridge.jsbridge import _make_status_logger
-from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
+from webchirp_bridge.runtime_errors import RuntimePreconditionError, RuntimeUnsupportedError
 
 if TYPE_CHECKING:
     from typing import Callable, Iterator, Optional, Sequence
@@ -253,7 +253,7 @@ def _best_effort_radio_instance(
         if memsize > 0:
             radio = radio_cls(memmap.MemoryMapBytes(bytes(memsize)))
         elif require_cached:
-            raise RuntimeUnsupportedError(
+            raise RuntimePreconditionError(
                 "No cached radio image for this model. Download from radio first."
             )
         else:

@@ -44,10 +44,23 @@ export const SENTRY_SDK_URL =
 export const SENTRY_HOSTS = Object.freeze(["codeplug.org", "www.codeplug.org"]);
 
 // Noise that is never actionable: a benign layout notification the browser
-// raises, and failures thrown by whatever the user has installed into their
-// own browser. Neither is this app's code.
+// raises, failures thrown by whatever the user has installed into their own
+// browser, and the runtime's own "you have not done X yet" guards. The first
+// two are not this app's code; the third is this app working as designed.
+//
+// RuntimePreconditionError (web/python/webchirp_bridge/runtime_errors.py) is
+// what the runtime raises when an action needs something the user has not
+// supplied -- pressing Upload before ever downloading, most of all. Its message
+// is already the instruction that fixes it, so a report says only that someone
+// pressed the buttons out of order, once per person who did. Matching the class
+// name rather than the sentence keeps the rule from lapsing silently the next
+// time the wording is improved; the debug panel still prints the whole
+// traceback either way. Pyodide flattens a Python exception into the message
+// text, which is what puts the class name within reach of a message filter at
+// all.
 const IGNORE_ERRORS = Object.freeze([
   /ResizeObserver loop/i,
+  /\bRuntimePreconditionError\b/,
 ]);
 
 const DENY_URLS = Object.freeze([
