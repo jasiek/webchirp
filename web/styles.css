@@ -1059,12 +1059,18 @@ button:disabled {
   opacity: 0.8;
 }
 
+/* The settings groups keep the place the buttons had -- a column down the left
+   of the settings panel -- but read as vertical folder tabs, the same language
+   as the Channels / Radio Settings strip above them. The column and the panel
+   are flush, so the selected tab joins the panel it fills. */
 .settings-layout {
   min-height: 0;
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  gap: 0.8rem;
+  /* No gap in either direction: the tabs have to touch the panel they open
+     into, beside it here and above it once the layout collapses to one column. */
+  gap: 0;
 }
 
 .settings-tabs {
@@ -1072,23 +1078,69 @@ button:disabled {
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  padding-right: 0.2rem;
+  gap: 0;
+  padding-right: 0;
+}
+
+/* The spine down the right of the column is drawn by the tabs themselves: each
+   one carries its own right border and the selected one paints that edge out in
+   the panel's --surface. This filler continues the line past the last tab to
+   the foot of the column. A border on .settings-tabs could not do the job --
+   the column is a scroll container, so its border box sits outside the clip and
+   no tab could ever paint over it. */
+.settings-tabs::after {
+  content: "";
+  flex: 1 1 auto;
+  border-right: 1px solid var(--border);
 }
 
 .settings-tab {
   width: 100%;
+  margin: 0 0 -1px;
+  padding: 0.45rem 0.7rem;
+  border-color: var(--border);
+  border-radius: 6px 0 0 6px;
+  background: var(--surface-muted);
+  color: var(--muted);
   text-align: left;
+  font-size: 0.85rem;
 }
 
-.settings-tab.is-active {
-  border-color: var(--accent-strong);
-  background: linear-gradient(180deg, var(--control-active-top) 0%, var(--control-active-bottom) 100%);
+/* Scoped over the global button:hover, which tints all four edges -- including
+   the right one that has to stay part of the spine. */
+.settings-tab:not(:disabled):hover {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
 }
 
 .settings-tab.has-invalid {
   border-color: var(--error-border);
-  background: linear-gradient(180deg, var(--error-bg) 0%, var(--error-bg-strong) 100%);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+/* Filled with the panel's own surface and missing its right edge, so the tab
+   opens into the fields it controls. Positioned so it paints above the panel's
+   drop shadow, which would otherwise darken the seam it is meant to erase. */
+.settings-tab.is-active {
+  position: relative;
+  z-index: 1;
+  border-color: var(--border);
+  border-right-color: var(--surface);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* A group with an invalid value keeps its red frame while selected; only the
+   edge that joins the panel and the marker colour change. */
+.settings-tab.is-active.has-invalid {
+  border-color: var(--error-border);
+  border-right-color: var(--surface);
+  background: var(--surface);
+  color: var(--error-text);
+  box-shadow: inset 2px 0 0 var(--error-border);
 }
 
 .settings-panel {
@@ -1097,20 +1149,31 @@ button:disabled {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  /* Open on the left: the tab column supplies that edge. */
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
   background: var(--surface);
   box-shadow: 0 10px 22px var(--shadow-color);
 }
 
+/* An inset notice rather than a bar across the panel's top edge. Full bleed, it
+   was the first thing the selected tab met, so a tab filled with --surface
+   opened into the notice's tint instead of into the fields -- most visible in
+   the stacked layout, where the tabs always sit directly above it. Indented by
+   the same 0.9rem as .settings-content, it lines up with the fields it warns
+   about and leaves --surface at every edge a tab can join. */
 .settings-summary {
-  border-bottom: 1px solid var(--border);
+  margin: 0.9rem 0.9rem 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--info-bg);
   color: var(--info-text);
-  padding: 0.7rem 0.9rem;
+  padding: 0.55rem 0.7rem;
   font-size: 0.84rem;
 }
 
 .settings-summary.has-invalid {
+  border-color: var(--error-border);
   background: var(--error-bg);
   color: var(--error-text);
 }
@@ -2389,16 +2452,47 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  /* Stacked layout: the same folder tabs, turned through ninety degrees. The
+     spine and the tab edges move from right to bottom, and the panel takes its
+     left border back and gives up its top one. */
   .settings-tabs {
     flex-direction: row;
     overflow: auto;
     padding-right: 0;
-    padding-bottom: 0.2rem;
+    padding-bottom: 0;
+  }
+
+  .settings-tabs::after {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
   }
 
   .settings-tab {
     width: auto;
+    margin: 0 -1px 0 0;
+    border-radius: 6px 6px 0 0;
     white-space: nowrap;
+  }
+
+  .settings-tab.is-active,
+  .settings-tab.is-active.has-invalid {
+    border-right-color: var(--border);
+    border-bottom-color: var(--surface);
+  }
+
+  .settings-tab.is-active {
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+
+  .settings-tab.is-active.has-invalid {
+    border-right-color: var(--error-border);
+    box-shadow: inset 0 2px 0 var(--error-border);
+  }
+
+  .settings-panel {
+    border-left: 1px solid var(--border);
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
   }
 
   .settings-fields {
