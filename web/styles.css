@@ -838,28 +838,77 @@ button:disabled {
   flex-direction: column;
 }
 
+/* Folder tabs rather than a pair of raised buttons: Channels and Radio
+   Settings are two views of the same radio, and button chrome made them read
+   as two separate actions. The strip carries a rule across the editor pane;
+   the active tab overlaps that rule and paints its own bottom edge out, so the
+   tab opens into the view below it the way a file-folder tab does.
+
+   The tabs deliberately do not enclose the view in a card: both views already
+   bring their own surface (#mem-table and .settings-panel are bordered cards),
+   so a card here would only nest one inside another. The active tab is filled
+   with --surface instead, which sits all but flush with the page in the light
+   theme and a step lighter than it in the dark one. */
 .editor-view-toggle {
-  display: inline-flex;
-  gap: 0.3rem;
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
   margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
 }
 
+/* Square bottom corners, and a shared hairline with the neighbour to the left,
+   so the row reads as one strip of tabs rather than adjacent controls. Every
+   tab hangs a pixel past the strip's rule; on an inactive tab that only
+   double-draws the same colour, on the active one it is what breaks the line.
+
+   Unselected tabs drop the control gradient for a flat, recessed fill. The
+   gradient is lighter than --surface in the dark theme, which made the
+   selected tab the dimmest thing in the strip; --surface-muted sits below
+   --surface in both themes, so the selected tab always reads as the raised one. */
 .editor-view-toggle button {
+  position: relative;
   min-width: 8.5rem;
+  margin: 0 0 -1px;
+  padding: 0.4rem 0.9rem;
+  border-color: var(--border);
+  border-radius: 6px 6px 0 0;
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.editor-view-toggle button + button {
+  margin-left: -1px;
+}
+
+/* Scoped over the global button:hover, which would otherwise tint all four
+   edges -- including the bottom one that has to stay on the strip's rule. */
+.editor-view-toggle button:not(:disabled):hover {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
 }
 
 .editor-view-toggle button:disabled {
   color: var(--disabled-text);
   border-color: var(--disabled-border);
-  background: linear-gradient(180deg, var(--control-disabled-top) 0%, var(--control-disabled-bottom) 100%);
+  background: var(--surface-muted);
   box-shadow: none;
   cursor: not-allowed;
 }
 
+/* Taller body and no bottom border: the extra padding lifts the active tab
+   clear of its neighbour (the strip is flex-end aligned, so it grows upward),
+   and the accent bar along the top edge names the selected view without the
+   filled background a button would need. */
 .editor-view-toggle button.is-active {
-  border-color: var(--accent-strong);
-  background: linear-gradient(180deg, var(--control-active-top) 0%, var(--control-active-bottom) 100%);
-  box-shadow: inset 0 0 0 1px rgba(32, 89, 141, 0.1);
+  z-index: 1;
+  padding-top: 0.6rem;
+  background: var(--surface);
+  border-color: var(--border);
+  border-bottom-color: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--accent);
 }
 
 .editor-view {
@@ -2363,10 +2412,8 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .editor-view-toggle {
-    display: flex;
-  }
-
+  /* The tab strip is flex at every width now; narrow phones only need the two
+     tabs to share the row instead of holding their 8.5rem label width. */
   .editor-view-toggle button {
     flex: 1 1 0;
     min-width: 0;
