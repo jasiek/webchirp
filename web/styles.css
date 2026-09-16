@@ -525,13 +525,26 @@ button:disabled {
   border-color: var(--accent);
 }
 
-.facebook-link {
-  gap: 0.4rem;
+/* Chromeless variant of .toolbar-link for the off-site community marks: the
+   logo alone carries the meaning, so the border and gradient of a toolbar
+   button would only compete with the controls that do something in-app. The
+   default is dimmed and brightens on hover so the marks recede until sought. */
+.toolbar-icon-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.25rem;
+  color: var(--text);
+  text-decoration: none;
+  opacity: 0.75;
 }
 
-.facebook-logo {
-  width: 1rem;
-  height: 1rem;
+.toolbar-icon-link:hover {
+  opacity: 1;
+}
+
+.toolbar-logo {
+  width: 1.15rem;
+  height: 1.15rem;
   flex: 0 0 auto;
 }
 
