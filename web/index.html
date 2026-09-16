@@ -622,6 +622,33 @@
     </div>
 
     <!--
+      The one modal for a failure the user can clear themselves rather than a
+      defect: pressing Upload before anything has been downloaded is the case
+      that forced it (RuntimePreconditionError,
+      web/python/webchirp_bridge/runtime_errors.py). Those messages are
+      instructions, and Debug Output is the wrong surface for an instruction --
+      it is folded away by default, and what it shows when it opens is a Python
+      traceback. Title and message are filled in by web/js/ui/notice-modal.js;
+      the markup carries neither, because nothing here is specific to uploads.
+    -->
+    <div
+      id="notice-modal"
+      class="modal-overlay notice-overlay hidden"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="notice-title"
+      aria-describedby="notice-message"
+    >
+      <div class="modal-card">
+        <h2 id="notice-title"></h2>
+        <p id="notice-message" class="notice-message"></p>
+        <div class="modal-actions">
+          <button id="notice-dismiss" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <!--
       Shown when the browser lacks a capability WebCHIRP needs, replacing the
       old sidebar note: the app greys out behind it (#app-shell gets
       .browser-unsupported alongside this overlay) and this panel explains why

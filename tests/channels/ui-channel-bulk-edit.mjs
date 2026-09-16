@@ -6,6 +6,7 @@ import test from "node:test";
 import { repoRoot } from "../support/repo-paths.mjs";
 import {
   channelRows,
+  closeVivifiedModals,
   clickLocationButton,
   createDeferred,
   flushMicrotasks,
@@ -162,12 +163,7 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra, radios = [RADIO], uplo
     },
   });
   await ui.init(true);
-  // index.html ships every modal with the hidden class; the DOM stub vivifies
-  // elements with no classes at all, so without this the Escape handler finds
-  // the import prompt "open" and never reaches the bulk editor.
-  for (const selector of ["#channel-bulk-edit-modal", "#channel-extra-modal", "#import-choice-modal"]) {
-    document.querySelector(selector).classList.add("hidden");
-  }
+  closeVivifiedModals(document);
 
   // Every row the grid holds, captured at load time. The controller only
   // exposes selectedRowsForOperations(), which answers with the selection once

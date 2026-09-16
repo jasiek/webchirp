@@ -10,6 +10,7 @@ import {
   requireRuntimeApi,
 } from "./ui/state.js";
 import { createDebugLog } from "./ui/debug-log.js";
+import { createNoticeModal } from "./ui/notice-modal.js";
 import { createProgress } from "./ui/progress.js";
 import { createIssueReporter } from "./ui/issue-report.js";
 import { createSettingsPanel } from "./ui/settings-panel.js";
@@ -41,7 +42,11 @@ export { buildExportFileName };
 export function createUiController() {
   const dom = queryUiElements();
   const state = createUiState();
-  const log = createDebugLog({ dom });
+  // Constructed ahead of the other modules, and outside ctx's forward
+  // references, because the debug log is what raises a notice and the debug log
+  // is itself constructed before any of them.
+  const notice = createNoticeModal({ dom });
+  const log = createDebugLog({ dom, notice });
   const progress = createProgress({ dom });
   const issueReporter = createIssueReporter({ state, log });
 
@@ -54,7 +59,8 @@ export function createUiController() {
     // Any modal that owns the keyboard: the channel grid's clipboard and
     // reorder shortcuts stand down while one is open.
     isAnyModalOpen: () =>
-      ctx.repeaterQuery.isModalOpen()
+      notice.isModalOpen()
+      || ctx.repeaterQuery.isModalOpen()
       || ctx.repeaterMap.isModalOpen()
       || ctx.channelExtra.isModalOpen()
       || ctx.bulkEdit.isModalOpen(),
@@ -68,7 +74,7 @@ export function createUiController() {
   // Modules hang off one context object so siblings can reach each other
   // through it. The forward references above and below are only dereferenced
   // after every module has been constructed.
-  const ctx = { dom, state, log, progress, actions };
+  const ctx = { dom, state, log, progress, notice, actions };
   const settings = createSettingsPanel(ctx);
   const table = createChannelTable(ctx);
   const channelExtra = createChannelExtra(ctx);
@@ -135,6 +141,7 @@ export function createUiController() {
   // error sinks.
   function bindEvents() {
     log.bindEvents();
+    notice.bindEvents();
     table.bindEvents();
     channelExtra.bindEvents();
     bulkEdit.bindEvents();
@@ -144,10 +151,15 @@ export function createUiController() {
     catalog.bindEvents();
     serial.bindEvents();
 
-    // Escape closes the topmost open surface: the import prompt, then the
-    // channel extras editor, then the bulk editor, then the repeater modals.
+    // Escape closes the topmost open surface: a notice, which is shown over
+    // whatever else is open, then the import prompt, then the channel extras
+    // editor, then the bulk editor, then the repeater modals.
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
+        if (notice.isModalOpen()) {
+          notice.closeModal();
+          return;
+        }
         if (codeplugIo.isImportChoiceModalOpen()) {
           codeplugIo.resolveImportChoice("cancel");
           return;

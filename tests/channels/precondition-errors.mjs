@@ -17,7 +17,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { initOptions } from "../../web/js/sentry.js";
+import { runtimeErrorSentence } from "../../web/js/runtime-errors.mjs";
+import { createDebugLog } from "../../web/js/ui/debug-log.js";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
+import { fakeDebugDom } from "../support/fake-dom.mjs";
+
+// The traceback as it reaches the UI: Pyodide prefixes its own line, CHIRP's
+// frames sit in the middle, and the sentence the user needs is the last line.
+const UPLOAD_TRACEBACK = [
+  "PythonError: Traceback (most recent call last):",
+  '  File "/lib/python312.zip/_pyodide/_base.py", line 597, in eval_code_async',
+  "    await CodeRunner(",
+  '  File "/webchirp_runtime/webchirp_bridge/clone.py", line 216, in upload_selected_radio',
+  "    return _upload_selected_radio_sync(module_name, class_name, rows, settings_groups)",
+  "webchirp_bridge.runtime_errors.RuntimePreconditionError: No cached radio image for this"
+  + " model. Download from radio first, then upload.",
+].join("\n");
 
 // A clone-mode driver, so the upload gets past the clone-mode check and reaches
 // the cached-image guard this test is about. Which model it is does not matter.
@@ -60,4 +75,45 @@ test("an ordinary radio failure is still reported", () => {
     "chirp.errors.RadioError: Radio did not respond",
   ].join("\n");
   assert.equal(isIgnored(message), false);
+});
+
+test("the sentence is lifted out of the traceback, not shown alongside it", () => {
+  assert.equal(
+    runtimeErrorSentence(new Error(UPLOAD_TRACEBACK)),
+    "No cached radio image for this model. Download from radio first, then upload.",
+  );
+  // A JS failure has no traceback to read; its own message is the sentence.
+  assert.equal(runtimeErrorSentence(new Error("Failed to fetch")), "Failed to fetch");
+});
+
+test("a precondition failure raises a notice instead of a bug report", () => {
+  const shown = [];
+  const dom = fakeDebugDom();
+  const log = createDebugLog({ dom, notice: { show: (notice) => shown.push(notice) } });
+
+  log.reportActionError("Upload", new Error(UPLOAD_TRACEBACK));
+
+  assert.deepEqual(shown, [{
+    title: "Upload not possible yet",
+    message: "No cached radio image for this model. Download from radio first, then upload.",
+  }]);
+  // Not a defect, so it does not become the title of the user's next bug report
+  // and does not throw the debug panel open in their face.
+  assert.equal(log.getLastErrorSummary(), "");
+  assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "false");
+  // The panel still has all of it, which is the rule that has no exceptions.
+  assert.match(dom.debugOutputEl.value, /UPLOAD BLOCKED/);
+  assert.match(dom.debugOutputEl.value, /clone\.py/);
+});
+
+test("an ordinary failure still opens the panel and raises no notice", () => {
+  const shown = [];
+  const dom = fakeDebugDom();
+  const log = createDebugLog({ dom, notice: { show: (notice) => shown.push(notice) } });
+
+  log.reportActionError("Upload", new Error("chirp.errors.RadioError: Radio did not respond"));
+
+  assert.deepEqual(shown, []);
+  assert.match(String(log.getLastErrorSummary()), /Radio did not respond/);
+  assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "true");
 });

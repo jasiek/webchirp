@@ -1413,7 +1413,17 @@ button:disabled {
   margin-top: auto;
 }
 
-.import-choice-message {
+/*
+  A notice is shown over whatever raised it, another modal included, so it sits
+  above the regular modals (60) and below the browser-capability overlay (70),
+  which describes something more fundamental than any notice can.
+*/
+.notice-overlay {
+  z-index: 65;
+}
+
+.import-choice-message,
+.notice-message {
   margin: 0 0 0.9rem;
   font-size: 0.9rem;
   line-height: 1.45;

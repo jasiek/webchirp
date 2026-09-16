@@ -2,11 +2,12 @@ import { errorDetails } from "./format.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
 import { captureError } from "../sentry.js";
 import { isBootstrapFailure } from "../runtime-bootstrap.mjs";
+import { isUserPreconditionFailure, runtimeErrorSentence } from "../runtime-errors.mjs";
 
 // The bottom debug panel is the single sink for status text, serial traffic and
 // full error detail. Keeping every write in one module preserves the rule that
 // full errors and tracebacks always reach the panel.
-export function createDebugLog({ dom }) {
+export function createDebugLog({ dom, notice } = {}) {
   let lastErrorSummary = "";
 
   function isExpanded() {
@@ -83,6 +84,10 @@ export function createDebugLog({ dom }) {
   // below is what a user calling something off reaches, and that is not a bug.
   function reportActionError(action, error) {
     const details = errorDetails(error);
+    if (isUserPreconditionFailure(error)) {
+      reportActionBlocked(action, error, details);
+      return;
+    }
     logError(`${action.toUpperCase()} ERROR\n${details}`);
     setStatus(`${action} failed (see Debug Output).`);
     // A failed runtime bootstrap has already been captured as a runtime crash,
@@ -97,6 +102,24 @@ export function createDebugLog({ dom }) {
       action,
       tags: { error_kind: classifyErrorKind(error), error_type: errorTypeName(error) },
     });
+  }
+
+  // Report an action the runtime refused because the user has not done a step
+  // it depends on -- pressing Upload before anything has been downloaded. The
+  // message such a failure carries is already the instruction that clears it,
+  // so it gets the modal (web/js/ui/notice-modal.js) rather than the treatment
+  // a defect gets, for the same reasons a cancellation does: it does not open
+  // the debug panel in the user's face, it does not become the title of their
+  // next bug report, and it is not reported to Sentry (IGNORE_ERRORS,
+  // web/js/sentry.js drops it by exception class).
+  //
+  // The full traceback still goes to the panel, unconditionally: whatever the
+  // UI makes of a failure, the panel is where all of it lands.
+  function reportActionBlocked(action, error, details) {
+    const sentence = runtimeErrorSentence(error);
+    logDebug(`${action.toUpperCase()} BLOCKED\n${details}`);
+    setStatus(`${action} blocked: ${sentence}`);
+    notice?.show({ title: `${action} not possible yet`, message: sentence });
   }
 
   // Report an action the user called off themselves, such as dismissing the

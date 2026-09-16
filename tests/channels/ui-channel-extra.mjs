@@ -6,6 +6,7 @@ import test from "node:test";
 import { repoRoot } from "../support/repo-paths.mjs";
 import {
   channelRows,
+  closeVivifiedModals,
   flushMicrotasks,
   installFakeDom,
   keydownEvent,
@@ -103,12 +104,7 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
     },
   });
   await ui.init(true);
-  // index.html ships every modal with the hidden class; the DOM stub vivifies
-  // elements with no classes at all, so without this the Escape handler finds
-  // the import prompt "open" and never reaches the extras editor.
-  for (const selector of ["#channel-extra-modal", "#import-choice-modal"]) {
-    document.querySelector(selector).classList.add("hidden");
-  }
+  closeVivifiedModals(document);
 
   // The binary import path, which is what a dropped or picked .img runs
   // through. Reusable: loading a second image is how the editor's rows get

@@ -443,6 +443,29 @@ function vivifyIdsOnly(selector) {
   return selector.startsWith("#") ? UI_STUBBED_SELECTORS.get(selector) || "div" : null;
 }
 
+// Every modal overlay index.html ships carries the hidden class. The stub
+// vivifies elements with no classes at all, so a booted UI finds all of them
+// "open" -- and the global Escape handler in web/js/ui.js, which closes the
+// topmost open surface and stops, then swallows the key before it reaches the
+// modal a test is actually driving. Listed here rather than in each boot helper
+// so that adding a modal to index.html does not break unrelated tests one at a
+// time, in a way that reads as a bug in the feature being added.
+const MODAL_SELECTORS = Object.freeze([
+  "#notice-modal",
+  "#import-choice-modal",
+  "#channel-extra-modal",
+  "#channel-bulk-edit-modal",
+  "#repeater-query-modal",
+  "#repeater-map-modal",
+]);
+
+// Put a freshly booted UI's modals into the state index.html ships them in.
+export function closeVivifiedModals(document) {
+  for (const selector of MODAL_SELECTORS) {
+    document.querySelector(selector)?.classList.add("hidden");
+  }
+}
+
 // The document stand-in: a registry of elements by selector plus the handful
 // of document-level calls the UI makes. Tests register the elements they
 // assert on; everything else comes from the vivify rule.

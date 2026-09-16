@@ -113,6 +113,10 @@ export const REQUIRED_ELEMENTS = {
   importChoiceReplaceEl: "#import-choice-replace",
   importChoiceMergeEl: "#import-choice-merge",
   importChoiceCancelEl: "#import-choice-cancel",
+  noticeModalEl: "#notice-modal",
+  noticeTitleEl: "#notice-title",
+  noticeMessageEl: "#notice-message",
+  noticeDismissEl: "#notice-dismiss",
 };
 
 // Resolved with querySelectorAll. Matching nothing is not an error: these are
