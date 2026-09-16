@@ -249,10 +249,19 @@ body {
   filter: brightness(1.08);
 }
 
-/* Two columns of model names rather than one 55-item ribbon down the page. */
+/* Two columns of names rather than one long ribbon down the page. Kenwood's
+   hub runs to 92 models, so a single column would be several screens of it. */
 .radio-page-list {
   columns: 2;
   gap: 1.2rem;
+}
+
+/* The model count beside each maker on the vendor directory. Dimmed because it
+   qualifies the link rather than being part of it -- the maker's name is what
+   a reader scans for. */
+.radio-page-count {
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 .radio-page-related {

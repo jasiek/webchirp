@@ -89,6 +89,14 @@ const FEATURES = {
   hasSettings: true,
 };
 
+// A listing page (the vendor directory, or one vendor's hub) carries the model
+// list and no per-radio copy. Told apart by that list rather than by filename,
+// because a hub is named after its vendor and so has no filename shape a test
+// could match without restating the slug rules.
+function isListingPage(html) {
+  return html.includes('<ul class="radio-page-list">');
+}
+
 function fixtureRadio(overrides) {
   return {
     key: "alpha:AlphaRadio",
@@ -137,8 +145,11 @@ test("every call to action names a radio the catalog still has", async () => {
 
     for (const [name, html] of pages) {
       const cta = html.match(/href="\.\.\/index\.html\?radio=([^"]+)"/);
-      if (name === "index.html") {
-        assert.equal(cta, null, "the vendor index links to models, not to one radio");
+      // Listing pages -- the vendor directory and the vendor hubs -- send a
+      // reader onward to a model rather than into the app with one preselected,
+      // so the absence of a call to action is the correct shape for them.
+      if (isListingPage(html)) {
+        assert.equal(cta, null, `${name} is a listing page but preselects one radio`);
         continue;
       }
       assert.ok(cta, `${name} has no call to action into the app`);
@@ -219,20 +230,185 @@ test("a radio whose driver describes it too thinly gets no page", async () => {
   });
 });
 
-test("two radios that would share one filename fail the build", async () => {
+test("drivers that name the same radio share one page, not one each", async () => {
   await withTempDir("webchirp-pages-", async (root) => {
-    // Slugs come from vendor and model, which the catalog does not guarantee
-    // are unique across driver classes. Silently overwriting one page with
-    // another's content is the failure this prevents.
+    // Several CHIRP drivers can describe one physical radio -- firmware and
+    // production variants -- and they slug alike because vendor and model are
+    // all a slug has. A page each would be that radio described twice under two
+    // URLs, so they merge, and the survivor is the driver saying the most.
     await stageFixture(root, {
       radios: [
         fixtureRadio({ model: "UV 5R" }),
         fixtureRadio({ key: "beta:BetaRadio", className: "BetaRadio", model: "UV-5R" }),
       ],
-      features: { "alpha:AlphaRadio": FEATURES, "beta:BetaRadio": FEATURES },
+      features: {
+        "alpha:AlphaRadio": { ...FEATURES, nameLength: 0, hasSettings: false },
+        "beta:BetaRadio": FEATURES,
+      },
+    });
+    const stdout = await runGenerator(root);
+    const written = await readdir(path.join(root, "web", "radios"));
+
+    assert.deepEqual(written.sort(), ["baofeng-uv-5r.html", "index.html"]);
+    const page = await readFile(
+      path.join(root, "web", "radios", "baofeng-uv-5r.html"),
+      "utf8",
+    );
+    // Beta describes itself more fully, so beta is what the page says and is
+    // what its call to action preselects.
+    assert.match(page, /Channel names up to 7 characters/);
+    assert.match(page, /radio=beta%3ABetaRadio/);
+    // Reported representative first, which is the order the page lists them in.
+    assert.match(stdout, /beta:BetaRadio \+ alpha:AlphaRadio/, "the merge is not reported");
+  });
+});
+
+test("the stock driver speaks for a merged page, not the most capable one", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // CHIRP marks every non-stock driver in `variant`, so the unmarked one is
+    // the radio as it ships -- the radio somebody searching the model name
+    // owns. Ranking on detail instead would put the aftermarket firmware's
+    // capabilities on the page and tell stock owners something false, which is
+    // the real-world Quansheng UV-K5 case in miniature.
+    await stageFixture(root, {
+      radios: [
+        fixtureRadio({ key: "stock:StockRadio", model: "UV-K5" }),
+        fixtureRadio({
+          key: "custom:CustomRadio",
+          className: "CustomRadio",
+          model: "UV-K5",
+          variant: "aftermarket",
+        }),
+      ],
+      features: {
+        "stock:StockRadio": { ...FEATURES, memoryBounds: [1, 200], modes: ["FM"] },
+        // Richer on every axis, and still not what the page is about.
+        "custom:CustomRadio": { ...FEATURES, memoryBounds: [1, 999], modes: ["FM", "NFM", "AM"] },
+      },
+    });
+    await runGenerator(root);
+    const page = await readFile(
+      path.join(root, "web", "radios", "baofeng-uv-k5.html"),
+      "utf8",
+    );
+
+    assert.match(page, /200 memory channels/);
+    assert.doesNotMatch(page, /999 memory channels/, "the page speaks for the aftermarket driver");
+    assert.match(page, /radio=stock%3AStockRadio/);
+  });
+});
+
+test("a merged page lists the variants it does not speak for", async () => {
+  await withGeneratedPages(({ pages }) => {
+    // A Leixen VV-898E holds 199 channels as stock and 99 as Dual Bank, so a
+    // page stating only the first figure would be wrong for half its readers.
+    const page = pages.get("leixen-vv-898e.html");
+
+    assert.match(page, /199 channels/);
+    assert.match(page, /99 channels/);
+    assert.match(page, /VV-898E \(Dual Bank\)/);
+    assert.match(page, /radio=leixen%3AVV898EDualBank/);
+    // A model with one driver has nothing to disambiguate, so it gets no list.
+    assert.doesNotMatch(pages.get("baofeng-uv-5r.html"), /do you have\?/);
+  });
+});
+
+test("a vendor hub exists per vendor with more than one model, and lists them", async () => {
+  await withGeneratedPages(({ pages }) => {
+    const hub = pages.get("baofeng.html");
+    assert.ok(hub, "no Baofeng hub was generated");
+    assert.match(hub, /<h1>Baofeng programming software<\/h1>/);
+    assert.match(hub, /href="\.\/baofeng-uv-5r\.html"/);
+    assert.match(hub, /href="\.\/index\.html"/, "the hub does not link back to the directory");
+    // Model pages point up at their own vendor's hub, which is what makes the
+    // hub a real level of the site rather than a page only the directory knows.
+    assert.match(pages.get("baofeng-uv-5r.html"), /href="\.\/baofeng\.html">All Baofeng radios/);
+  });
+});
+
+test("the directory links every vendor, and no vendor is stranded", async () => {
+  await withGeneratedPages(async ({ root, pages }) => {
+    const index = pages.get("index.html");
+    const catalog = JSON.parse(
+      await readFile(path.join(root, "web", "radio-catalog.json"), "utf8"),
+    );
+    // Every vendor that got a page must be reachable from the directory in one
+    // click; a vendor whose only route in is the sitemap is a vendor no reader
+    // finds. Vendors are read back off the generated pages rather than off the
+    // catalog, because the catalog also holds the radios that were skipped.
+    const linked = new Set(
+      [...index.matchAll(/<li><a href="\.\/([^"]+)\.html"/g)].map((match) => match[1]),
+    );
+    const reachable = new Set();
+    for (const slug of linked) {
+      const page = pages.get(`${slug}.html`);
+      assert.ok(page, `the directory links ${slug}.html, which was not generated`);
+      if (isListingPage(page)) {
+        for (const match of page.matchAll(/<li><a href="\.\/([^"]+)\.html"/g)) {
+          reachable.add(match[1]);
+        }
+      } else {
+        reachable.add(slug);
+      }
+    }
+
+    const vendors = new Set(catalog.radios.map((radio) => radio.vendor));
+    assert.ok(linked.size > 1, "the directory lists one vendor or none");
+    assert.ok(linked.size <= vendors.size, "the directory lists more vendors than exist");
+    for (const [name, html] of pages) {
+      if (name === "index.html" || isListingPage(html)) {
+        continue;
+      }
+      assert.ok(
+        reachable.has(name.replace(/\.html$/, "")),
+        `${name} is reachable from the sitemap but not from the directory`,
+      );
+    }
+  });
+});
+
+test("a vendor with a single model gets no hub of its own", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // A hub holding one link repeats that model page's subject, so the two
+    // would compete for the same search with the hub carrying less. The
+    // directory links straight to the model page instead.
+    await stageFixture(root, {
+      radios: [fixtureRadio({ vendor: "Solo", model: "One" })],
+      features: { "alpha:AlphaRadio": FEATURES },
+    });
+    await runGenerator(root);
+    const written = await readdir(path.join(root, "web", "radios"));
+
+    assert.deepEqual(written.sort(), ["index.html", "solo-one.html"]);
+    const index = await readFile(path.join(root, "web", "radios", "index.html"), "utf8");
+    assert.match(index, /href="\.\/solo-one\.html"/);
+    assert.match(
+      await readFile(path.join(root, "web", "radios", "solo-one.html"), "utf8"),
+      /href="\.\/index\.html">All supported radios/,
+    );
+  });
+});
+
+test("a vendor whose slug collides with a model page fails the build", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // Hubs and model pages share one flat directory, so "Retevis RT5" as a
+    // model of Acme and "Acme Retevis" as a vendor would both want
+    // acme-retevis.html. Nothing in the catalog does this today; the build
+    // fails rather than letting one silently overwrite the other.
+    await stageFixture(root, {
+      radios: [
+        fixtureRadio({ vendor: "Acme", model: "Retevis" }),
+        fixtureRadio({ key: "beta:BetaRadio", vendor: "Acme Retevis", model: "One" }),
+        fixtureRadio({ key: "gamma:GammaRadio", vendor: "Acme Retevis", model: "Two" }),
+      ],
+      features: {
+        "alpha:AlphaRadio": FEATURES,
+        "beta:BetaRadio": FEATURES,
+        "gamma:GammaRadio": FEATURES,
+      },
     });
 
-    await assert.rejects(runGenerator(root), /slug to baofeng-uv-5r/);
+    await assert.rejects(runGenerator(root), /both want acme-retevis\.html/);
   });
 });
 
