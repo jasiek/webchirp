@@ -1817,9 +1817,16 @@ button:disabled {
   display: none;
 }
 
+/* Three fixed columns rather than as many 130px ones as fit: the control
+   column of a 560px modal only ever fitted two, which turned the seven RSGB
+   bands into four rows and the six modes into three, and those seven rows are
+   height the map preview below them needs. Every option here is a short token
+   ("70cm", "dstar"), so a third of the column is room enough, and fixing the
+   count keeps the two groups in the same grid whatever a directory's
+   dictionary happens to list. */
 .modal-modes {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.35rem 0.55rem;
 }
 
