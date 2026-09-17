@@ -1,5 +1,6 @@
 import { errorSummary } from "./format.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
+import { normalizeSettingValue } from "./setting-values.js";
 import { isStaleRadioLoad, nextRadioLoadToken, requireRuntimeApi } from "./state.js";
 
 // Radio-wide settings: the tabbed editor, its per-value validation, and the
@@ -97,86 +98,12 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     return out;
   }
 
-  function normalizeRadioSettingValue(meta, rawValue, previousValue) {
-    const type = String(meta?.type || "");
-    if (meta?.mutable === false) {
-      return { value: previousValue, error: "" };
-    }
-
-    if (type === "boolean") {
-      return { value: Boolean(rawValue), error: "" };
-    }
-
-    if (type === "enum") {
-      const options = Array.isArray(meta?.options) ? meta.options.map(String) : [];
-      const candidate = String(rawValue ?? "");
-      if (options.length > 0 && !options.includes(candidate)) {
-        return { value: previousValue, error: "Select one of the supported values." };
-      }
-      return { value: candidate, error: "" };
-    }
-
-    if (type === "integer") {
-      const parsed = Number.parseInt(String(rawValue ?? "").trim(), 10);
-      if (!Number.isInteger(parsed)) {
-        return { value: rawValue, error: "Enter an integer." };
-      }
-      if (Number.isFinite(meta.min) && parsed < Number(meta.min)) {
-        return { value: parsed, error: `Value must be at least ${meta.min}.` };
-      }
-      if (Number.isFinite(meta.max) && parsed > Number(meta.max)) {
-        return { value: parsed, error: `Value must be at most ${meta.max}.` };
-      }
-      if (Number.isFinite(meta.step) && Number(meta.step) > 1) {
-        const base = Number.isFinite(meta.min) ? Number(meta.min) : 0;
-        if ((parsed - base) % Number(meta.step) !== 0) {
-          return { value: parsed, error: `Value must increment by ${meta.step}.` };
-        }
-      }
-      return { value: parsed, error: "" };
-    }
-
-    if (type === "float") {
-      const parsed = Number.parseFloat(String(rawValue ?? "").trim());
-      if (!Number.isFinite(parsed)) {
-        return { value: rawValue, error: "Enter a number." };
-      }
-      if (Number.isFinite(meta.min) && parsed < Number(meta.min)) {
-        return { value: parsed, error: `Value must be at least ${meta.min}.` };
-      }
-      if (Number.isFinite(meta.max) && parsed > Number(meta.max)) {
-        return { value: parsed, error: `Value must be at most ${meta.max}.` };
-      }
-      return { value: parsed, error: "" };
-    }
-
-    if (type === "string") {
-      const text = String(rawValue ?? "");
-      if (Number.isFinite(meta.minLength) && text.length < Number(meta.minLength)) {
-        return { value: text, error: `Value must be at least ${meta.minLength} characters.` };
-      }
-      if (Number.isFinite(meta.maxLength) && text.length > Number(meta.maxLength)) {
-        return { value: text, error: `Value must be at most ${meta.maxLength} characters.` };
-      }
-      if (meta.charset) {
-        const allowed = new Set(String(meta.charset).split(""));
-        const invalidChar = text.split("").find((ch) => !allowed.has(ch));
-        if (invalidChar) {
-          return { value: text, error: `Character ${JSON.stringify(invalidChar)} is not allowed.` };
-        }
-      }
-      return { value: text, error: "" };
-    }
-
-    return { value: rawValue, error: "" };
-  }
-
   function setSettingValue(settingNode, valueIndex, rawValue) {
     const valueMeta = settingNode?.values?.[valueIndex];
     if (!valueMeta) {
       return;
     }
-    const result = normalizeRadioSettingValue(valueMeta, rawValue, valueMeta.current);
+    const result = normalizeSettingValue(valueMeta, rawValue, valueMeta.current);
     valueMeta.current = result.value;
     const key = settingKey(settingNode.path, valueIndex);
     if (result.error) {
