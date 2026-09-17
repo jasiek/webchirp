@@ -322,6 +322,32 @@ test("a fractional value for an integer extra is rejected", async () => {
   assert.match(document.querySelector("#channel-extra-grid").textContent, /whole number/);
 });
 
+test("a fraction that rounds to a whole number is rejected too", async () => {
+  // The near-miss the exponential test above cannot catch. Number() rounds to
+  // the nearest double before any check sees the value, and the largest double
+  // below 1 is about 0.99999999999999989 -- so ".99999999999999999" arrives as
+  // a genuine 1 and "1.0000000000000000001" as the same. An isInteger check on
+  // that result accepts both, and the channel silently takes a VOX level the
+  // user did not type. The rule has to read the digits instead
+  // (denotesInteger, web/js/ui/setting-values.js).
+  for (const typed of [".99999999999999999", "1.0000000000000000001"]) {
+    const { document, rows } = await boot({
+      getChannelExtra: async () => ({
+        available: true,
+        message: "",
+        fields: [{ name: "voxlevel", label: "VOX level", type: "integer", min: 0, max: 99, mutable: true, current: 3 }],
+      }),
+    });
+    await openExtraModal(document, 0);
+    controlFor(document, "voxlevel").value = typed;
+    await submitModal(document);
+
+    assert.equal(modalIsOpen(document), true, `${typed} should not have saved`);
+    assert.match(document.querySelector("#channel-extra-grid").textContent, /whole number/);
+    assert.equal(rows()[0].__extra.voxlevel, undefined, `${typed} must write nothing`);
+  }
+});
+
 test("focus enters the dialog on open and returns to the button on close", async () => {
   const { document } = await boot({
     // Nothing renders, which is the case that used to leave the keyboard on the

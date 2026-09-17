@@ -1,7 +1,10 @@
 // Pure coercion/validation for radio-wide setting values, driven by the value
 // metadata the Python runtime reports for each CHIRP RadioSetting. Kept apart
 // from web/js/ui/settings-panel.js so the rules can be exercised without a DOM
-// or a loaded image.
+// or a loaded image. denotesInteger is exported because the per-channel extras
+// read integers from their own controls (readSettingControl in
+// web/js/ui/setting-fields.js) and the rule has to be one rule: it was written
+// twice before, and the second copy kept the defect the first had shed.
 
 // A decimal literal, split so the digits can be read without converting: sign,
 // the digits before the point, the digits after it, and the exponent. Anything
@@ -25,7 +28,7 @@ const DECIMAL_LITERAL = /^[+-]?(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/;
 // digit left of the point's new position is all that is left, i.e. every digit
 // at or beyond it is zero. That keeps "1e2" (100) and "1.50e1" (15) while
 // rejecting "1.5" and ".99999999999999999".
-function denotesInteger(text) {
+export function denotesInteger(text) {
   const match = DECIMAL_LITERAL.exec(text);
   if (!match) {
     return false;
