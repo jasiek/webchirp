@@ -1459,9 +1459,31 @@ button:disabled {
 
 /* The query modal stacks two multi-row checkbox lists, which the shared
    0.45rem row gap runs together into one block — Band and Mode need to read as
-   separate groups. */
+   separate groups. They are also why the rows align to the top rather than the
+   shared centre: a centred "Band" floats halfway down three rows of
+   checkboxes, next to nothing in particular, when what it names is the row it
+   starts on. */
 #repeater-query-modal .modal-grid {
   row-gap: 1.1rem;
+  align-items: start;
+}
+
+/* Top-aligned, a label's box starts where the control's does, which puts its
+   text a border and a padding above the text inside the control. This is the
+   control's own 1px + 0.35rem, so the two read as sitting on one line. */
+#repeater-query-modal .modal-field-label {
+  padding-top: calc(0.35rem + 1px);
+}
+
+/* The controls that are not a bordered box: a checkbox row, a lone checkbox,
+   and the fixed country readout all start their content at the top of the
+   grid row, so a label beside one needs no offset to meet it. Named as
+   exceptions rather than listing the boxed controls, because a field added
+   later is far more likely to be another boxed one. */
+#repeater-query-modal .modal-field-label:has(+ .modal-modes),
+#repeater-query-modal .modal-field-label:has(+ input[type="checkbox"]),
+#repeater-query-modal .modal-field-label:has(+ .modal-fixed-value) {
+  padding-top: 0;
 }
 
 /* A driver decides how many extras a channel has -- anytone_iii publishes
@@ -2468,28 +2490,16 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  /* Stacked, every row gap is doing two different jobs: it separates a label
-     from the control it names, and it separates one field from the next. The
-     query modal's 1.1rem is right for the second and three times too much for
-     the first -- a label floating that far above its own box reads as the end
-     of the field above it. So the grid keeps only the label-to-control third,
-     and the labels carry the rest as a top margin, which restores the full
-     1.1rem after each control without widening the gap under it. The map
-     preview follows a control rather than a label, so it takes the same margin
-     to keep the space the range field had under it. */
+  /* The one modal that keeps its label column on a phone. It is also the
+     longest form in the app, and stacking cost it two things per field -- the
+     label's own line, and a row gap between the label and the control it names
+     -- which ran the dialog past a phone screen and a half. Every label here
+     is short enough to sit beside its control in 110px; below that "Only
+     operational" wraps, above it the two coordinate boxes stop fitting their
+     placeholders. The map preview spans both columns either way, so none of
+     this touches it. */
   #repeater-query-modal .modal-grid {
-    row-gap: 0.37rem;
-  }
-
-  #repeater-query-modal .modal-field-label,
-  #repeater-query-modal .modal-map-preview {
-    margin-top: 0.73rem;
-  }
-
-  /* Nothing above the first label but the dialog title, which brings its own
-     margin. */
-  #repeater-query-modal .modal-grid > :first-child {
-    margin-top: 0;
+    grid-template-columns: minmax(0, 110px) minmax(0, 1fr);
   }
 
   /* The extras editor sets its own label column at a specificity the rule above
