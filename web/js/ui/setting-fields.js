@@ -1,3 +1,5 @@
+import { denotesInteger } from "./setting-values.js";
+
 // Controls for the driver-described settings the Python runtime reports as
 // value metadata -- a type, an option list, bounds, a character set -- built by
 // _serialize_setting_value in web/python/webchirp_bridge/radio_settings.py and
@@ -101,7 +103,15 @@ export function readSettingControl(field, control, { rejectUnlistedValue = false
     if (text === "" || !Number.isFinite(parsed)) {
       return { value: null, error: field.type === "integer" ? "Enter a whole number." : "Enter a number." };
     }
-    if (field.type === "integer" && !Number.isInteger(parsed)) {
+    // Whole-ness is decided from the digits rather than from `parsed`, because
+    // Number() rounds to the nearest double on the way: the largest double
+    // below 1 is about 0.99999999999999989, so ".99999999999999999" arrives as
+    // a genuine 1 and an isInteger check on it accepts a fraction as another
+    // in-range extra. Number.isInteger(parsed) is not also tested because
+    // denotesInteger plus the isFinite gate above already imply it -- every
+    // double at or beyond 2^52 is whole, and every whole value below it is
+    // exactly representable.
+    if (field.type === "integer" && !denotesInteger(text)) {
       return { value: parsed, error: "Enter a whole number." };
     }
     if (Number.isFinite(field.min) && parsed < Number(field.min)) {
