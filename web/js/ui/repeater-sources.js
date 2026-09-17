@@ -326,7 +326,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
         // are: picking a place fills latitude, longitude and the locator and
         // recentres the preview, so the two rows below read as the result of
         // this one rather than as something to fill in by hand.
-        { kind: "city", key: "city", label: "City/Locality", placeholder: "e.g. Warszawa" },
+        { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Warszawa" },
         { kind: "position", locatorPlaceholder: "e.g. JO91GG" },
         { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30 },
       ],
@@ -582,7 +582,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
         // are: picking a place fills latitude, longitude and the locator and
         // recentres the preview, so the two rows below read as the result of
         // this one rather than as something to fill in by hand.
-        { kind: "city", key: "city", label: "City/Locality", placeholder: "e.g. Manchester" },
+        { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Manchester" },
         { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
         {
           kind: "number",

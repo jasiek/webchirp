@@ -209,8 +209,8 @@ const PREVIEW_DEBOUNCE_MS = 300;
 // around where it now is and the drag carries on from there.
 const PREVIEW_OVERSCAN = 128;
 // The worked examples in the coordinate placeholders. Manchester, to match the
-// city the City/Locality box uses as its own example, at the four decimal
-// places (about 10 m) the field is worth typing to by hand.
+// place the Place name box uses as its own example, at the four decimal places
+// (about 10 m) the field is worth typing to by hand.
 const LATITUDE_PLACEHOLDER = "Latitude 53.4808";
 const LONGITUDE_PLACEHOLDER = "Longitude -2.2426";
 
@@ -751,7 +751,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   };
 }
 
-// --- City/Locality autocomplete ---------------------------------------------
+// --- Place name autocomplete -------------------------------------------------
 
 // The lookup runs on every keystroke with no debounce: typing leaves 150-250 ms
 // between characters, so a window short enough not to be felt collapses
@@ -789,7 +789,7 @@ function cityLabel(city) {
 // leaves the text alone.
 export function createCityField({
   key = "city",
-  label = "City/Locality",
+  label = "Place name",
   placeholder = "e.g. Manchester",
   initial = {},
   search,

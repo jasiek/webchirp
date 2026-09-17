@@ -85,7 +85,7 @@ export function createRepeaterQuery(ctx) {
   let positionField = null;
   let cityField = null;
   const positionState = { latitudeText: "", longitudeText: "" };
-  // The place the City/Locality box last settled on. Kept for the same reason
+  // What the Place name box last settled on. Kept for the same reason
   // the coordinates are: it is where the user is, which does not change with
   // the directory they ask. Held here rather than in the field because the
   // field is rebuilt on every open.

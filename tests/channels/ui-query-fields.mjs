@@ -787,7 +787,7 @@ test("a queued redraw is not lost to a press that turns out not to be a drag", a
   assert.equal(field.value().longitude, -2.5);
 });
 
-// --- City/Locality autocomplete ---------------------------------------------
+// --- Place name autocomplete -------------------------------------------------
 
 // The lookup fires on the keystroke, so typing only has to outrun the stub's
 // own promise rather than a timer. A macrotask is enough for that and keeps the
@@ -855,7 +855,7 @@ test("city field labels a text input and hides its suggestion list until it has 
   const { field, input, list } = buildCityField();
   const [label, wrapper] = field.nodes;
   assert.equal(label.tagName, "LABEL");
-  assert.equal(label.textContent, "City/Locality");
+  assert.equal(label.textContent, "Place name");
   assert.equal(label.htmlFor, input.id);
   assert.equal(wrapper.className, "modal-city-field");
   assert.equal(input.type, "text");

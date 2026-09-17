@@ -94,7 +94,7 @@ function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
       apiUrl: `${irtsBase}/irts`,
       metaUrl: `${irtsBase}/irts/meta`,
     },
-    // The gazetteer behind the City/Locality autocomplete. It follows the IRTS
+    // The gazetteer behind the Place name autocomplete. It follows the IRTS
     // rule rather than the proxy rule: it is a first-party api.codeplug.org
     // route and it is not a directory at all -- it only turns a place name into
     // the coordinate pair every source already filters by -- so a deployment

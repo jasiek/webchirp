@@ -1662,7 +1662,7 @@ button:disabled {
   line-height: 1;
 }
 
-/* The City/Locality autocomplete (web/js/ui/query-fields.js): a text box with
+/* The Place name autocomplete (web/js/ui/query-fields.js): a text box with
    a suggestion list that overlays the fields under it. Positioned rather than
    in flow, so a list that appears on a keystroke does not shove Latitude,
    Longitude and the map down the card mid-type. */

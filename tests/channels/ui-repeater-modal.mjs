@@ -1502,7 +1502,7 @@ test("a request answering inside the deadline is unaffected by it", async (t) =>
   assert.equal(table.inserted.length, 1);
 });
 
-// --- City/Locality across opens ---------------------------------------------
+// --- Place name across opens -------------------------------------------------
 
 const KRAKOW_JSON = JSON.stringify({
   query: "krak",
@@ -1517,7 +1517,7 @@ const KRAKOW_JSON = JSON.stringify({
   }],
 });
 
-// Type into the City/Locality box and take the top suggestion the way a user
+// Type into the Place name box and take the top suggestion the way a user
 // leaving the field does. The lookup fires on the keystroke, so the only wait
 // is for the stubbed fetch to settle.
 async function pickCity(dom, text) {
