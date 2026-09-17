@@ -3,19 +3,53 @@
 // from web/js/ui/settings-panel.js so the rules can be exercised without a DOM
 // or a loaded image.
 
-// Parse an integer setting's text without letting a prefix parse stand in for
-// validation. Number.parseInt stops at the first character it cannot use, so
-// "1.5" becomes 1 and "1e2" becomes 1 -- both then pass an isInteger check and
-// the range checks run on a number the user never typed, which on a small
-// range like Squelch Level 0-9 is another value the radio would accept
-// (issue #116). Number() either consumes the whole string or yields NaN, which
-// is what makes Number.isInteger a real test of the input. Blank is rejected up
-// front because Number("") is 0. The per-channel driver settings reached the
-// same conclusion for their own controls -- see readSettingControl in
-// web/js/ui/setting-fields.js.
+// A decimal literal, split so the digits can be read without converting: sign,
+// the digits before the point, the digits after it, and the exponent. Anything
+// else (hex, "Infinity", stray characters) fails to match and is not a number
+// the user could have typed into a number input anyway.
+const DECIMAL_LITERAL = /^[+-]?(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/;
+
+// Does this text denote a whole number exactly? Decided from the digits
+// themselves, because every check that runs after a conversion is a check on
+// the conversion rather than on the input -- the mistake this function exists
+// to avoid, twice over. Number.parseInt stops at the first character it cannot
+// use, so "1.5" and "1e2" both become 1, and an isInteger check on that result
+// can never reject anything (issue #116). Number() consumes the whole string
+// but rounds to the nearest double first, so ".99999999999999999" arrives as a
+// genuine 1 and passes the same check. Either way the min/max/step checks then
+// run on a number the user never typed, and on a small range like Squelch
+// Level 0-9 the wrong value is one the radio accepts, so nothing looks amiss.
+//
+// Reading the digits sidesteps both. The decimal point starts after the
+// leading digits and the exponent moves it; the value is whole when every
+// digit left of the point's new position is all that is left, i.e. every digit
+// at or beyond it is zero. That keeps "1e2" (100) and "1.50e1" (15) while
+// rejecting "1.5" and ".99999999999999999".
+function denotesInteger(text) {
+  const match = DECIMAL_LITERAL.exec(text);
+  if (!match) {
+    return false;
+  }
+  const [, whole = "", fraction = "", exponent = "0"] = match;
+  const digits = whole + fraction;
+  if (!digits) {
+    return false;
+  }
+  const pointIndex = whole.length + Number(exponent);
+  return digits
+    .slice(Math.max(pointIndex, 0))
+    .split("")
+    .every((digit) => digit === "0");
+}
+
+// Read an integer setting's text. Blank is rejected up front because Number("")
+// is 0, and the Number.isInteger check still stands behind denotesInteger to
+// catch a literal that overflows to Infinity ("1e400"). The per-channel driver
+// settings reached the same conclusion for their own controls -- see
+// readSettingControl in web/js/ui/setting-fields.js.
 function parseIntegerInput(rawValue) {
   const text = String(rawValue ?? "").trim();
-  if (!text) {
+  if (!text || !denotesInteger(text)) {
     return Number.NaN;
   }
   return Number(text);

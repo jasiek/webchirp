@@ -27,6 +27,35 @@ test("exponent notation is read whole, not as its leading digit", () => {
   );
 });
 
+test("a fraction that rounds to a whole double is still rejected", () => {
+  // Number(".99999999999999999") is exactly 1 -- the largest double below 1 is
+  // about 0.99999999999999989, so the literal rounds up and reaches
+  // Number.isInteger as a genuine integer. Deciding from the digits is what
+  // catches it; converting first cannot.
+  for (const raw of [".99999999999999999", "0.99999999999999999", "1.0000000000000000001"]) {
+    assert.deepEqual(
+      normalizeSettingValue(WIDE_INTEGER, raw, 1),
+      { value: raw, error: "Enter an integer." },
+    );
+  }
+});
+
+test("a fraction the exponent cancels out is a whole number", () => {
+  // The point moves, so 1.50e1 denotes 15 exactly and is not a fractional
+  // entry at all. Rejecting every string containing a "." would be the easy
+  // over-correction here.
+  assert.deepEqual(normalizeSettingValue(WIDE_INTEGER, "1.50e1", 1), { value: 15, error: "" });
+  assert.deepEqual(normalizeSettingValue(SQUELCH, "0.0", 3), { value: 0, error: "" });
+});
+
+test("a literal a number input could not produce is rejected", () => {
+  // Hex and an overflowing exponent both survive Number() as a finite or
+  // infinite value; neither is something the control can hand over.
+  for (const raw of ["0x10", "1e400", "1,5"]) {
+    assert.equal(normalizeSettingValue(WIDE_INTEGER, raw, 1).error, "Enter an integer.");
+  }
+});
+
 test("an integer entry with trailing text is rejected", () => {
   assert.deepEqual(
     normalizeSettingValue(SQUELCH, "5abc", 3),
