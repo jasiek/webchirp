@@ -933,6 +933,42 @@ function installGatedRsgbFetch(bySquare) {
   return { calls, release: () => openGate() };
 }
 
+// installGatedRsgbFetch() with an escape hatch: the RSGB square requests wait
+// on the gate, but a URL matching one of the routes (a directory's /meta, say)
+// answers straight away. That is what it takes to open a *different* directory
+// while an RSGB query is still in flight.
+function installGatedRsgbFetchExcept(bySquare, routes) {
+  const calls = [];
+  let openGate;
+  const gate = new Promise((resolve) => {
+    openGate = resolve;
+  });
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: async (url, init) => {
+      const text = String(url);
+      calls.push({ url: text, init });
+      const route = routes.find((entry) => text.includes(entry.match));
+      if (route) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => route.body ?? "",
+          json: async () => JSON.parse(route.body ?? "null"),
+        };
+      }
+      await gate;
+      const square = text.split("/").pop();
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: bySquare[square] ?? null }),
+      };
+    },
+  });
+  return { calls, release: () => openGate() };
+}
+
 // installGatedRsgbFetch()'s general-purpose sibling: every request is held open
 // until the test releases it, whatever the URL, so a source can be caught with
 // its dictionary still loading.
@@ -1393,6 +1429,45 @@ test("a second submit while a query is in flight is ignored, not duplicated", as
   assert.equal(calls.length, 2, "the second submit must not reach the network");
   assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "the button comes back for the next query");
   assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API");
+});
+
+test("a cancelled query cannot insert into, or close, the directory opened next", async () => {
+  const { dom, log, table } = buildHarness();
+  installGeolocation(LONDON);
+  const { release } = installGatedRsgbFetchExcept({
+    IO91: [repeaterRecord({ id: 1, repeater: "GB3XP", tx: 145687500, rx: 145087500, locator: "IO91VJ" })],
+  }, [{ match: "/przemienniki/meta", body: META_JSON }]);
+
+  await openRsgb(dom);
+  await geolocateButton(dom).dispatch("click");
+  // Not awaited: the RSGB fan-out is suspended on the gate, which is the
+  // several seconds a real one takes.
+  const pending = dom.repeaterQueryFormEl.dispatch("submit");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true, "the query is running");
+
+  await dom.repeaterQueryCancelEl.dispatch("click");
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "cancelling gives the button back");
+  assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API");
+
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.equal(dom.repeaterQueryTitleEl.textContent, "Query przemienniki.net");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "the new directory's query is runnable");
+
+  release();
+  await pending;
+
+  assert.deepEqual(table.inserted, [], "the cancelled directory's repeaters must not reach the grid");
+  assert.equal(
+    dom.repeaterQueryModalEl.classList.contains("hidden"),
+    false,
+    "the cancelled query must not close the modal that replaced it",
+  );
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API");
+  assert.deepEqual(log.errors, []);
+  // Dropped rows are still accounted for where diagnostics belong.
+  assert.match(log.debug.join("\n"), /^RSGB DISCARDED 1 row\(s\): the query was abandoned$/m);
 });
 
 // --- Request deadline --------------------------------------------------------

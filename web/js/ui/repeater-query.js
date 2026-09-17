@@ -102,6 +102,13 @@ export function createRepeaterQuery(ctx) {
   // twice. An RSGB fan-out over 24 squares takes seconds, so the window is
   // wide enough to hit by double-clicking.
   let queryInFlight = false;
+  // Bumped every time the modal is closed or rebuilt for another directory.
+  // A submission captures it and compares before it touches anything, because
+  // queryInFlight alone belongs to no particular modal: cancelling a slow
+  // query used to leave the next directory's button stuck on "Querying...",
+  // and the abandoned query then inserted its own directory's repeaters and
+  // slammed that modal shut over them.
+  let querySubmission = 0;
   const submitIdleLabel = dom.repeaterQuerySubmitEl.textContent || "Query API";
 
   // Mark the query busy: the flag is what actually rejects a re-entrant
@@ -112,6 +119,16 @@ export function createRepeaterQuery(ctx) {
     queryInFlight = busy;
     dom.repeaterQuerySubmitEl.disabled = busy;
     dom.repeaterQuerySubmitEl.textContent = busy ? "Querying..." : submitIdleLabel;
+  }
+
+  // Disown whatever query is in flight: the modal it was started from is gone
+  // or has become another directory's, so its rows and its status messages
+  // belong to nothing on screen. The button is freed here rather than being
+  // left to the abandoned submission, whose own release is now guarded and may
+  // arrive seconds later -- or, for a request that never answers, never.
+  function abandonQuery() {
+    querySubmission += 1;
+    setQueryBusy(false);
   }
 
   // A city was committed in the autocomplete: its coordinates become the
@@ -335,6 +352,7 @@ export function createRepeaterQuery(ctx) {
     } else {
       // Nothing in flight may land on a closed modal, or on the next one.
       previewGeneration += 1;
+      abandonQuery();
       if (previewTimer) {
         clearTimeout(previewTimer);
         previewTimer = 0;
@@ -363,6 +381,10 @@ export function createRepeaterQuery(ctx) {
         return;
       }
     }
+    // The modal is about to become this source's, so a query still running
+    // for the previous one loses its claim on it -- including on the submit
+    // button, which the user needs back for the directory they just opened.
+    abandonQuery();
     activeSource = source;
     buildFields(source, loadedOptions);
     dom.repeaterQueryTitleEl.textContent = source.title;
@@ -478,13 +500,27 @@ export function createRepeaterQuery(ctx) {
       // still in flight, and openModal() reassigns activeSource when they do.
       // Every line below has to keep meaning the source the query started on.
       const source = activeSource;
+      // The modal instance this submission belongs to. Everything below runs
+      // after an await, by which time Cancel or another directory may own the
+      // modal; only the submission that still matches may write to the grid,
+      // close the modal or release the button. runQuery() is handed the same
+      // test because it is where the rows are inserted, well before it returns.
+      const submission = querySubmission;
+      const isCurrent = () => submission === querySubmission;
       try {
         if (!state.currentHeaders.length) {
           log.setStatus("No channel schema loaded yet.");
           setModalOpen(false);
           return;
         }
-        await source.runQuery(collectValues());
+        await source.runQuery(collectValues(), { isCurrent });
+        if (!isCurrent()) {
+          // Nothing to report: the rows were dropped inside runQuery() and the
+          // user is looking at a modal that never asked for them. The debug
+          // panel still says it happened.
+          log.logDebug(`${source.actionLabel.toUpperCase()} QUERY ABANDONED (modal closed or replaced)`);
+          return;
+        }
         recordFlow(FLOWS.REPEATER_QUERY, OUTCOMES.OK, { repeater_source: source.key });
         setModalOpen(false);
       } catch (error) {
@@ -498,6 +534,13 @@ export function createRepeaterQuery(ctx) {
         // nothing was requested, there is nothing wrong with the directory, and
         // the user can fix it in the box in front of them. Counting those as
         // failures is what would have an alert firing over a missing location.
+        // A failure the user walked away from is not theirs to read:
+        // reportActionError writes the status line, which now describes the
+        // modal they opened instead. Keep the traceback in the debug panel.
+        if (!isCurrent()) {
+          log.logDebug(`${source.actionLabel.toUpperCase()} QUERY ABANDONED (${error?.stack || error?.message || error})`);
+          return;
+        }
         const blocked = error instanceof RepeaterInputError;
         recordFlow(FLOWS.REPEATER_QUERY, blocked ? OUTCOMES.BLOCKED : OUTCOMES.FAILED, {
           repeater_source: source.key,
@@ -506,7 +549,11 @@ export function createRepeaterQuery(ctx) {
         });
         log.reportActionError(`${source.actionLabel} query`, error);
       } finally {
-        setQueryBusy(false);
+        // Only for the modal this submission still owns: abandonQuery() has
+        // already freed the button, and a later query may be using it.
+        if (isCurrent()) {
+          setQueryBusy(false);
+        }
       }
     });
   }

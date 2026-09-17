@@ -359,7 +359,11 @@ export function createRepeaterSources(ctx, { endpoints }) {
         return optionsPromise;
       },
       previewQuery: (values) => previewRemote(values),
-      runQuery: async (values) => {
+      // isCurrent() reports whether the modal this query was submitted from is
+      // still the one on screen; web/js/ui/repeater-query.js bumps it on close
+      // and on opening another directory. It is asked here, not only back in
+      // the caller, because the rows are inserted before this resolves.
+      runQuery: async (values, { isCurrent = () => true } = {}) => {
         const country = String(values.country || "").trim().toLowerCase();
         const url = buildQueryUrl(values, values.radius);
         log.setStatus(`Querying ${label}...`);
@@ -383,6 +387,16 @@ export function createRepeaterSources(ctx, { endpoints }) {
         for (const entry of skipped) {
           log.logDebug(`${actionLabel.toUpperCase()} SKIPPED ${entry.repeater} (${skippedReason(entry)})`);
         }
+        log.logDebug(`${actionLabel.toUpperCase()} QUERY ${url.toString()}`);
+        log.logDebug(`${actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length} fetched, ${rows.length} inserted`);
+        // Cancelled, or another directory was opened while this was in flight:
+        // these are the wrong directory's repeaters for the form now on
+        // screen, so they are dropped rather than written into the grid. The
+        // two lines above still say what came back.
+        if (!isCurrent()) {
+          log.logDebug(`${actionLabel.toUpperCase()} DISCARDED ${rows.length} row(s): the query was abandoned`);
+          return;
+        }
         ctx.table.insertRowsAtSelectionOrEnd(rows, insertLabel);
         // result_count is the point of this event: a query that returns
         // nothing means the filters or the proxy are wrong, and today that is
@@ -394,8 +408,6 @@ export function createRepeaterSources(ctx, { endpoints }) {
           located: values.position ? "yes" : "no",
           result_count: parsed.repeaters.length,
         });
-        log.logDebug(`${actionLabel.toUpperCase()} QUERY ${url.toString()}`);
-        log.logDebug(`${actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length} fetched, ${rows.length} inserted`);
         if (skipped.length > 0) {
           log.setStatus(`Inserted ${rows.length} channel(s); skipped ${skippedDetail(skipped)}.`);
         }
@@ -596,7 +608,9 @@ export function createRepeaterSources(ctx, { endpoints }) {
       ],
       loadOptions: null,
       previewQuery: (values) => previewRsgb(values),
-      runQuery: async (values) => {
+      // See the remote directory source above: isCurrent() is the test for
+      // whether the modal that submitted this query is still on screen.
+      runQuery: async (values, { isCurrent = () => true } = {}) => {
         const position = values.position;
         if (!position) {
           throw new RepeaterInputError("Set a location first: use the 🛰️ button or type a latitude and longitude.");
@@ -654,6 +668,13 @@ export function createRepeaterSources(ctx, { endpoints }) {
         // saying out loud, or it reads as results going missing.
         for (const entry of skipped) {
           log.logDebug(`RSGB SKIPPED ${entry.repeater} (${skippedReason(entry)})`);
+        }
+        // As in the remote directory source: a query the user cancelled, or
+        // one left behind by opening another directory, must not insert its
+        // rows into the form that replaced it.
+        if (!isCurrent()) {
+          log.logDebug(`RSGB DISCARDED ${rows.length} row(s): the query was abandoned`);
+          return;
         }
         ctx.table.insertRowsAtSelectionOrEnd(rows, "RSGB ETCC");
         // result_count is the point of this event: a query that returns
