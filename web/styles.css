@@ -2468,6 +2468,30 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* Stacked, every row gap is doing two different jobs: it separates a label
+     from the control it names, and it separates one field from the next. The
+     query modal's 1.1rem is right for the second and three times too much for
+     the first -- a label floating that far above its own box reads as the end
+     of the field above it. So the grid keeps only the label-to-control third,
+     and the labels carry the rest as a top margin, which restores the full
+     1.1rem after each control without widening the gap under it. The map
+     preview follows a control rather than a label, so it takes the same margin
+     to keep the space the range field had under it. */
+  #repeater-query-modal .modal-grid {
+    row-gap: 0.37rem;
+  }
+
+  #repeater-query-modal .modal-field-label,
+  #repeater-query-modal .modal-map-preview {
+    margin-top: 0.73rem;
+  }
+
+  /* Nothing above the first label but the dialog title, which brings its own
+     margin. */
+  #repeater-query-modal .modal-grid > :first-child {
+    margin-top: 0;
+  }
+
   /* The extras editor sets its own label column at a specificity the rule above
      cannot reach, so it needs its own override or it keeps two columns -- a
      220px label beside a squeezed control -- on a phone. */

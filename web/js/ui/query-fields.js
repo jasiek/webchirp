@@ -27,8 +27,16 @@ function fieldId(key, suffix = "") {
   return `${FIELD_ID_PREFIX}${key}${suffix ? `-${suffix}` : ""}`;
 }
 
+// Every field's label carries this class, whichever element it is built from,
+// so the stacked phone layout can put the gap between fields on the labels and
+// leave a label sitting close to the control it names (see the max-width: 560px
+// block in web/styles.css). A selector cannot do the job on its own: a label is
+// a <label> when it has a control to point at and a <span> when it does not.
+const FIELD_LABEL_CLASS = "modal-field-label";
+
 function labelledBy(text, controlId) {
   const label = document.createElement("label");
+  label.className = FIELD_LABEL_CLASS;
   label.htmlFor = controlId;
   label.textContent = text;
   return label;
@@ -36,6 +44,7 @@ function labelledBy(text, controlId) {
 
 function plainLabel(text) {
   const span = document.createElement("span");
+  span.className = FIELD_LABEL_CLASS;
   span.textContent = text;
   return span;
 }
