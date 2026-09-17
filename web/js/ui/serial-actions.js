@@ -412,8 +412,24 @@ export function createSerialActions(ctx) {
     ]);
     const result = rowResult;
     const settingsValidation = settingsResult
-      || { valid: true, issues: [], settings: ctx.settings.getGroups() };
-    ctx.settings.setGroups(settingsValidation.settings);
+      || { valid: true, issues: [], settings: ctx.settings.getGroups(), available: true };
+    // Take the runtime's tree only when it actually checked the settings and
+    // accepted every value. It answers available=false with an empty list when
+    // it could not check them at all -- and valid=true with it, so an
+    // unreadable settings tree never blocks an upload of channels alone -- and
+    // on a rejected value the tree it returns still holds the radio's pre-edit
+    // value there, because the set_value that failed never took. Overwriting
+    // with either loses what the user typed; with the second it would also
+    // mark the field invalid while showing the old value, leaving Upload
+    // blocked until the user edits a field that already looks correct.
+    if (settingsValidation.available !== false && settingsValidation.valid) {
+      ctx.settings.setGroups(settingsValidation.settings);
+    } else if (settingsValidation.available === false) {
+      log.logDebug(
+        `PREFLIGHT SETTINGS UNCHECKED ${settingsValidation.message || "runtime returned no settings"}`
+          + (settingsValidation.error ? ` (${settingsValidation.error})` : ""),
+      );
+    }
     ctx.settings.ensureActiveTab();
     ctx.settings.clearInvalid();
     ctx.settings.applyValidationIssues(settingsValidation.issues);

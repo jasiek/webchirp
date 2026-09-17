@@ -404,10 +404,21 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     applyValidationIssues,
     invalidCount: () => invalidKeys.size,
     getGroups: () => settingsState.groups,
-    // Replace the settings tree, falling back to the current groups when the
-    // runtime returns nothing (upload/export echo the settings back).
+    // Replace the settings tree with a runtime echo -- upload, export and the
+    // upload preflight all send the edited tree and get one back -- keeping the
+    // current groups when the runtime returns nothing. An empty list is not an
+    // empty settings tree: it is how the runtime reports settings it could not
+    // check at all (no cached image, a driver without has_settings, or a
+    // get_settings() that raised, in
+    // web/python/webchirp_bridge/radio_settings.py), so taking it literally
+    // would throw away the edits the user is in the middle of uploading and
+    // leave the Radio Settings tab disabled. Reports whether it replaced them.
     setGroups(groups) {
-      settingsState.groups = cloneGroups(groups || settingsState.groups);
+      if (!Array.isArray(groups) || groups.length === 0) {
+        return false;
+      }
+      settingsState.groups = cloneGroups(groups);
+      return true;
     },
     // Wholesale replacement after a download or image load, where the settings
     // come from the image rather than a driver probe.
