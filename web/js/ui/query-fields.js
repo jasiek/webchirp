@@ -199,31 +199,37 @@ const PREVIEW_DEBOUNCE_MS = 300;
 // tile traffic every render costs. Past it the drag rebases: the map redraws
 // around where it now is and the drag carries on from there.
 const PREVIEW_OVERSCAN = 128;
+// The worked examples in the coordinate placeholders. Manchester, to match the
+// city the City/Locality box uses as its own example, at the four decimal
+// places (about 10 m) the field is worth typing to by hand.
+const LATITUDE_PLACEHOLDER = "Latitude 53.4808";
+const LONGITUDE_PLACEHOLDER = "Longitude -2.2426";
+
 // A drag has to beat this before it counts as one. Below it, a press is a
 // click with a shaky hand, and moving the location under it would make the map
 // impossible to merely look at.
 const PREVIEW_DRAG_SLOP = 3;
 
-// Latitude + geolocate button, longitude, and a Maidenhead locator. The
-// locator is a two-way alternative way to enter the position, not a filter of
-// its own — every source's query consumes only the coordinate pair. Editing
-// one side rewrites the other; the rewrites are programmatic value
-// assignments, which fire no input events, so the two handlers cannot feed
-// back into each other.
+// A latitude/longitude pair on one row, and a Maidenhead locator sharing its
+// row with the geolocate and clear buttons. The locator is a two-way
+// alternative way to enter the position, not a filter of its own — every
+// source's query consumes only the coordinate pair. Editing one side rewrites
+// the other; the rewrites are programmatic value assignments, which fire no
+// input events, so the two handlers cannot feed back into each other.
 //
 // `onChange(latitudeText, longitudeText)` fires whenever the coordinate texts
 // change (typing, locator edits, setPosition), so the modal shell can persist
 // the position across opens — the one part of the form that does survive a
 // close.
 //
-// Under the three inputs sits a static OSM map of whatever position they
-// currently hold, so a mistyped digit or a locator from the wrong square is
-// visible before the query runs rather than after a hundred repeaters from the
-// wrong country land in the grid. It is a fourth way *into* the position as
-// well as a picture of it: dragging the map moves the coordinates under the
-// marker, which stays pinned to the centre. `onPan()` fires once per drag that
-// actually moved, so the shell can count it the way it counts geolocation —
-// where the drag ended up is not reported.
+// Below the last field in the form (see `tailNodes`) sits a static OSM map of
+// whatever position the inputs hold, so a mistyped digit or a locator from the
+// wrong square is visible before the query runs rather than after a hundred
+// repeaters from the wrong country land in the grid. It is a fourth way *into*
+// the position as well as a picture of it: dragging the map moves the
+// coordinates under the marker, which stays pinned to the centre. `onPan()`
+// fires once per drag that actually moved, so the shell can count it the way
+// it counts geolocation — where the drag ended up is not reported.
 export function createPositionField({ key = "position", locatorPlaceholder, initial = {}, onChange, onPan } = {}) {
   const latitude = document.createElement("input");
   latitude.id = fieldId(key, "latitude");
@@ -231,6 +237,15 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   latitude.type = "number";
   latitude.step = "any";
   latitude.value = String(initial.latitudeText ?? "");
+  // The two coordinate boxes share one "Coordinates" label, so each names
+  // itself in its own placeholder -- the word plus a worked example, because
+  // the example alone ("53.4808") does not say which half of the pair it is.
+  // The example is a signed decimal and not a hemisphere letter for the same
+  // reason: that is what the field accepts, and "2.2426 W" typed literally
+  // into a number input is a position in Russia.
+  latitude.placeholder = LATITUDE_PLACEHOLDER;
+  latitude.setAttribute("aria-label", "Latitude");
+  latitude.title = "Latitude";
 
   const longitude = document.createElement("input");
   longitude.id = fieldId(key, "longitude");
@@ -238,6 +253,15 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   longitude.type = "number";
   longitude.step = "any";
   longitude.value = String(initial.longitudeText ?? "");
+  longitude.placeholder = LONGITUDE_PLACEHOLDER;
+  longitude.setAttribute("aria-label", "Longitude");
+  longitude.title = "Longitude";
+
+  // One row, two equal boxes (see .modal-coord-row in web/styles.css).
+  const coordRow = document.createElement("div");
+  coordRow.className = "modal-coord-row";
+  coordRow.appendChild(latitude);
+  coordRow.appendChild(longitude);
 
   const locator = document.createElement("input");
   locator.id = fieldId(key, "locator");
@@ -662,14 +686,17 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   return {
     key,
     nodes: [
-      labelledBy("Latitude", latitude.id),
-      latitude,
-      labelledBy("Longitude", longitude.id),
-      longitude,
+      labelledBy("Coordinates", latitude.id),
+      coordRow,
       labelledBy("Locator", locator.id),
       geoRow,
-      preview,
     ],
+    // Appended after every other field rather than in place (see buildFields in
+    // web/js/ui/repeater-query.js). The preview draws the whole query -- the
+    // position, and the range circle a later field supplies -- so a range
+    // control below the picture of itself was the one field the user had to
+    // scroll past the map to reach.
+    tailNodes: [preview],
     focusTarget: latitude,
     refreshPreview,
     // The range filter is a sibling field, so the shell hands its value over

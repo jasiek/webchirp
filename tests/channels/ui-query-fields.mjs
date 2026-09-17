@@ -159,11 +159,14 @@ function buildPositionField(config = {}) {
     onPan: () => pans.push(true),
     ...config,
   });
-  const [, latitude, , longitude, , geoRow, preview] = field.nodes;
+  const [, coordRow, , geoRow] = field.nodes;
+  const [preview] = field.tailNodes;
+  const [latitude, longitude] = coordRow.children;
   const locator = geoRow.children[0];
   const [previewCanvas, previewEmpty, previewCount, previewAttribution] = preview.children;
   return {
     field,
+    coordRow,
     latitude,
     longitude,
     locator,
@@ -232,6 +235,30 @@ test("position field renders the locator row with the geolocate and clear button
   assert.equal(locator.placeholder, "e.g. JO91GG");
   assert.equal(locator.maxLength, 8);
   assert.equal(field.focusTarget, latitude);
+});
+
+test("latitude and longitude share one labelled row and name themselves", () => {
+  const { field, coordRow, latitude, longitude } = buildPositionField();
+  const [coordLabel] = field.nodes;
+  assert.equal(coordLabel.tagName, "LABEL");
+  assert.equal(coordLabel.textContent, "Coordinates");
+  assert.equal(coordLabel.htmlFor, latitude.id);
+  // One row holding both boxes and nothing else: the row is what keeps the
+  // pair on a single grid line under the single label above.
+  assert.equal(coordRow.className, "modal-coord-row");
+  assert.deepEqual(coordRow.children, [latitude, longitude]);
+  // With no per-box label left, the placeholder is the only thing that says
+  // which half is which, so it has to carry the word and not just an example.
+  assert.match(latitude.placeholder, /^Latitude /);
+  assert.match(longitude.placeholder, /^Longitude /);
+  assert.equal(latitude.getAttribute("aria-label"), "Latitude");
+  assert.equal(longitude.getAttribute("aria-label"), "Longitude");
+  // The examples have to be a position the field would accept, or the hint
+  // teaches a format value() refuses.
+  const latitudeExample = Number(latitude.placeholder.replace("Latitude ", ""));
+  const longitudeExample = Number(longitude.placeholder.replace("Longitude ", ""));
+  assert.ok(Number.isFinite(latitudeExample) && Math.abs(latitudeExample) <= 90);
+  assert.ok(Number.isFinite(longitudeExample) && Math.abs(longitudeExample) <= 180);
 });
 
 test("the clear button wipes all three fields and notifies onChange", async () => {

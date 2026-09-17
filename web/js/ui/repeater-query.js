@@ -145,6 +145,11 @@ export function createRepeaterQuery(ctx) {
     fieldInstances = [];
     positionField = null;
     cityField = null;
+    // Nodes a field wants at the foot of the grid rather than at its own place
+    // in the config order. Only the position field's map preview uses this: it
+    // pictures the whole query, range circle included, so it belongs after the
+    // range control and not above it.
+    const tailNodes = [];
     for (const config of source.fields) {
       let instance;
       if (config.kind === "city") {
@@ -198,7 +203,11 @@ export function createRepeaterQuery(ctx) {
       for (const node of instance.nodes) {
         dom.repeaterQueryGridEl.appendChild(node);
       }
+      tailNodes.push(...(instance.tailNodes || []));
       fieldInstances.push(instance);
+    }
+    for (const node of tailNodes) {
+      dom.repeaterQueryGridEl.appendChild(node);
     }
     bindRangeToPreview();
   }

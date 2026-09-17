@@ -324,8 +324,8 @@ export function createRepeaterSources(ctx, { endpoints }) {
         { kind: "checkbox", key: "only", label: "Only working", checked: true },
         // Above the coordinates because it is how most people know where they
         // are: picking a place fills latitude, longitude and the locator and
-        // recentres the preview, so the three inputs below read as the result
-        // of this one rather than as something to fill in by hand.
+        // recentres the preview, so the two rows below read as the result of
+        // this one rather than as something to fill in by hand.
         { kind: "city", key: "city", label: "City/Locality", placeholder: "e.g. Warszawa" },
         { kind: "position", locatorPlaceholder: "e.g. JO91GG" },
         { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30 },
@@ -580,8 +580,8 @@ export function createRepeaterSources(ctx, { endpoints }) {
         { kind: "checkbox", key: "only", label: "Only operational", checked: true },
         // Above the coordinates because it is how most people know where they
         // are: picking a place fills latitude, longitude and the locator and
-        // recentres the preview, so the three inputs below read as the result
-        // of this one rather than as something to fill in by hand.
+        // recentres the preview, so the two rows below read as the result of
+        // this one rather than as something to fill in by hand.
         { kind: "city", key: "city", label: "City/Locality", placeholder: "e.g. Manchester" },
         { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
         {

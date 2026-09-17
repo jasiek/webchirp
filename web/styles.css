@@ -1642,6 +1642,20 @@ button:disabled {
   align-items: center;
 }
 
+/* Latitude and longitude on one row under a single "Coordinates" label
+   (web/js/ui/query-fields.js). Two equal tracks rather than auto: the boxes
+   hold the same kind of value and their placeholders are near enough the same
+   length, so an uneven split would only read as one of them mattering more.
+   minmax(0, 1fr) for the reason .modal-grid gives -- a bare fr track floors at
+   the content's min-content width, and a number input's is wide enough to push
+   the pair past the column. */
+.modal-coord-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  align-items: center;
+}
+
 .modal-geo-button {
   min-width: 2rem;
   padding: 0.35rem 0.45rem;
