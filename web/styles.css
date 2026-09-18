@@ -534,6 +534,22 @@ button:disabled {
   border-color: var(--accent);
 }
 
+/* The one toolbar control that is an offer rather than a tool, so it is filled
+   rather than outlined -- it competes with Import/Export for the same row and
+   loses at equal weight, which is the whole reason the browser's own install
+   affordance goes unnoticed. Same accent fill as the per-model page CTA, the
+   app's other ask. */
+.toolbar-install {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.toolbar-install:hover {
+  filter: brightness(1.08);
+}
+
 /* Chromeless variant of .toolbar-link for the off-site community marks: the
    logo alone carries the meaning, so the border and gradient of a toolbar
    button would only compete with the controls that do something in-app. The

@@ -17,6 +17,11 @@ const REQUIRED_WEB_FILES = [
   "images/icon-512.png",
   "images/icon-maskable-512.png",
   "images/apple-touch-icon.png",
+  // The manifest screenshots are what make Chrome's install dialog the rich one
+  // rather than a bare icon-and-origin sheet; a missing one silently downgrades
+  // it back, which no page load reveals.
+  "images/screenshot-narrow.png",
+  "images/screenshot-wide.png",
 ];
 
 function toPosix(relPath) {

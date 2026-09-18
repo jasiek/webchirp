@@ -2,6 +2,13 @@
 //   images/screenshot.png               (README screenshot, 1600x1000)
 //   images/screenshot-for-opengraph.png (OpenGraph card, 1200x630)
 //   web/images/social-preview.png       (copy of the OpenGraph card served by the site)
+//   web/images/screenshot-wide.png      (manifest screenshot, desktop install dialog)
+//   web/images/screenshot-narrow.png    (manifest screenshot, Android install dialog)
+//
+// The last two are what turn Chrome's install dialog from a bare icon-and-origin
+// sheet into the rich one carrying the app's description and a screenshot
+// carousel. They are captured here rather than drawn by hand so they cannot
+// drift from the app the way a checked-in marketing image would.
 //
 // Usage: npm run screenshots
 //
@@ -19,11 +26,27 @@ import { fileURLToPath } from "node:url";
 
 const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// Each shot names a viewport and the files it is written to. `mobile` switches
+// Chrome into device emulation so the app lays itself out the way a phone sees
+// it, and `scale` multiplies the captured pixels without changing that layout —
+// a manifest screenshot is displayed at phone size but on a phone's display, so
+// a 1x capture of it looks soft in the install dialog.
+//
+// Chrome constrains manifest screenshots: every one of a given form_factor must
+// share an aspect ratio, and no side may exceed 2.3x the other or 3840px. The
+// narrow shot is deliberately a flat 1:2 rather than a real handset's ratio,
+// which sits close enough to that limit to be worth not testing.
+//
+// The mobile shot goes last so its emulation override cannot follow the desktop
+// captures into a layout they were not framed for.
 const SHOTS = [
   {
     width: 1600,
     height: 1000,
-    outputs: [path.join(repoRootDir, "images", "screenshot.png")],
+    outputs: [
+      path.join(repoRootDir, "images", "screenshot.png"),
+      path.join(repoRootDir, "web", "images", "screenshot-wide.png"),
+    ],
   },
   {
     width: 1200,
@@ -32,6 +55,18 @@ const SHOTS = [
       path.join(repoRootDir, "images", "screenshot-for-opengraph.png"),
       path.join(repoRootDir, "web", "images", "social-preview.png"),
     ],
+  },
+  {
+    width: 412,
+    height: 824,
+    mobile: true,
+    scale: 2,
+    // A phone stacks the sidebar above the editor, so an unscrolled capture is
+    // a page of buttons and a disclaimer -- the channel grid, which is what the
+    // app is, sits entirely below the fold. The install dialog gets one image
+    // to make its case, so this one starts at the grid.
+    scrollTo: "#channel-editor",
+    outputs: [path.join(repoRootDir, "web", "images", "screenshot-narrow.png")],
   },
 ];
 
@@ -311,8 +346,28 @@ async function captureShots(cdp, sessionId) {
   for (const shot of SHOTS) {
     await cdp.send(
       "Emulation.setDeviceMetricsOverride",
-      { width: shot.width, height: shot.height, deviceScaleFactor: 1, mobile: false },
+      {
+        width: shot.width,
+        height: shot.height,
+        deviceScaleFactor: shot.scale || 1,
+        mobile: Boolean(shot.mobile),
+      },
       sessionId
+    );
+    // A phone viewport crosses two media-query breakpoints and re-stacks the
+    // whole layout, which the channel grid then has to re-measure against its
+    // new scroll viewport. The wait is per-shot rather than once at the end.
+    await delay(1000);
+    // Framing is set after the layout has settled, and reset for every shot
+    // that does not ask for it, so one capture cannot inherit another's
+    // scroll position.
+    await evaluate(
+      cdp,
+      sessionId,
+      shot.scrollTo
+        ? `document.querySelector(${JSON.stringify(shot.scrollTo)})`
+          + `?.scrollIntoView({ block: "start" })`
+        : "window.scrollTo(0, 0)"
     );
     await delay(500);
     const { data } = await cdp.send(
@@ -324,8 +379,10 @@ async function captureShots(cdp, sessionId) {
     for (const outputPath of shot.outputs) {
       fs.mkdirSync(path.dirname(outputPath), { recursive: true });
       fs.writeFileSync(outputPath, pngBuffer);
+      const scale = shot.scale || 1;
       console.log(
-        `Wrote ${path.relative(repoRootDir, outputPath)} (${shot.width}x${shot.height}, ${pngBuffer.length} bytes)`
+        `Wrote ${path.relative(repoRootDir, outputPath)} `
+        + `(${shot.width * scale}x${shot.height * scale}, ${pngBuffer.length} bytes)`
       );
     }
   }

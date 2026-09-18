@@ -99,6 +99,70 @@ test("manifest carries the icon purposes Android installs need", () => {
   assert.ok(sizesFor("maskable").length > 0, "no maskable icon");
 });
 
+// Chrome shows a richer install dialog -- description plus a screenshot
+// carousel -- only when the manifest carries screenshots for the form factor
+// being installed on, and falls back to a bare icon-and-origin sheet when
+// anything about them is wrong. It never says which, and the difference is
+// invisible everywhere except the one dialog that decides whether an install
+// happens, so the rules Chrome applies are pinned here.
+test("the manifest carries what the rich install dialog needs", () => {
+  const manifest = JSON.parse(manifestText);
+  // The description is shown beside the screenshots; without one the dialog
+  // degrades even with screenshots present.
+  assert.ok(manifest.description, "manifest is missing description");
+  assert.ok(Array.isArray(manifest.screenshots), "manifest is missing screenshots");
+
+  const formFactors = manifest.screenshots.map((shot) => shot.form_factor);
+  // Android is the form factor this exists for; wide only covers desktop.
+  assert.ok(formFactors.includes("narrow"), "no narrow screenshot for phone installs");
+  // Chrome ignores a screenshot with no form_factor when picking a set.
+  for (const shot of manifest.screenshots) {
+    assert.ok(
+      ["narrow", "wide"].includes(shot.form_factor),
+      `screenshot has no usable form_factor: ${shot.src}`,
+    );
+    assert.equal(shot.type, "image/png", `screenshot declares a wrong type: ${shot.src}`);
+    assert.ok(shot.label, `screenshot has no label: ${shot.src}`);
+  }
+});
+
+test("every screenshot exists at its declared size and within Chrome's limits", () => {
+  const manifest = JSON.parse(manifestText);
+  const ratios = new Map();
+
+  for (const shot of manifest.screenshots) {
+    const shotPath = path.join(webDir, shot.src);
+    assert.ok(fs.existsSync(shotPath), `missing manifest screenshot: ${shot.src}`);
+    const { width, height } = pngSize(shotPath);
+    assert.equal(
+      `${width}x${height}`,
+      shot.sizes,
+      `${shot.src} is ${width}x${height} but declares ${shot.sizes}`,
+    );
+
+    // Chrome's own bounds: no side below 320px or above 3840px, and neither
+    // side more than 2.3x the other. A screenshot outside them is dropped.
+    const min = Math.min(width, height);
+    const max = Math.max(width, height);
+    assert.ok(min >= 320, `${shot.src} is smaller than 320px on a side`);
+    assert.ok(max <= 3840, `${shot.src} is larger than 3840px on a side`);
+    assert.ok(max / min <= 2.3, `${shot.src} is more than 2.3x longer than it is wide`);
+
+    // Every screenshot of one form factor must share an aspect ratio, or Chrome
+    // discards the whole set rather than the odd one out.
+    const ratio = width / height;
+    const seen = ratios.get(shot.form_factor);
+    if (seen === undefined) {
+      ratios.set(shot.form_factor, ratio);
+    } else {
+      assert.ok(
+        Math.abs(seen - ratio) < 0.01,
+        `${shot.src} does not share the aspect ratio of the other ${shot.form_factor} screenshots`,
+      );
+    }
+  }
+});
+
 test("every page links the manifest and an iOS touch icon", () => {
   for (const page of htmlPages) {
     const html = fs.readFileSync(path.join(webDir, page), "utf8");

@@ -272,11 +272,17 @@ export function bindInstallTracking(win = target) {
   }
 
   win.addEventListener("beforeinstallprompt", (event) => {
-    // Deliberately not preventDefault()ed — that suppresses the browser's own
-    // install prompt, and this app has no custom install button to replace it.
+    // Deliberately not preventDefault()ed here: this is the measurement side
+    // and it runs on both pages, while only index.html has a button to replace
+    // what cancelling would suppress. Cancelling is that page's own decision,
+    // taken in web/js/install-prompt.js, and preventDefault() from a second
+    // listener is honoured whichever runs first — so this event means "an
+    // install became available", not "the browser showed something".
     trackEvent("pwa_install_prompt", {}, win);
-    // userChoice settles once the user answers the browser-shown prompt. It can
-    // stay pending forever if they never do, which costs nothing.
+    // userChoice settles once the user answers a prompt that was actually
+    // raised — by the browser on about.html, by the toolbar button on
+    // index.html. It stays pending forever if none ever is, which costs
+    // nothing.
     const choice = event?.userChoice;
     if (typeof choice?.then !== "function") {
       return;

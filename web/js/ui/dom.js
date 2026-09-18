@@ -29,6 +29,9 @@ export const REQUIRED_ELEMENTS = {
   debugClearEl: "#debug-clear",
   debugCopyEl: "#debug-copy",
   reportIssueEl: "#report-issue",
+  // Toolbar install affordance, hidden until the browser parks an install
+  // prompt for web/js/install-prompt.js to raise.
+  installAppEl: "#install-app",
   // The shell is greyed out (class toggle) while the unsupported-browser
   // overlay explains why serial cannot work here.
   appShellEl: "#app-shell",
