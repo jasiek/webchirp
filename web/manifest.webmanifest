@@ -29,5 +29,21 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "screenshots": [
+    {
+      "src": "./images/screenshot-narrow.png",
+      "sizes": "824x1648",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Repeater channels loaded into the WebCHIRP channel editor"
+    },
+    {
+      "src": "./images/screenshot-wide.png",
+      "sizes": "1600x1000",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "WebCHIRP with a radio selected, its channel editor and the debug output"
+    }
   ]
 }

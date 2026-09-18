@@ -32,6 +32,8 @@ const REQUIRED_FILES = {
   "images/icon-512.png": "",
   "images/icon-maskable-512.png": "",
   "images/apple-touch-icon.png": "",
+  "images/screenshot-narrow.png": "",
+  "images/screenshot-wide.png": "",
 };
 
 // The same digest build-dist.mjs names assets with, so a name can be checked
