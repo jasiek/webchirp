@@ -54,6 +54,7 @@ function settingsTree(currentValue) {
   ];
 }
 
+// The current value of the one setting above, read out of a serialized tree.
 function settingValue(groups) {
   return groups?.[0]?.children?.[0]?.values?.[0]?.current;
 }
@@ -144,6 +145,8 @@ async function makeUploadHarness({ validateSettings, upload }) {
   });
   ctx.settings.updateViewButtons();
 
+  // Press Upload and let its async chain settle: the click listener starts
+  // uploadToRadio() without awaiting it, exactly as the real button does.
   async function pressUpload() {
     await dom.radioUploadEl.dispatch("click");
     await flushMicrotasks();

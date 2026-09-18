@@ -404,15 +404,10 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     applyValidationIssues,
     invalidCount: () => invalidKeys.size,
     getGroups: () => settingsState.groups,
-    // Replace the settings tree with a runtime echo -- upload, export and the
-    // upload preflight all send the edited tree and get one back -- keeping the
-    // current groups when the runtime returns nothing. An empty list is not an
-    // empty settings tree: it is how the runtime reports settings it could not
-    // check at all (no cached image, a driver without has_settings, or a
-    // get_settings() that raised, in
-    // web/python/webchirp_bridge/radio_settings.py), so taking it literally
-    // would throw away the edits the user is in the middle of uploading and
-    // leave the Radio Settings tab disabled. Reports whether it replaced them.
+    // Take the settings tree an upload, export or preflight echoed back, and
+    // report whether it was taken. An empty echo means the runtime could not
+    // read the settings (web/python/webchirp_bridge/radio_settings.py) rather
+    // than a radio without any, so the edits being uploaded stay put.
     setGroups(groups) {
       if (!Array.isArray(groups) || groups.length === 0) {
         return false;
