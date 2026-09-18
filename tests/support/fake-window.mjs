@@ -16,18 +16,52 @@
 //   version      - what fetch("./version.json") resolves to; null makes the
 //                  response not-ok, as a missing file would.
 //   fetch        - an explicit fetch, when a test needs more than version.json.
-// Also exposes `injected` (every node appended to document.head) and the
-// `dispatch`/`listenerCount` helpers tests drive listeners through.
+//   broadcast    - false to leave BroadcastChannel off the window, as a browser
+//                  without it (or with site data blocked) presents it.
+// Also exposes `injected` (every node appended to document.head), `broadcasts`
+// (every message posted to a channel) and the `dispatch`/`listenerCount`/
+// `deliverBroadcast` helpers tests drive listeners through.
 export function makeWindow({
   hostname = "codeplug.org",
   displayModes = [],
   standalone = undefined,
   version = { webchirpSha: "abc123" },
   fetch = async () => ({ ok: version !== null, json: async () => version }),
+  broadcast = true,
 } = {}) {
   const listeners = new Map();
   const injected = [];
+  // One window stands in for one tab, so the channels it opens are collected
+  // here and a test plays the part of the other tab by delivering to them.
+  const broadcasts = [];
+  const channels = [];
+  class FakeBroadcastChannel {
+    constructor(name) {
+      this.name = String(name);
+      this.onmessage = null;
+      this.closed = false;
+      channels.push(this);
+    }
+
+    postMessage(data) {
+      broadcasts.push({ name: this.name, data });
+    }
+
+    close() {
+      this.closed = true;
+    }
+  }
   return {
+    broadcasts,
+    BroadcastChannel: broadcast ? FakeBroadcastChannel : undefined,
+    // What another tab on this origin posting the message looks like from here.
+    deliverBroadcast(data) {
+      for (const channel of channels) {
+        if (!channel.closed && typeof channel.onmessage === "function") {
+          channel.onmessage({ data });
+        }
+      }
+    },
     location: { hostname },
     injected,
     document: {

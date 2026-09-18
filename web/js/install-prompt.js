@@ -32,6 +32,53 @@ let deferredPrompt = null;
 
 const availabilityListeners = new Set();
 
+// appinstalled is dispatched only to the window the install happened from, so a
+// second tab left open on this origin would go on showing an Install button
+// backed by an event the browser has already invalidated -- a tap that installs
+// nothing. BroadcastChannel is same-origin by construction, so one message on a
+// fixed name is enough to retire the button everywhere.
+const INSTALL_CHANNEL_NAME = "webchirp-install";
+const INSTALLED_MESSAGE = "installed";
+
+let installChannel = null;
+
+// Drop the parked prompt and tell whoever is listening. The one path both the
+// local appinstalled event and another tab's message converge on.
+function forgetInstallPrompt() {
+  deferredPrompt = null;
+  notifyAvailability();
+}
+
+// Open the cross-tab channel, replacing any previous one. Absent in some
+// browsers and known to throw where site data is blocked, and neither is worth
+// failing over: without it the button is merely window-local again, which is
+// where it started.
+function openInstallChannel(win) {
+  if (installChannel) {
+    try {
+      installChannel.close();
+    } catch {
+      /* ignored */
+    }
+    installChannel = null;
+  }
+  const Channel = win?.BroadcastChannel;
+  if (typeof Channel !== "function") {
+    return;
+  }
+  try {
+    installChannel = new Channel(INSTALL_CHANNEL_NAME);
+  } catch {
+    installChannel = null;
+    return;
+  }
+  installChannel.onmessage = (event) => {
+    if (event?.data === INSTALLED_MESSAGE) {
+      forgetInstallPrompt();
+    }
+  };
+}
+
 // Tell every subscriber what the current availability is. A throwing subscriber
 // is swallowed so one broken listener cannot strand the others -- this runs on
 // a browser event with no call site to report a failure back to.
@@ -72,10 +119,15 @@ export function onInstallAvailabilityChange(listener) {
 // rejected the call. Callers get an outcome rather than a rejection because
 // there is nothing for them to handle -- every failure here means the same
 // thing to the UI, which is that the button is finished.
+//
+// The rejection itself still comes back alongside the outcome. A failure here
+// is user-visible (a tap that installs nothing) and rare enough to be worth
+// diagnosing, and the app's rule is that the whole error reaches the debug
+// panel rather than a summary of it.
 export async function promptInstall() {
   const event = deferredPrompt;
   if (!event || typeof event.prompt !== "function") {
-    return "unavailable";
+    return { outcome: "unavailable", error: null };
   }
   // Dropped before prompting rather than after. The event may be raised only
   // once, so a second tap while the first prompt is still open would be
@@ -85,9 +137,9 @@ export async function promptInstall() {
   try {
     await event.prompt();
     const result = await event.userChoice;
-    return String(result?.outcome || "unknown");
-  } catch {
-    return "failed";
+    return { outcome: String(result?.outcome || "unknown"), error: null };
+  } catch (error) {
+    return { outcome: "failed", error };
   }
 }
 
@@ -113,13 +165,19 @@ export function bindInstallPrompt(win = target) {
     notifyAvailability();
   });
 
-  // The install can also happen through the browser's own menu, or from
-  // another tab on this origin, and the button has to stand down when it does.
+  // The install can also happen through the browser's own menu, and the button
+  // has to stand down when it does. Every other tab on this origin is told
+  // too, since the event does not reach them.
   win.addEventListener("appinstalled", () => {
-    deferredPrompt = null;
-    notifyAvailability();
+    forgetInstallPrompt();
+    try {
+      installChannel?.postMessage(INSTALLED_MESSAGE);
+    } catch {
+      /* ignored */
+    }
   });
 
+  openInstallChannel(win);
   notifyAvailability();
 }
 

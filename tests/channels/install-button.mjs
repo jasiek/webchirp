@@ -22,7 +22,13 @@ function makeContext() {
   return {
     installAppEl,
     debug,
-    ctx: { dom: { installAppEl }, log: { logDebug: (line) => debug.push(line) } },
+    ctx: {
+      dom: { installAppEl },
+      log: {
+        logDebug: (line) => debug.push(line),
+        logError: (line) => debug.push(line),
+      },
+    },
   };
 }
 
@@ -105,5 +111,40 @@ test("the button stands down when the app is installed elsewhere", () => {
   assert.equal(installAppEl.hidden, false);
 
   win.dispatch("appinstalled", {});
+  assert.equal(installAppEl.hidden, true);
+});
+
+test("a browser that refuses the prompt says why in the debug panel", async () => {
+  const win = makeWindow();
+  bindInstallPrompt(win);
+  const { installAppEl, debug, ctx } = makeContext();
+  createInstallButton(ctx).bindEvents();
+  win.dispatch("beforeinstallprompt", {
+    preventDefault() {},
+    prompt() {
+      throw new Error("prompt() can only be called once");
+    },
+  });
+
+  await installAppEl.dispatch("click");
+
+  // The button vanishing with nothing installed is the whole user-visible
+  // symptom, so the panel has to carry the actual exception.
+  assert.ok(
+    debug.some((line) => line.includes("INSTALL PROMPT ERROR") && line.includes("called once")),
+    `the rejection never reached the debug panel: ${debug.join(" | ")}`,
+  );
+  assert.equal(installAppEl.hidden, true);
+});
+
+test("an install in another tab retires the button here", () => {
+  const win = makeWindow();
+  bindInstallPrompt(win);
+  const { installAppEl, ctx } = makeContext();
+  createInstallButton(ctx).bindEvents();
+  win.dispatch("beforeinstallprompt", fakePromptEvent());
+  assert.equal(installAppEl.hidden, false);
+
+  win.deliverBroadcast("installed");
   assert.equal(installAppEl.hidden, true);
 });

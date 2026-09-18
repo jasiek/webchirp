@@ -4,6 +4,7 @@ import {
   promptInstall,
 } from "../install-prompt.js";
 import { trackEvent } from "./analytics.js";
+import { errorDetails } from "./format.js";
 
 // The toolbar's Install button: this app's own install affordance, standing in
 // for the browser one that web/js/install-prompt.js suppresses. See that module
@@ -31,10 +32,17 @@ export function createInstallButton(ctx) {
   // two together are this button's conversion rate. The outcome still reaches
   // the debug panel, where it is the only sign the tap did anything at all when
   // the user declines.
+  //
+  // A browser that refuses to raise the prompt is the one case a user can see
+  // go wrong -- the button vanishes and nothing is installed -- so the whole
+  // rejection is written out rather than summarised as "failed".
   async function install() {
     trackEvent("pwa_install_clicked");
-    const outcome = await promptInstall();
+    const { outcome, error } = await promptInstall();
     log.logDebug(`INSTALL PROMPT ${outcome}`);
+    if (error) {
+      log.logError(`INSTALL PROMPT ERROR\n${errorDetails(error)}`);
+    }
   }
 
   function bindEvents() {
