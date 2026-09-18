@@ -23,6 +23,16 @@
       rewrites every occurrence of one, comments included.
     -->
     <script type="module" src="./js/analytics.js"></script>
+    <!--
+      Home-screen install. Cancels the browser's own install prompt and parks
+      it for the toolbar button, which is the only way most Android users ever
+      find the install at all. Loaded here rather than with the UI because the
+      event can fire before the app boots, and only from this page: about.html
+      has no button to replace what cancelling suppresses. Do not spell asset
+      paths out in prose here -- build-dist rewrites every occurrence of one,
+      comments included.
+    -->
+    <script type="module" src="./js/install-prompt.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
       Base URL of the API that fronts przemienniki.net, repeaterbook.com and
@@ -92,6 +102,13 @@
           </p>
         </div>
         <div class="toolbar-actions">
+          <!--
+            Shown only while the browser has an install to offer; hidden is
+            toggled from web/js/ui/install-button.js.
+          -->
+          <button id="install-app" class="toolbar-install" title="Install WebCHIRP as an app on this device" hidden>
+            Install app
+          </button>
           <a class="toolbar-link" href="./about.html">About</a>
           <button id="import-csv" title="Load a CHIRP CSV file (or drag one onto the page)">
             Import CSV

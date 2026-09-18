@@ -162,8 +162,9 @@ test("an install prompt is measured without suppressing the browser's own", () =
   const [prompt] = eventsNamed(win, "pwa_install_prompt");
   assert.ok(prompt, "beforeinstallprompt sent no event");
   assert.equal(prompt[2].display_mode, "browser");
-  // preventDefault() hides Chrome's install UI, and there is no custom install
-  // button here to put in its place.
+  // Cancelling belongs to web/js/install-prompt.js, which index.html loads and
+  // about.html does not. If this module started cancelling too, about.html
+  // would lose the browser's install UI with nothing to replace it.
   assert.equal(prevented, false);
 });
 
