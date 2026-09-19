@@ -24,10 +24,22 @@ export const MEASUREMENT_ID = "G-80DP6MQ180";
 // out. Off-domain nothing is requested from googletagmanager, gtag stays
 // undefined, and every trackEvent() call no-ops through the guard below.
 //
-// www sits beside the apex because CNAME points at the apex and a www visitor
+// www sits beside each apex because CNAME points at the apex and a www visitor
 // who was not redirected is real traffic. Forks are unaffected either way,
 // being on github.io or a domain of their own.
-export const ANALYTICS_HOSTS = Object.freeze(["codeplug.org", "www.codeplug.org"]);
+//
+// webchirp.org is the same deployment under a second name, so its traffic is
+// production traffic and belongs in the same property: splitting it out would
+// halve every per-driver rate for no reason anyone reading the reports wants.
+// Only its apex is listed, because webchirp.org is served on the apex alone and
+// its www redirects there -- the browser follows that redirect before any of
+// this runs, so location.hostname is never www.webchirp.org and an entry for it
+// would be a branch that can never be taken.
+export const ANALYTICS_HOSTS = Object.freeze([
+  "codeplug.org",
+  "www.codeplug.org",
+  "webchirp.org",
+]);
 
 // Every event parameter this app sends, declared once here so the GA property
 // can be brought in line with the code rather than the other way round — see
