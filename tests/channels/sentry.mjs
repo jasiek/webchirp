@@ -89,7 +89,12 @@ test("the DSN points at a project, not a placeholder", () => {
 test("the host gate admits only the production deployment", () => {
   assert.equal(isSentryHost({ location: { hostname: "codeplug.org" } }), true);
   assert.equal(isSentryHost({ location: { hostname: "www.codeplug.org" } }), true);
+  // The same deployment's second name, which reports into the same project.
+  assert.equal(isSentryHost({ location: { hostname: "webchirp.org" } }), true);
+  assert.equal(isSentryHost({ location: { hostname: "www.webchirp.org" } }), true);
   assert.equal(isSentryHost({ location: { hostname: "localhost" } }), false);
+  // Not a suffix match: a lookalike domain must not inherit the project.
+  assert.equal(isSentryHost({ location: { hostname: "evil-webchirp.org" } }), false);
   assert.equal(isSentryHost({ location: { hostname: "jasiek.github.io" } }), false);
   assert.equal(isSentryHost({}), false);
   assert.equal(isSentryHost(null), false);

@@ -41,7 +41,12 @@ export const SENTRY_SDK_URL =
 //
 // This list must stay in step with ANALYTICS_HOSTS; the same deployment is
 // "production" for both, and tests/channels/sentry.mjs fails if they diverge.
-export const SENTRY_HOSTS = Object.freeze(["codeplug.org", "www.codeplug.org"]);
+export const SENTRY_HOSTS = Object.freeze([
+  "codeplug.org",
+  "www.codeplug.org",
+  "webchirp.org",
+  "www.webchirp.org",
+]);
 
 // Noise that is never actionable: a benign layout notification the browser
 // raises, failures thrown by whatever the user has installed into their own

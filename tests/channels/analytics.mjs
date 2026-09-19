@@ -70,14 +70,23 @@ test("init attaches the launch context to config, never to a bare set", () => {
 });
 
 test("only the production deployment reports", () => {
-  assert.deepEqual([...ANALYTICS_HOSTS].sort(), ["codeplug.org", "www.codeplug.org"]);
+  assert.deepEqual([...ANALYTICS_HOSTS].sort(), [
+    "codeplug.org",
+    "webchirp.org",
+    "www.codeplug.org",
+    "www.webchirp.org",
+  ]);
   assert.equal(isAnalyticsHost(makeWindow({ hostname: "codeplug.org" })), true);
   // CNAME points at the apex, so an unredirected www visitor is real traffic.
   assert.equal(isAnalyticsHost(makeWindow({ hostname: "www.codeplug.org" })), true);
+  // The second production name for the same deployment, and its www.
+  assert.equal(isAnalyticsHost(makeWindow({ hostname: "webchirp.org" })), true);
+  assert.equal(isAnalyticsHost(makeWindow({ hostname: "www.webchirp.org" })), true);
   assert.equal(isAnalyticsHost(makeWindow({ hostname: "localhost" })), false);
   assert.equal(isAnalyticsHost(makeWindow({ hostname: "jasiek.github.io" })), false);
   // Not a suffix match: a lookalike domain must not inherit the property.
   assert.equal(isAnalyticsHost(makeWindow({ hostname: "evil-codeplug.org" })), false);
+  assert.equal(isAnalyticsHost(makeWindow({ hostname: "evil-webchirp.org" })), false);
   assert.equal(isAnalyticsHost({}), false);
 });
 
