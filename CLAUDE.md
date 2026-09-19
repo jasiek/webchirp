@@ -79,6 +79,14 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Avoid context pollution by spawning sub-agents when appropriate.
   - Use sub-agent sandboxing when a read-only task is to be executed.
   - Use sub-agents to produce a summary for a commit message.
+- Whether a radio's firmware can be updated is not in the catalog and cannot be:
+  no CHIRP driver knows it. `radio-firmware.json` (repo root) records it by hand,
+  keyed by vendor with `vendor|model` overrides, and `scripts/build-model-pages.mjs`
+  turns it into a section on each model page. Never state a claim more strongly than
+  its evidence: a vendor-level answer points at that vendor's download page, and only
+  a model-level entry promises a download for that model. Record `unknown` rather than
+  guessing; an unknown radio gets no section. Adding a vendor to the catalog without
+  an answer fails `tests/build/radio-firmware.mjs`.
 - When you discover something new, or unexpected, put it in FINDINGS.md.
 - Analytics goes through `trackEvent` in `web/js/ui/analytics.js`; never reach
   `gtag` directly. Every parameter an event sends must be declared in

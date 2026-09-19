@@ -1,0 +1,947 @@
+{
+  "documentation": "Whether each radio's firmware can be updated, and where the firmware lives. Hand-maintained: no CHIRP driver knows this, so it cannot be generated like radio-catalog.json or radio-features.json. A models entry (keyed vendor|model, exactly as the catalog spells it) overrides its vendors entry. status is one of official, service, community, none, unknown; unknown renders nothing. scripts/build-model-pages.mjs turns these into page copy.",
+  "vendors": {
+    "AOR": {
+      "status": "none",
+      "url": "https://www.aorusa.com/support/firmware.html",
+      "note": "Its firmware downloads cover only the AR-DV1 and AR-DV10."
+    },
+    "ARRL": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Abbree": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Alinco": {
+      "status": "none",
+      "url": "https://alinco.com/download-archive/",
+      "note": "It publishes firmware for a few models only; the rest list clone software and manuals."
+    },
+    "AnyTone": {
+      "status": "official",
+      "url": "https://www.anytone.net/download",
+      "note": "Its DMR and CB sets have firmware; the analog models list programming software only."
+    },
+    "Anysecu": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "BTECH": {
+      "status": "none",
+      "url": "https://baofengtech.com/software/",
+      "note": "Its firmware downloads cover the DMR and PRO-series radios; the analog FRS, GMRS, MURS and UV sets get CPS only."
+    },
+    "Bajeton": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Baofeng": {
+      "status": "none",
+      "url": "https://www.baofengradio.com/pages/download",
+      "note": "Its download area carries programming software and manuals; the two radios that do have firmware are listed separately here."
+    },
+    "Baojie": {
+      "status": "none",
+      "url": null,
+      "note": "Baojie's own download page lists programming software, manuals and a USB driver only; no firmware files."
+    },
+    "Boblov": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Boristone": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "CRT": {
+      "status": "none",
+      "url": null,
+      "note": "crtfrance.com has no downloads section at all."
+    },
+    "Cignus": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Commander": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Explorer": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Feidaxin": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Generic": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "HamGeek": {
+      "status": "none",
+      "url": "https://www.hgeek.com/blogs/download/tagged/firmware",
+      "note": "Its download area has firmware for other products, but none for this one."
+    },
+    "Hiroyasu": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "HobbyPCB": {
+      "status": "official",
+      "url": "https://sites.google.com/site/hobbypcbrsuv3awiki/firmware",
+      "note": "The RS-UV3 firmware images and flashing procedure are on its product wiki."
+    },
+    "Icom": {
+      "status": "official",
+      "url": "https://www.icomjapan.com/support/firmware_driver/",
+      "note": "Many older models have no firmware download at all."
+    },
+    "Intek": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "JJCC": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Jetstream": {
+      "status": "none",
+      "url": null,
+      "note": "Jetstream radios are built by Leixen."
+    },
+    "Jianpai": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "KSUN": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "KYD": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood": {
+      "status": "service",
+      "url": "https://www.kenwood.com/usa/Support/Land_Mobile_Radio/",
+      "note": "Its commercial firmware is not published for download."
+    },
+    "LUITON": {
+      "status": "none",
+      "url": "https://www.luiton.com/category/contact-us/software-download/",
+      "note": "Its download page carries programming software and drivers only."
+    },
+    "Lanchonlh": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Leixen": {
+      "status": "none",
+      "url": null,
+      "note": "The VV-898 family uses a one-time-programmable microcontroller."
+    },
+    "MMLradio": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "MTC": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Maverick": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "MaxTalker": {
+      "status": "none",
+      "url": "https://www.maxtalkerradio.com/pages/download",
+      "note": "Its download page carries programming software and manuals only."
+    },
+    "Midland": {
+      "status": "none",
+      "url": null,
+      "note": "The DBR2500 is discontinued."
+    },
+    "Polmar": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Powerwerx": {
+      "status": "none",
+      "url": null,
+      "note": "It publishes programming software for the DB-750X, but no firmware."
+    },
+    "Puxing": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Q-MAC": {
+      "status": "service",
+      "url": null,
+      "note": "A Q-MAC or Barrett representative supplies and fits the upgrade."
+    },
+    "QYT": {
+      "status": "none",
+      "url": "https://www.qytradio.com/category/downloads/1",
+      "note": "Its download pages carry programming software and manuals only."
+    },
+    "Quansheng": {
+      "status": "official",
+      "url": "https://en.qsfj.com/support/downloads",
+      "note": "Each model's page carries its firmware, its CPS and the upgrade tool."
+    },
+    "RT Systems": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Radioddity": {
+      "status": "official",
+      "url": "https://www.radioddity.com/pages/radioddity-download",
+      "note": "Its firmware downloads cover the DMR radios; much of the analog range has programming software only."
+    },
+    "Radtel": {
+      "status": "official",
+      "url": "https://www.radtels.com/pages/software-download",
+      "note": "Most of the RT- range has a firmware update file alongside its CPS."
+    },
+    "Retevis": {
+      "status": "official",
+      "url": "https://www.retevis.com/downloads/firmware",
+      "note": "Its firmware list covers a subset of the range; many entry-level FRS and PMR models are not on it."
+    },
+    "Rugged": {
+      "status": "service",
+      "url": "https://www.ruggedradios.com/pages/instructions",
+      "note": "RH5R updates go through Rugged Radios' tech support department."
+    },
+    "Ruyage": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Sainsonic": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "SenhaiX": {
+      "status": "none",
+      "url": "https://www.senhaixptt.com/pages/software-downloads",
+      "note": "SenHaiX lists a firmware update tool as coming soon; nothing is downloadable yet."
+    },
+    "Socotran": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TDXone": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TID": {
+      "status": "official",
+      "url": "https://www.tidradio.com/pages/tidradio-firmware",
+      "note": "TID radios are TIDRADIO models. The page asks which model you have and sends the file back, rather than linking it directly."
+    },
+    "TIDRADIO": {
+      "status": "official",
+      "url": "https://www.tidradio.com/pages/tidradio-firmware",
+      "note": "The page asks which model you have and sends the file back, rather than linking it directly."
+    },
+    "TYT": {
+      "status": "official",
+      "url": "https://www.tyt888.com/download.html",
+      "note": "Only the current models have firmware; the legacy range lists software only."
+    },
+    "Talkpod": {
+      "status": "official",
+      "url": "https://talkpodonline.com/pages/firmware-software",
+      "note": "It publishes versioned A36plus firmware and a bootloader utility."
+    },
+    "WACCOM": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "WLN": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Wouxun": {
+      "status": "none",
+      "url": "https://www.wouxun.com/list.aspx",
+      "note": "Its download centre carries programming software, manuals and cable drivers only."
+    },
+    "Yaesu": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-categories.aspx?Division=Amateur",
+      "note": "Each model's firmware, when it has any, is on that model's own Files tab."
+    },
+    "Yedro": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Zastone": {
+      "status": "none",
+      "url": null,
+      "note": "Its download site has a firmware section, but the ZT-X6 is not in it."
+    }
+  },
+  "models": {
+    "Alinco|DJ-G7EG": {
+      "status": "official",
+      "url": "https://alinco.com/download-article/?post_id=9178",
+      "note": "Alinco publishes a DJ-G7T/E/EG firmware updater; the radio is flashed in clone mode over an ERW-7 cable."
+    },
+    "Alinco|DJ-G7T": {
+      "status": "official",
+      "url": "https://alinco.com/download-article/?post_id=9178",
+      "note": "Alinco publishes a DJ-G7T/E/EG firmware updater; the radio is flashed in clone mode over an ERW-7 cable."
+    },
+    "AnyTone|5888UV": {
+      "status": "none",
+      "url": "https://www.anytone.net/download",
+      "note": "AnyTone's download page lists programming software for this analog model, not firmware."
+    },
+    "AnyTone|5888UVIII": {
+      "status": "none",
+      "url": "https://www.anytone.net/download",
+      "note": "AnyTone's download page lists programming software for this analog model, not firmware."
+    },
+    "AnyTone|778UV": {
+      "status": "none",
+      "url": "https://www.anytone.net/download",
+      "note": "AnyTone's download page lists programming software for this analog model, not firmware."
+    },
+    "AnyTone|778UV VOX": {
+      "status": "none",
+      "url": "https://www.anytone.net/download",
+      "note": "AnyTone's download page lists programming software for this analog model, not firmware."
+    },
+    "AnyTone|779UV": {
+      "status": "none",
+      "url": "https://www.anytone.net/download",
+      "note": "AnyTone's download page lists programming software for this analog model, not firmware."
+    },
+    "AnyTone|OBLTR-8R": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "AnyTone|TERMN-8R": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Anysecu|AC-580": {
+      "status": "none",
+      "url": null,
+      "note": "Identical to the Radioddity GS-5B, for which only programming software and manuals are published, no firmware."
+    },
+    "Baofeng|BF-F8HP-PRO": {
+      "status": "official",
+      "url": "https://baofengtech.com/software/",
+      "note": "BTECH publishes BF-F8HP PRO firmware, flashed from the BTECH CPS bootloader over a PC03 cable."
+    },
+    "Baofeng|UV-25": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Baofeng|UV-9G": {
+      "status": "official",
+      "url": "https://www.baofengradio.com/pages/download",
+      "note": "Baofeng's download area includes a UV-9G firmware update that enables transmit on channel 15."
+    },
+    "Icom|IC-7100": {
+      "status": "official",
+      "url": "https://www.icomjapan.com/support/firmware_driver/2411/",
+      "note": "You install it yourself over a USB cable after installing Icom's USB driver."
+    },
+    "Icom|IC-7300": {
+      "status": "official",
+      "url": "https://www.icomjapan.com/support/firmware_driver/4102/",
+      "note": "You install it yourself from an SD card using the radio's own menu."
+    },
+    "Icom|IC-7410": {
+      "status": "official",
+      "url": "https://www.icomjapan.com/support/firmware_driver/2388/",
+      "note": "You install it yourself over the rear-panel USB port."
+    },
+    "Icom|IC-7610": {
+      "status": "official",
+      "url": "https://www.icomjapan.com/support/firmware_driver/4450/",
+      "note": "You install it yourself from an SD card or USB flash drive."
+    },
+    "Icom|IC-9700": {
+      "status": "official",
+      "url": "https://www.icomjapan.com/support/firmware_driver/4424/",
+      "note": "You install it yourself from an SD card using the radio's own menu."
+    },
+    "Icom|ID-4100": {
+      "status": "official",
+      "url": "https://www.icomjapan.com/support/firmware_driver/2437/",
+      "note": "You install it yourself following the advanced manual's update section."
+    },
+    "Icom|ID-51 Plus": {
+      "status": "official",
+      "url": "https://www.icomjapan.com/support/firmware_driver/2449/",
+      "note": "You install it yourself with an OPC-2350LU or OPC-2218LU cable."
+    },
+    "Icom|ID-51 Plus2": {
+      "status": "official",
+      "url": "https://www.icomjapan.com/support/firmware_driver/2455/",
+      "note": "You install it yourself with an OPC-2350LU or OPC-2218LU cable."
+    },
+    "Icom|ID-5100": {
+      "status": "official",
+      "url": "https://www.icomjapan.com/support/firmware_driver/3615/",
+      "note": "You install it yourself with an OPC-2350LU, OPC-1529R or OPC-2218LU cable."
+    },
+    "Kenwood|HMK": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|ITM": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TH-D7": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TH-D72 (clone mode)": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/th_d72/thd72_main_update_e.html",
+      "note": "The main-firmware updater runs over USB."
+    },
+    "Kenwood|TH-D72 (live mode)": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/th_d72/thd72_main_update_e.html",
+      "note": "The main-firmware updater runs over USB."
+    },
+    "Kenwood|TH-D74 (clone mode)": {
+      "status": "service",
+      "url": "https://www.kenwood.com/i/products/info/amateur/thd74_update_e.html",
+      "note": "Kenwood has suspended the download and directs owners to a service centre."
+    },
+    "Kenwood|TH-D74 (live mode)": {
+      "status": "service",
+      "url": "https://www.kenwood.com/i/products/info/amateur/thd74_update_e.html",
+      "note": "Kenwood has suspended the download and directs owners to a service centre."
+    },
+    "Kenwood|TH-D75": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/thd75_update_e.html",
+      "note": "The updater runs over a USB-C cable."
+    },
+    "Kenwood|TH-D7G": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TH-F6": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TH-F7": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TH-G71": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TH-K2": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TM-271": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TM-281": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TM-471": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TM-D700": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TM-D710": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/tmv71_d710_main_update_e.html",
+      "note": "There are three updaters: main, panel and TNC."
+    },
+    "Kenwood|TM-D710G": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/tmd710g_main_update_e.html",
+      "note": "There are two updaters: main and panel."
+    },
+    "Kenwood|TM-D710G_CloneMode": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/tmd710g_main_update_e.html",
+      "note": "There are two updaters: main and panel."
+    },
+    "Kenwood|TM-D710_CloneMode": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/tmv71_d710_main_update_e.html",
+      "note": "There are three updaters: main, panel and TNC."
+    },
+    "Kenwood|TM-G707": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TM-V7": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TM-V71": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/tmv71_d710_main_update_e.html",
+      "note": "One main-firmware updater covers the TM-V71A and TM-V71E."
+    },
+    "Kenwood|TS-2000": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/pop_ts2000.html",
+      "note": "The updater runs over RS-232C."
+    },
+    "Kenwood|TS-480_CloneMode": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/ts_480/firmware/pop_ts480_e.html",
+      "note": "One updater covers the TS-480HX and TS-480SAT, over RS-232C."
+    },
+    "Kenwood|TS-480_LiveMode": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/ts_480/firmware/pop_ts480_e.html",
+      "note": "One updater covers the TS-480HX and TS-480SAT, over RS-232C."
+    },
+    "Kenwood|TS-590S/SG_LiveMode": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/software_download.html",
+      "note": "The TS-590S and TS-590SG take separate updaters."
+    },
+    "Kenwood|TS-590SG_CloneMode": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/ts_590g/ts590g_update_e.html",
+      "note": "The updater runs over USB or RS-232C."
+    },
+    "Kenwood|TS-590S_CloneMode": {
+      "status": "official",
+      "url": "https://www.kenwood.com/i/products/info/amateur/ts_590/ts590_update_e.html",
+      "note": "The updater runs over USB or RS-232C."
+    },
+    "Kenwood|TS-790E": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Kenwood|TS-850": {
+      "status": "none",
+      "url": null,
+      "note": ""
+    },
+    "Quansheng|TG-UV2+": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Quansheng|TK11": {
+      "status": "official",
+      "url": "https://en.qsfj.com/support/downloads/6997",
+      "note": "Quansheng publishes TK11/TK11(8) firmware and programming software."
+    },
+    "Quansheng|UV-K1": {
+      "status": "official",
+      "url": "https://en.qsfj.com/support/downloads/8740",
+      "note": "Quansheng ships a CPS+upgrade tool+firmware bundle; open-source firmware at github.com/armel/uv-k1-k5v3-firmware-custom."
+    },
+    "Quansheng|UV-K5": {
+      "status": "official",
+      "url": "https://en.qsfj.com/support/downloads/3002",
+      "note": "Quansheng ships firmware plus an upgrade tool; open-source firmware at github.com/egzumer/uv-k5-firmware-custom uses the same cable."
+    },
+    "Radioddity|GM-30": {
+      "status": "official",
+      "url": "https://www.radioddity.com/blogs/all/how-to-update-radioddity-gm-30-firmware",
+      "note": "Radioddity documents a GM-30 firmware update with the CPS firmware upgrade tool and programming cable."
+    },
+    "Radtel|T18": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH-350": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH-7800": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH-7800 File": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH-9800": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH-9800 File": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH-UV3R": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH-UV3R-25": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH-UV8000": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH-UVF1": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH-UVF8D": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH9000_144": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH9000_220": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "TYT|TH9000_440": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Yaesu|FT-1500M": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-1500M&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-1802M": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-1802M&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-1D": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT1DR%2FXDR&CatName=Legacy",
+      "note": "The file and its PC update tool are on the model's Files tab at yaesu.com."
+    },
+    "Yaesu|FT-25R": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-25R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-2800M": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-2800M&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-2900R/1900R": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-2900R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-2900R/1900R(TXMod)": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-2900R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-450": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-450D&CatName=Legacy",
+      "note": "The file and its PC update tool are on the model's Files tab at yaesu.com."
+    },
+    "Yaesu|FT-450D": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-450D&CatName=Legacy",
+      "note": "The file and its PC update tool are on the model's Files tab at yaesu.com."
+    },
+    "Yaesu|FT-4VR": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-4VR&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-4XE": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-4XR&CatName=VHF%2FUHF%20Handhelds",
+      "note": ""
+    },
+    "Yaesu|FT-4XR": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-4XR&CatName=VHF%2FUHF%20Handhelds",
+      "note": ""
+    },
+    "Yaesu|FT-50": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-50R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-60": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-60R&CatName=VHF%2FUHF%20Handhelds",
+      "note": ""
+    },
+    "Yaesu|FT-65E": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-65R&CatName=VHF%2FUHF%20Handhelds",
+      "note": ""
+    },
+    "Yaesu|FT-65R": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-65R&CatName=VHF%2FUHF%20Handhelds",
+      "note": ""
+    },
+    "Yaesu|FT-70D": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-70DR&CatName=VHF%2FUHF%20Handhelds",
+      "note": "The file and its PC update tool are on the model's Files tab at yaesu.com."
+    },
+    "Yaesu|FT-7100M": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Yaesu|FT-7800/7900": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-7800R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-8100": {
+      "status": "unknown",
+      "url": null,
+      "note": ""
+    },
+    "Yaesu|FT-817": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-817ND&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-817ND": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-817ND&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-817ND (US)": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-817ND&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-818": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-818&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-818ND (US)": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-818&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-857/897": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-857D&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-857/897 (US)": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-857D&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-8800": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-8800R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-8900": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-8900R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT-90": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-90R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FT2D": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT2DR&CatName=Legacy",
+      "note": "The file and its PC update tool are on the model's Files tab at yaesu.com."
+    },
+    "Yaesu|FT3D": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT3DR&CatName=Legacy",
+      "note": "The file and its PC update tool are on the model's Files tab at yaesu.com."
+    },
+    "Yaesu|FT5D": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FT5DR&CatName=VHF%2FUHF%20Handhelds",
+      "note": "The file and its PC update tool are on the model's Files tab at yaesu.com."
+    },
+    "Yaesu|FTM-300DR": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FTM-300DR&CatName=Legacy",
+      "note": "The file and its PC update tool are on the model's Files tab at yaesu.com."
+    },
+    "Yaesu|FTM-3200D": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FTM-3200DR&CatName=Legacy",
+      "note": "The file and its PC update tool are on the model's Files tab at yaesu.com."
+    },
+    "Yaesu|FTM-350": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FTM-350AR&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|FTM-7250D": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FTM-7250DR&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-1": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-1R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-150": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-150&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-170": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-170&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-177": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-177&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-2": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-2R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-3": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-3R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-5": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-5R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-6": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-6R&CatName=VHF%2FUHF%20Handhelds",
+      "note": ""
+    },
+    "Yaesu|VX-7": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-7R&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-8DR": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-8DR&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-8GE": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-8GR&CatName=Legacy",
+      "note": ""
+    },
+    "Yaesu|VX-8R": {
+      "status": "none",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=VX-8R&CatName=Legacy",
+      "note": ""
+    },
+    "Ruyage|UV58Plus": {
+      "status": "community",
+      "url": "https://github.com/OEFW-community/RT-890-custom-firmware",
+      "note": "The UV58Plus shares the Radtel RT-890 platform, which is what the project targets."
+    },
+    "Lanchonlh|HG-UV98": {
+      "status": "community",
+      "url": "https://github.com/pwnj0hn/HG-UV98",
+      "note": "The repository collects the factory updaters and flashing notes."
+    },
+    "Sainsonic|AP510": {
+      "status": "community",
+      "url": null,
+      "note": "Its designer releases the AVRT5 firmware, which the owner flashes with AVR serial tools."
+    }
+  }
+}
