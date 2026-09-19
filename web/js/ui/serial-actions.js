@@ -412,8 +412,22 @@ export function createSerialActions(ctx) {
     ]);
     const result = rowResult;
     const settingsValidation = settingsResult
-      || { valid: true, issues: [], settings: ctx.settings.getGroups() };
-    ctx.settings.setGroups(settingsValidation.settings);
+      || { valid: true, issues: [], settings: ctx.settings.getGroups(), available: true };
+    // The echo is worth taking only when the runtime read the settings and
+    // accepted every value. An unavailable reply carries an empty tree (with
+    // valid=true, so unreadable settings never block a channels-only upload);
+    // a rejected one carries the radio's pre-edit value, the failed set_value
+    // never having taken. Either overwrites what the user typed, and the
+    // second would mark the field invalid while showing the old value,
+    // leaving Upload blocked until they re-edit a field that already looks right.
+    if (settingsValidation.available !== false && settingsValidation.valid) {
+      ctx.settings.setGroups(settingsValidation.settings);
+    } else if (settingsValidation.available === false) {
+      log.logDebug(
+        `PREFLIGHT SETTINGS UNCHECKED ${settingsValidation.message || "runtime returned no settings"}`
+          + (settingsValidation.error ? ` (${settingsValidation.error})` : ""),
+      );
+    }
     ctx.settings.ensureActiveTab();
     ctx.settings.clearInvalid();
     ctx.settings.applyValidationIssues(settingsValidation.issues);
