@@ -149,7 +149,7 @@ function buildHarness({
   // The modal starts closed, exactly as index.html ships it.
   dom.repeaterQueryModalEl.classList.add("hidden");
 
-  const log = { statuses: [], debug: [], errors: [], cancelled: [] };
+  const log = { statuses: [], debug: [], errors: [], rejected: [], cancelled: [] };
   const table = { inserted: [] };
 
   const ctx = {
@@ -159,6 +159,11 @@ function buildHarness({
       setStatus: (message) => log.statuses.push(String(message)),
       logDebug: (message) => log.debug.push(String(message)),
       reportActionError: (label, error) => log.errors.push(`${label}: ${error?.message || error}`),
+      // Kept apart from reportActionError because that is the whole point of
+      // it: a form the user can fix is reported without reaching Sentry, so a
+      // test that let the two share a list could not tell which funnel a
+      // failure took.
+      reportActionRejected: (label, error) => log.rejected.push(`${label}: ${error?.message || error}`),
       reportActionCancelled: (label, message) => log.cancelled.push(`${label}: ${message}`),
     },
     table: {
@@ -1116,8 +1121,12 @@ test("a coordinate-free or ill-formed RSGB query never reaches the network", asy
   const calls = installRsgbFetch({});
   await openRsgb(dom);
 
+  // The submit event is dispatched straight at the form, which is the one way
+  // past the disabled button (a browser refuses both the click and the
+  // implicit Enter submission while it is disabled). What it proves is that
+  // the check inside runQuery is still there behind the gate.
   await dom.repeaterQueryFormEl.dispatch("submit");
-  assert.match(log.errors.join("\n"), /Set a location first/);
+  assert.match(log.rejected.join("\n"), /Set a location first/);
 
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "51.5072";
@@ -1129,13 +1138,53 @@ test("a coordinate-free or ill-formed RSGB query never reaches the network", asy
     fieldByName(dom, "radius").value = radius;
     await dom.repeaterQueryFormEl.dispatch("submit");
   }
-  assert.equal(log.errors.filter((line) => /positive number of kilometres/.test(line)).length, 3);
+  assert.equal(log.rejected.filter((line) => /positive number of kilometres/.test(line)).length, 3);
 
+  // None of the four is a defect, so none may take the funnel that files a
+  // Sentry event: an unfilled form is not a failure of the directory.
+  assert.deepEqual(log.errors, [], "form input the user can fix is not an error report");
   assert.deepEqual(calls, [], "nothing should have been fetched");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false, "the modal stays open on an error");
   // Four submits were accepted, so a failed query must release the in-flight
   // guard rather than leaving the form wedged.
   assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "a failed query leaves the button usable");
+});
+
+test("RSGB cannot be queried until it has a location, and says so", async () => {
+  const { dom } = buildHarness();
+  installGeolocation(LONDON);
+  installRsgbFetch({});
+  await openRsgb(dom);
+
+  // The gate, before any click: RSGB fans out over the squares around a point,
+  // so with no point there is no query to run -- and letting the button be
+  // pressed only to answer with an error report is what this replaces.
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
+  assert.match(dom.repeaterQuerySubmitEl.title, /Set a location first/);
+  assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API", "a gated button still says what it will do");
+  // A disabled button explains nothing on a touch screen, so the caption under
+  // the map carries the reason where it can actually be read.
+  assert.match(previewCaption(dom).textContent, /Set a location/);
+
+  await geolocateButton(dom).dispatch("click");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  assert.equal(dom.repeaterQuerySubmitEl.title, "");
+
+  // Clearing the location puts the gate back: the form is unfillable again.
+  await clearLocationButton(dom).dispatch("click");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
+});
+
+test("a directory that filters by country is queryable with no location", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/przemienniki/meta", body: META_JSON }]);
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+
+  // The gate is per source, not a blanket rule. przemienniki, RepeaterBook and
+  // IRTS filter upstream and accept a country on its own, so gating them would
+  // remove a whole-country search that works.
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  assert.equal(dom.repeaterQuerySubmitEl.title, "");
 });
 
 test("an RSGB query fans out over the squares and inserts the matching repeaters", async () => {

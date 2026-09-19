@@ -406,8 +406,9 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // rather than fetched here because this file contacts no directory.
   //   state:      "ok" once an answer is drawn, "loading" while the next is
   //               fetched, "failed" when it could not be, "blocked" when no
-  //               radio is loaded to import into, "off" when there is nothing
-  //               to preview.
+  //               radio is loaded to import into, "needed" when the source
+  //               cannot be queried until a position is set, "off" when there
+  //               is nothing to preview.
   //   points:     the repeaters to plot.
   //   truncated:  the source searched only part of the area (RSGB clips its
   //               fan-out at 24 squares), so the count is not whole-radius
@@ -422,6 +423,12 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   const FIXED_CAPTIONS = {
     failed: "Could not preview this search.",
     blocked: "Select a radio to preview repeaters.",
+    // The readable half of a disabled Query API button. The button carries the
+    // same sentence as a title, which is nothing at all on a touch screen, so
+    // the reason it cannot be pressed has to be on the page somewhere -- and
+    // under the map is where the user is already looking for the missing
+    // location.
+    needed: "Set a location to search this directory.",
   };
 
   // Caption the map with what is drawn on it, not with what was handed in: a
@@ -733,10 +740,11 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
         refreshPreview();
         return;
       }
-      // "off" and "blocked" both mean there is nothing to preview, so the
-      // squares must go with the caption, or they would be redrawn around the
-      // next position the user enters while its own preview is still on its way.
-      if ((state === "off" || state === "blocked") && plot.points.length > 0) {
+      // "off", "blocked" and "needed" all mean there is nothing to preview, so
+      // the squares must go with the caption, or they would be redrawn around
+      // the next position the user enters while its own preview is still on
+      // its way.
+      if ((state === "off" || state === "blocked" || state === "needed") && plot.points.length > 0) {
         plot.points = [];
         refreshPreview();
         return;
