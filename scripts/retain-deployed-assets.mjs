@@ -16,6 +16,18 @@
 // deploy: warn and exit 0. A host that does not answer at all is a
 // misconfiguration and exits non-zero, because silently retaining nothing
 // looks identical to a successful run.
+//
+// That non-zero exit also catches a domain move, where the host in CNAME is
+// correct but not yet wired up. Pages serves one custom domain per repository
+// and only learns a new one from a deploy -- which this step runs before, so a
+// CNAME change landed on its own fails here and the deploy never happens. The
+// order that works is to point the Pages site at the new domain out of band
+// first (Settings -> Pages, or PUT /repos/:owner/:repo/pages), wait for its
+// certificate, and land the CNAME change afterwards; by then the new host is
+// serving the previous artifact and there is a real manifest to retain from.
+// The guard is deliberately not relaxed for this case: a host that answers
+// nothing is indistinguishable from the drift this whole script exists to
+// catch, so the message below carries the remedy instead.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -87,7 +99,11 @@ async function main() {
     if (!(await siteIsReachable(baseUrl))) {
       throw new Error(
         `${baseUrl} does not serve a site — retention would silently do nothing. ` +
-          "Check that the host matches CNAME and that Pages is serving it.",
+          "Check that the host matches CNAME and that Pages is serving it. " +
+          "If CNAME has just been pointed at a new domain, set that domain on " +
+          "the Pages site first and wait for its certificate, then land the " +
+          "CNAME change: Pages only learns a new domain from a deploy, and this " +
+          "step runs before it.",
       );
     }
     console.warn(`No deployed asset manifest at ${baseUrl}; nothing to retain (first deploy?).`);

@@ -3,6 +3,9 @@
 // being treated the same as a first deploy. Both cost the live site its
 // post-deploy cache window for a week before anyone noticed, because the
 // script exited 0 either way (see FINDINGS.md, pages-deploy-and-cache-window).
+// A third case fails identically but for a benign reason -- a CNAME moved to a
+// domain Pages has not been told about -- so what is pinned there is the
+// message, which is all that tells the two apart.
 //
 // Everything here drives the real script as a child process, so what is under
 // test is exactly what CI runs.
@@ -96,6 +99,27 @@ test("a host that serves nothing fails the build instead of warning", async () =
     assert.notEqual(result.status, 0, "must exit non-zero");
     assert.match(result.stderr, /does not serve a site/);
     assert.match(result.stderr, /CNAME/);
+  }));
+});
+
+test("the unreachable-host failure explains the domain-move ordering", async () => {
+  // A CNAME pointed at a domain Pages has not been told about yet fails here
+  // exactly like a drifted hostname, and cannot be told apart from one. The
+  // message is the only thing that separates them for whoever reads the log,
+  // so it has to carry the order that works rather than just the symptom.
+  await withSite({}, (url) => withTempRepo("unused.test", async (dir) => {
+    const result = await run(dir, [url]);
+    assert.notEqual(result.status, 0, "must exit non-zero");
+    assert.match(
+      result.stderr,
+      /pointed at a new domain/,
+      "the failure must name the domain-move case, not only a wrong hostname",
+    );
+    assert.match(
+      result.stderr,
+      /Pages only learns a new domain from a deploy/,
+      "the failure must say why landing the CNAME change first cannot work",
+    );
   }));
 });
 
