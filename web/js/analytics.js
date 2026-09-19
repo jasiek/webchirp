@@ -24,17 +24,21 @@ export const MEASUREMENT_ID = "G-80DP6MQ180";
 // out. Off-domain nothing is requested from googletagmanager, gtag stays
 // undefined, and every trackEvent() call no-ops through the guard below.
 //
-// www sits beside each apex because CNAME points at the apex and a www visitor
-// who was not redirected is real traffic. Forks are unaffected either way,
+// Both domains are listed because the app is moving between them. webchirp.org
+// is what CNAME names and what Pages serves; codeplug.org is the name it was
+// served under, and stays here until the redirect site replacing it is live --
+// an installed PWA and a long-lived tab keep running the app from that origin
+// in the meantime, and that is production traffic reaching production code.
+// Splitting either into its own property would halve every per-driver rate for
+// no reason anyone reading the reports wants. Forks are unaffected either way,
 // being on github.io or a domain of their own.
 //
-// webchirp.org is the same deployment under a second name, so its traffic is
-// production traffic and belongs in the same property: splitting it out would
-// halve every per-driver rate for no reason anyone reading the reports wants.
-// Only its apex is listed, because webchirp.org is served on the apex alone and
-// its www redirects there -- the browser follows that redirect before any of
-// this runs, so location.hostname is never www.webchirp.org and an entry for it
-// would be a branch that can never be taken.
+// The two pairs are deliberately not symmetric, so a tidy-up that makes them
+// symmetric breaks one of them. www.codeplug.org is listed because it is a
+// real name that was never redirected to its apex, and an unredirected visitor
+// is real traffic. www.webchirp.org is not listed because it does not exist:
+// the name is NXDOMAIN rather than a redirect, so location.hostname can never
+// be it and an entry would be a branch that can never be taken.
 export const ANALYTICS_HOSTS = Object.freeze([
   "codeplug.org",
   "www.codeplug.org",

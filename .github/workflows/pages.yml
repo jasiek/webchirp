@@ -1,5 +1,5 @@
 # Build the production bundle (npm run build:dist) and deploy dist/ to GitHub
-# Pages, which serves the app at the domain in CNAME (https://codeplug.org/).
+# Pages, which serves the app at the domain in CNAME (https://webchirp.org/).
 # Replaces the legacy Jekyll deployment that served the raw repo tree.
 name: Deploy to GitHub Pages
 

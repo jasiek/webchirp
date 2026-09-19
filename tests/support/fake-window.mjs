@@ -22,7 +22,7 @@
 // (every message posted to a channel) and the `dispatch`/`listenerCount`/
 // `deliverBroadcast` helpers tests drive listeners through.
 export function makeWindow({
-  hostname = "codeplug.org",
+  hostname = "webchirp.org",
   displayModes = [],
   standalone = undefined,
   version = { webchirpSha: "abc123" },
