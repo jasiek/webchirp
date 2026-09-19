@@ -417,7 +417,10 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   //   unsupported: repeaters the map places but the selected radio cannot use.
   //   drawn:      the tally from the last render, so a caption rewritten
   //               without a redraw still describes the squares on screen.
-  let plot = { state: "off", points: [], truncated: false, unmapped: 0, unsupported: 0, drawn: null };
+  //   needReason: under "needed", the shell's own sentence for what the form
+  //               is still missing -- the sources word it differently, so the
+  //               caption is told rather than guessing.
+  let plot = { state: "off", points: [], truncated: false, unmapped: 0, unsupported: 0, drawn: null, needReason: "" };
 
   // States whose caption does not depend on what is drawn.
   const FIXED_CAPTIONS = {
@@ -427,7 +430,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     // same sentence as a title, which is nothing at all on a touch screen, so
     // the reason it cannot be pressed has to be on the page somewhere -- and
     // under the map is where the user is already looking for the missing
-    // location.
+    // location. Stands in only if the shell passed no reason of its own.
     needed: "Set a location to search this directory.",
   };
 
@@ -438,7 +441,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     plot.drawn = drawn;
     previewCount.classList.toggle("is-loading", plot.state === "loading");
     if (FIXED_CAPTIONS[plot.state]) {
-      previewCount.textContent = FIXED_CAPTIONS[plot.state];
+      previewCount.textContent = plot.needReason || FIXED_CAPTIONS[plot.state];
       previewCount.hidden = false;
       return;
     }
@@ -731,8 +734,9 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     // — the squares already drawn stay put while the next answer is fetched,
     // because blanking the map on every edit would make it flicker through
     // every keystroke of a radius.
-    setMarkers: (points, state = "ok", { truncated = false, unmapped = 0, unsupported = 0 } = {}) => {
+    setMarkers: (points, state = "ok", { truncated = false, unmapped = 0, unsupported = 0, reason = "" } = {}) => {
       plot.state = state;
+      plot.needReason = state === "needed" ? String(reason || "") : "";
       if (state === "ok") {
         // Only an answer carries the qualifiers; "loading" and "failed" keep
         // the ones describing the squares still on screen.

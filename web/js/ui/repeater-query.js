@@ -7,9 +7,9 @@ import { encodeMaidenhead } from "../rsgb.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
 import {
-  POSITION_REQUIRED_MESSAGE,
   RepeaterInputError,
   createRepeaterSources,
+  unmetRequirement,
 } from "./repeater-sources.js";
 import {
   createCheckboxField,
@@ -132,22 +132,22 @@ export function createRepeaterQuery(ctx) {
     applySubmitState();
   }
 
-  // Whether the active source can be queried with what is in the form. Only
-  // the position is tested, and only for the sources that declare they need
-  // one (requiresPosition, web/js/ui/repeater-sources.js): a directory that
-  // filters by country is perfectly queryable without one.
+  // Whether the active source can be queried with what is in the form. Each
+  // source declares what it needs (requires, web/js/ui/repeater-sources.js)
+  // and the rule differs: RSGB fans out around a point and has nothing to do
+  // without one, while the three country-filtered directories accept either a
+  // country or a location and answer a query with neither by sending their
+  // whole contents.
   //
-  // This is what keeps an unfillable form from becoming an error report.
-  // Before it, the only thing that said a location was needed was the sentence
+  // This is what keeps an unrunnable form from becoming an error report.
+  // Before it, the only thing that said a filter was needed was the sentence
   // RepeaterInputError carried -- which the user could not read until they had
   // pressed the button, and which arrived through the same funnel a directory
-  // outage does, so every missing location filed a Sentry event for something
-  // no one could fix in the code.
+  // outage does, so every unfilled form filed a Sentry event for something no
+  // one could fix in the code.
   function refreshSubmitState() {
     const values = fieldInstances.length > 0 ? collectValues() : {};
-    submitBlockedReason = activeSource?.requiresPosition && !values.position
-      ? POSITION_REQUIRED_MESSAGE
-      : "";
+    submitBlockedReason = unmetRequirement(activeSource, values);
     applySubmitState();
   }
 
@@ -339,11 +339,14 @@ export function createRepeaterQuery(ctx) {
     const values = collectValues();
     // No position is not a failed preview, it is a form not yet filled in: the
     // map is showing its stand-in line, and a count under it would be counting
-    // nothing. A source that cannot be queried without one says so under the
+    // nothing. A form that cannot be submitted as it stands says why under the
     // map instead of staying blank, because that is the readable half of the
     // disabled Query API button -- a title attribute is nothing on a phone.
+    // Only when it cannot: a country-wide search is runnable and simply has no
+    // position to preview, so it keeps the blank caption.
     if (!values.position) {
-      positionField?.setMarkers([], activeSource?.requiresPosition ? "needed" : "off");
+      const blocked = submitBlockedReason.length > 0;
+      positionField?.setMarkers([], blocked ? "needed" : "off", { reason: submitBlockedReason });
       return;
     }
     const source = activeSource;

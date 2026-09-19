@@ -253,6 +253,20 @@ function fieldByName(dom, name) {
   return match;
 }
 
+// Pick a country and report it the way the select does, so the shell's gate on
+// the submit button sees it. The three country-filtered directories answer a
+// query with neither a country nor a location by sending their whole contents,
+// so most of these tests have to choose one of the two before they can submit.
+async function chooseCountry(dom, value) {
+  const select = countrySelect(dom);
+  select.value = value;
+  // Dispatched at the grid, which is where the shell delegates from: the fake
+  // DOM does not bubble, so an event fired at the select itself would reach no
+  // listener at all (see tests/support/fake-dom.mjs).
+  await grid(dom).dispatch("change", { target: select });
+  return select;
+}
+
 function countrySelect(dom) {
   const select = descendants(grid(dom)).find((el) => el.tagName === "SELECT");
   assert.ok(select, "country select is in the grid");
@@ -452,11 +466,19 @@ test("blank optional filters are omitted from the query", async () => {
   for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
     el.checked = false;
   }
+  // The country is left blank on purpose -- that is the parameter under test --
+  // so the position is what lets the query run at all.
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = "52.2297";
+  await latitude.dispatch("input");
+  const longitude = fieldByName(dom, "longitude");
+  longitude.value = "21.0122";
+  await longitude.dispatch("input");
 
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   const url = queryUrl(calls);
-  for (const param of ["country", "band", "onlyworking", "latitude", "longitude"]) {
+  for (const param of ["country", "band", "onlyworking"]) {
     assert.equal(url.searchParams.get(param), null, `no ${param} parameter`);
   }
   assert.equal(url.searchParams.get("range"), "30");
@@ -473,6 +495,7 @@ test("an RXF query with no mode selected falls back to analogue only", async () 
   ]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
   for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
     el.checked = false;
   }
@@ -539,6 +562,7 @@ test("IRTS rejects an RXF response without a frequency perspective", async () =>
   ]);
 
   await dom.channelImportIrtsEl.dispatch("click");
+  await chooseCountry(dom, "IE");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   assert.equal(table.inserted.length, 0);
@@ -562,6 +586,7 @@ test("IRTS skips and reports a digital mode the selected radio cannot use", asyn
   ]);
 
   await dom.channelImportIrtsEl.dispatch("click");
+  await chooseCountry(dom, "IE");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   assert.equal(table.inserted.length, 1);
@@ -592,6 +617,7 @@ test("IRTS skips a repeater the selected radio cannot tune", async () => {
   ]);
 
   await dom.channelImportIrtsEl.dispatch("click");
+  await chooseCountry(dom, "IE");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   // The 23cm repeater is above the harness radio's 470 MHz ceiling. Before the
@@ -622,6 +648,7 @@ test("an RXF entry missing one qrg imports as simplex, not as a bogus split", as
   ]);
 
   await dom.channelImportIrtsEl.dispatch("click");
+  await chooseCountry(dom, "IE");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   // An absent <qrg> used to parse as Number("") === 0, a finite value that
@@ -642,6 +669,7 @@ test("a failed query reports the error and leaves the modal open", async () => {
   ]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   assert.equal(log.errors.length, 1);
@@ -850,6 +878,7 @@ test("submitting without a channel schema fetches nothing", async () => {
   const calls = installFetch([{ match: "/meta", body: META_JSON }]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   assert.ok(log.statuses.includes("No channel schema loaded yet."));
@@ -1175,16 +1204,55 @@ test("RSGB cannot be queried until it has a location, and says so", async () => 
   assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
 });
 
-test("a directory that filters by country is queryable with no location", async () => {
+test("a country-filtered directory takes either filter, but not neither", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/przemienniki/meta", body: META_JSON },
+    { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
+  ]);
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+
+  // Neither filter is not a search: the directory answers it with everything
+  // it has -- 18.4 MB from RepeaterBook, measured live -- so the query never
+  // gets to leave.
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
+  assert.match(dom.repeaterQuerySubmitEl.title, /Choose a country or set a location/);
+  assert.match(previewCaption(dom).textContent, /Choose a country or set a location/);
+
+  // Either one clears it. The gate is per source, not a blanket rule: unlike
+  // RSGB these three filter upstream, so a whole-country search is a real
+  // search and gating them on a location would remove it.
+  await chooseCountry(dom, "PL");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  assert.equal(dom.repeaterQuerySubmitEl.title, "");
+  // A country-wide search has no position to preview, which is a blank caption
+  // and not a complaint.
+  assert.equal(previewCaption(dom).hidden, true);
+
+  await dom.repeaterQueryFormEl.dispatch("submit");
+  const url = queryUrl(calls);
+  assert.equal(url.searchParams.get("country"), "pl");
+  assert.equal(url.searchParams.get("latitude"), null, "no position was set");
+});
+
+test("a country-filtered directory is also queryable on a location alone", async () => {
   const { dom } = buildHarness();
   installFetch([{ match: "/przemienniki/meta", body: META_JSON }]);
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
 
-  // The gate is per source, not a blanket rule. przemienniki, RepeaterBook and
-  // IRTS filter upstream and accept a country on its own, so gating them would
-  // remove a whole-country search that works.
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = "52.2297";
+  await latitude.dispatch("input");
+  const longitude = fieldByName(dom, "longitude");
+  longitude.value = "21.0122";
+  await longitude.dispatch("input");
+
+  // The range is what actually bounds the response -- measured live, adding a
+  // country to a located RepeaterBook query returns a byte-identical body, so
+  // a location on its own is the better-filtered of the two.
   assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
-  assert.equal(dom.repeaterQuerySubmitEl.title, "");
+  assert.equal(countrySelect(dom).value, "", "no country was chosen");
 });
 
 test("an RSGB query fans out over the squares and inserts the matching repeaters", async () => {
@@ -1510,6 +1578,7 @@ test("a stalled przemienniki query times out with the dictionary already loaded"
   ]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
   assert.deepEqual(log.errors, [], "the dictionary fetch is well inside the deadline");
 
   const pending = dom.repeaterQueryFormEl.dispatch("submit");
@@ -1544,6 +1613,7 @@ test("a request answering inside the deadline is unaffected by it", async (t) =>
   ]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
   await dom.repeaterQueryFormEl.dispatch("submit");
   t.mock.timers.tick(REPEATER_REQUEST_TIMEOUT_MS * 2);
 
