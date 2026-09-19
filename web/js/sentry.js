@@ -45,8 +45,10 @@ export const SENTRY_HOSTS = Object.freeze(["codeplug.org", "www.codeplug.org"]);
 
 // Noise that is never actionable: a benign layout notification the browser
 // raises, failures thrown by whatever the user has installed into their own
-// browser, and the runtime's own "you have not done X yet" guards. The first
-// two are not this app's code; the third is this app working as designed.
+// browser, the runtime's own "you have not done X yet" guards, and the CHIRP
+// errors that describe the user's file, the user's radio or the user's cable.
+// The first two are not this app's code; the last two are this app, and CHIRP,
+// working as designed.
 //
 // RuntimePreconditionError (web/python/webchirp_bridge/runtime_errors.py) is
 // what the runtime raises when an action needs something the user has not
@@ -58,9 +60,36 @@ export const SENTRY_HOSTS = Object.freeze(["codeplug.org", "www.codeplug.org"]);
 // traceback either way. Pyodide flattens a Python exception into the message
 // text, which is what puts the class name within reach of a message filter at
 // all.
+//
+// The chirp.errors rule names its classes rather than taking the module whole,
+// because the module is not a severity boundary. Upstream CHIRP is a desktop
+// app where every one of these ends in a dialog box, so it never had to tell
+// "the user handed us something we cannot use" apart from "we asked for
+// something that does not exist". The classes below are the first kind: a CSV
+// with no channels in it, a value or a tone the radio will not take, an image
+// no driver claims, a radio that did not answer because the cable is not in.
+// The ones deliberately left out are the second kind and stay reportable --
+// InvalidMemoryLocation (we computed a channel bound the driver rejects),
+// FrozenMemoryError (we mutated a memory we were told not to), and the bare
+// RadioError the drivers raise as a catch-all, which is where a short read from
+// the Web Serial stand-in (web/python/webchirp_bridge/serial_pipe.py) would
+// surface -- the one failure class upstream CHIRP has never had to see.
+//
+// Matching on the defining module is also what keeps this app's own errors
+// clear of the rule: RuntimeUnsupportedError and ImageDetectionError subclass
+// errors.RadioError, but Pyodide names a flattened exception after the module
+// that defines it, so they arrive as webchirp_bridge.runtime_errors.* and are
+// reported as before.
+//
+// Dropping the events does not drop the signal. ignoreErrors filters events
+// only, while the failure metrics in web/js/ui/metrics.js carry error_kind,
+// error_type and the driver out through beforeSendMetric -- so "what share of
+// clones fail on this model" stays a question a dashboard can answer even for
+// the classes filtered here.
 const IGNORE_ERRORS = Object.freeze([
   /ResizeObserver loop/i,
   /\bRuntimePreconditionError\b/,
+  /\bchirp\.errors\.(?:InvalidDataError|InvalidValueError|UnsupportedToneError|ImageDetectFailed|ImageMetadataInvalidModel|RadioNoResponse|RadioNoContactLikelyK1|RadioFixedBanks)\b/,
 ]);
 
 const DENY_URLS = Object.freeze([
