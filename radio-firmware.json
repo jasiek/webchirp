@@ -47,9 +47,9 @@
       "note": "Its download area carries programming software and manuals; the two radios that do have firmware are listed separately here."
     },
     "Baojie": {
-      "status": "unknown",
+      "status": "none",
       "url": null,
-      "note": ""
+      "note": "Baojie's own download page lists programming software, manuals and a USB driver only; no firmware files."
     },
     "Boblov": {
       "status": "unknown",
@@ -222,9 +222,9 @@
       "note": ""
     },
     "Radioddity": {
-      "status": "unknown",
-      "url": null,
-      "note": ""
+      "status": "official",
+      "url": "https://www.radioddity.com/pages/radioddity-download",
+      "note": "Its firmware downloads cover the DMR radios; much of the analog range has programming software only."
     },
     "Radtel": {
       "status": "official",
@@ -362,6 +362,11 @@
       "status": "unknown",
       "url": null,
       "note": ""
+    },
+    "Anysecu|AC-580": {
+      "status": "none",
+      "url": null,
+      "note": "Identical to the Radioddity GS-5B, for which only programming software and manuals are published, no firmware."
     },
     "Baofeng|BF-F8HP-PRO": {
       "status": "official",
