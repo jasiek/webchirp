@@ -20,6 +20,10 @@ const WEB_DIR = path.join(REPO_ROOT, "web");
 const PAGES_DIR = path.join(WEB_DIR, "radios");
 const CATALOG_PATH = path.join(WEB_DIR, "radio-catalog.json");
 const FEATURES_PATH = path.join(REPO_ROOT, "radio-features.json");
+// Hand-curated, unlike the two above: no CHIRP driver knows whether the radio
+// it talks to can take new firmware, so that fact cannot be generated from the
+// catalog and is recorded by hand instead. This script only states it.
+const FIRMWARE_PATH = path.join(REPO_ROOT, "radio-firmware.json");
 const CNAME_PATH = path.join(REPO_ROOT, "CNAME");
 
 // The USB-serial chips WebUSB drivers exist for (web/js/ch340-webusb.js and
@@ -34,6 +38,144 @@ function escapeHtml(value) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// The firmware statuses radio-firmware.json may record, each as the sentence a
+// page shows for it. The generator states the judgement and never makes it.
+//
+// Two sentences per status, because the two ways an answer is reached are not
+// equally strong. A "model" entry was established for this radio; a "vendor"
+// entry is the maker's general practice, inherited by a radio nobody checked
+// individually. Saying "Icom publishes a firmware update for the IC-2100H" off
+// a vendor-level fact would be inventing a per-model claim out of a range-level
+// one, and a reader who then cannot find that download has been sent on an
+// errand by this page. The vendor wording points at the download page instead
+// of promising what is on it.
+//
+// "unknown" has no sentence on purpose. A page saying "we could not find out"
+// gives a reader nothing to act on, so an unknown radio gets no firmware
+// section at all -- the same rule the spec bullets follow, where a capability a
+// driver cannot report contributes no bullet rather than a blank one.
+const FIRMWARE_SENTENCES = {
+  official: {
+    model: (vendor, model) =>
+      `${vendor} publishes a firmware update for the ${model} that you can install yourself.`,
+    vendor: (vendor, model) =>
+      `${vendor} publishes firmware updates, though not for every radio it has made. Its `
+      + `download page is where to check whether the ${model} is one of them.`,
+  },
+  service: {
+    model: (vendor, model) =>
+      `The ${model} takes firmware updates, but a ${vendor} dealer or service centre installs `
+      + "them rather than the owner.",
+    vendor: (vendor) =>
+      `${vendor} firmware is updated by a dealer or service centre rather than by the owner.`,
+  },
+  community: {
+    model: (vendor, model) =>
+      `${vendor} publishes no firmware update for the ${model}, but a community-built firmware `
+      + "exists for it. It is unofficial, and a failed flash can leave the radio unusable.",
+    vendor: (vendor) =>
+      `${vendor} publishes no firmware updates of its own. Community-built firmware exists for `
+      + "some of its radios; it is unofficial, and a failed flash can leave one unusable.",
+  },
+  none: {
+    model: (vendor, model) =>
+      `The ${model} has no firmware update: its firmware is written at the factory and is not `
+      + "replaceable in the field.",
+    // Names the radio even at vendor scope, unlike the other three. This
+    // answer is only ever recorded after somebody went through the whole of a
+    // vendor's download area and did not find the model there, so the negative
+    // is established for this radio in a way a positive never is -- and stating
+    // it flatly ("publishes no firmware updates") would be contradicted by the
+    // notes, several of which have to name the two or three stablemates that
+    // do have a download.
+    vendor: (vendor, model) =>
+      `${vendor} publishes no firmware update for the ${model}: its radios are programmed at `
+      + "the factory, and their firmware is not meant to be replaced.",
+  },
+};
+
+// What the outbound link is called, per status. A radio whose firmware cannot
+// be updated still has a download page worth linking -- programming software,
+// manuals, and the handful of stablemates that do have firmware -- but calling
+// that link "Firmware downloads" next to a sentence saying there is no firmware
+// is the page arguing with itself, and the reader believes the link.
+const FIRMWARE_LINK_LABELS = {
+  official: (vendor, host) => `Firmware downloads at ${host}`,
+  service: (vendor, host) => `${vendor} support at ${host}`,
+  community: (vendor, host) => `The firmware project at ${host}`,
+  none: (vendor, host) => `${vendor} downloads at ${host}`,
+};
+
+// Said on every firmware section, because the section is the one place on this
+// page where a reader could reasonably conclude that pressing Upload flashes
+// firmware. It does not: a clone writes the codeplug, which is a different part
+// of the radio, and conflating the two is how a working radio gets bricked.
+const FIRMWARE_DISCLAIMER =
+  "WebCHIRP does not flash firmware. It reads and writes the channel list and settings over "
+  + "the programming cable, which is a separate part of the radio.";
+
+// The firmware answer for one radio, carrying how it was reached. An exact
+// vendor-and-model entry wins over the vendor's default, because a vendor is
+// rarely uniform -- Kenwood's amateur range and its commercial TK-/NX- range
+// are not the same answer -- and the exception is the thing worth recording.
+// A radio with neither entry, or one recorded as unknown, resolves to null and
+// gets no section.
+function firmwareFor(radio, firmware) {
+  const byModel = firmware.models[`${radio.vendor}|${radio.model}`];
+  const entry = byModel || firmware.vendors[radio.vendor];
+  if (!entry || entry.status === "unknown") {
+    return null;
+  }
+  return { ...entry, scope: byModel ? "model" : "vendor" };
+}
+
+// The status as a finished sentence about this radio, with the recorded note
+// after it where there is one. Built once and used twice -- the visible
+// paragraph and the FAQ JSON-LD answer are the same string, because structured
+// data that does not match what the page shows is structured data Google drops.
+function firmwareSentence(entry, vendor, model) {
+  const lead = FIRMWARE_SENTENCES[entry.status][entry.scope](vendor, model);
+  return entry.note ? `${lead} ${entry.note}` : lead;
+}
+
+// The destination's own host, so the link says where it goes instead of "click
+// here" and a reader can see it is the manufacturer's site before following it.
+// A url that will not parse yields no label, and the caller then renders the
+// sentence with no link rather than a link that goes nowhere.
+function firmwareLinkHost(url) {
+  try {
+    return new URL(url).host.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+// What the owner can do about firmware, as its own section rather than another
+// spec bullet: it is the one thing on the page that is about the radio instead
+// of about its codeplug, and it is what a reader arrives with when the answer
+// they found elsewhere was a forum thread. Absent, not empty, when nothing is
+// recorded for this radio (firmwareFor).
+function firmwareSection(radio, entry) {
+  if (!entry) {
+    return "";
+  }
+  const host = entry.url ? firmwareLinkHost(entry.url) : null;
+  // nofollow because these are outbound links on 556 pages pointing at a few
+  // dozen hosts, which is the shape of a link scheme whether or not it is one.
+  const link = host
+    ? `
+        <p>
+          <a href="${escapeHtml(entry.url)}" rel="nofollow noopener"
+            >${escapeHtml(FIRMWARE_LINK_LABELS[entry.status](radio.vendor, host))}</a
+          >
+        </p>`
+    : "";
+  return `
+        <h2>Can I update the firmware on the ${escapeHtml(radio.model)}?</h2>
+        <p>${escapeHtml(firmwareSentence(entry, radio.vendor, radio.model))}</p>${link}
+        <p>${escapeHtml(FIRMWARE_DISCLAIMER)}</p>`;
 }
 
 // Any label as one filename-safe token.
@@ -211,10 +353,10 @@ function variantsOf(ranked, features) {
   });
 }
 
-function faqEntries(radio, features) {
+function faqEntries(radio, features, firmware) {
   const name = `${radio.vendor} ${radio.model}`;
   const [low, high] = features.memoryBounds;
-  return [
+  const entries = [
     {
       question: `Do I need to install a USB driver to program the ${name}?`,
       answer:
@@ -232,6 +374,16 @@ function faqEntries(radio, features) {
       answer: `${high - low + 1}, numbered ${low} to ${high} in the channel table.`,
     },
   ];
+  // "Can I update the firmware" is asked about a radio far more often than it
+  // is answered, so where there is an answer the page offers it as a question
+  // rather than leaving it in prose a search engine reads as prose.
+  if (firmware) {
+    entries.push({
+      question: `Can I update the firmware on the ${name}?`,
+      answer: `${firmwareSentence(firmware, radio.vendor, radio.model)} ${FIRMWARE_DISCLAIMER}`,
+    });
+  }
+  return entries;
 }
 
 // Google reads this, not the prose, when it decides whether a page answers a
@@ -249,7 +401,16 @@ function faqJsonLd(entries) {
   });
 }
 
-function renderModelPage({ radio, features, siblings, index, baseUrl, vendorHref, vendorLabel }) {
+function renderModelPage({
+  radio,
+  features,
+  firmware,
+  siblings,
+  index,
+  baseUrl,
+  vendorHref,
+  vendorLabel,
+}) {
   const name = `${radio.vendor} ${radio.model}`;
   const slug = slugFor(radio);
   const title = `${name} programming software`;
@@ -258,7 +419,7 @@ function renderModelPage({ radio, features, siblings, index, baseUrl, vendorHref
     `Program a ${name} from your browser: ${high - low + 1} channels, `
     + "no CPS download and no USB driver install. Runs CHIRP's own driver.";
   const aliases = aliasLabels(radio);
-  const faq = faqEntries(radio, features);
+  const faq = faqEntries(radio, features, firmware);
   const previous = siblings[index - 1];
   const next = siblings[index + 1];
 
@@ -362,7 +523,7 @@ ${faqJsonLd(faq)}
         <ul>
 ${specBullets(radio, features).map((line) => `          <li>${escapeHtml(line)}</li>`).join("\n")}
         </ul>
-${aliasSection}${variantSection}
+${aliasSection}${variantSection}${firmwareSection(radio, firmware)}
         <h2>How to program a ${escapeHtml(name)}</h2>
         <ol>
           <li>Plug the programming cable into the radio and the computer.</li>
@@ -543,12 +704,28 @@ async function readJson(file) {
 async function main() {
   const catalog = await readJson(CATALOG_PATH);
   const { features, chirpRevision } = await readJson(FEATURES_PATH);
+  const firmware = await readJson(FIRMWARE_PATH);
   if (chirpRevision !== catalog.chirpRevision) {
     throw new Error(
       `radio-features.json is from CHIRP ${chirpRevision} but the catalog is from `
       + `${catalog.chirpRevision}; run npm run build:catalog first.`,
     );
   }
+  // A status the sentence table does not cover would otherwise surface as a
+  // crash deep inside a template, or -- worse -- as a section that quietly says
+  // nothing. Checked once, over both maps, so a typo in a hand-maintained file
+  // fails the build at the point it is introduced.
+  for (const [scope, entries] of [["vendors", firmware.vendors], ["models", firmware.models]]) {
+    for (const [key, entry] of Object.entries(entries)) {
+      if (entry.status !== "unknown" && !(entry.status in FIRMWARE_SENTENCES)) {
+        throw new Error(
+          `radio-firmware.json ${scope}["${key}"] has status "${entry.status}", which is not `
+          + `one of: unknown, ${Object.keys(FIRMWARE_SENTENCES).join(", ")}.`,
+        );
+      }
+    }
+  }
+
   const host = (await readFile(CNAME_PATH, "utf8")).trim();
   if (!host) {
     throw new Error("CNAME is empty; the pages need a canonical host.");
@@ -623,6 +800,7 @@ async function main() {
       const html = renderModelPage({
         radio,
         features: features[radio.key],
+        firmware: firmwareFor(radio, firmware),
         siblings,
         index,
         baseUrl,
@@ -662,11 +840,13 @@ async function main() {
   await writeFile(path.join(WEB_DIR, "robots.txt"), renderRobots(baseUrl), "utf8");
 
   const merged = radios.filter((radio) => radio.variants.length > 1);
+  const answered = radios.filter((radio) => firmwareFor(radio, firmware)).length;
   const written = (await readdir(PAGES_DIR)).length;
   // eslint-disable-next-line no-console
   console.log(
     `Wrote ${written} pages to ${path.relative(REPO_ROOT, PAGES_DIR)}: ${radios.length} models `
-    + `across ${vendorNames.length} vendors, ${hubVendors.length} of which got a hub`
+    + `across ${vendorNames.length} vendors, ${hubVendors.length} of which got a hub, `
+    + `${answered} of which answer whether their firmware can be updated`
     + `${merged.length ? `, merging ${merged.length} model(s) whose drivers share one name: ${merged.map((radio) => radio.variants.map((variant) => variant.key).join(" + ")).join("; ")}` : ""}`
     + `${skipped.length ? `, skipping ${skipped.length} radio(s) that describe themselves too thinly: ${skipped.join(", ")}` : ""}.`,
   );

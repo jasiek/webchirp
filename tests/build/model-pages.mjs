@@ -21,7 +21,7 @@ import { withTempDir } from "../support/temp-dir.mjs";
 const SCRIPT = path.join(repoRoot, "scripts", "build-model-pages.mjs");
 
 // The script resolves every path from its cwd, so a temp tree holding these
-// three inputs is a complete stand-in for the repo.
+// four inputs is a complete stand-in for the repo.
 async function stageRealInputs(root) {
   await mkdir(path.join(root, "web"), { recursive: true });
   await copyFile(path.join(repoRoot, "CNAME"), path.join(root, "CNAME"));
@@ -33,11 +33,15 @@ async function stageRealInputs(root) {
     path.join(repoRoot, "radio-features.json"),
     path.join(root, "radio-features.json"),
   );
+  await copyFile(
+    path.join(repoRoot, "radio-firmware.json"),
+    path.join(root, "radio-firmware.json"),
+  );
 }
 
 // A catalog and feature set of exactly the shape the real ones have, so a test
 // can put one radio in a state the real catalog does not contain.
-async function stageFixture(root, { radios, features, revision = "fixture" }) {
+async function stageFixture(root, { radios, features, firmware, revision = "fixture" }) {
   await mkdir(path.join(root, "web"), { recursive: true });
   await writeFile(path.join(root, "CNAME"), "example.test\n", "utf8");
   await writeFile(
@@ -48,6 +52,15 @@ async function stageFixture(root, { radios, features, revision = "fixture" }) {
   await writeFile(
     path.join(root, "radio-features.json"),
     JSON.stringify({ chirpRevision: revision, features }),
+    "utf8",
+  );
+  // A build input like the other two, so a fixture that says nothing about
+  // firmware still has to provide the file -- which is what makes its absence
+  // in the real tree a build failure rather than pages that quietly lost a
+  // section.
+  await writeFile(
+    path.join(root, "radio-firmware.json"),
+    JSON.stringify(firmware || { vendors: {}, models: {} }),
     "utf8",
   );
 }
@@ -95,6 +108,16 @@ const FEATURES = {
 // could match without restating the slug rules.
 function isListingPage(html) {
   return html.includes('<ul class="radio-page-list">');
+}
+
+// The generator escapes page copy but not JSON-LD, so a test comparing the two
+// has to put one through the same transform to compare like with like.
+function escapeForHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function fixtureRadio(overrides) {
@@ -386,6 +409,201 @@ test("a vendor with a single model gets no hub of its own", async () => {
       await readFile(path.join(root, "web", "radios", "solo-one.html"), "utf8"),
       /href="\.\/index\.html">All supported radios/,
     );
+  });
+});
+
+
+// --- Firmware answers -------------------------------------------------------
+//
+// radio-firmware.json is the one page input nobody generated: no CHIRP driver
+// can say whether the radio it talks to takes new firmware. That makes it the
+// input most able to go quietly wrong, so these check the two failure modes
+// that matter -- a vendor-level fact stated as a per-model promise, and a
+// section that renders with nothing in it.
+
+test("a radio with a recorded firmware answer says so, in the page and in its structured data", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    await stageFixture(root, {
+      radios: [fixtureRadio({ vendor: "Quansheng", model: "UV-K5" })],
+      features: { "alpha:AlphaRadio": FEATURES },
+      firmware: {
+        vendors: {},
+        models: {
+          "Quansheng|UV-K5": {
+            status: "community",
+            url: "https://github.com/egzumer/uv-k5-firmware-custom",
+            note: "CHIRP carries a driver for the egzumer firmware.",
+          },
+        },
+      },
+    });
+    await runGenerator(root);
+    const page = await readFile(
+      path.join(root, "web", "radios", "quansheng-uv-k5.html"),
+      "utf8",
+    );
+
+    assert.match(page, /<h2>Can I update the firmware on the UV-K5\?<\/h2>/);
+    assert.match(page, /community-built firmware exists for it/);
+    assert.match(page, /CHIRP carries a driver for the egzumer firmware\./);
+    // The link names its destination rather than saying "click here", so a
+    // reader can see where it goes before following it.
+    assert.match(page, /href="https:\/\/github\.com\/egzumer\/uv-k5-firmware-custom"/);
+    // The link is named for what it is: a community project, not a vendor's
+    // firmware page. Labelling all four statuses alike is how a page ends up
+    // saying "no firmware exists" above a link called "Firmware downloads".
+    assert.match(page, /The firmware project at github\.com/);
+    // Upload writes a codeplug, not firmware. A page that leaves that implicit
+    // is a page somebody can misread into bricking a radio.
+    assert.match(page, /WebCHIRP does not flash firmware/);
+
+    // Structured data and visible text have to be the same sentence: Google
+    // drops a FAQ answer that does not appear on the page.
+    const jsonLd = JSON.parse(page.match(/<script type="application\/ld\+json">\n([\s\S]*?)\n    <\/script>/)[1]);
+    const answers = jsonLd.mainEntity.map((entry) => entry.acceptedAnswer.text);
+    const firmwareAnswer = answers.find((text) => text.includes("community-built"));
+    assert.ok(firmwareAnswer, "the firmware answer is missing from the FAQ structured data");
+    assert.ok(
+      page.includes(escapeForHtml(firmwareAnswer.split(" WebCHIRP does not flash")[0])),
+      "the structured answer is not the sentence the page shows",
+    );
+  });
+});
+
+test("a vendor-level answer stays a statement about the vendor, not a promise about one model", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // Icom publishes firmware for part of its range, so "Icom publishes a
+    // firmware update for the IC-2100H" would be a per-model claim invented
+    // from a range-level fact -- and a reader who cannot then find that file
+    // has been sent on an errand by this page.
+    await stageFixture(root, {
+      radios: [fixtureRadio({ vendor: "Icom", model: "IC-2100H" })],
+      features: { "alpha:AlphaRadio": FEATURES },
+      firmware: {
+        vendors: {
+          Icom: { status: "official", url: "https://www.icomjapan.com/support/firmware_driver/", note: "" },
+        },
+        models: {},
+      },
+    });
+    await runGenerator(root);
+    const page = await readFile(path.join(root, "web", "radios", "icom-ic-2100h.html"), "utf8");
+
+    assert.match(page, /not for every radio it has made/);
+    assert.match(page, /whether the IC-2100H is one of them/);
+    assert.doesNotMatch(
+      page,
+      /publishes a firmware update for the IC-2100H/,
+      "a vendor-level fact was stated as a per-model promise",
+    );
+  });
+});
+
+test("a model entry overrides the vendor it belongs to", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // The case this whole shape exists for: Kenwood's amateur range takes
+    // owner-installed firmware while its commercial TK-/NX- range does not, so
+    // one answer for "Kenwood" would be wrong for one half or the other.
+    await stageFixture(root, {
+      radios: [
+        fixtureRadio({ vendor: "Kenwood", model: "TH-D75" }),
+        fixtureRadio({ key: "beta:BetaRadio", vendor: "Kenwood", model: "TK-3140" }),
+      ],
+      features: { "alpha:AlphaRadio": FEATURES, "beta:BetaRadio": FEATURES },
+      firmware: {
+        vendors: { Kenwood: { status: "service", url: null, note: "" } },
+        models: {
+          "Kenwood|TH-D75": { status: "official", url: "https://www.kenwood.com/", note: "" },
+        },
+      },
+    });
+    await runGenerator(root);
+    const ham = await readFile(path.join(root, "web", "radios", "kenwood-th-d75.html"), "utf8");
+    const commercial = await readFile(
+      path.join(root, "web", "radios", "kenwood-tk-3140.html"),
+      "utf8",
+    );
+
+    assert.match(ham, /publishes a firmware update for the TH-D75/);
+    assert.match(commercial, /dealer or service centre/);
+    assert.doesNotMatch(commercial, /publishes a firmware update/);
+    // No url recorded, so no link -- rather than a link that goes nowhere.
+    assert.doesNotMatch(commercial, /support at/);
+  });
+});
+
+test("a radio nobody established an answer for gets no firmware section", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // A heading that then says "we could not find out" is worse than no
+    // heading: it costs a reader a scroll and gives them nothing to act on.
+    await stageFixture(root, {
+      radios: [
+        fixtureRadio({ vendor: "Zastone", model: "ZT-X6" }),
+        fixtureRadio({ key: "beta:BetaRadio", vendor: "WLN", model: "KD-C1" }),
+      ],
+      features: { "alpha:AlphaRadio": FEATURES, "beta:BetaRadio": FEATURES },
+      firmware: {
+        vendors: { WLN: { status: "unknown", url: null, note: "" } },
+        models: {},
+      },
+    });
+    await runGenerator(root);
+    const unrecorded = await readFile(
+      path.join(root, "web", "radios", "zastone-zt-x6.html"),
+      "utf8",
+    );
+    const unknown = await readFile(path.join(root, "web", "radios", "wln-kd-c1.html"), "utf8");
+
+    assert.doesNotMatch(unrecorded, /Can I update the firmware/);
+    assert.doesNotMatch(unknown, /Can I update the firmware/);
+  });
+});
+
+test("a status the generator has no sentence for fails the build", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // The file is maintained by hand, so a typo in it is a question of when.
+    // Failing here names the key; rendering it would put an empty section on
+    // every page of that vendor and say nothing at all.
+    await stageFixture(root, {
+      radios: [fixtureRadio({ vendor: "Baofeng", model: "UV-5R" })],
+      features: { "alpha:AlphaRadio": FEATURES },
+      firmware: { vendors: { Baofeng: { status: "maybe", url: null, note: "" } }, models: {} },
+    });
+    await assert.rejects(
+      runGenerator(root),
+      /Baofeng.*status "maybe"/s,
+      "a bogus status did not fail the build",
+    );
+  });
+});
+
+test("the real catalog's firmware answers reach the pages they belong to", async () => {
+  await withGeneratedPages(async ({ pages }) => {
+    const firmware = JSON.parse(
+      await readFile(path.join(repoRoot, "radio-firmware.json"), "utf8"),
+    );
+    // Every model-level entry was researched for one specific radio, so an
+    // entry whose page does not carry it is an entry keyed to a model the
+    // catalog spells differently -- work done and then lost.
+    for (const [key, entry] of Object.entries(firmware.models)) {
+      // An unknown model entry exists to suppress its vendor's answer, not to
+      // produce one, so it is correct for its page to stay silent.
+      if (entry.status === "unknown") {
+        continue;
+      }
+      const [vendor, model] = key.split("|");
+      const name = `${vendor}-${model}`
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      const page = pages.get(`${name}.html`);
+      // A model can be absent because its driver describes itself too thinly
+      // to get a page at all; that is not this test's business.
+      if (!page) {
+        continue;
+      }
+      assert.match(page, /<h2>Can I update the firmware/, `${key} has no firmware section`);
+    }
   });
 });
 
