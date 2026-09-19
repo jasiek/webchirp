@@ -406,8 +406,9 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // rather than fetched here because this file contacts no directory.
   //   state:      "ok" once an answer is drawn, "loading" while the next is
   //               fetched, "failed" when it could not be, "blocked" when no
-  //               radio is loaded to import into, "off" when there is nothing
-  //               to preview.
+  //               radio is loaded to import into, "needed" when the source
+  //               cannot be queried until a position is set, "off" when there
+  //               is nothing to preview.
   //   points:     the repeaters to plot.
   //   truncated:  the source searched only part of the area (RSGB clips its
   //               fan-out at 24 squares), so the count is not whole-radius
@@ -416,12 +417,21 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   //   unsupported: repeaters the map places but the selected radio cannot use.
   //   drawn:      the tally from the last render, so a caption rewritten
   //               without a redraw still describes the squares on screen.
-  let plot = { state: "off", points: [], truncated: false, unmapped: 0, unsupported: 0, drawn: null };
+  //   needReason: under "needed", the shell's own sentence for what the form
+  //               is still missing -- the sources word it differently, so the
+  //               caption is told rather than guessing.
+  let plot = { state: "off", points: [], truncated: false, unmapped: 0, unsupported: 0, drawn: null, needReason: "" };
 
   // States whose caption does not depend on what is drawn.
   const FIXED_CAPTIONS = {
     failed: "Could not preview this search.",
     blocked: "Select a radio to preview repeaters.",
+    // The readable half of a disabled Query API button. The button carries the
+    // same sentence as a title, which is nothing at all on a touch screen, so
+    // the reason it cannot be pressed has to be on the page somewhere -- and
+    // under the map is where the user is already looking for the missing
+    // location. Stands in only if the shell passed no reason of its own.
+    needed: "Set a location to search this directory.",
   };
 
   // Caption the map with what is drawn on it, not with what was handed in: a
@@ -431,7 +441,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     plot.drawn = drawn;
     previewCount.classList.toggle("is-loading", plot.state === "loading");
     if (FIXED_CAPTIONS[plot.state]) {
-      previewCount.textContent = FIXED_CAPTIONS[plot.state];
+      previewCount.textContent = plot.needReason || FIXED_CAPTIONS[plot.state];
       previewCount.hidden = false;
       return;
     }
@@ -724,8 +734,9 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     // — the squares already drawn stay put while the next answer is fetched,
     // because blanking the map on every edit would make it flicker through
     // every keystroke of a radius.
-    setMarkers: (points, state = "ok", { truncated = false, unmapped = 0, unsupported = 0 } = {}) => {
+    setMarkers: (points, state = "ok", { truncated = false, unmapped = 0, unsupported = 0, reason = "" } = {}) => {
       plot.state = state;
+      plot.needReason = state === "needed" ? String(reason || "") : "";
       if (state === "ok") {
         // Only an answer carries the qualifiers; "loading" and "failed" keep
         // the ones describing the squares still on screen.
@@ -733,10 +744,11 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
         refreshPreview();
         return;
       }
-      // "off" and "blocked" both mean there is nothing to preview, so the
-      // squares must go with the caption, or they would be redrawn around the
-      // next position the user enters while its own preview is still on its way.
-      if ((state === "off" || state === "blocked") && plot.points.length > 0) {
+      // "off", "blocked" and "needed" all mean there is nothing to preview, so
+      // the squares must go with the caption, or they would be redrawn around
+      // the next position the user enters while its own preview is still on
+      // its way.
+      if ((state === "off" || state === "blocked" || state === "needed") && plot.points.length > 0) {
         plot.points = [];
         refreshPreview();
         return;

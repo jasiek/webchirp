@@ -149,7 +149,7 @@ function buildHarness({
   // The modal starts closed, exactly as index.html ships it.
   dom.repeaterQueryModalEl.classList.add("hidden");
 
-  const log = { statuses: [], debug: [], errors: [], cancelled: [] };
+  const log = { statuses: [], debug: [], errors: [], rejected: [], cancelled: [] };
   const table = { inserted: [] };
 
   const ctx = {
@@ -159,6 +159,11 @@ function buildHarness({
       setStatus: (message) => log.statuses.push(String(message)),
       logDebug: (message) => log.debug.push(String(message)),
       reportActionError: (label, error) => log.errors.push(`${label}: ${error?.message || error}`),
+      // Kept apart from reportActionError because that is the whole point of
+      // it: a form the user can fix is reported without reaching Sentry, so a
+      // test that let the two share a list could not tell which funnel a
+      // failure took.
+      reportActionRejected: (label, error) => log.rejected.push(`${label}: ${error?.message || error}`),
       reportActionCancelled: (label, message) => log.cancelled.push(`${label}: ${message}`),
     },
     table: {
@@ -246,6 +251,20 @@ function fieldByName(dom, name) {
   const match = descendants(grid(dom)).find((el) => el.name === name && el.tagName !== "OPTION");
   assert.ok(match, `field named "${name}" is in the grid`);
   return match;
+}
+
+// Pick a country and report it the way the select does, so the shell's gate on
+// the submit button sees it. The three country-filtered directories answer a
+// query with neither a country nor a location by sending their whole contents,
+// so most of these tests have to choose one of the two before they can submit.
+async function chooseCountry(dom, value) {
+  const select = countrySelect(dom);
+  select.value = value;
+  // Dispatched at the grid, which is where the shell delegates from: the fake
+  // DOM does not bubble, so an event fired at the select itself would reach no
+  // listener at all (see tests/support/fake-dom.mjs).
+  await grid(dom).dispatch("change", { target: select });
+  return select;
 }
 
 function countrySelect(dom) {
@@ -447,11 +466,19 @@ test("blank optional filters are omitted from the query", async () => {
   for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
     el.checked = false;
   }
+  // The country is left blank on purpose -- that is the parameter under test --
+  // so the position is what lets the query run at all.
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = "52.2297";
+  await latitude.dispatch("input");
+  const longitude = fieldByName(dom, "longitude");
+  longitude.value = "21.0122";
+  await longitude.dispatch("input");
 
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   const url = queryUrl(calls);
-  for (const param of ["country", "band", "onlyworking", "latitude", "longitude"]) {
+  for (const param of ["country", "band", "onlyworking"]) {
     assert.equal(url.searchParams.get(param), null, `no ${param} parameter`);
   }
   assert.equal(url.searchParams.get("range"), "30");
@@ -468,6 +495,7 @@ test("an RXF query with no mode selected falls back to analogue only", async () 
   ]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
   for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
     el.checked = false;
   }
@@ -534,6 +562,7 @@ test("IRTS rejects an RXF response without a frequency perspective", async () =>
   ]);
 
   await dom.channelImportIrtsEl.dispatch("click");
+  await chooseCountry(dom, "IE");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   assert.equal(table.inserted.length, 0);
@@ -557,6 +586,7 @@ test("IRTS skips and reports a digital mode the selected radio cannot use", asyn
   ]);
 
   await dom.channelImportIrtsEl.dispatch("click");
+  await chooseCountry(dom, "IE");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   assert.equal(table.inserted.length, 1);
@@ -587,6 +617,7 @@ test("IRTS skips a repeater the selected radio cannot tune", async () => {
   ]);
 
   await dom.channelImportIrtsEl.dispatch("click");
+  await chooseCountry(dom, "IE");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   // The 23cm repeater is above the harness radio's 470 MHz ceiling. Before the
@@ -617,6 +648,7 @@ test("an RXF entry missing one qrg imports as simplex, not as a bogus split", as
   ]);
 
   await dom.channelImportIrtsEl.dispatch("click");
+  await chooseCountry(dom, "IE");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   // An absent <qrg> used to parse as Number("") === 0, a finite value that
@@ -637,6 +669,7 @@ test("a failed query reports the error and leaves the modal open", async () => {
   ]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   assert.equal(log.errors.length, 1);
@@ -845,6 +878,7 @@ test("submitting without a channel schema fetches nothing", async () => {
   const calls = installFetch([{ match: "/meta", body: META_JSON }]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
   await dom.repeaterQueryFormEl.dispatch("submit");
 
   assert.ok(log.statuses.includes("No channel schema loaded yet."));
@@ -1116,8 +1150,12 @@ test("a coordinate-free or ill-formed RSGB query never reaches the network", asy
   const calls = installRsgbFetch({});
   await openRsgb(dom);
 
+  // The submit event is dispatched straight at the form, which is the one way
+  // past the disabled button (a browser refuses both the click and the
+  // implicit Enter submission while it is disabled). What it proves is that
+  // the check inside runQuery is still there behind the gate.
   await dom.repeaterQueryFormEl.dispatch("submit");
-  assert.match(log.errors.join("\n"), /Set a location first/);
+  assert.match(log.rejected.join("\n"), /Set a location first/);
 
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "51.5072";
@@ -1129,13 +1167,92 @@ test("a coordinate-free or ill-formed RSGB query never reaches the network", asy
     fieldByName(dom, "radius").value = radius;
     await dom.repeaterQueryFormEl.dispatch("submit");
   }
-  assert.equal(log.errors.filter((line) => /positive number of kilometres/.test(line)).length, 3);
+  assert.equal(log.rejected.filter((line) => /positive number of kilometres/.test(line)).length, 3);
 
+  // None of the four is a defect, so none may take the funnel that files a
+  // Sentry event: an unfilled form is not a failure of the directory.
+  assert.deepEqual(log.errors, [], "form input the user can fix is not an error report");
   assert.deepEqual(calls, [], "nothing should have been fetched");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false, "the modal stays open on an error");
   // Four submits were accepted, so a failed query must release the in-flight
   // guard rather than leaving the form wedged.
   assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "a failed query leaves the button usable");
+});
+
+test("RSGB cannot be queried until it has a location, and says so", async () => {
+  const { dom } = buildHarness();
+  installGeolocation(LONDON);
+  installRsgbFetch({});
+  await openRsgb(dom);
+
+  // The gate, before any click: RSGB fans out over the squares around a point,
+  // so with no point there is no query to run -- and letting the button be
+  // pressed only to answer with an error report is what this replaces.
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
+  assert.match(dom.repeaterQuerySubmitEl.title, /Set a location first/);
+  assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API", "a gated button still says what it will do");
+  // A disabled button explains nothing on a touch screen, so the caption under
+  // the map carries the reason where it can actually be read.
+  assert.match(previewCaption(dom).textContent, /Set a location/);
+
+  await geolocateButton(dom).dispatch("click");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  assert.equal(dom.repeaterQuerySubmitEl.title, "");
+
+  // Clearing the location puts the gate back: the form is unfillable again.
+  await clearLocationButton(dom).dispatch("click");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
+});
+
+test("a country-filtered directory takes either filter, but not neither", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/przemienniki/meta", body: META_JSON },
+    { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
+  ]);
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+
+  // Neither filter is not a search: the directory answers it with everything
+  // it has -- 18.4 MB from RepeaterBook, measured live -- so the query never
+  // gets to leave.
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
+  assert.match(dom.repeaterQuerySubmitEl.title, /Choose a country or set a location/);
+  assert.match(previewCaption(dom).textContent, /Choose a country or set a location/);
+
+  // Either one clears it. The gate is per source, not a blanket rule: unlike
+  // RSGB these three filter upstream, so a whole-country search is a real
+  // search and gating them on a location would remove it.
+  await chooseCountry(dom, "PL");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  assert.equal(dom.repeaterQuerySubmitEl.title, "");
+  // A country-wide search has no position to preview, which is a blank caption
+  // and not a complaint.
+  assert.equal(previewCaption(dom).hidden, true);
+
+  await dom.repeaterQueryFormEl.dispatch("submit");
+  const url = queryUrl(calls);
+  assert.equal(url.searchParams.get("country"), "pl");
+  assert.equal(url.searchParams.get("latitude"), null, "no position was set");
+});
+
+test("a country-filtered directory is also queryable on a location alone", async () => {
+  const { dom } = buildHarness();
+  installFetch([{ match: "/przemienniki/meta", body: META_JSON }]);
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
+
+  const latitude = fieldByName(dom, "latitude");
+  latitude.value = "52.2297";
+  await latitude.dispatch("input");
+  const longitude = fieldByName(dom, "longitude");
+  longitude.value = "21.0122";
+  await longitude.dispatch("input");
+
+  // The range is what actually bounds the response -- measured live, adding a
+  // country to a located RepeaterBook query returns a byte-identical body, so
+  // a location on its own is the better-filtered of the two.
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  assert.equal(countrySelect(dom).value, "", "no country was chosen");
 });
 
 test("an RSGB query fans out over the squares and inserts the matching repeaters", async () => {
@@ -1461,6 +1578,7 @@ test("a stalled przemienniki query times out with the dictionary already loaded"
   ]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
   assert.deepEqual(log.errors, [], "the dictionary fetch is well inside the deadline");
 
   const pending = dom.repeaterQueryFormEl.dispatch("submit");
@@ -1495,6 +1613,7 @@ test("a request answering inside the deadline is unaffected by it", async (t) =>
   ]);
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
   await dom.repeaterQueryFormEl.dispatch("submit");
   t.mock.timers.tick(REPEATER_REQUEST_TIMEOUT_MS * 2);
 

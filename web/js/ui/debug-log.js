@@ -122,6 +122,22 @@ export function createDebugLog({ dom, notice } = {}) {
     notice?.show({ title: `${action} not possible yet`, message: sentence });
   }
 
+  // Report an action this app's own UI refused because of what is in the form
+  // in front of the user -- a repeater query with no location set, a distance
+  // that is not a number. Same treatment as a runtime precondition failure
+  // above, and for the same reasons: the message is already the instruction
+  // that clears it, nothing is broken, and filing it as a defect would count
+  // an unfilled form as a failure of the directory being queried.
+  //
+  // Separate from reportActionError rather than a branch inside it, because
+  // what makes a failure user-fixable is the caller's own validation and not
+  // anything readable off the error: the class that marks one
+  // (RepeaterInputError, web/js/ui/repeater-sources.js) is local to the module
+  // that throws it.
+  function reportActionRejected(action, error) {
+    reportActionBlocked(action, error, errorDetails(error));
+  }
+
   // Report an action the user called off themselves, such as dismissing the
   // browser's serial port chooser. It reveals the panel because this app has no
   // other visible surface for a message -- silence made a dismissed chooser
@@ -193,6 +209,7 @@ export function createDebugLog({ dom, notice } = {}) {
     logSerial,
     setStatus,
     reportActionError,
+    reportActionRejected,
     reportActionCancelled,
     latestDebugTail,
     clear,

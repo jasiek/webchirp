@@ -46,6 +46,34 @@ import { trackEvent } from "./analytics.js";
 // caller.
 export class RepeaterInputError extends Error {}
 
+// What a source says when the form has not narrowed the search enough to run
+// it. Exported because two places say each sentence: the shared modal
+// (web/js/ui/repeater-query.js) puts it on the disabled Query API button
+// before the click, and the backstop check in runQuery throws it if a query
+// ever reaches there anyway. One sentence each, so the button's explanation
+// and the error can never drift apart.
+export const POSITION_REQUIRED_MESSAGE =
+  "Set a location first: use the \u{1F6F0}\u{FE0F} button or type a latitude and longitude.";
+export const COUNTRY_OR_POSITION_REQUIRED_MESSAGE =
+  "Choose a country or set a location: an unfiltered search downloads the whole directory.";
+
+// The first filter requirement the form has not met, as the sentence to show
+// for it, or "" when the query can run. Each requirement names the keys that
+// satisfy it together -- any one of them holding a value is enough -- because
+// the rule is not "fill in this field" but "narrow the search somehow".
+//
+// Any value counts, since every key this is used with is either a non-empty
+// string or a parsed position object; a filter whose unset state were the
+// number 0 would need its own test.
+export function unmetRequirement(source, values) {
+  for (const requirement of source?.requires || []) {
+    if (!requirement.keys.some((key) => Boolean(values?.[key]))) {
+      return requirement.message;
+    }
+  }
+  return "";
+}
+
 export function createRepeaterSources(ctx, { endpoints }) {
   const { log } = ctx;
 
@@ -310,6 +338,16 @@ export function createRepeaterSources(ctx, { endpoints }) {
       // Proxy-dependent sources have null endpoints when the configured base
       // is blank. IRTS always receives its default api.codeplug.org endpoints.
       available: Boolean(apiUrl && metaUrl),
+      // These directories filter upstream and accept a country on its own, so
+      // a query with no position is a whole-country search rather than an
+      // unfilled form -- which is what the located dimension on repeater_import
+      // below measures. A query with neither is not a search at all: measured
+      // live, RepeaterBook answers one with its entire directory, 18.4 MB
+      // (see FINDINGS.md). Either filter clears the gate.
+      requires: [{
+        keys: ["country", "position"],
+        message: COUNTRY_OR_POSITION_REQUIRED_MESSAGE,
+      }],
       title: `Query ${label}`,
       label,
       actionLabel,
@@ -361,6 +399,13 @@ export function createRepeaterSources(ctx, { endpoints }) {
       previewQuery: (values) => previewRemote(values),
       runQuery: async (values) => {
         const country = String(values.country || "").trim().toLowerCase();
+        // The backstop behind the modal's gate, and the one that matters most:
+        // a query with neither filter is answered in full, so reaching the
+        // network here costs the user an 18 MB download and a codeplug with
+        // every repeater on the continent in it.
+        if (!country && !values.position) {
+          throw new RepeaterInputError(COUNTRY_OR_POSITION_REQUIRED_MESSAGE);
+        }
         const url = buildQueryUrl(values, values.radius);
         log.setStatus(`Querying ${label}...`);
         // Both the request and the body read sit inside the deadline: the
@@ -536,6 +581,13 @@ export function createRepeaterSources(ctx, { endpoints }) {
       key: "rsgb",
       toolbarButton: "channelImportRsgbEl",
       available: true,
+      // The one source with no second way to narrow a search: the fan-out is
+      // over the locator squares around a point, so with nothing to centre on
+      // there is no request to make. The shared modal
+      // (web/js/ui/repeater-query.js) reads this and keeps Query API disabled
+      // until the form has one, which is why the guard in runQuery below is
+      // now only a backstop.
+      requires: [{ keys: ["position"], message: POSITION_REQUIRED_MESSAGE }],
       title: "Query RSGB ETCC API",
       label: "RSGB ETCC",
       actionLabel,
@@ -599,7 +651,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
       runQuery: async (values) => {
         const position = values.position;
         if (!position) {
-          throw new RepeaterInputError("Set a location first: use the 🛰️ button or type a latitude and longitude.");
+          throw new RepeaterInputError(POSITION_REQUIRED_MESSAGE);
         }
         const radiusKm = values.radius;
         if (!Number.isFinite(radiusKm) || radiusKm <= 0) {

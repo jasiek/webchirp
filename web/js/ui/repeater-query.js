@@ -6,7 +6,11 @@ import {
 import { encodeMaidenhead } from "../rsgb.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
-import { RepeaterInputError, createRepeaterSources } from "./repeater-sources.js";
+import {
+  RepeaterInputError,
+  createRepeaterSources,
+  unmetRequirement,
+} from "./repeater-sources.js";
 import {
   createCheckboxField,
   createCheckboxGroupField,
@@ -102,7 +106,22 @@ export function createRepeaterQuery(ctx) {
   // twice. An RSGB fan-out over 24 squares takes seconds, so the window is
   // wide enough to hit by double-clicking.
   let queryInFlight = false;
+  // Why the form as it stands cannot be queried, or "" when it can. Held
+  // beside queryInFlight because both disable the same button and either can
+  // change while the other holds: re-enabling after a query must not undo the
+  // gate, and filling the form in mid-query must not enable the button early.
+  let submitBlockedReason = "";
   const submitIdleLabel = dom.repeaterQuerySubmitEl.textContent || "Query API";
+
+  // Put the button in the state the two flags describe. The label says only
+  // whether a query is running; a button disabled because the form is not
+  // filled in still reads "Query API", because that is what it will do once it
+  // is.
+  function applySubmitState() {
+    dom.repeaterQuerySubmitEl.disabled = queryInFlight || submitBlockedReason.length > 0;
+    dom.repeaterQuerySubmitEl.textContent = queryInFlight ? "Querying..." : submitIdleLabel;
+    dom.repeaterQuerySubmitEl.title = queryInFlight ? "" : submitBlockedReason;
+  }
 
   // Mark the query busy: the flag is what actually rejects a re-entrant
   // submit (Enter in a text field submits the form too, not just the button),
@@ -110,8 +129,26 @@ export function createRepeaterQuery(ctx) {
   // second click did nothing.
   function setQueryBusy(busy) {
     queryInFlight = busy;
-    dom.repeaterQuerySubmitEl.disabled = busy;
-    dom.repeaterQuerySubmitEl.textContent = busy ? "Querying..." : submitIdleLabel;
+    applySubmitState();
+  }
+
+  // Whether the active source can be queried with what is in the form. Each
+  // source declares what it needs (requires, web/js/ui/repeater-sources.js)
+  // and the rule differs: RSGB fans out around a point and has nothing to do
+  // without one, while the three country-filtered directories accept either a
+  // country or a location and answer a query with neither by sending their
+  // whole contents.
+  //
+  // This is what keeps an unrunnable form from becoming an error report.
+  // Before it, the only thing that said a filter was needed was the sentence
+  // RepeaterInputError carried -- which the user could not read until they had
+  // pressed the button, and which arrived through the same funnel a directory
+  // outage does, so every unfilled form filed a Sentry event for something no
+  // one could fix in the code.
+  function refreshSubmitState() {
+    const values = fieldInstances.length > 0 ? collectValues() : {};
+    submitBlockedReason = unmetRequirement(activeSource, values);
+    applySubmitState();
   }
 
   // A city was committed in the autocomplete: its coordinates become the
@@ -279,6 +316,10 @@ export function createRepeaterQuery(ctx) {
   // Called by every control in the form. The work is deferred, so a drag that
   // fires this on each pointermove still costs one preview.
   function schedulePreview() {
+    // Ahead of every early return below: a change that cannot produce a
+    // preview -- no radio loaded, a source without one -- still changes
+    // whether the form can be submitted.
+    refreshSubmitState();
     previewGeneration += 1;
     if (previewTimer) {
       clearTimeout(previewTimer);
@@ -298,9 +339,14 @@ export function createRepeaterQuery(ctx) {
     const values = collectValues();
     // No position is not a failed preview, it is a form not yet filled in: the
     // map is showing its stand-in line, and a count under it would be counting
-    // nothing.
+    // nothing. A form that cannot be submitted as it stands says why under the
+    // map instead of staying blank, because that is the readable half of the
+    // disabled Query API button -- a title attribute is nothing on a phone.
+    // Only when it cannot: a country-wide search is runnable and simply has no
+    // position to preview, so it keeps the blank caption.
     if (!values.position) {
-      positionField?.setMarkers([], "off");
+      const blocked = submitBlockedReason.length > 0;
+      positionField?.setMarkers([], blocked ? "needed" : "off", { reason: submitBlockedReason });
       return;
     }
     const source = activeSource;
@@ -504,7 +550,17 @@ export function createRepeaterQuery(ctx) {
           error_kind: classifyErrorKind(error),
           error_type: errorTypeName(error),
         });
-        log.reportActionError(`${source.actionLabel} query`, error);
+        // Input the form rejected is reported like a precondition failure --
+        // the modal and the debug panel, not Sentry. The sentence it carries
+        // is the instruction that clears it, and a form the user can fix is
+        // not a defect to capture. The button gate above makes the missing
+        // location unreachable from the UI; this covers the checks it does not
+        // gate, and any a source adds later.
+        if (blocked) {
+          log.reportActionRejected(`${source.actionLabel} query`, error);
+        } else {
+          log.reportActionError(`${source.actionLabel} query`, error);
+        }
       } finally {
         setQueryBusy(false);
       }

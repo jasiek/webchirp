@@ -140,3 +140,25 @@ test("an ordinary action failure is still captured by the action funnel", async 
   assert.equal(sdk.captured[0].error.message, "Failed to fetch");
   resetSentryForTests();
 });
+
+test("input the form rejected is shown to the user and never captured", async () => {
+  resetSentryForTests();
+  const sdk = makeSentrySdk();
+  await initSentry(makeSentryWindow(), { loadSdk: async () => sdk });
+
+  const shown = [];
+  const dom = fakeDebugDom();
+  const log = createDebugLog({ dom, notice: { show: (options) => shown.push(options) } });
+  log.reportActionRejected("RSGB ETCC query", new Error("Set a location first."));
+
+  // The whole point: a form the user can fix reaches them as an instruction,
+  // not a defect. Nothing is filed, and the debug panel is not thrown open in
+  // their face the way a real failure throws it.
+  assert.equal(sdk.captured.length, 0, "an unfilled form is not a Sentry event");
+  assert.deepEqual(shown.map((options) => options.message), ["Set a location first."]);
+  assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "false");
+  // The panel still has all of it, which is the rule that holds for every
+  // failure however it is surfaced.
+  assert.match(String(dom.debugOutputEl.value), /RSGB ETCC QUERY BLOCKED/);
+  resetSentryForTests();
+});

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RepeaterInputError, createRepeaterSources } from "../../web/js/ui/repeater-sources.js";
+import {
+  RepeaterInputError,
+  createRepeaterSources,
+  unmetRequirement,
+} from "../../web/js/ui/repeater-sources.js";
 
 // Telling a form the user can fix from a directory that is down. Both surface
 // the same way in the UI, so the distinction exists only for telemetry: the one
@@ -21,13 +25,21 @@ function stubContext() {
   };
 }
 
-function rsgbSource() {
+function sourceNamed(key) {
   const sources = createRepeaterSources(stubContext(), {
-    endpoints: { rsgb: "https://api.example.test/rsgb" },
+    endpoints: {
+      rsgb: "https://api.example.test/rsgb",
+      przemienniki: { apiUrl: "https://api.example.test/przemienniki", metaUrl: "https://api.example.test/przemienniki/meta" },
+      repeaterbook: { apiUrl: "https://api.example.test/repeaterbook", metaUrl: "https://api.example.test/repeaterbook/meta" },
+    },
   });
-  const rsgb = sources.find((source) => source.key === "rsgb");
-  assert.ok(rsgb, "the RSGB source is missing, so the rest of this file proves nothing");
-  return rsgb;
+  const source = sources.find((entry) => entry.key === key);
+  assert.ok(source, `the ${key} source is missing, so the rest of this file proves nothing`);
+  return source;
+}
+
+function rsgbSource() {
+  return sourceNamed("rsgb");
 }
 
 test("a query with no location is an input error, not a directory failure", async () => {
@@ -59,4 +71,32 @@ test("a directory that answers with an error is not an input error", async (t) =
     () => rsgbSource().runQuery({ position: { latitude: 53.4, longitude: -2.9 }, radius: 25 }),
     (error) => error instanceof Error && !(error instanceof RepeaterInputError),
   );
+});
+
+test("a country-filtered query with no filter at all is an input error", async () => {
+  // Measured live: repeaterbook.com answers a query with neither a country nor
+  // a position by sending its entire directory, 18.4 MB (FINDINGS.md). The
+  // modal keeps the button disabled, and this is the check behind it -- the
+  // one place that stops the request rather than reporting it afterwards.
+  const repeaterbook = sourceNamed("repeaterbook");
+  await assert.rejects(
+    () => repeaterbook.runQuery({ country: "", position: null, radius: 30 }),
+    RepeaterInputError,
+  );
+});
+
+test("either filter on its own satisfies a country-filtered source", () => {
+  // The rule the modal reads off the source, rather than the rule the modal
+  // hard-codes: a source that gains a filter declares it here and the button
+  // follows.
+  const repeaterbook = sourceNamed("repeaterbook");
+  const position = { latitude: 52.2297, longitude: 21.0122 };
+  assert.match(unmetRequirement(repeaterbook, { country: "", position: null }), /Choose a country/);
+  assert.equal(unmetRequirement(repeaterbook, { country: "pl", position: null }), "");
+  assert.equal(unmetRequirement(repeaterbook, { country: "", position }), "");
+
+  // RSGB has no second way in: it fans out over the squares around a point.
+  const rsgb = rsgbSource();
+  assert.match(unmetRequirement(rsgb, { country: "gb", position: null }), /Set a location first/);
+  assert.equal(unmetRequirement(rsgb, { position }), "");
 });
