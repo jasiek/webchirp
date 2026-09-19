@@ -72,20 +72,107 @@ function normalizeSourcePath(sourcePath) {
   return noLeadingSlash;
 }
 
-async function fetchText(url) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${url}: ${res.status}`);
+// Retrying the runtime's source fetches.
+//
+// Seeding the runtime is a burst of parallel GETs -- the core CHIRP files from
+// jsDelivr, the bridge files from the app's own asset host, one driver module
+// per lazy import -- and one rejected request aborts the whole Promise.all. A
+// transient blip (a dropped connection, a 429 from a CDN edge, a 5xx while
+// Pages rolls a deploy) therefore costs the visitor a reload and files itself
+// as a crash. Every one of these requests is an idempotent GET for a pinned
+// asset, so trying it again has no side effects.
+export const PYTHON_SOURCE_MAX_ATTEMPTS = 3;
+export const PYTHON_SOURCE_TIMEOUT_MS = 15000;
+const PYTHON_SOURCE_BASE_BACKOFF_MS = 250;
+
+// A non-2xx response, carrying its status so the retry loop can tell "come back
+// later" from "this request is wrong". The message keeps its historical shape
+// so existing debug lines and the Sentry scrub rules read the same.
+class PythonSourceFetchError extends Error {
+  constructor(url, status) {
+    super(`Failed to fetch ${url}: ${status}`);
+    this.name = "PythonSourceFetchError";
+    this.status = status;
   }
-  return await res.text();
 }
 
-async function fetchJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${url}: ${res.status}`);
+// Only retry what a second attempt can plausibly fix. The CDN asking us to come
+// back (408/429) or failing on its side (5xx) is transient; every other 4xx is
+// about the request itself -- a bad pin, a typo in a runtime URL -- and would
+// fail identically, so retrying it only delays the loud failure. A transport
+// rejection (offline, DNS, TLS, a blocking proxy) carries no status and is
+// transient by nature; so is this module's own timeout.
+function isRetryableError(error) {
+  return !(error instanceof PythonSourceFetchError)
+    || error.status === 408
+    || error.status === 429
+    || error.status >= 500;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Exponential backoff with jitter. The seeding burst is 30-odd requests at
+// once, so an unjittered delay resends them all at the same instant -- which is
+// how a CDN that is already rate-limiting the visitor stays rate-limited.
+function backoffDelay(baseMs, attemptNumber, random) {
+  const exponential = baseMs * 2 ** (attemptNumber - 1);
+  return Math.round(exponential + exponential * 0.5 * random());
+}
+
+// One attempt under a deadline. fetch() resolves as soon as the response
+// headers arrive, so the body read has to happen inside `run` for a host that
+// answers 200 and then stalls mid-body to be bounded too. An AbortSignal rather
+// than Promise.race so the connection is actually closed, and a setTimeout
+// rather than AbortSignal.timeout() so tests can drive the deadline over a
+// mocked clock (the same reasoning as web/js/request-timeout.js).
+async function withDeadline(url, run, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await run(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Failed to fetch ${url}: timed out after ${timeoutMs} ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return await res.json();
+}
+
+// Bounded retry shared by every source fetch. `attempt(signal)` performs one
+// full request-and-parse; `onRetry` is told about each failure so the debug
+// panel can show a boot that is slow because it is retrying, not hung.
+export async function fetchWithRetry(url, attempt, {
+  maxAttempts = PYTHON_SOURCE_MAX_ATTEMPTS,
+  timeoutMs = PYTHON_SOURCE_TIMEOUT_MS,
+  baseBackoffMs = PYTHON_SOURCE_BASE_BACKOFF_MS,
+  sleepImpl = sleep,
+  randomImpl = Math.random,
+  onRetry = null,
+} = {}) {
+  for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber += 1) {
+    try {
+      return await withDeadline(url, attempt, timeoutMs);
+    } catch (error) {
+      if (attemptNumber >= maxAttempts || !isRetryableError(error)) {
+        throw error;
+      }
+      const waitMs = backoffDelay(baseBackoffMs, attemptNumber, randomImpl);
+      if (onRetry) {
+        onRetry(
+          `RETRY ${url} failed (${error?.message || error}); `
+          + `attempt ${attemptNumber}/${maxAttempts}, next in ${waitMs} ms`,
+        );
+      }
+      await sleepImpl(waitMs);
+    }
+  }
+  // Unreachable: the loop returns or throws on its last iteration. Kept so the
+  // function has no implicit `undefined` return path.
+  throw new Error(`fetchWithRetry exhausted without an error: ${url}`);
 }
 
 function parseDriverModuleNames(indexJson) {
@@ -103,8 +190,12 @@ function parseDriverModuleNames(indexJson) {
 export function createBrowserCdnPythonSource({
   chirpRevision = DEFAULT_CHIRP_REVISION,
   runtimeFileUrls,
-  fetchTextImpl = fetchText,
-  fetchJsonImpl = fetchJson,
+  fetchImpl = fetch,
+  maxAttempts = PYTHON_SOURCE_MAX_ATTEMPTS,
+  timeoutMs = PYTHON_SOURCE_TIMEOUT_MS,
+  sleepImpl = sleep,
+  randomImpl = Math.random,
+  onRetry = null,
 } = {}) {
   // Checked up front rather than at fetch time so a module added to
   // RUNTIME_PYTHON_FILES without a URL fails the first boot loudly, not the
@@ -117,17 +208,38 @@ export function createBrowserCdnPythonSource({
   const chirpCdnBase = `https://cdn.jsdelivr.net/gh/kk7ds/chirp@${chirpRevision}`;
   const chirpFileIndexUrl =
     `https://data.jsdelivr.com/v1/package/gh/kk7ds/chirp@${chirpRevision}/flat`;
+  const retryOptions = { maxAttempts, timeoutMs, sleepImpl, randomImpl, onRetry };
+
+  // One GET whose body is read inside the attempt, so a response that stalls
+  // mid-body is retried rather than handed on half-read.
+  const fetchText = (url) =>
+    fetchWithRetry(url, async (signal) => {
+      const res = await fetchImpl(url, { signal });
+      if (!res.ok) {
+        throw new PythonSourceFetchError(url, res.status);
+      }
+      return res.text();
+    }, retryOptions);
+
+  const fetchJson = (url) =>
+    fetchWithRetry(url, async (signal) => {
+      const res = await fetchImpl(url, { signal });
+      if (!res.ok) {
+        throw new PythonSourceFetchError(url, res.status);
+      }
+      return res.json();
+    }, retryOptions);
 
   return {
     async fetchChirpSource(sourcePath) {
       const relPath = normalizeSourcePath(sourcePath);
-      return fetchTextImpl(`${chirpCdnBase}/${relPath}`);
+      return fetchText(`${chirpCdnBase}/${relPath}`);
     },
     async fetchRuntimeFile(relPath) {
-      return fetchTextImpl(runtimeFileUrls[relPath]);
+      return fetchText(runtimeFileUrls[relPath]);
     },
     async listDriverModules() {
-      const indexJson = await fetchJsonImpl(chirpFileIndexUrl);
+      const indexJson = await fetchJson(chirpFileIndexUrl);
       return parseDriverModuleNames(indexJson);
     },
     getRuntimeInfo() {
