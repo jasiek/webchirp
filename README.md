@@ -2,7 +2,7 @@
 
 Web-based CPS for amateur transceivers which runs [CHIRP](https://chirp.danplanet.com)'s drivers in a browser and uses WebSerial to communicate.
 
-# This is live and running on [codeplug.org](https://codeplug.org)
+# This is live and running on [webchirp.org](https://webchirp.org)
 
 ![](images/screenshot.png)
 
