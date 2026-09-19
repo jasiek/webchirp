@@ -45,7 +45,6 @@ export const SENTRY_HOSTS = Object.freeze([
   "codeplug.org",
   "www.codeplug.org",
   "webchirp.org",
-  "www.webchirp.org",
 ]);
 
 // Noise that is never actionable: a benign layout notification the browser

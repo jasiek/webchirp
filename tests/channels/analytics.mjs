@@ -74,14 +74,15 @@ test("only the production deployment reports", () => {
     "codeplug.org",
     "webchirp.org",
     "www.codeplug.org",
-    "www.webchirp.org",
   ]);
   assert.equal(isAnalyticsHost(makeWindow({ hostname: "codeplug.org" })), true);
   // CNAME points at the apex, so an unredirected www visitor is real traffic.
   assert.equal(isAnalyticsHost(makeWindow({ hostname: "www.codeplug.org" })), true);
-  // The second production name for the same deployment, and its www.
+  // The second production name for the same deployment. Its apex only: that
+  // domain is served on the apex and its www redirects there, so a hit is
+  // always reported as the apex by the time this runs.
   assert.equal(isAnalyticsHost(makeWindow({ hostname: "webchirp.org" })), true);
-  assert.equal(isAnalyticsHost(makeWindow({ hostname: "www.webchirp.org" })), true);
+  assert.equal(isAnalyticsHost(makeWindow({ hostname: "www.webchirp.org" })), false);
   assert.equal(isAnalyticsHost(makeWindow({ hostname: "localhost" })), false);
   assert.equal(isAnalyticsHost(makeWindow({ hostname: "jasiek.github.io" })), false);
   // Not a suffix match: a lookalike domain must not inherit the property.
