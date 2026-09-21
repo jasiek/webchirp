@@ -33,6 +33,10 @@ const RANGE_FIELD_KEY = "radius";
 // delay is set by what a wasted preview costs, not by what the user can feel.
 const PREVIEW_QUERY_DEBOUNCE_MS = 600;
 
+// One sentence for every repeater control the browser connectivity signal
+// blocks, so tooltips and the modal submit button explain the same state.
+const OFFLINE_BLOCKED_REASON = "Reconnect to query repeater directories.";
+
 const FIELD_FACTORIES = {
   select: createSelectField,
   fixed: createFixedField,
@@ -72,7 +76,9 @@ export function createRepeaterQuery(ctx) {
   // removing the action.
   const endpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
   const sources = createRepeaterSources(ctx, { endpoints });
+  const sourceButtonTitles = new Map();
   for (const source of sources) {
+    sourceButtonTitles.set(source.key, dom[source.toolbarButton].title);
     if (!source.available) {
       dom[source.toolbarButton].hidden = true;
     }
@@ -106,6 +112,9 @@ export function createRepeaterQuery(ctx) {
   // twice. An RSGB fan-out over 24 squares takes seconds, so the window is
   // wide enough to hit by double-clicking.
   let queryInFlight = false;
+  // Browser-reported connectivity only. Request failures do not change this;
+  // web/js/ui/connectivity.js updates it from online/offline events.
+  let online = true;
   // Why the form as it stands cannot be queried, or "" when it can. Held
   // beside queryInFlight because both disable the same button and either can
   // change while the other holds: re-enabling after a query must not undo the
@@ -118,9 +127,27 @@ export function createRepeaterQuery(ctx) {
   // filled in still reads "Query API", because that is what it will do once it
   // is.
   function applySubmitState() {
-    dom.repeaterQuerySubmitEl.disabled = queryInFlight || submitBlockedReason.length > 0;
+    dom.repeaterQuerySubmitEl.disabled = queryInFlight || !online || submitBlockedReason.length > 0;
     dom.repeaterQuerySubmitEl.textContent = queryInFlight ? "Querying..." : submitIdleLabel;
-    dom.repeaterQuerySubmitEl.title = queryInFlight ? "" : submitBlockedReason;
+    dom.repeaterQuerySubmitEl.title = queryInFlight
+      ? ""
+      : !online ? OFFLINE_BLOCKED_REASON : submitBlockedReason;
+  }
+
+  // Apply the browser connectivity signal to every entry point. The explicit
+  // guards in the click and submit handlers remain necessary because disabled
+  // controls can still be invoked programmatically.
+  function setOnline(nextOnline) {
+    online = Boolean(nextOnline);
+    for (const source of sources) {
+      const button = dom[source.toolbarButton];
+      button.disabled = !online;
+      button.title = online ? sourceButtonTitles.get(source.key) : OFFLINE_BLOCKED_REASON;
+    }
+    applySubmitState();
+    if (isModalOpen()) {
+      schedulePreview();
+    }
   }
 
   // Mark the query busy: the flag is what actually rejects a re-entrant
@@ -327,6 +354,12 @@ export function createRepeaterQuery(ctx) {
     if (!isModalOpen() || typeof activeSource?.previewQuery !== "function") {
       return;
     }
+    // Going offline invalidates any preview already in flight and leaves a
+    // readable reason in the open form instead of starting another request.
+    if (!online) {
+      positionField?.setMarkers([], "offline");
+      return;
+    }
     // The same guard the submit handler applies. Without it the map fetches,
     // plots squares and captions "23 in range" for a query that Query API
     // immediately refuses with "No channel schema loaded yet" — promising
@@ -394,7 +427,7 @@ export function createRepeaterQuery(ctx) {
 
   async function openModal(sourceKey) {
     const source = sources.find((entry) => entry.key === sourceKey);
-    if (!source || !source.available) {
+    if (!online || !source || !source.available) {
       return;
     }
     const generation = ++openGeneration;
@@ -406,6 +439,11 @@ export function createRepeaterQuery(ctx) {
       // modal now, so leave it alone. The load still resolved, so a failure
       // here is still reported by the caller.
       if (generation !== openGeneration) {
+        return;
+      }
+      // The browser can report offline while a dictionary request is pending;
+      // do not open a network-backed modal after its controls were disabled.
+      if (!online) {
         return;
       }
     }
@@ -496,6 +534,9 @@ export function createRepeaterQuery(ctx) {
     }
     for (const source of sources) {
       dom[source.toolbarButton].addEventListener("click", async () => {
+        if (!online) {
+          return;
+        }
         try {
           await openModal(source.key);
         } catch (error) {
@@ -514,7 +555,7 @@ export function createRepeaterQuery(ctx) {
     });
     dom.repeaterQueryFormEl.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (queryInFlight) {
+      if (queryInFlight || !online) {
         return;
       }
       setQueryBusy(true);
@@ -567,5 +608,5 @@ export function createRepeaterQuery(ctx) {
     });
   }
 
-  return { bindEvents, isModalOpen, setModalOpen };
+  return { bindEvents, isModalOpen, setModalOpen, setOnline };
 }

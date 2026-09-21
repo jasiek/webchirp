@@ -301,6 +301,43 @@ function queryUrl(calls) {
   return new URL(call.url);
 }
 
+test("offline state disables every repeater query entry point until online", async () => {
+  const { query, dom } = buildHarness();
+  const calls = installFetch([
+    { match: "/przemienniki/meta", body: META_JSON },
+    { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
+  ]);
+  const sourceButtons = [
+    dom.channelImportPrzemiennikiEl,
+    dom.channelImportRepeaterbookEl,
+    dom.channelImportIrtsEl,
+    dom.channelImportRsgbEl,
+  ];
+
+  query.setOnline(false);
+  assert.ok(sourceButtons.every((button) => button.disabled));
+  assert.ok(sourceButtons.every((button) => /Reconnect/.test(button.title)));
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  assert.deepEqual(calls, [], "a programmatic click cannot bypass the disabled button");
+  assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
+
+  query.setOnline(true);
+  assert.ok(sourceButtons.every((button) => !button.disabled));
+  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await chooseCountry(dom, "PL");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+
+  query.setOnline(false);
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
+  assert.match(dom.repeaterQuerySubmitEl.title, /Reconnect/);
+  await dom.repeaterQueryFormEl.dispatch("submit");
+  assert.equal(calls.length, 1, "offline submit does not start a directory query");
+
+  query.setOnline(true);
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  assert.equal(dom.repeaterQuerySubmitEl.title, "");
+});
+
 test("opening przemienniki builds the form from the dictionary, once", async () => {
   const { dom, log } = buildHarness();
   const calls = installFetch([{ match: "/przemienniki/meta", body: META_JSON }]);
