@@ -32,6 +32,8 @@ export const REQUIRED_ELEMENTS = {
   // Toolbar install affordance, hidden until the browser parks an install
   // prompt for web/js/install-prompt.js to raise.
   installAppEl: "#install-app",
+  // Global badge shown only while the browser reports that it is offline.
+  offlineIndicatorEl: "#offline-indicator",
   // The shell is greyed out (class toggle) while the unsupported-browser
   // overlay explains why serial cannot work here.
   appShellEl: "#app-shell",

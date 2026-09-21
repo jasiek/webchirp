@@ -23,6 +23,7 @@ import { createRepeaterMap } from "./ui/repeater-map.js";
 import { createCodeplugIo } from "./ui/codeplug-io.js";
 import { createSerialActions } from "./ui/serial-actions.js";
 import { createInstallButton } from "./ui/install-button.js";
+import { createConnectivity } from "./ui/connectivity.js";
 import {
   classifyErrorKind,
   errorTypeName,
@@ -86,9 +87,10 @@ export function createUiController() {
   const codeplugIo = createCodeplugIo(ctx);
   const serial = createSerialActions(ctx);
   const installButton = createInstallButton(ctx);
+  const connectivity = createConnectivity(ctx);
   Object.assign(ctx, {
     settings, table, channelExtra, bulkEdit, catalog, repeaterQuery, repeaterMap, codeplugIo,
-    serial, installButton,
+    serial, installButton, connectivity,
   });
 
   exposeCurrentRowsForDebugging(state);
@@ -153,6 +155,7 @@ export function createUiController() {
     catalog.bindEvents();
     serial.bindEvents();
     installButton.bindEvents();
+    connectivity.bindEvents();
 
     // Escape closes the topmost open surface: a notice, which is shown over
     // whatever else is open, then the import prompt, then the channel extras

@@ -405,7 +405,8 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // after it previews the query the form describes (see setMarkers). Held here
   // rather than fetched here because this file contacts no directory.
   //   state:      "ok" once an answer is drawn, "loading" while the next is
-  //               fetched, "failed" when it could not be, "blocked" when no
+  //               fetched, "failed" when it could not be, "offline" when the
+  //               browser reports no network, "blocked" when no
   //               radio is loaded to import into, "needed" when the source
   //               cannot be queried until a position is set, "off" when there
   //               is nothing to preview.
@@ -425,6 +426,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // States whose caption does not depend on what is drawn.
   const FIXED_CAPTIONS = {
     failed: "Could not preview this search.",
+    offline: "Reconnect to preview repeaters.",
     blocked: "Select a radio to preview repeaters.",
     // The readable half of a disabled Query API button. The button carries the
     // same sentence as a title, which is nothing at all on a touch screen, so
