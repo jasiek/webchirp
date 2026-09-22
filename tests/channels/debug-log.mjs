@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { initAnalytics } from "../../web/js/analytics.js";
 import { createDebugLog } from "../../web/js/ui/debug-log.js";
 import { initSentry, resetSentryForTests } from "../../web/js/sentry.js";
 import { markBootstrapFailure } from "../../web/js/runtime-bootstrap.mjs";
 import { fakeDebugDom } from "../support/fake-dom.mjs";
+import { makeWindow } from "../support/fake-window.mjs";
 
 test("debug output is folded initially and toggles both hidden regions together", () => {
   const dom = fakeDebugDom();
@@ -73,6 +75,50 @@ test("a delayed clipboard failure reopens a panel collapsed while copying", asyn
     assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "true");
     assert.match(dom.debugOutputEl.value, /DEBUG COPY ERROR/);
     assert.match(dom.debugOutputEl.value, /Clipboard permission denied/);
+  } finally {
+    if (navigatorDescriptor) {
+      Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    } else {
+      delete globalThis.navigator;
+    }
+  }
+});
+
+test("copy instrumentation fires only while the debug log contains an error", async () => {
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { clipboard: { writeText: () => Promise.resolve() } },
+  });
+
+  try {
+    const win = makeWindow();
+    initAnalytics(win);
+    const dom = fakeDebugDom();
+    const log = createDebugLog({ dom });
+    log.bindEvents();
+
+    log.logDebug("Runtime ready");
+    dom.debugCopyEl.click();
+    assert.equal(
+      win.dataLayer.filter((call) => call[0] === "event" && call[1] === "debug_log_copied").length,
+      0,
+    );
+
+    log.logError("Driver import failed");
+    dom.debugCopyEl.click();
+    assert.equal(
+      win.dataLayer.filter((call) => call[0] === "event" && call[1] === "debug_log_copied").length,
+      1,
+    );
+
+    dom.debugClearEl.click();
+    dom.debugCopyEl.click();
+    assert.equal(
+      win.dataLayer.filter((call) => call[0] === "event" && call[1] === "debug_log_copied").length,
+      1,
+    );
+    await Promise.resolve();
   } finally {
     if (navigatorDescriptor) {
       Object.defineProperty(globalThis, "navigator", navigatorDescriptor);

@@ -194,10 +194,12 @@ export function createDebugLog({ dom, notice } = {}) {
       clear();
     });
     dom.debugCopyEl.addEventListener("click", () => {
-      // Copying the log almost always means something went wrong and the user
-      // is taking the evidence somewhere. The log contents are not reported —
-      // only that this happened.
-      trackEvent("debug_log_copied");
+      // A routine log can be copied while diagnosing the app without anything
+      // having failed. Instrument only copies that contain a reported error;
+      // the log contents themselves are never sent.
+      if (lastErrorSummary) {
+        trackEvent("debug_log_copied");
+      }
       copyToClipboard();
     });
   }
