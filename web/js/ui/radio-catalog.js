@@ -158,13 +158,6 @@ export function createRadioCatalog(ctx) {
     return String(query || "").toLowerCase().split(/\s+/).filter(Boolean);
   }
 
-  // "<Make> <Model>", with the live-mode marker trailing the name so the
-  // vendor stays first and radios still align down the left edge of the list.
-  function radioDisplayLabel(radio) {
-    const base = makeModelLabel(radio);
-    return radio.isLiveRadio ? `${base} ⚡` : base;
-  }
-
   // Whether another catalog entry wears the same "<Make> <Model>" text. When
   // one does, the name alone cannot say which driver Connect / Load / Save will
   // act on, so the class is the only thing that can.
@@ -179,7 +172,7 @@ export function createRadioCatalog(ctx) {
   // persistent readout share it, so the two cannot disagree about which entry
   // a name refers to.
   function radioLabel(radio, isAmbiguous) {
-    const label = radioDisplayLabel(radio);
+    const label = makeModelLabel(radio);
     return isAmbiguous ? `${label} (${radio.className})` : label;
   }
 
