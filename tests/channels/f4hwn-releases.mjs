@@ -147,6 +147,13 @@ setting_value(risky_settings, "upload_calibration", True)
 safe_validation = validate_radio_settings(_module, _class_name, risky_settings)
 image = get_cached_image_base64(_module, _class_name)
 reloaded = load_image_base64(image["imageBase64"])
+raw_image = base64.b64decode(image["imageBase64"])
+image_body, legacy_metadata = chirp_common.CloneModeRadio._strip_metadata(raw_image)
+legacy_metadata["variant"] = ""
+legacy_image = image_body + chirp_common.CloneModeRadio.MAGIC + base64.b64encode(
+    json.dumps(legacy_metadata).encode()
+)
+legacy_loaded = load_image_base64(base64.b64encode(legacy_image).decode(), _module, _class_name)
 json.dumps({
     "loaded": {
         "number": loaded.number,
@@ -170,6 +177,11 @@ json.dumps({
         "module": reloaded["module"],
         "className": reloaded["className"],
         "rows": len(reloaded["rows"]),
+    },
+    "legacyLoaded": {
+        "module": legacy_loaded["module"],
+        "className": legacy_loaded["className"],
+        "rows": len(legacy_loaded["rows"]),
     },
 })
     `,
@@ -195,6 +207,11 @@ json.dumps({
   assert.equal(result.calibrationAccepted, false);
   assert.ok(result.imageSize > 0xB190, "saved image should include CHIRP metadata");
   assert.deepEqual(result.reloaded, {
+    module: MODULE,
+    className: CLASS_NAME,
+    rows: 1,
+  });
+  assert.deepEqual(result.legacyLoaded, {
     module: MODULE,
     className: CLASS_NAME,
     rows: 1,

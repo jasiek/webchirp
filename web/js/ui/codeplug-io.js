@@ -258,7 +258,11 @@ export function createCodeplugIo(ctx) {
     const raw = new Uint8Array(await file.arrayBuffer());
     const imageBase64 = bytesToBase64(raw);
     log.setStatus("Loading CHIRP binary codeplug...");
-    const loaded = await requireRuntimeApi(state).loadImage({ imageBase64 });
+    const loaded = await requireRuntimeApi(state).loadImage({
+      imageBase64,
+      module: state.selectedRadio?.module,
+      className: state.selectedRadio?.className,
+    });
     const selected = ctx.catalog.selectRadioByDetectedImage(loaded);
     if (!selected) {
       throw new Error(

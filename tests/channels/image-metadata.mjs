@@ -5,6 +5,7 @@ import {
   findCatalogRadioForImageMetadata,
   isImageDetectionFailure,
   loadImageWithDriverFallback,
+  selectedF4hwnForLegacyImage,
 } from "../../web/js/image-metadata.mjs";
 import { ensureModule, imageMetadata, sharedHarness } from "../support/chirp.mjs";
 
@@ -22,6 +23,28 @@ const CATALOG = [
   { module: "ft60", className: "FT60Radio", vendor: "Yaesu", model: "FT-60R" },
   { module: "uv5r", className: "BaofengUV5RGeneric", vendor: "Baofeng", model: "UV-5R" },
 ];
+
+test("only a matching selected F4HWN release may read empty-variant images", () => {
+  const selected = {
+    module: "f4hwn_v6",
+    className: "UVK5RadioEgzumer",
+    vendor: "Quansheng",
+    model: "UV-K1 & UV-K5 V3 (F4HWN)",
+    isLiveRadio: false,
+  };
+  const metadata = {
+    hasMetadata: true,
+    rclass: selected.className,
+    vendor: selected.vendor,
+    model: selected.model,
+    variant: "",
+  };
+  assert.equal(selectedF4hwnForLegacyImage(selected, metadata), true);
+  assert.equal(selectedF4hwnForLegacyImage(selected, { ...metadata, model: "Other" }), false);
+  assert.equal(selectedF4hwnForLegacyImage(selected, { ...metadata, variant: "other" }), false);
+  assert.equal(selectedF4hwnForLegacyImage({ ...selected, module: "uvk5" }, metadata), false);
+  assert.equal(selectedF4hwnForLegacyImage(null, metadata), false);
+});
 
 function makeTestRow() {
   return {

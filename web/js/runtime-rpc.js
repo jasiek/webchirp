@@ -8,6 +8,7 @@ import {
 import {
   findCatalogRadioForImageMetadata,
   loadImageWithDriverFallback,
+  selectedF4hwnForLegacyImage,
 } from "./image-metadata.mjs";
 import {
   createBootstrapCrashReporter,
@@ -412,6 +413,21 @@ async function handleLoadImage(payload = {}) {
   const metadata = await runPythonJson(
     "json.dumps(read_image_metadata_base64(_image_b64))",
   );
+  const selected = payload.module && payload.className
+    ? (await loadRadioCatalog()).find((radio) =>
+      radio.module === payload.module && radio.className === payload.className)
+    : null;
+  if (selectedF4hwnForLegacyImage(selected, metadata)) {
+    await ensureSelectedRadioModules(selected.module);
+    pyodide.globals.set("_sel_module", selected.module);
+    pyodide.globals.set("_sel_class", selected.className);
+    debugLog?.(
+      `IMAGE using selected F4HWN release ${selected.module} for legacy empty-variant metadata`,
+    );
+    return runPythonJson(
+      "json.dumps(load_image_base64(_image_b64, _sel_module, _sel_class))",
+    );
+  }
   let resolvedDriver = null;
   if (metadata?.hasMetadata) {
     const radios = await loadRadioCatalog();

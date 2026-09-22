@@ -71,8 +71,8 @@ function createRuntimeApi({ catalog = CATALOG, imageRadio = CATALOG[0] } = {}) {
           errors: [],
         };
       },
-      loadImage: async ({ imageBase64 }) => {
-        calls.loadImage.push(imageBase64);
+      loadImage: async (payload) => {
+        calls.loadImage.push(payload);
         return {
           module: imageRadio.module,
           className: imageRadio.className,
@@ -131,7 +131,11 @@ test("dropping an .img file loads it through the binary codeplug loader", async 
   assert.equal(calls.loadImage.length, 1);
   assert.equal(calls.parseCsv.length, 0);
   // The .img bytes reach the runtime base64-encoded, not as a CSV parse.
-  assert.equal(calls.loadImage[0], Buffer.from([0xff, 0x00, 0x42]).toString("base64"));
+  assert.deepEqual(calls.loadImage[0], {
+    imageBase64: Buffer.from([0xff, 0x00, 0x42]).toString("base64"),
+    module: undefined,
+    className: undefined,
+  });
   assert.match(debugOutputEl.value, /STATUS Loaded binary codeplug for Acme Alpha/);
 });
 
@@ -172,6 +176,8 @@ test("reselecting a radio after an .img load refreshes its schema and settings",
 
   // Loading an image switches the UI to Beta and applies Beta's schema.
   await window.emit("drop", dropEvent([fakeFile("beta.img")]));
+  assert.equal(calls.loadImage.at(-1).module, "alpha");
+  assert.equal(calls.loadImage.at(-1).className, "AlphaRadio");
   assert.equal(selectionNameEl.textContent, "Acme Beta");
   assert.equal(calls.metadata.at(-1), BETA_RADIO.module);
 
