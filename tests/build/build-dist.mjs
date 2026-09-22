@@ -17,7 +17,10 @@ import path from "node:path";
 
 import { repoRoot, webDir } from "../support/repo-paths.mjs";
 import { withTempDir } from "../support/temp-dir.mjs";
-import { RUNTIME_PYTHON_FILES } from "../../web/js/python-sources.mjs";
+import {
+  BUNDLED_DRIVER_RELATIVE_FILES,
+  RUNTIME_PYTHON_FILES,
+} from "../../web/js/python-sources.mjs";
 
 const SCRIPT = path.join(repoRoot, "scripts", "build-dist.mjs");
 // Matches build-dist.mjs: name.<10 hex>.ext.
@@ -365,7 +368,11 @@ test("every runtime Python file has a URL the build can rewrite", () => {
     .filter((file) => [".js", ".html", ".css"].includes(path.extname(file)))
     .map((file) => readFileSync(file, "utf8"))
     .join("\n");
-  const missing = RUNTIME_PYTHON_FILES.filter(
+  const deployedPythonFiles = [
+    ...RUNTIME_PYTHON_FILES,
+    ...BUNDLED_DRIVER_RELATIVE_FILES,
+  ];
+  const missing = deployedPythonFiles.filter(
     (relPath) => !rewritten.includes(`"./python/${relPath}"`),
   );
   assert.deepEqual(missing, [], "add the URL to RUNTIME_PYTHON_URLS in web/js/runtime-rpc.js");
@@ -374,6 +381,10 @@ test("every runtime Python file has a URL the build can rewrite", () => {
   const shipped = sourceFiles(pythonRoot)
     .filter((file) => file.endsWith(".py"))
     .map((file) => path.relative(pythonRoot, file).split(path.sep).join("/"));
-  const unlisted = shipped.filter((relPath) => !RUNTIME_PYTHON_FILES.includes(relPath));
-  assert.deepEqual(unlisted, [], "list the module in RUNTIME_PYTHON_FILES so it is seeded");
+  const unlisted = shipped.filter((relPath) => !deployedPythonFiles.includes(relPath));
+  assert.deepEqual(
+    unlisted,
+    [],
+    "list bridge files in RUNTIME_PYTHON_FILES or drivers in BUNDLED_DRIVER_RELATIVE_FILES",
+  );
 });

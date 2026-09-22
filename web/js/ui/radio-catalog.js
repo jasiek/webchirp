@@ -108,7 +108,7 @@ export function createRadioCatalog(ctx) {
 
   // The radio's own searchable text, without its aliases.
   function primaryHaystack(radio) {
-    return `${radio.vendor} ${radio.model} ${radio.className}`.toLowerCase();
+    return `${makeModelLabel(radio)} ${radio.className}`.toLowerCase();
   }
 
   function matchesAllTokens(haystack, tokens) {

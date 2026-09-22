@@ -1,5 +1,6 @@
 {
   "include": ["web/python"],
+  "exclude": ["web/python/chirp/drivers"],
   "stubPath": "web/python/typings",
   "extraPaths": ["web/python"],
   "pythonVersion": "3.12",

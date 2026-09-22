@@ -14,6 +14,7 @@ from __future__ import annotations
 import importlib
 import importlib.abc
 import os
+import re
 import sys
 import traceback
 from typing import TYPE_CHECKING
@@ -113,6 +114,44 @@ def _install_chirp_import_hook() -> None:
     sys.meta_path.insert(0, ChirpCdnFinder())
 
 
+def _bundled_f4hwn_variant(module_short: str) -> str:
+    """Return the release label that keeps bundled F4HWN drivers distinct."""
+    if module_short == "f4hwn_v6":
+        return "F4HWN driver v6.0.0"
+    if module_short == "f4hwn_v4_3":
+        return "F4HWN driver v4.3.0-v4.3.2"
+    match = re.fullmatch(r"f4hwn_v(\d+(?:_\d+)+)", module_short)
+    if match is None:
+        return ""
+    return "F4HWN driver v" + match.group(1).replace("_", ".")
+
+
+def _install_bundled_driver_registration_shim() -> None:
+    """Give same-identity F4HWN releases unique CHIRP variants.
+
+    Every v5 release declares the same vendor, model and class name. CHIRP
+    rejects the second registration unless the variant differs, and the radio
+    picker would not tell the releases apart even if duplicate registrations
+    were permitted. Apply the version just before CHIRP computes its driver id
+    so the vendored release files remain byte-for-byte unchanged.
+    """
+    original_register = directory.register
+    if getattr(original_register, "_webchirp_f4hwn_variants", False):
+        return
+
+    def register_with_release_variant(
+        radio_cls: type[chirp_common.Radio],
+    ) -> type[chirp_common.Radio]:
+        module_short = str(getattr(radio_cls, "__module__", "")).rsplit(".", 1)[-1]
+        variant = _bundled_f4hwn_variant(module_short)
+        if variant:
+            radio_cls.VARIANT = variant
+        return original_register(radio_cls)
+
+    setattr(register_with_release_variant, "_webchirp_f4hwn_variants", True)
+    directory.register = register_with_release_variant
+
+
 def ensure_radio_module(module_short_name: str) -> None:
     """Force-import a selected driver module so downstream calls can use it."""
     importlib.import_module(f"chirp.drivers.{module_short_name}")
@@ -127,6 +166,7 @@ def ensure_radio_module(module_short_name: str) -> None:
 # ``__all__`` and adds a CDN round trip to every boot.
 import chirp.drivers  # noqa: E402, F401
 
+_install_bundled_driver_registration_shim()
 _install_chirp_import_hook()
 
 

@@ -161,6 +161,7 @@ test("search suggestions disambiguate duplicates, cap results, and close on Esca
   const radios = [
     { vendor: "Acme", model: "Twin", module: "twin_a", className: "TwinA", key: "twin_a:TwinA", isLiveRadio: false },
     { vendor: "Acme", model: "Twin", module: "twin_b", className: "TwinB", key: "twin_b:TwinB", isLiveRadio: false },
+    { vendor: "Acme", model: "Versioned", variant: "driver v5.9.0", module: "versioned", className: "VersionedRadio", key: "versioned:VersionedRadio", isLiveRadio: false },
   ];
   for (let i = 0; i < 60; i += 1) {
     radios.push({
@@ -190,6 +191,14 @@ test("search suggestions disambiguate duplicates, cap results, and close on Esca
   assert.deepEqual(
     radioSearchResultsEl.children.map((li) => li.textContent),
     ["Acme Twin (TwinA)", "Acme Twin (TwinB)"],
+  );
+
+  // A CHIRP variant is part of both the visible label and the search text, so
+  // release-specific drivers with the same model remain distinguishable.
+  typeRadioSearch(document, "v5.9.0");
+  assert.deepEqual(
+    radioSearchResultsEl.children.map((li) => li.textContent),
+    ["Acme Versioned — driver v5.9.0"],
   );
 
   // More than 50 matches: list is capped and a footer reports the overflow.

@@ -284,7 +284,9 @@ export function countryDisplayName(countryCode) {
 
 // Build a short user-facing label for a selected radio catalog entry.
 export function makeModelLabel(radio) {
-  return `${radio.vendor} ${radio.model}`;
+  const base = `${radio.vendor} ${radio.model}`;
+  const variant = String(radio.variant || "").trim();
+  return variant ? `${base} — ${variant}` : base;
 }
 
 // Summarise channels the driver could not decode during a download or image

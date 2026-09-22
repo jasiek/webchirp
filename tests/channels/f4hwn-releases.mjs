@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  BUNDLED_DRIVERS,
   BUNDLED_DRIVER_MODULES,
   listDriverModules,
 } from "../../web/js/python-sources.mjs";
@@ -13,48 +14,72 @@ import { webDir } from "../support/repo-paths.mjs";
 
 const MODULE = "f4hwn_v6";
 const CLASS_NAME = "UVK5RadioEgzumer";
-const RELEASE_SHA256 = "c1c560ae081a40ea7aee0cd1e71b47641e63d64aea8886412c1041bda14f5156";
 
-// Pin the exact third-party release being shipped: a silent local edit would
-// otherwise look like the named upstream v6.0.0 driver while no longer being it.
-test("the bundled F4HWN driver is the unmodified v6.0.0 release", async () => {
-  const source = await fs.readFile(
-    path.join(webDir, "python", "chirp", "drivers", `${MODULE}.py`),
-  );
-  assert.equal(createHash("sha256").update(source).digest("hex"), RELEASE_SHA256);
+// Pin every byte-distinct published asset: a silent local edit would otherwise
+// look like the named upstream release while no longer being it. v4.3.0,
+// v4.3.1 and v4.3.2 deliberately share one entry because all three assets are
+// byte-for-byte identical and identify themselves as driver v4.3.0.
+test("the bundled F4HWN drivers are the exact published releases", async () => {
+  assert.equal(BUNDLED_DRIVERS.length, 13);
+  assert.equal(BUNDLED_DRIVERS.flatMap((driver) => driver.releases).length, 15);
+  for (const driver of BUNDLED_DRIVERS) {
+    const source = await fs.readFile(path.join(webDir, "python", driver.relPath));
+    assert.equal(
+      createHash("sha256").update(source).digest("hex"),
+      driver.sha256,
+      driver.releases.join(", "),
+    );
+  }
 });
 
 // Bundling the source is only half of making it selectable: every source
 // provider must enumerate the module so catalog builds and runtime fallback
 // discovery import it alongside the pinned upstream modules.
-test("the bundled F4HWN driver participates in driver discovery", async () => {
+test("all bundled F4HWN drivers participate in lazy driver discovery", async () => {
   const harness = await sharedHarness();
-  assert.deepEqual(BUNDLED_DRIVER_MODULES, [MODULE]);
-  assert.ok((await listDriverModules(harness.pythonSource)).includes(MODULE));
+  assert.deepEqual(
+    BUNDLED_DRIVER_MODULES,
+    BUNDLED_DRIVERS.map((driver) => driver.module),
+  );
+  const discovered = await listDriverModules(harness.pythonSource);
+  assert.deepEqual(
+    BUNDLED_DRIVER_MODULES.filter((moduleName) => discovered.includes(moduleName)),
+    BUNDLED_DRIVER_MODULES,
+  );
 });
 
-test("the F4HWN v6 radio registers through the wx compatibility shim", async () => {
+test("every F4HWN release registers with a distinct selectable version", async () => {
   const harness = await sharedHarness();
-  const radios = await listRegisteredRadios(harness, [MODULE]);
-  assert.deepEqual(radios, [
-    {
-      key: `${MODULE}:${CLASS_NAME}`,
-      module: MODULE,
-      className: CLASS_NAME,
-      vendor: "Quansheng",
-      model: "UV-K1 & UV-K5 V3 (F4HWN)",
-      baudRate: 38400,
-      isLiveRadio: false,
-    },
-  ]);
+  const radios = await listRegisteredRadios(harness, BUNDLED_DRIVER_MODULES);
+  assert.equal(radios.length, BUNDLED_DRIVERS.length);
+  const byModule = Object.fromEntries(radios.map((radio) => [radio.module, radio]));
+  for (const driver of BUNDLED_DRIVERS) {
+    const releaseLabel = driver.releases.length === 1
+      ? driver.releases[0]
+      : `${driver.releases[0]}-${driver.releases.at(-1)}`;
+    const radio = byModule[driver.module];
+    assert.ok(radio, driver.module);
+    assert.equal(radio.key, `${driver.module}:${CLASS_NAME}`);
+    assert.equal(radio.className, CLASS_NAME);
+    assert.equal(radio.vendor, "Quansheng");
+    assert.equal(radio.baudRate, 38400);
+    assert.equal(radio.isLiveRadio, false);
+    assert.equal(radio.variant, `F4HWN driver ${releaseLabel}`);
+  }
 
   const metadata = await harness.runPythonJson(
-    "json.dumps(get_radio_column_metadata(_module, _class_name))",
-    { _module: MODULE, _class_name: CLASS_NAME },
+    `json.dumps({
+        module_name: get_radio_column_metadata(module_name, _class_name)
+        for module_name in _modules
+    })`,
+    { _modules: BUNDLED_DRIVER_MODULES, _class_name: CLASS_NAME },
   );
-  assert.equal(metadata.columns.Location.min, 1);
-  assert.equal(metadata.columns.Location.max, 1024);
-  assert.ok(metadata.columns.Mode.options.includes("USB"));
+  for (const driver of BUNDLED_DRIVERS) {
+    const columns = metadata[driver.module].columns;
+    assert.equal(columns.Location.min, 1);
+    assert.ok(columns.Location.max >= 200);
+    assert.ok(columns.Mode.options.includes("USB"));
+  }
 
   const wxResult = await harness.runPythonJson(
     `
