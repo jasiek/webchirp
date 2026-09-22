@@ -457,10 +457,10 @@ test("search finds radios by their alias identities and names the matching alias
   assert.equal(radioSelectionNameEl.textContent, "Baofeng UV-5R");
 });
 
-// The live-mode marker trails the name in both places that show a radio, so the
-// vendor stays first and the list still aligns down its left edge.
-test("live-mode radios carry their marker after the name, in list and readout", async () => {
-  const { document, radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installUiDom();
+// Live-mode drivers cannot use the clone workflow exposed by the browser UI,
+// so they must not appear as choices or contribute to the searchable count.
+test("live-mode radios are omitted from radio selection", async () => {
+  const { document, radioSearchEl, radioSearchResultsEl } = installUiDom();
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
 
@@ -480,15 +480,12 @@ test("live-mode radios carry their marker after the name, in list and readout", 
 
   await ui.init(true);
 
+  assert.equal(radioSearchEl.placeholder, "Search 1 radios…");
   typeRadioSearch(document, "acme");
-  assert.deepEqual(suggestionLines(radioSearchResultsEl), [
-    ["Acme Live ⚡"],
-    ["Acme Clone"],
-  ]);
+  assert.deepEqual(suggestionLines(radioSearchResultsEl), [["Acme Clone"]]);
 
-  selectRadioBySearch(document, "acme live");
-  await flushMicrotasks();
-  assert.equal(radioSelectionNameEl.textContent, "Acme Live ⚡");
+  typeRadioSearch(document, "acme live");
+  assert.equal(radioSearchResultsEl.children[0].textContent, "No matching radios");
 });
 
 // Several catalog entries can share one "<Make> <Model>" name, and the search

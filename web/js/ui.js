@@ -263,7 +263,11 @@ export function createUiController() {
         );
       }
       const catalogResponse = await requireRuntimeApi(state).listRadios();
-      state.radioCatalog = catalogResponse.radios || [];
+      // Live-mode drivers need a different interaction model from the clone
+      // workflow this UI exposes, so do not offer entries the user cannot use.
+      state.radioCatalog = (catalogResponse.radios || []).filter(
+        (radio) => !radio.isLiveRadio,
+      );
       state.runtimeInfo = (await requireRuntimeApi(state).getRuntimeInfo()) || state.runtimeInfo;
       catalog.refreshCatalog();
       // A ?radio= link is an explicit choice for this visit and outranks the
