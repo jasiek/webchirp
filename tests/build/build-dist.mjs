@@ -370,9 +370,10 @@ test("every runtime Python file has a URL the build can rewrite", () => {
   );
   assert.deepEqual(missing, [], "add the URL to RUNTIME_PYTHON_URLS in web/js/runtime-rpc.js");
 
-  const shipped = readdirSync(path.join(webDir, "python", "webchirp_bridge"))
-    .filter((name) => name.endsWith(".py"))
-    .map((name) => `webchirp_bridge/${name}`);
+  const pythonRoot = path.join(webDir, "python");
+  const shipped = sourceFiles(pythonRoot)
+    .filter((file) => file.endsWith(".py"))
+    .map((file) => path.relative(pythonRoot, file).split(path.sep).join("/"));
   const unlisted = shipped.filter((relPath) => !RUNTIME_PYTHON_FILES.includes(relPath));
   assert.deepEqual(unlisted, [], "list the module in RUNTIME_PYTHON_FILES so it is seeded");
 });

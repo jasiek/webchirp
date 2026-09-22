@@ -4,6 +4,25 @@
 // the runtime rejects a mismatched static catalog.
 export const DEFAULT_CHIRP_REVISION = "098f57b2563af7d9411f2f42722947c52d569929";
 
+// Drivers shipped by WebCHIRP in addition to the pinned upstream CHIRP tree.
+// Their source is seeded through RUNTIME_PYTHON_FILES, while this list makes
+// the catalog builder and the runtime fallback enumerate them as radios.
+// f4hwn_v6.py is the unmodified v6.0.0 release from
+// github.com/armel/uv-k1-k5v3-firmware-custom, SHA-256
+// c1c560ae081a40ea7aee0cd1e71b47641e63d64aea8886412c1041bda14f5156.
+export const BUNDLED_DRIVER_RELATIVE_FILES = Object.freeze([
+  "chirp/drivers/f4hwn_v6.py",
+]);
+export const BUNDLED_DRIVER_MODULES = Object.freeze(
+  BUNDLED_DRIVER_RELATIVE_FILES.map((relPath) => pathBasename(relPath).replace(/\.py$/, "")),
+);
+
+// Return the final component of a POSIX asset path without importing Node's
+// path module into browser code.
+function pathBasename(relPath) {
+  return String(relPath || "").split("/").pop() || "";
+}
+
 const CORE_CHIRP_RELATIVE_FILES = [
   "chirp/__init__.py",
   "chirp/errors.py",
@@ -49,7 +68,13 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
   "webchirp_bridge/row_validation.py",
   "webchirp_bridge/runtime_errors.py",
   "webchirp_bridge/serial_pipe.py",
+  ...BUNDLED_DRIVER_RELATIVE_FILES,
 ]);
+
+// Add WebCHIRP's bundled drivers to a provider's upstream module names once.
+function withBundledDriverModules(moduleNames) {
+  return Array.from(new Set([...(moduleNames || []), ...BUNDLED_DRIVER_MODULES])).sort();
+}
 
 function assertMethod(obj, name) {
   if (!obj || typeof obj[name] !== "function") {
@@ -128,7 +153,7 @@ export function createBrowserCdnPythonSource({
     },
     async listDriverModules() {
       const indexJson = await fetchJsonImpl(chirpFileIndexUrl);
-      return parseDriverModuleNames(indexJson);
+      return withBundledDriverModules(parseDriverModuleNames(indexJson));
     },
     getRuntimeInfo() {
       return {
@@ -173,11 +198,11 @@ export function createFilesystemPythonSource({
     },
     async listDriverModules() {
       const names = await readDirNames(joinPath(chirpPackageDir, "drivers"));
-      return names
+      const upstreamModules = names
         .filter((name) => /^[A-Za-z0-9_]+\.py$/.test(name))
         .map((name) => name.replace(/\.py$/, ""))
-        .filter((name) => !name.startsWith("__"))
-        .sort();
+        .filter((name) => !name.startsWith("__"));
+      return withBundledDriverModules(upstreamModules);
     },
     getRuntimeInfo() {
       return {

@@ -48,6 +48,7 @@ const RUNTIME_PYTHON_URLS = Object.freeze({
   "webchirp_bridge/row_validation.py": "./python/webchirp_bridge/row_validation.py",
   "webchirp_bridge/runtime_errors.py": "./python/webchirp_bridge/runtime_errors.py",
   "webchirp_bridge/serial_pipe.py": "./python/webchirp_bridge/serial_pipe.py",
+  "chirp/drivers/f4hwn_v6.py": "./python/chirp/drivers/f4hwn_v6.py",
 });
 
 const pythonSource = createBrowserCdnPythonSource({
