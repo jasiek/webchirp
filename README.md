@@ -40,6 +40,21 @@ npm run dev
 
 Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/).
 
+The default and `?drivers=chirp` use the pinned upstream CHIRP drivers. Use
+`?drivers=quansheng-unofficial` to load only the bundled unofficial Quansheng
+driver catalog containing v4.3.2, v5.9.0 and v6.0.0. Choose the firmware release
+in the radio picker to load its driver. Release labels belong to the catalog;
+the driver's original CHIRP
+identity and image metadata are preserved.
+
+In unofficial mode, select the matching firmware release before opening a
+CHIRP image. Changing releases starts a fresh Python runtime and discards the
+cached clone image, so download from the radio or import an image again before
+uploading. Image detection uses the selected driver's native CHIRP metadata
+matching; these drivers cannot identify metadata-less images or create a blank
+clone image. Real-radio download/upload with the bundled unofficial drivers
+has not been verified.
+
 Serial access requires a browser with Web Serial support and a secure context
 (`http://localhost` works).
 

@@ -44,6 +44,11 @@ export const REQUIRED_ELEMENTS = {
   unsupportedBrowserContinueEl: "#unsupported-browser-continue",
   liveRadioSupportWarningEl: "#live-radio-support-warning",
   radioSearchEl: "#radio-search",
+  useQuanshengDriversEl: "#use-quansheng-drivers",
+  useChirpDriversEl: "#use-chirp-drivers",
+  sidebarWarningEl: "#sidebar-warning",
+  standardDriverWarningEl: "#standard-driver-warning",
+  unofficialDriverWarningEl: "#unofficial-driver-warning",
   radioSearchResultsEl: "#radio-search-results",
   // The sidebar readout of which radio the app is currently working with.
   radioSelectionEl: "#radio-selection",

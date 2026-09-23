@@ -162,7 +162,7 @@ function firmwareSection(radio, entry) {
     return "";
   }
   const host = entry.url ? firmwareLinkHost(entry.url) : null;
-  // nofollow because these are outbound links on 556 pages pointing at a few
+  // nofollow because these are outbound links on hundreds of pages pointing at a few
   // dozen hosts, which is the shape of a link scheme whether or not it is one.
   const link = host
     ? `

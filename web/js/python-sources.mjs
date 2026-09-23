@@ -3,6 +3,50 @@
 // revision; scripts/build-catalog.mjs enforces it at catalog build time and
 // the runtime rejects a mismatched static catalog.
 export const DEFAULT_CHIRP_REVISION = "098f57b2563af7d9411f2f42722947c52d569929";
+export const DEFAULT_DRIVER_SET = "chirp";
+export const QUANSHENG_UNOFFICIAL_DRIVER_SET = "quansheng-unofficial";
+export const DRIVER_SETS = Object.freeze([
+  DEFAULT_DRIVER_SET,
+  QUANSHENG_UNOFFICIAL_DRIVER_SET,
+]);
+
+// Third-party drivers shipped by WebCHIRP in addition to the pinned upstream
+// CHIRP tree. Keep their release hashes here so tests can prove that the local
+// sources are the exact published assets. The v4.3.2 release ships a driver
+// that identifies itself as v4.3.0; preserve those published bytes unchanged.
+export const QUANSHENG_UNOFFICIAL_DRIVERS = Object.freeze([
+  {
+    module: "f4hwn_v4_3",
+    relPath: "extra_drivers/quansheng/f4hwn_v4_3.py",
+    releases: ["v4.3.2"],
+    sha256: "024ff9d263d7aeb8be03414754c99dd696ee20cf322e6e20c6a72f0287cf42a1",
+  },
+  {
+    module: "f4hwn_v5_9_0",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_9_0.py",
+    releases: ["v5.9.0"],
+    sha256: "09d23891a6dc44478cb3e8fd16e1f00fdf33673b4e2faffae765ad812b3a0ff2",
+  },
+  {
+    module: "f4hwn_v6",
+    relPath: "extra_drivers/quansheng/f4hwn_v6.py",
+    releases: ["v6.0.0"],
+    sha256: "c1c560ae081a40ea7aee0cd1e71b47641e63d64aea8886412c1041bda14f5156",
+  },
+]);
+export const EXTRA_DRIVER_RELATIVE_FILES = Object.freeze(
+  QUANSHENG_UNOFFICIAL_DRIVERS.map((driver) => driver.relPath),
+);
+export const QUANSHENG_UNOFFICIAL_DRIVER_MODULES = Object.freeze(
+  QUANSHENG_UNOFFICIAL_DRIVERS.map((driver) => driver.module),
+);
+
+const QUANSHENG_SOURCE_BY_CHIRP_PATH = new Map(
+  QUANSHENG_UNOFFICIAL_DRIVERS.map((driver) => [
+    `chirp/drivers/${driver.module}.py`,
+    driver.relPath,
+  ]),
+);
 
 const CORE_CHIRP_RELATIVE_FILES = [
   "chirp/__init__.py",
@@ -50,6 +94,16 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
   "webchirp_bridge/runtime_errors.py",
   "webchirp_bridge/serial_pipe.py",
 ]);
+
+// Resolve a URL value to one of the two supported driver collections.
+export function normalizeDriverSet(value) {
+  return DRIVER_SETS.includes(String(value || "")) ? String(value) : DEFAULT_DRIVER_SET;
+}
+
+// Read the driver collection from a query string, defaulting to upstream CHIRP.
+export function driverSetFromSearch(search) {
+  return normalizeDriverSet(new URLSearchParams(String(search || "")).get("drivers"));
+}
 
 function assertMethod(obj, name) {
   if (!obj || typeof obj[name] !== "function") {
@@ -102,14 +156,19 @@ function parseDriverModuleNames(indexJson) {
 
 export function createBrowserCdnPythonSource({
   chirpRevision = DEFAULT_CHIRP_REVISION,
+  driverSet = DEFAULT_DRIVER_SET,
   runtimeFileUrls,
   fetchTextImpl = fetchText,
   fetchJsonImpl = fetchJson,
 } = {}) {
-  // Checked up front rather than at fetch time so a module added to
-  // RUNTIME_PYTHON_FILES without a URL fails the first boot loudly, not the
-  // first user who reaches the code that imports it.
-  for (const relPath of RUNTIME_PYTHON_FILES) {
+  const selectedDriverSet = normalizeDriverSet(driverSet);
+  // Checked up front rather than at fetch time so a declared local Python
+  // source without a URL fails construction loudly, not the first user who
+  // reaches the code that imports it.
+  for (const relPath of [
+    ...RUNTIME_PYTHON_FILES,
+    ...EXTRA_DRIVER_RELATIVE_FILES,
+  ]) {
     if (typeof runtimeFileUrls?.[relPath] !== "string") {
       throw new Error(`createBrowserCdnPythonSource: no URL for runtime Python file ${relPath}`);
     }
@@ -121,20 +180,28 @@ export function createBrowserCdnPythonSource({
   return {
     async fetchChirpSource(sourcePath) {
       const relPath = normalizeSourcePath(sourcePath);
+      const extraSourcePath = QUANSHENG_SOURCE_BY_CHIRP_PATH.get(relPath);
+      if (extraSourcePath && selectedDriverSet === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+        return fetchTextImpl(runtimeFileUrls[extraSourcePath]);
+      }
       return fetchTextImpl(`${chirpCdnBase}/${relPath}`);
     },
     async fetchRuntimeFile(relPath) {
       return fetchTextImpl(runtimeFileUrls[relPath]);
     },
     async listDriverModules() {
+      if (selectedDriverSet === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+        return [...QUANSHENG_UNOFFICIAL_DRIVER_MODULES];
+      }
       const indexJson = await fetchJsonImpl(chirpFileIndexUrl);
-      return parseDriverModuleNames(indexJson);
+      return parseDriverModuleNames(indexJson).sort();
     },
     getRuntimeInfo() {
       return {
         chirpRevision,
         chirpCdnBase,
         chirpSourceKind: "cdn",
+        driverSet: selectedDriverSet,
       };
     },
   };
@@ -143,10 +210,12 @@ export function createBrowserCdnPythonSource({
 export function createFilesystemPythonSource({
   chirpPackageDir,
   runtimePythonDir,
+  driverSet = DEFAULT_DRIVER_SET,
   readText,
   readDirNames,
   joinPath,
 } = {}) {
+  const selectedDriverSet = normalizeDriverSet(driverSet);
   if (!chirpPackageDir) {
     throw new Error("createFilesystemPythonSource requires chirpPackageDir");
   }
@@ -166,12 +235,19 @@ export function createFilesystemPythonSource({
   return {
     async fetchChirpSource(sourcePath) {
       const relPath = normalizeSourcePath(sourcePath);
+      const extraSourcePath = QUANSHENG_SOURCE_BY_CHIRP_PATH.get(relPath);
+      if (extraSourcePath && selectedDriverSet === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+        return readText(joinPath(runtimePythonDir, ...extraSourcePath.split("/")));
+      }
       return readText(joinPath(chirpPackageDir, relPath.replace(/^chirp\//, "")));
     },
     async fetchRuntimeFile(relPath) {
       return readText(joinPath(runtimePythonDir, ...relPath.split("/")));
     },
     async listDriverModules() {
+      if (selectedDriverSet === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+        return [...QUANSHENG_UNOFFICIAL_DRIVER_MODULES];
+      }
       const names = await readDirNames(joinPath(chirpPackageDir, "drivers"));
       return names
         .filter((name) => /^[A-Za-z0-9_]+\.py$/.test(name))
@@ -185,6 +261,7 @@ export function createFilesystemPythonSource({
         chirpCdnBase: "",
         chirpSourceKind: "filesystem",
         chirpPackageDir: String(chirpPackageDir),
+        driverSet: selectedDriverSet,
       };
     },
   };

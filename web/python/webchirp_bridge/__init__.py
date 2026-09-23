@@ -1,10 +1,10 @@
 """The webchirp Python runtime: CHIRP driven from a browser through Pyodide.
 
 Importing this package prepares the interpreter for ``import chirp``, which
-is why the two shims live here rather than in the modules that need them:
+is why the runtime shims live here rather than in the modules that need them:
 Python runs ``__init__`` before any submodule, so whichever module the entry
 point (``web/python/runtime_bridge.py``) happens to import first finds the
-builtins and the ``serial`` stand-in already in place. Nothing else belongs
+builtins and compatibility stand-ins already in place. Nothing else belongs
 in this file; the runtime logic is in the submodules, each covering one
 concern (loading CHIRP sources, channel rows, the serial pipe, ...), and the
 entry point flattens their namespaces into the RPC globals.
@@ -38,6 +38,40 @@ def _install_gettext_builtins() -> None:
 
 
 _install_gettext_builtins()
+
+
+def _install_wx_shim() -> None:
+    """Let desktop-oriented drivers import their confirmation-dialog helper.
+
+    Pyodide cannot load wxPython. Some third-party drivers nevertheless import
+    ``wx`` only to ask for confirmation from a settings validation callback.
+    Returning ``CANCEL`` keeps those drivers importable without silently
+    approving dangerous actions such as calibration writes. WebCHIRP can
+    replace this conservative answer with an explicit browser confirmation if
+    it ever exposes those opt-in settings.
+    """
+    try:
+        import wx  # noqa: F401
+        return
+    except ImportError:
+        pass
+
+    shim = types.ModuleType("wx")
+    shim.__doc__ = "Minimal, cancel-by-default wx stand-in for WebCHIRP drivers."
+    shim.OK = 1
+    shim.CANCEL = 2
+    shim.CANCEL_DEFAULT = 4
+    shim.ICON_WARNING = 8
+
+    def MessageBox(*args: Any, **kwargs: Any) -> int:
+        """Decline a desktop confirmation that the browser cannot display."""
+        return shim.CANCEL
+
+    shim.MessageBox = MessageBox
+    sys.modules["wx"] = shim
+
+
+_install_wx_shim()
 
 
 def _install_pyserial_shim() -> None:

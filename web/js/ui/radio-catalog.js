@@ -5,6 +5,7 @@ import {
 } from "./state.js";
 import { makeModelLabel } from "./format.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
+import { DEFAULT_DRIVER_SET, QUANSHENG_UNOFFICIAL_DRIVER_SET } from "../python-sources.mjs";
 
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
@@ -26,6 +27,9 @@ export function createRadioCatalog(ctx) {
   // Overrides the readout while the catalog is loading or failed to load, so a
   // cold start does not claim the user simply has not chosen a radio yet.
   let catalogStatusText = "";
+  // Track queued selections as well as rendered state so A -> B -> A restores A.
+  let requestedRadioKey = "";
+  let radioLoadPending = false;
 
   function setCookie(name, value, maxAgeSeconds = 31536000) {
     document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
@@ -108,7 +112,7 @@ export function createRadioCatalog(ctx) {
 
   // The radio's own searchable text, without its aliases.
   function primaryHaystack(radio) {
-    return `${radio.vendor} ${radio.model} ${radio.className}`.toLowerCase();
+    return `${makeModelLabel(radio)} ${radio.className}`.toLowerCase();
   }
 
   function matchesAllTokens(haystack, tokens) {
@@ -339,10 +343,15 @@ export function createRadioCatalog(ctx) {
     // returns to the last fully loaded radio and needs no new runtime calls.
     const loadToken = nextRadioLoadToken(state);
     const radio = state.selectedRadio;
-    if (radio && radio.key === state.lastLoadedRadioKey) {
+    const previousRequestedKey = requestedRadioKey;
+    // Release selection may have queued an interpreter switch; reselecting the
+    // last rendered release must switch it back even before that load finishes.
+    if (radio && radio.key === state.lastLoadedRadioKey
+      && (!radio.releaseLabel || (previousRequestedKey === radio.key && !radioLoadPending))) {
       ctx.table.render();
       return;
     }
+    radioLoadPending = true;
     Promise.all([
       fetchRadioMetadata(radio),
       ctx.settings.fetchForRadio(radio),
@@ -365,6 +374,11 @@ export function createRadioCatalog(ctx) {
       .catch((error) => {
         if (!isStaleRadioLoad(state, loadToken)) {
           log.reportActionError("Metadata load", error);
+        }
+      })
+      .finally(() => {
+        if (!isStaleRadioLoad(state, loadToken)) {
+          radioLoadPending = false;
         }
       });
   }
@@ -454,6 +468,7 @@ export function createRadioCatalog(ctx) {
   }
 
   async function fetchRadioMetadata(radio) {
+    requestedRadioKey = radio?.key || "";
     if (!radio) {
       return { headers: [], columns: {} };
     }
@@ -494,6 +509,17 @@ export function createRadioCatalog(ctx) {
   }
 
   function bindEvents() {
+    // Keep switching links available even if catalog loading fails. Missing or
+    // empty parameters select CHIRP; any other set offers a return to the root.
+    const driverSet = new URLSearchParams(window.location?.search || "").get("drivers")
+      || DEFAULT_DRIVER_SET;
+    dom.useQuanshengDriversEl.hidden = driverSet === QUANSHENG_UNOFFICIAL_DRIVER_SET;
+    dom.useChirpDriversEl.hidden = driverSet === DEFAULT_DRIVER_SET;
+    // Non-CHIRP driver sets carry the stronger hardware-risk warning.
+    const unofficial = driverSet !== DEFAULT_DRIVER_SET;
+    dom.standardDriverWarningEl.hidden = unofficial;
+    dom.unofficialDriverWarningEl.hidden = !unofficial;
+    dom.sidebarWarningEl.classList.toggle("is-unofficial", unofficial);
     // Typing opens an autocomplete list of "<Make> <Model>" suggestions; the
     // (Pyodide-backed) metadata/settings load only happens once the user picks
     // a suggestion via keyboard or mouse.
