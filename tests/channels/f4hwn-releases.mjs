@@ -5,9 +5,15 @@ import path from "node:path";
 import test from "node:test";
 
 import {
-  BUNDLED_DRIVERS,
-  BUNDLED_DRIVER_MODULES,
+  createBrowserCdnPythonSource,
+  DEFAULT_DRIVER_SET,
+  driverSetFromSearch,
+  EXTRA_DRIVER_RELATIVE_FILES,
   listDriverModules,
+  QUANSHENG_UNOFFICIAL_DRIVERS,
+  QUANSHENG_UNOFFICIAL_DRIVER_MODULES,
+  QUANSHENG_UNOFFICIAL_DRIVER_SET,
+  RUNTIME_PYTHON_FILES,
 } from "../../web/js/python-sources.mjs";
 import { listRegisteredRadios, sharedHarness } from "../support/chirp.mjs";
 import { webDir } from "../support/repo-paths.mjs";
@@ -20,9 +26,9 @@ const CLASS_NAME = "UVK5RadioEgzumer";
 // v4.3.1 and v4.3.2 deliberately share one entry because all three assets are
 // byte-for-byte identical and identify themselves as driver v4.3.0.
 test("the bundled F4HWN drivers are the exact published releases", async () => {
-  assert.equal(BUNDLED_DRIVERS.length, 13);
-  assert.equal(BUNDLED_DRIVERS.flatMap((driver) => driver.releases).length, 15);
-  for (const driver of BUNDLED_DRIVERS) {
+  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.length, 13);
+  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.flatMap((driver) => driver.releases).length, 15);
+  for (const driver of QUANSHENG_UNOFFICIAL_DRIVERS) {
     const source = await fs.readFile(path.join(webDir, "python", driver.relPath));
     assert.equal(
       createHash("sha256").update(source).digest("hex"),
@@ -35,25 +41,108 @@ test("the bundled F4HWN drivers are the exact published releases", async () => {
 // Bundling the source is only half of making it selectable: every source
 // provider must enumerate the module so catalog builds and runtime fallback
 // discovery import it alongside the pinned upstream modules.
-test("all bundled F4HWN drivers participate in lazy driver discovery", async () => {
-  const harness = await sharedHarness();
+test("the drivers query selects one driver collection", () => {
+  assert.equal(driverSetFromSearch(""), DEFAULT_DRIVER_SET);
+  assert.equal(driverSetFromSearch("?drivers=chirp"), DEFAULT_DRIVER_SET);
+  assert.equal(
+    driverSetFromSearch("?drivers=quansheng-unofficial"),
+    QUANSHENG_UNOFFICIAL_DRIVER_SET,
+  );
+  assert.equal(driverSetFromSearch("?drivers=unknown"), DEFAULT_DRIVER_SET);
+});
+
+test("browser sources fetch only the selected driver collection", async () => {
+  const runtimeFileUrls = Object.fromEntries(
+    [...RUNTIME_PYTHON_FILES, ...EXTRA_DRIVER_RELATIVE_FILES].map((relPath) => [
+      relPath,
+      `/runtime/${relPath}`,
+    ]),
+  );
+  const fetchedText = [];
+  let fetchedIndexes = 0;
+  const sourceOptions = {
+    runtimeFileUrls,
+    fetchTextImpl: async (url) => {
+      fetchedText.push(url);
+      return url;
+    },
+    fetchJsonImpl: async () => {
+      fetchedIndexes += 1;
+      return { files: [{ name: "/chirp/drivers/uv5r.py" }] };
+    },
+  };
+
+  const unofficial = createBrowserCdnPythonSource({
+    ...sourceOptions,
+    driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET,
+  });
+  assert.deepEqual(await unofficial.listDriverModules(), QUANSHENG_UNOFFICIAL_DRIVER_MODULES);
+  assert.equal(fetchedIndexes, 0, "unofficial discovery should not fetch the CHIRP driver index");
+  await unofficial.fetchChirpSource("/chirp/drivers/f4hwn_v6.py");
+  assert.equal(
+    fetchedText.at(-1),
+    "/runtime/extra_drivers/quansheng/f4hwn_v6.py",
+  );
+
+  const chirp = createBrowserCdnPythonSource(sourceOptions);
+  assert.deepEqual(await chirp.listDriverModules(), ["uv5r"]);
+  assert.equal(fetchedIndexes, 1);
+  await chirp.fetchChirpSource("/chirp/drivers/f4hwn_v6.py");
+  assert.match(fetchedText.at(-1), /\/chirp\/drivers\/f4hwn_v6\.py$/);
+  assert.notEqual(fetchedText.at(-1), "/runtime/extra_drivers/quansheng/f4hwn_v6.py");
+});
+
+test("unofficial mode discovers only bundled F4HWN drivers", async () => {
+  const harness = await sharedHarness({ driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET });
   assert.deepEqual(
-    BUNDLED_DRIVER_MODULES,
-    BUNDLED_DRIVERS.map((driver) => driver.module),
+    QUANSHENG_UNOFFICIAL_DRIVER_MODULES,
+    QUANSHENG_UNOFFICIAL_DRIVERS.map((driver) => driver.module),
   );
   const discovered = await listDriverModules(harness.pythonSource);
+  assert.deepEqual(discovered, QUANSHENG_UNOFFICIAL_DRIVER_MODULES);
+});
+
+test("CHIRP mode excludes bundled F4HWN drivers", async () => {
+  const harness = await sharedHarness();
+  const discovered = await listDriverModules(harness.pythonSource);
+  assert.equal(discovered.length, 193);
   assert.deepEqual(
-    BUNDLED_DRIVER_MODULES.filter((moduleName) => discovered.includes(moduleName)),
-    BUNDLED_DRIVER_MODULES,
+    discovered.filter((moduleName) => QUANSHENG_UNOFFICIAL_DRIVER_MODULES.includes(moduleName)),
+    [],
+  );
+});
+
+test("each driver mode has a matching static catalog", async () => {
+  const chirpCatalog = JSON.parse(
+    await fs.readFile(path.join(webDir, "radio-catalog.json"), "utf8"),
+  );
+  const unofficialCatalog = JSON.parse(
+    await fs.readFile(
+      path.join(webDir, "radio-catalog-quansheng-unofficial.json"),
+      "utf8",
+    ),
+  );
+  assert.equal(chirpCatalog.driverSet, DEFAULT_DRIVER_SET);
+  assert.equal(unofficialCatalog.driverSet, QUANSHENG_UNOFFICIAL_DRIVER_SET);
+  assert.equal(chirpCatalog.count, chirpCatalog.radios.length);
+  assert.equal(unofficialCatalog.count, unofficialCatalog.radios.length);
+  assert.deepEqual(
+    chirpCatalog.radios.filter((radio) =>
+      QUANSHENG_UNOFFICIAL_DRIVER_MODULES.includes(radio.module)),
+    [],
+  );
+  assert.deepEqual(
+    unofficialCatalog.radios.map((radio) => radio.module).sort(),
+    [...QUANSHENG_UNOFFICIAL_DRIVER_MODULES].sort(),
   );
 });
 
 test("every F4HWN release registers with a distinct selectable version", async () => {
-  const harness = await sharedHarness();
-  const radios = await listRegisteredRadios(harness, BUNDLED_DRIVER_MODULES);
-  assert.equal(radios.length, BUNDLED_DRIVERS.length);
+  const harness = await sharedHarness({ driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET });
+  const radios = await listRegisteredRadios(harness, QUANSHENG_UNOFFICIAL_DRIVER_MODULES);
+  assert.equal(radios.length, QUANSHENG_UNOFFICIAL_DRIVERS.length);
   const byModule = Object.fromEntries(radios.map((radio) => [radio.module, radio]));
-  for (const driver of BUNDLED_DRIVERS) {
+  for (const driver of QUANSHENG_UNOFFICIAL_DRIVERS) {
     const releaseLabel = driver.releases.length === 1
       ? driver.releases[0]
       : `${driver.releases[0]}-${driver.releases.at(-1)}`;
@@ -72,9 +161,9 @@ test("every F4HWN release registers with a distinct selectable version", async (
         module_name: get_radio_column_metadata(module_name, _class_name)
         for module_name in _modules
     })`,
-    { _modules: BUNDLED_DRIVER_MODULES, _class_name: CLASS_NAME },
+    { _modules: QUANSHENG_UNOFFICIAL_DRIVER_MODULES, _class_name: CLASS_NAME },
   );
-  for (const driver of BUNDLED_DRIVERS) {
+  for (const driver of QUANSHENG_UNOFFICIAL_DRIVERS) {
     const columns = metadata[driver.module].columns;
     assert.equal(columns.Location.min, 1);
     assert.ok(columns.Location.max >= 200);
@@ -99,7 +188,7 @@ json.dumps({
 // caching. An erased map avoids inventing a hardware fixture while still
 // making the driver's entire bitwise layout parse.
 test("the F4HWN v6 driver loads channels and settings through WebCHIRP", async () => {
-  const harness = await sharedHarness();
+  const harness = await sharedHarness({ driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET });
   const result = await harness.runPythonJson(
     `
 import copy

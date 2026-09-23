@@ -40,6 +40,10 @@ npm run dev
 
 Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/).
 
+The default and `?drivers=chirp` use the pinned upstream CHIRP drivers. Use
+`?drivers=quansheng-unofficial` to load only the bundled unofficial Quansheng
+drivers.
+
 Serial access requires a browser with Web Serial support and a secure context
 (`http://localhost` works).
 

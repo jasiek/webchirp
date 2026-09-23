@@ -74,7 +74,7 @@ export async function resolveChirpPackageDir(inputDir) {
   );
 }
 
-async function createLocalPythonSource(repoRoot, chirpDirArg) {
+async function createLocalPythonSource(repoRoot, chirpDirArg, driverSet) {
   const chirpInputDir =
     chirpDirArg || process.env.WEBCHIRP_CHIRP_DIR || path.join(repoRoot, "chirp");
   const chirpPackageDir = await resolveChirpPackageDir(chirpInputDir);
@@ -82,6 +82,7 @@ async function createLocalPythonSource(repoRoot, chirpDirArg) {
   return createFilesystemPythonSource({
     chirpPackageDir,
     runtimePythonDir,
+    driverSet,
     readText: (fullPath) => fs.readFile(fullPath, "utf8"),
     readDirNames: async (fullPath) => {
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
@@ -475,12 +476,14 @@ export class TestRadioHarness {
   constructor({
     repoRoot,
     chirpDir = "",
+    driverSet = "chirp",
     portPath = "",
     serialMode = "stub",
     serialBridge = null,
   } = {}) {
     this.repoRoot = path.resolve(String(repoRoot || process.cwd()));
     this.chirpDir = String(chirpDir || "");
+    this.driverSet = String(driverSet || "chirp");
     this.portPath = String(portPath || "");
     this.serialMode = String(serialMode || "stub");
     this.pythonSource = null;
@@ -492,7 +495,11 @@ export class TestRadioHarness {
     if (this.pyodide) {
       return this;
     }
-    this.pythonSource = await createLocalPythonSource(this.repoRoot, this.chirpDir);
+    this.pythonSource = await createLocalPythonSource(
+      this.repoRoot,
+      this.chirpDir,
+      this.driverSet,
+    );
     installFetchChirpSourceGlobal(this.pythonSource);
 
     if (!this.serialBridge) {
@@ -659,10 +666,17 @@ const sharedHarnesses = new Map();
 
 // The cache key: everything that shapes the runtime and can be compared by
 // value. A custom serialBridge is an object identity, so it is never keyed.
-function harnessCacheKey({ repoRoot, chirpDir = "", portPath = "", serialMode = "stub" } = {}) {
+function harnessCacheKey({
+  repoRoot,
+  chirpDir = "",
+  driverSet = "chirp",
+  portPath = "",
+  serialMode = "stub",
+} = {}) {
   return JSON.stringify({
     repoRoot: path.resolve(String(repoRoot || process.cwd())),
     chirpDir: String(chirpDir || ""),
+    driverSet: String(driverSet || "chirp"),
     portPath: String(portPath || ""),
     serialMode: String(serialMode || "stub"),
   });

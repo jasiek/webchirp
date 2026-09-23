@@ -3,96 +3,109 @@
 // revision; scripts/build-catalog.mjs enforces it at catalog build time and
 // the runtime rejects a mismatched static catalog.
 export const DEFAULT_CHIRP_REVISION = "098f57b2563af7d9411f2f42722947c52d569929";
+export const DEFAULT_DRIVER_SET = "chirp";
+export const QUANSHENG_UNOFFICIAL_DRIVER_SET = "quansheng-unofficial";
+export const DRIVER_SETS = Object.freeze([
+  DEFAULT_DRIVER_SET,
+  QUANSHENG_UNOFFICIAL_DRIVER_SET,
+]);
 
 // Third-party drivers shipped by WebCHIRP in addition to the pinned upstream
 // CHIRP tree. Keep their release hashes here so tests can prove that the local
 // sources are the exact published assets. The three v4.3.x firmware releases
 // all contain the same v4.3.0 driver bytes, so one module covers all three.
-export const BUNDLED_DRIVERS = Object.freeze([
+export const QUANSHENG_UNOFFICIAL_DRIVERS = Object.freeze([
   {
     module: "f4hwn_v4_3",
-    relPath: "chirp/drivers/f4hwn_v4_3.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v4_3.py",
     releases: ["v4.3.0", "v4.3.1", "v4.3.2"],
     sha256: "024ff9d263d7aeb8be03414754c99dd696ee20cf322e6e20c6a72f0287cf42a1",
   },
   {
     module: "f4hwn_v5_1_0",
-    relPath: "chirp/drivers/f4hwn_v5_1_0.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_1_0.py",
     releases: ["v5.1.0"],
     sha256: "a92eaa46e544e2c32e62700dc12ec419407300d50f13442ba4cc9dce2a28dcab",
   },
   {
     module: "f4hwn_v5_2_0",
-    relPath: "chirp/drivers/f4hwn_v5_2_0.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_2_0.py",
     releases: ["v5.2.0"],
     sha256: "adf4aa2c02a9a9c61a5e3c4d63088064e59c091b5a16ed649e3d28d15231d121",
   },
   {
     module: "f4hwn_v5_3_0",
-    relPath: "chirp/drivers/f4hwn_v5_3_0.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_3_0.py",
     releases: ["v5.3.0"],
     sha256: "7464bc109dc051c6f8c88ccfffba9d7068bd6a0ea1ce9ff2f553b89136c0f53b",
   },
   {
     module: "f4hwn_v5_3_1",
-    relPath: "chirp/drivers/f4hwn_v5_3_1.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_3_1.py",
     releases: ["v5.3.1"],
     sha256: "052315f4d2d268995b357b7f93734ba2095578e4a02bcee605b3fc3ee7721cd2",
   },
   {
     module: "f4hwn_v5_4_0",
-    relPath: "chirp/drivers/f4hwn_v5_4_0.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_4_0.py",
     releases: ["v5.4.0"],
     sha256: "698c34470b199d42b995be46f3f144c710dcd165cd705721515836cb275f80c0",
   },
   {
     module: "f4hwn_v5_5_0",
-    relPath: "chirp/drivers/f4hwn_v5_5_0.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_5_0.py",
     releases: ["v5.5.0"],
     sha256: "df241243949a70920864b9284990287d4e7ba00280e1f36841a0b498c6cd203c",
   },
   {
     module: "f4hwn_v5_6_0",
-    relPath: "chirp/drivers/f4hwn_v5_6_0.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_6_0.py",
     releases: ["v5.6.0"],
     sha256: "3a8bde054b803f4287b03aab46a1c447d8e46d52110f5c64d979c4cad8ecf6bd",
   },
   {
     module: "f4hwn_v5_6_1",
-    relPath: "chirp/drivers/f4hwn_v5_6_1.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_6_1.py",
     releases: ["v5.6.1"],
     sha256: "2c742582237f38a4a021d72e07449543734a11aa08ce3c093c699a0ec04eb653",
   },
   {
     module: "f4hwn_v5_7_0",
-    relPath: "chirp/drivers/f4hwn_v5_7_0.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_7_0.py",
     releases: ["v5.7.0"],
     sha256: "927df9b31d1622b660da65df3c85a601d9cace371a2bced29ca4be2ff6b8b4a1",
   },
   {
     module: "f4hwn_v5_8_0",
-    relPath: "chirp/drivers/f4hwn_v5_8_0.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_8_0.py",
     releases: ["v5.8.0"],
     sha256: "a5f87cc3781a908ae36ed9e479d3b7d0c59064cf8c53e2865e8ac8e1f89cac97",
   },
   {
     module: "f4hwn_v5_9_0",
-    relPath: "chirp/drivers/f4hwn_v5_9_0.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v5_9_0.py",
     releases: ["v5.9.0"],
     sha256: "09d23891a6dc44478cb3e8fd16e1f00fdf33673b4e2faffae765ad812b3a0ff2",
   },
   {
     module: "f4hwn_v6",
-    relPath: "chirp/drivers/f4hwn_v6.py",
+    relPath: "extra_drivers/quansheng/f4hwn_v6.py",
     releases: ["v6.0.0"],
     sha256: "c1c560ae081a40ea7aee0cd1e71b47641e63d64aea8886412c1041bda14f5156",
   },
 ]);
-export const BUNDLED_DRIVER_RELATIVE_FILES = Object.freeze(
-  BUNDLED_DRIVERS.map((driver) => driver.relPath),
+export const EXTRA_DRIVER_RELATIVE_FILES = Object.freeze(
+  QUANSHENG_UNOFFICIAL_DRIVERS.map((driver) => driver.relPath),
 );
-export const BUNDLED_DRIVER_MODULES = Object.freeze(
-  BUNDLED_DRIVERS.map((driver) => driver.module),
+export const QUANSHENG_UNOFFICIAL_DRIVER_MODULES = Object.freeze(
+  QUANSHENG_UNOFFICIAL_DRIVERS.map((driver) => driver.module),
+);
+
+const QUANSHENG_SOURCE_BY_CHIRP_PATH = new Map(
+  QUANSHENG_UNOFFICIAL_DRIVERS.map((driver) => [
+    `chirp/drivers/${driver.module}.py`,
+    driver.relPath,
+  ]),
 );
 
 const CORE_CHIRP_RELATIVE_FILES = [
@@ -142,9 +155,14 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
   "webchirp_bridge/serial_pipe.py",
 ]);
 
-// Add WebCHIRP's bundled drivers to a provider's upstream module names once.
-function withBundledDriverModules(moduleNames) {
-  return Array.from(new Set([...(moduleNames || []), ...BUNDLED_DRIVER_MODULES])).sort();
+// Resolve a URL value to one of the two supported driver collections.
+export function normalizeDriverSet(value) {
+  return DRIVER_SETS.includes(String(value || "")) ? String(value) : DEFAULT_DRIVER_SET;
+}
+
+// Read the driver collection from a query string, defaulting to upstream CHIRP.
+export function driverSetFromSearch(search) {
+  return normalizeDriverSet(new URLSearchParams(String(search || "")).get("drivers"));
 }
 
 function assertMethod(obj, name) {
@@ -198,16 +216,18 @@ function parseDriverModuleNames(indexJson) {
 
 export function createBrowserCdnPythonSource({
   chirpRevision = DEFAULT_CHIRP_REVISION,
+  driverSet = DEFAULT_DRIVER_SET,
   runtimeFileUrls,
   fetchTextImpl = fetchText,
   fetchJsonImpl = fetchJson,
 } = {}) {
+  const selectedDriverSet = normalizeDriverSet(driverSet);
   // Checked up front rather than at fetch time so a declared local Python
   // source without a URL fails construction loudly, not the first user who
   // reaches the code that imports it.
   for (const relPath of [
     ...RUNTIME_PYTHON_FILES,
-    ...BUNDLED_DRIVER_RELATIVE_FILES,
+    ...EXTRA_DRIVER_RELATIVE_FILES,
   ]) {
     if (typeof runtimeFileUrls?.[relPath] !== "string") {
       throw new Error(`createBrowserCdnPythonSource: no URL for runtime Python file ${relPath}`);
@@ -220,8 +240,9 @@ export function createBrowserCdnPythonSource({
   return {
     async fetchChirpSource(sourcePath) {
       const relPath = normalizeSourcePath(sourcePath);
-      if (BUNDLED_DRIVER_RELATIVE_FILES.includes(relPath)) {
-        return fetchTextImpl(runtimeFileUrls[relPath]);
+      const extraSourcePath = QUANSHENG_SOURCE_BY_CHIRP_PATH.get(relPath);
+      if (extraSourcePath && selectedDriverSet === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+        return fetchTextImpl(runtimeFileUrls[extraSourcePath]);
       }
       return fetchTextImpl(`${chirpCdnBase}/${relPath}`);
     },
@@ -229,14 +250,18 @@ export function createBrowserCdnPythonSource({
       return fetchTextImpl(runtimeFileUrls[relPath]);
     },
     async listDriverModules() {
+      if (selectedDriverSet === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+        return [...QUANSHENG_UNOFFICIAL_DRIVER_MODULES];
+      }
       const indexJson = await fetchJsonImpl(chirpFileIndexUrl);
-      return withBundledDriverModules(parseDriverModuleNames(indexJson));
+      return parseDriverModuleNames(indexJson).sort();
     },
     getRuntimeInfo() {
       return {
         chirpRevision,
         chirpCdnBase,
         chirpSourceKind: "cdn",
+        driverSet: selectedDriverSet,
       };
     },
   };
@@ -245,10 +270,12 @@ export function createBrowserCdnPythonSource({
 export function createFilesystemPythonSource({
   chirpPackageDir,
   runtimePythonDir,
+  driverSet = DEFAULT_DRIVER_SET,
   readText,
   readDirNames,
   joinPath,
 } = {}) {
+  const selectedDriverSet = normalizeDriverSet(driverSet);
   if (!chirpPackageDir) {
     throw new Error("createFilesystemPythonSource requires chirpPackageDir");
   }
@@ -268,8 +295,9 @@ export function createFilesystemPythonSource({
   return {
     async fetchChirpSource(sourcePath) {
       const relPath = normalizeSourcePath(sourcePath);
-      if (BUNDLED_DRIVER_RELATIVE_FILES.includes(relPath)) {
-        return readText(joinPath(runtimePythonDir, ...relPath.split("/")));
+      const extraSourcePath = QUANSHENG_SOURCE_BY_CHIRP_PATH.get(relPath);
+      if (extraSourcePath && selectedDriverSet === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+        return readText(joinPath(runtimePythonDir, ...extraSourcePath.split("/")));
       }
       return readText(joinPath(chirpPackageDir, relPath.replace(/^chirp\//, "")));
     },
@@ -277,12 +305,15 @@ export function createFilesystemPythonSource({
       return readText(joinPath(runtimePythonDir, ...relPath.split("/")));
     },
     async listDriverModules() {
+      if (selectedDriverSet === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+        return [...QUANSHENG_UNOFFICIAL_DRIVER_MODULES];
+      }
       const names = await readDirNames(joinPath(chirpPackageDir, "drivers"));
-      const upstreamModules = names
+      return names
         .filter((name) => /^[A-Za-z0-9_]+\.py$/.test(name))
         .map((name) => name.replace(/\.py$/, ""))
-        .filter((name) => !name.startsWith("__"));
-      return withBundledDriverModules(upstreamModules);
+        .filter((name) => !name.startsWith("__"))
+        .sort();
     },
     getRuntimeInfo() {
       return {
@@ -290,6 +321,7 @@ export function createFilesystemPythonSource({
         chirpCdnBase: "",
         chirpSourceKind: "filesystem",
         chirpPackageDir: String(chirpPackageDir),
+        driverSet: selectedDriverSet,
       };
     },
   };

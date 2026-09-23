@@ -18,13 +18,16 @@ import {
 import {
   createBrowserCdnPythonSource,
   DEFAULT_CHIRP_REVISION,
+  driverSetFromSearch,
   installFetchChirpSourceGlobal,
   listDriverModules,
+  QUANSHENG_UNOFFICIAL_DRIVER_SET,
   seedPyodideRuntime,
 } from "./python-sources.mjs";
 
 const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/";
 const CHIRP_REVISION = DEFAULT_CHIRP_REVISION;
+const DRIVER_SET = driverSetFromSearch(globalThis.location?.search);
 
 // Where the browser fetches each runtime Python file from, keyed the way
 // RUNTIME_PYTHON_FILES (web/js/python-sources.mjs) names them. The literals
@@ -49,23 +52,24 @@ const RUNTIME_PYTHON_URLS = Object.freeze({
   "webchirp_bridge/row_validation.py": "./python/webchirp_bridge/row_validation.py",
   "webchirp_bridge/runtime_errors.py": "./python/webchirp_bridge/runtime_errors.py",
   "webchirp_bridge/serial_pipe.py": "./python/webchirp_bridge/serial_pipe.py",
-  "chirp/drivers/f4hwn_v4_3.py": "./python/chirp/drivers/f4hwn_v4_3.py",
-  "chirp/drivers/f4hwn_v5_1_0.py": "./python/chirp/drivers/f4hwn_v5_1_0.py",
-  "chirp/drivers/f4hwn_v5_2_0.py": "./python/chirp/drivers/f4hwn_v5_2_0.py",
-  "chirp/drivers/f4hwn_v5_3_0.py": "./python/chirp/drivers/f4hwn_v5_3_0.py",
-  "chirp/drivers/f4hwn_v5_3_1.py": "./python/chirp/drivers/f4hwn_v5_3_1.py",
-  "chirp/drivers/f4hwn_v5_4_0.py": "./python/chirp/drivers/f4hwn_v5_4_0.py",
-  "chirp/drivers/f4hwn_v5_5_0.py": "./python/chirp/drivers/f4hwn_v5_5_0.py",
-  "chirp/drivers/f4hwn_v5_6_0.py": "./python/chirp/drivers/f4hwn_v5_6_0.py",
-  "chirp/drivers/f4hwn_v5_6_1.py": "./python/chirp/drivers/f4hwn_v5_6_1.py",
-  "chirp/drivers/f4hwn_v5_7_0.py": "./python/chirp/drivers/f4hwn_v5_7_0.py",
-  "chirp/drivers/f4hwn_v5_8_0.py": "./python/chirp/drivers/f4hwn_v5_8_0.py",
-  "chirp/drivers/f4hwn_v5_9_0.py": "./python/chirp/drivers/f4hwn_v5_9_0.py",
-  "chirp/drivers/f4hwn_v6.py": "./python/chirp/drivers/f4hwn_v6.py",
+  "extra_drivers/quansheng/f4hwn_v4_3.py": "./python/extra_drivers/quansheng/f4hwn_v4_3.py",
+  "extra_drivers/quansheng/f4hwn_v5_1_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_1_0.py",
+  "extra_drivers/quansheng/f4hwn_v5_2_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_2_0.py",
+  "extra_drivers/quansheng/f4hwn_v5_3_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_3_0.py",
+  "extra_drivers/quansheng/f4hwn_v5_3_1.py": "./python/extra_drivers/quansheng/f4hwn_v5_3_1.py",
+  "extra_drivers/quansheng/f4hwn_v5_4_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_4_0.py",
+  "extra_drivers/quansheng/f4hwn_v5_5_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_5_0.py",
+  "extra_drivers/quansheng/f4hwn_v5_6_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_6_0.py",
+  "extra_drivers/quansheng/f4hwn_v5_6_1.py": "./python/extra_drivers/quansheng/f4hwn_v5_6_1.py",
+  "extra_drivers/quansheng/f4hwn_v5_7_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_7_0.py",
+  "extra_drivers/quansheng/f4hwn_v5_8_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_8_0.py",
+  "extra_drivers/quansheng/f4hwn_v5_9_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_9_0.py",
+  "extra_drivers/quansheng/f4hwn_v6.py": "./python/extra_drivers/quansheng/f4hwn_v6.py",
 });
 
 const pythonSource = createBrowserCdnPythonSource({
   chirpRevision: CHIRP_REVISION,
+  driverSet: DRIVER_SET,
   runtimeFileUrls: RUNTIME_PYTHON_URLS,
 });
 
@@ -252,7 +256,10 @@ function sortRadioCatalog(radios) {
 // callers fall back to live enumeration.
 async function loadRadioCatalogFromStatic() {
   try {
-    const url = new URL("../radio-catalog.json", import.meta.url);
+    const catalogFile = DRIVER_SET === QUANSHENG_UNOFFICIAL_DRIVER_SET
+      ? "../radio-catalog-quansheng-unofficial.json"
+      : "../radio-catalog.json";
+    const url = new URL(catalogFile, import.meta.url);
     const res = await fetch(url);
     if (!res.ok) {
       return null;
@@ -265,6 +272,13 @@ async function loadRadioCatalogFromStatic() {
           + `runtime is pinned to ${CHIRP_REVISION}; falling back to live enumeration`,
         );
       }
+      return null;
+    }
+    if (data?.driverSet !== DRIVER_SET) {
+      debugLog?.(
+        `CATALOG SKIP static catalog is for drivers ${data?.driverSet || "unknown"}, `
+        + `runtime requested ${DRIVER_SET}; falling back to live enumeration`,
+      );
       return null;
     }
     const radios = data?.radios;

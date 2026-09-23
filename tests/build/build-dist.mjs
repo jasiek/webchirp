@@ -18,7 +18,7 @@ import path from "node:path";
 import { repoRoot, webDir } from "../support/repo-paths.mjs";
 import { withTempDir } from "../support/temp-dir.mjs";
 import {
-  BUNDLED_DRIVER_RELATIVE_FILES,
+  EXTRA_DRIVER_RELATIVE_FILES,
   RUNTIME_PYTHON_FILES,
 } from "../../web/js/python-sources.mjs";
 
@@ -370,7 +370,7 @@ test("every runtime Python file has a URL the build can rewrite", () => {
     .join("\n");
   const deployedPythonFiles = [
     ...RUNTIME_PYTHON_FILES,
-    ...BUNDLED_DRIVER_RELATIVE_FILES,
+    ...EXTRA_DRIVER_RELATIVE_FILES,
   ];
   const missing = deployedPythonFiles.filter(
     (relPath) => !rewritten.includes(`"./python/${relPath}"`),
@@ -385,6 +385,6 @@ test("every runtime Python file has a URL the build can rewrite", () => {
   assert.deepEqual(
     unlisted,
     [],
-    "list bridge files in RUNTIME_PYTHON_FILES or drivers in BUNDLED_DRIVER_RELATIVE_FILES",
+    "list bridge files in RUNTIME_PYTHON_FILES or drivers in EXTRA_DRIVER_RELATIVE_FILES",
   );
 });
