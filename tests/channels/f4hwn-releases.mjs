@@ -135,52 +135,52 @@ test("each driver mode has a matching static catalog", async () => {
     unofficialCatalog.radios.map((radio) => radio.module).sort(),
     [...QUANSHENG_UNOFFICIAL_DRIVER_MODULES].sort(),
   );
+  for (const driver of QUANSHENG_UNOFFICIAL_DRIVERS) {
+    const radio = unofficialCatalog.radios.find((entry) => entry.module === driver.module);
+    assert.equal(radio.variant ?? "", "");
+    assert.equal(radio.releaseLabel, driver.releases.join(" / "));
+  }
 });
 
-test("every F4HWN release registers with a distinct selectable version", async () => {
-  const harness = await sharedHarness({ driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET });
-  const radios = await listRegisteredRadios(harness, QUANSHENG_UNOFFICIAL_DRIVER_MODULES);
-  assert.equal(radios.length, QUANSHENG_UNOFFICIAL_DRIVERS.length);
-  const byModule = Object.fromEntries(radios.map((radio) => [radio.module, radio]));
+// Releases share native CHIRP identities, so selecting a release must import
+// it in its own runtime rather than alter the identity saved in desktop images.
+test("every F4HWN release registers with its native identity in an isolated runtime", async () => {
   for (const driver of QUANSHENG_UNOFFICIAL_DRIVERS) {
-    const releaseLabel = driver.releases.length === 1
-      ? driver.releases[0]
-      : `${driver.releases[0]}-${driver.releases.at(-1)}`;
-    const radio = byModule[driver.module];
+    const harness = await sharedHarness({
+      driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET,
+      isolated: true,
+    });
+    const radios = await listRegisteredRadios(harness, [driver.module]);
+    assert.equal(radios.length, 1);
+    const [radio] = radios;
     assert.ok(radio, driver.module);
     assert.equal(radio.key, `${driver.module}:${CLASS_NAME}`);
     assert.equal(radio.className, CLASS_NAME);
     assert.equal(radio.vendor, "Quansheng");
     assert.equal(radio.baudRate, 38400);
     assert.equal(radio.isLiveRadio, false);
-    assert.equal(radio.variant, `F4HWN driver ${releaseLabel}`);
-  }
-
-  const metadata = await harness.runPythonJson(
-    `json.dumps({
-        module_name: get_radio_column_metadata(module_name, _class_name)
-        for module_name in _modules
-    })`,
-    { _modules: QUANSHENG_UNOFFICIAL_DRIVER_MODULES, _class_name: CLASS_NAME },
-  );
-  for (const driver of QUANSHENG_UNOFFICIAL_DRIVERS) {
-    const columns = metadata[driver.module].columns;
+    assert.equal(radio.variant ?? "", "");
+    const metadata = await harness.runPythonJson(
+      "json.dumps(get_radio_column_metadata(_module, _class_name))",
+      { _module: driver.module, _class_name: CLASS_NAME },
+    );
+    const columns = metadata.columns;
     assert.equal(columns.Location.min, 1);
     assert.ok(columns.Location.max >= 200);
     assert.ok(columns.Mode.options.includes("USB"));
-  }
 
-  const wxResult = await harness.runPythonJson(
-    `
+    const wxResult = await harness.runPythonJson(
+      `
 import json
 import wx
 json.dumps({
     "answer": wx.MessageBox("Proceed?", "Warning", wx.OK | wx.CANCEL),
     "cancel": wx.CANCEL,
 })
-    `,
-  );
-  assert.equal(wxResult.answer, wxResult.cancel, "desktop-only confirmations must fail safe");
+      `,
+    );
+    assert.equal(wxResult.answer, wxResult.cancel, "desktop-only confirmations must fail safe");
+  }
 });
 
 // Exercise the same bridge surfaces the browser reaches after a radio read:
@@ -188,7 +188,7 @@ json.dumps({
 // caching. An erased map avoids inventing a hardware fixture while still
 // making the driver's entire bitwise layout parse.
 test("the F4HWN v6 driver loads channels and settings through WebCHIRP", async () => {
-  const harness = await sharedHarness({ driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET });
+  const harness = await sharedHarness({ driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET, isolated: true });
   const result = await harness.runPythonJson(
     `
 import copy
@@ -237,12 +237,7 @@ safe_validation = validate_radio_settings(_module, _class_name, risky_settings)
 image = get_cached_image_base64(_module, _class_name)
 reloaded = load_image_base64(image["imageBase64"])
 raw_image = base64.b64decode(image["imageBase64"])
-image_body, legacy_metadata = chirp_common.CloneModeRadio._strip_metadata(raw_image)
-legacy_metadata["variant"] = ""
-legacy_image = image_body + chirp_common.CloneModeRadio.MAGIC + base64.b64encode(
-    json.dumps(legacy_metadata).encode()
-)
-legacy_loaded = load_image_base64(base64.b64encode(legacy_image).decode(), _module, _class_name)
+image_body, native_metadata = chirp_common.CloneModeRadio._strip_metadata(raw_image)
 json.dumps({
     "loaded": {
         "number": loaded.number,
@@ -267,11 +262,7 @@ json.dumps({
         "className": reloaded["className"],
         "rows": len(reloaded["rows"]),
     },
-    "legacyLoaded": {
-        "module": legacy_loaded["module"],
-        "className": legacy_loaded["className"],
-        "rows": len(legacy_loaded["rows"]),
-    },
+    "nativeMetadata": native_metadata,
 })
     `,
     { _module: MODULE, _class_name: CLASS_NAME },
@@ -300,9 +291,6 @@ json.dumps({
     className: CLASS_NAME,
     rows: 1,
   });
-  assert.deepEqual(result.legacyLoaded, {
-    module: MODULE,
-    className: CLASS_NAME,
-    rows: 1,
-  });
+  assert.equal(result.nativeMetadata.variant, "");
+  assert.equal(result.nativeMetadata.rclass, CLASS_NAME);
 });

@@ -281,6 +281,9 @@ export function createUiController() {
       // Schema only: the grid starts empty and shows its own "load something"
       // notice, so the status line stays on the catalog result.
       await codeplugIo.loadEmptySchema();
+      // Restored/link-selected radios have completed the same metadata/settings
+      // load as a picker selection; reselecting them must preserve current edits.
+      state.lastLoadedRadioKey = state.selectedRadio?.key || "";
       log.setStatus(
         state.selectedRadio
           ? `Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources.`

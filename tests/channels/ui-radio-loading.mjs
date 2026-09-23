@@ -230,6 +230,185 @@ const STALE_TEST_CATALOG = [
 
 const EMPTY_SETTINGS = { supported: false, available: false, requiresImage: false, message: "", groups: [] };
 
+const RELEASE_TEST_CATALOG = ["v5.9.0", "v6.0.0"].map((releaseLabel, index) => ({
+  vendor: "Quansheng", model: "F4HWN", variant: "", releaseLabel,
+  module: `release${index}`, className: "Radio", key: `release${index}:Radio`, isLiveRadio: false,
+}));
+
+// Give the settings editor a mutable field so release reselection can prove
+// that unsaved edits survive, independently of the number of runtime calls.
+function releaseSettings(module) {
+  return {
+    supported: true, available: true, requiresImage: false, message: "",
+    groups: [{
+      kind: "group", id: module, label: `${module} settings`, path: [module],
+      children: [{
+        kind: "setting", id: "greeting", label: "Greeting", path: [module, "greeting"],
+        values: [{ type: "string", current: "Original", mutable: true }],
+      }],
+    }],
+  };
+}
+
+test("release labels are searchable and displayed without changing native variant or losing edits on reselection", async () => {
+  const { document, radioSearchResultsEl, radioSelectionNameEl } = installUiDom();
+  const { createUiController } = await import("../../web/js/ui.js");
+  const ui = createUiController();
+  const metadataCalls = [];
+  const settingsCalls = [];
+  ui.setRuntimeApi({
+    listRadios: async () => ({ radios: RELEASE_TEST_CATALOG }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name"] }),
+    getRadioMetadata: async ({ module }) => {
+      metadataCalls.push(module);
+      return { headers: ["Location", "Name"], columns: {} };
+    },
+    getRadioSettings: async ({ module }) => {
+      settingsCalls.push(module);
+      return releaseSettings(module);
+    },
+    parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
+  });
+  await ui.init(true);
+  typeRadioSearch(document, "v5.9.0");
+  assert.deepEqual(suggestionLines(radioSearchResultsEl), [["Quansheng F4HWN — v5.9.0"]]);
+  selectRadioBySearch(document, "v5.9.0");
+  await flushMicrotasks();
+  assert.equal(radioSelectionNameEl.textContent, "Quansheng F4HWN — v5.9.0");
+  const control = document.querySelector("#settings-content").querySelector("input");
+  assert.ok(control);
+  control.value = "Unsaved edit";
+  control.dispatchEvent({ type: "change", target: control });
+  selectRadioBySearch(document, "v5.9.0");
+  await flushMicrotasks();
+  assert.deepEqual(metadataCalls, ["release0"]);
+  assert.deepEqual(settingsCalls, ["release0"]);
+  assert.equal(document.querySelector("#settings-content").querySelector("input").value, "Unsaved edit");
+  assert.equal(RELEASE_TEST_CATALOG[0].variant, "");
+});
+
+test("returning to a loaded release while another release is pending requests the original runtime again", async () => {
+  const { document, radioSelectionNameEl } = installUiDom();
+  const { createUiController } = await import("../../web/js/ui.js");
+  const ui = createUiController();
+  const pending = createDeferred();
+  const metadataCalls = [];
+  const settingsCalls = [];
+  ui.setRuntimeApi({
+    listRadios: async () => ({ radios: RELEASE_TEST_CATALOG }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name"] }),
+    getRadioMetadata: async ({ module }) => {
+      metadataCalls.push(module);
+      if (module === "release1") await pending.promise;
+      return { headers: ["Location", `${module}Header`], columns: {} };
+    },
+    getRadioSettings: async ({ module }) => {
+      settingsCalls.push(module);
+      if (module === "release1") await pending.promise;
+      return releaseSettings(module);
+    },
+    parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
+  });
+  await ui.init(true);
+  selectRadioBySearch(document, "v5.9.0");
+  await flushMicrotasks();
+  selectRadioBySearch(document, "v6.0.0");
+  await flushMicrotasks();
+  selectRadioBySearch(document, "v5.9.0");
+  await flushMicrotasks();
+  assert.deepEqual(metadataCalls, ["release0", "release1", "release0"]);
+  assert.deepEqual(settingsCalls, ["release0", "release1", "release0"]);
+  pending.resolve();
+  await flushMicrotasks();
+  assert.equal(radioSelectionNameEl.textContent, "Quansheng F4HWN — v5.9.0");
+  assert.ok(tableHeaderTexts(document).includes("release0Header"));
+  assert.ok(!tableHeaderTexts(document).includes("release1Header"));
+  assert.equal(document.querySelector("#settings-tabs").textContent, "release0 settings");
+});
+
+test("reselecting a release restored from a cookie or link preserves edits without loading again", async () => {
+  const { createUiController } = await import("../../web/js/ui.js");
+  for (const source of ["cookie", "link"]) {
+    const { document } = installUiDom();
+    if (source === "cookie") {
+      document.cookie = `webchirp_last_radio=${encodeURIComponent(JSON.stringify({ make: "Quansheng", key: "release0:Radio" }))}`;
+    } else {
+      globalThis.window.location = { search: "?radio=release0%3ARadio" };
+    }
+    const ui = createUiController();
+    const metadataCalls = [];
+    const settingsCalls = [];
+    ui.setRuntimeApi({
+      listRadios: async () => ({ radios: RELEASE_TEST_CATALOG }),
+      getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+      getDefaultSchema: async () => ({ headers: ["Location", "Name"] }),
+      getRadioMetadata: async ({ module }) => {
+        metadataCalls.push(module);
+        return { headers: ["Location", "Name"], columns: {} };
+      },
+      getRadioSettings: async ({ module }) => {
+        settingsCalls.push(module);
+        return releaseSettings(module);
+      },
+      parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
+    });
+    await ui.init(true);
+    const control = document.querySelector("#settings-content").querySelector("input");
+    assert.ok(control, `${source} should restore release settings`);
+    control.value = "Startup edit";
+    control.dispatchEvent({ type: "change", target: control });
+    selectRadioBySearch(document, "v5.9.0");
+    await flushMicrotasks();
+    assert.deepEqual(metadataCalls, ["release0"], source);
+    assert.deepEqual(settingsCalls, ["release0"], source);
+    assert.equal(document.querySelector("#settings-content").querySelector("input").value, "Startup edit", source);
+  }
+});
+
+test("reselecting a returning release while its reload is pending still applies the latest load", async () => {
+  const { document } = installUiDom();
+  const { createUiController } = await import("../../web/js/ui.js");
+  const ui = createUiController();
+  const pending = createDeferred();
+  let returning = false;
+  const metadataCalls = [];
+  const settingsCalls = [];
+  ui.setRuntimeApi({
+    listRadios: async () => ({ radios: RELEASE_TEST_CATALOG }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name"] }),
+    getRadioMetadata: async ({ module }) => {
+      metadataCalls.push(module);
+      const isReload = returning;
+      if (isReload) await pending.promise;
+      return { headers: ["Location", isReload ? `${module}Reloaded` : "InitialHeader"], columns: {} };
+    },
+    getRadioSettings: async ({ module }) => {
+      settingsCalls.push(module);
+      const isReload = returning;
+      if (isReload) await pending.promise;
+      return releaseSettings(isReload ? `${module}Reloaded` : module);
+    },
+    parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
+  });
+  await ui.init(true);
+  selectRadioBySearch(document, "v5.9.0");
+  await flushMicrotasks();
+  returning = true;
+  selectRadioBySearch(document, "v6.0.0");
+  selectRadioBySearch(document, "v5.9.0");
+  selectRadioBySearch(document, "v5.9.0");
+  pending.resolve();
+  await flushMicrotasks();
+  assert.deepEqual(metadataCalls, ["release0", "release1", "release0", "release0"]);
+  assert.deepEqual(settingsCalls, ["release0", "release1", "release0", "release0"]);
+  assert.ok(tableHeaderTexts(document).includes("release0Reloaded"));
+  assert.ok(!tableHeaderTexts(document).includes("InitialHeader"));
+  assert.equal(document.querySelector("#settings-tabs").textContent, "release0Reloaded settings");
+});
+
 test("stale metadata response does not overwrite a newer radio selection", async () => {
   const { document, radioSearchEl } = installUiDom();
   const { createUiController } = await import("../../web/js/ui.js");

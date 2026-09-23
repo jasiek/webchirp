@@ -8,13 +8,12 @@ import {
 import {
   findCatalogRadioForImageMetadata,
   loadImageWithDriverFallback,
-  selectedF4hwnForLegacyImage,
 } from "./image-metadata.mjs";
 import {
   createBootstrapCrashReporter,
-  createRuntimeBootstrap,
   markBootstrapFailure,
 } from "./runtime-bootstrap.mjs";
+import { createSelectedDriverRuntime } from "./selected-driver-runtime.mjs";
 import {
   createBrowserCdnPythonSource,
   DEFAULT_CHIRP_REVISION,
@@ -175,7 +174,11 @@ function installSerialBridgeGlobals() {
 
 // Trigger runtime import of the selected driver; Python import hook fetches missing files.
 async function ensureSelectedRadioModules(moduleShortName) {
-  await ensurePyodide();
+  if (!moduleShortName) {
+    await ensurePyodide();
+    return;
+  }
+  pyodide = await runtimeBootstrap.select(moduleShortName);
   pyodide.globals.set("_sel_module_short", moduleShortName);
   await pyodide.runPythonAsync("ensure_radio_module(_sel_module_short)");
 }
@@ -185,6 +188,9 @@ async function ensureSelectedRadioModules(moduleShortName) {
 // front, so detection has to try them all. Each module is fetched individually
 // by the Python import hook, so this is deliberately not done eagerly.
 async function ensureAllDriverModules() {
+  if (DRIVER_SET === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+    throw new Error("Select the matching firmware release before opening an image.");
+  }
   if (!allDriverModulesPromise) {
     allDriverModulesPromise = (async () => {
       const modules = await listDriverModules(pythonSource);
@@ -325,13 +331,17 @@ async function loadRadioCatalog() {
     radioCatalogSource = "static";
     return radioCatalogCache;
   }
+  if (DRIVER_SET === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+    throw new Error("The unofficial driver catalog is unavailable. Reload the page to retry.");
+  }
   return loadRadioCatalogFromSources();
 }
 
 // Lazily initialize Pyodide, preload core CHIRP files, and load runtime bridge.
 // The handle is returned rather than assigned mid-sequence so that nothing can
 // observe a runtime that loaded but failed to seed.
-const runtimeBootstrap = createRuntimeBootstrap({
+const runtimeBootstrap = createSelectedDriverRuntime({
+  isolated: DRIVER_SET === QUANSHENG_UNOFFICIAL_DRIVER_SET,
   async loadRuntime() {
     installSerialBridgeGlobals();
     const loaded = await loadPyodide({ indexURL: PYODIDE_INDEX_URL });
@@ -391,7 +401,7 @@ async function handleParseCsv(payload = {}) {
 }
 
 async function handleNormalizeRows(payload = {}) {
-  await requirePyodide();
+  await ensureSelectedRadioModules(payload.module || "");
   setRowsJsonGlobal(payload.rows);
   setSelectedRadioGlobals(payload);
   return pyodide.runPythonAsync(
@@ -400,7 +410,7 @@ async function handleNormalizeRows(payload = {}) {
 }
 
 async function handleValidateRowsForUpload(payload = {}) {
-  await requirePyodide();
+  await ensureSelectedRadioModules(payload.module || "");
   setRowsJsonGlobal(payload.rows);
   setSelectedRadioGlobals(payload);
   return runPythonJson(
@@ -420,6 +430,17 @@ async function handleExportImage(payload = {}) {
 }
 
 async function handleLoadImage(payload = {}) {
+  if (DRIVER_SET === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
+    const selected = (await loadRadioCatalog()).find((radio) =>
+      radio.module === payload.module && radio.className === payload.className);
+    if (!selected) {
+      throw new Error("Select the matching firmware release before opening an image.");
+    }
+    await ensureSelectedRadioModules(selected.module);
+    pyodide.globals.set("_image_b64", payload.imageBase64 || "");
+    // Native CHIRP metadata detection now sees only the selected release.
+    return runPythonJson("json.dumps(load_image_base64(_image_b64))");
+  }
   await requirePyodide();
   pyodide.globals.set("_image_b64", payload.imageBase64 || "");
   // CHIRP image detection only searches drivers that are already imported, so
@@ -427,21 +448,6 @@ async function handleLoadImage(payload = {}) {
   const metadata = await runPythonJson(
     "json.dumps(read_image_metadata_base64(_image_b64))",
   );
-  const selected = payload.module && payload.className
-    ? (await loadRadioCatalog()).find((radio) =>
-      radio.module === payload.module && radio.className === payload.className)
-    : null;
-  if (selectedF4hwnForLegacyImage(selected, metadata)) {
-    await ensureSelectedRadioModules(selected.module);
-    pyodide.globals.set("_sel_module", selected.module);
-    pyodide.globals.set("_sel_class", selected.className);
-    debugLog?.(
-      `IMAGE using selected F4HWN release ${selected.module} for legacy empty-variant metadata`,
-    );
-    return runPythonJson(
-      "json.dumps(load_image_base64(_image_b64, _sel_module, _sel_class))",
-    );
-  }
   let resolvedDriver = null;
   if (metadata?.hasMetadata) {
     const radios = await loadRadioCatalog();

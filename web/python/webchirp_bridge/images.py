@@ -157,33 +157,9 @@ def read_image_metadata_base64(image_b64: str) -> dict[str, Any]:
     }
 
 
-def load_image_base64(
-    image_b64: str, selected_module: str = "", selected_class: str = ""
-) -> dict[str, Any]:
-    """Load an image, honoring a selected F4HWN release for legacy metadata."""
+def load_image_base64(image_b64: str) -> dict[str, Any]:
+    """Load a CHIRP .img payload, detect driver, and return rows + radio identity."""
     raw_image = _decode_image_b64(image_b64)
-
-    _, metadata = chirp_common.CloneModeRadio._strip_metadata(raw_image)
-    if selected_module.startswith("f4hwn_v") and selected_class == "UVK5RadioEgzumer":
-        radio_cls = _import_radio_class(selected_module, selected_class)
-        if (
-            metadata
-            and metadata.get("vendor") == radio_cls.VENDOR
-            and metadata.get("model") == radio_cls.MODEL
-            and metadata.get("rclass") == selected_class
-            and metadata.get("variant") == ""
-        ):
-            # CHIRP's detector rejects the original empty variant after our
-            # registration shim gives each release a distinct picker identity.
-            radio = _radio_from_image_bytes(radio_cls, raw_image)
-            return {
-                "module": selected_module,
-                "className": selected_class,
-                "vendor": str(radio_cls.VENDOR),
-                "model": str(radio_cls.MODEL),
-                "variant": str(radio_cls.VARIANT),
-                **_read_radio_payload(selected_module, selected_class, radio),
-            }
 
     with _temp_image_path(raw_image, prefix="webchirp-") as image_path:
         try:

@@ -1,10 +1,12 @@
-import { execFile } from "node:child_process";
+import { execFile, fork } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import {
   DEFAULT_CHIRP_REVISION,
   QUANSHENG_UNOFFICIAL_DRIVER_SET,
+  QUANSHENG_UNOFFICIAL_DRIVERS,
 } from "../web/js/python-sources.mjs";
 import { createTestRadioHarness } from "../tests/support/radio-harness.mjs";
 
@@ -43,9 +45,9 @@ async function resolveChirpRevision(chirpPackageDir) {
 }
 
 // Import one configured driver collection and return its catalog and failures.
-async function buildDriverCatalog(driverSet) {
+async function buildDriverCatalog(driverSet, selectedModules) {
   const harness = await createTestRadioHarness({ repoRoot: REPO_ROOT, driverSet });
-  const modules = await harness.pythonSource.listDriverModules();
+  const modules = selectedModules || await harness.pythonSource.listDriverModules();
   const radios = await harness.runPythonJson(
     "json.dumps(list_registered_radios(_modules))",
     { _modules: modules },
@@ -68,7 +70,61 @@ async function buildDriverCatalog(driverSet) {
   return { harness, modules, radios: sorted, chirpRevision, importFailures };
 }
 
+// Give each release its own Python registry and release its runtime memory on exit.
+async function buildIsolatedDriverCatalog(moduleName) {
+  return new Promise((resolve, reject) => {
+    const child = fork(fileURLToPath(import.meta.url), ["--driver-module", moduleName], {
+      stdio: ["ignore", "inherit", "inherit", "ipc"],
+    });
+    let result;
+    child.on("message", (message) => { result = message; });
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code !== 0 || !result) {
+        reject(new Error(`Catalog generation failed for ${moduleName} (exit ${code})`));
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
+
+// Keep firmware release labels in the catalog without changing CHIRP identities.
+async function buildUnofficialCatalog() {
+  const radios = [];
+  const importFailures = {};
+  const modules = [];
+  let chirpRevision;
+  for (const driver of QUANSHENG_UNOFFICIAL_DRIVERS) {
+    const catalog = await buildIsolatedDriverCatalog(driver.module);
+    if (catalog.radios.length === 0 || Object.keys(catalog.importFailures).length) {
+      throw new Error(`No complete catalog for bundled driver ${driver.module}`);
+    }
+    chirpRevision = catalog.chirpRevision;
+    modules.push(...catalog.modules);
+    Object.assign(importFailures, catalog.importFailures);
+    radios.push(...catalog.radios.map((radio) => ({
+      ...radio,
+      releaseLabel: driver.releases.join(" / "),
+    })));
+  }
+  return { radios: sortRadioCatalog(radios), modules, importFailures, chirpRevision };
+}
+
 async function main() {
+  if (process.argv[2] === "--driver-module") {
+    const moduleName = process.argv[3];
+    if (!process.send || !QUANSHENG_UNOFFICIAL_DRIVERS.some((driver) => driver.module === moduleName)) {
+      throw new Error("The isolated catalog worker requires a known bundled driver and IPC");
+    }
+    const { harness: _harness, ...catalog } = await buildDriverCatalog(
+      QUANSHENG_UNOFFICIAL_DRIVER_SET,
+      [moduleName],
+    );
+    process.send(catalog);
+    process.disconnect();
+    return;
+  }
   const chirpCatalog = await buildDriverCatalog("chirp");
 
   // The browser runtime rejects a catalog built from any other revision, so a
@@ -90,7 +146,7 @@ async function main() {
 
   await writeFile(OUTPUT_PATH, `${JSON.stringify(catalog, null, 0)}\n`, "utf8");
 
-  const quanshengCatalog = await buildDriverCatalog(QUANSHENG_UNOFFICIAL_DRIVER_SET);
+  const quanshengCatalog = await buildUnofficialCatalog();
   await writeFile(
     QUANSHENG_OUTPUT_PATH,
     `${JSON.stringify({

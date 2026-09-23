@@ -30,20 +30,6 @@ function matchesIdentity(radio, vendor, model, variant) {
   });
 }
 
-// Published F4HWN desktop images record an empty variant, while WebCHIRP adds
-// release variants to keep the bundled drivers selectable. Only an explicitly
-// selected release with the same original identity may bridge that mismatch.
-export function selectedF4hwnForLegacyImage(radio, metadata) {
-  return Boolean(radio?.module?.startsWith("f4hwn_v")
-    && radio.className === "UVK5RadioEgzumer"
-    && metadata?.hasMetadata === true
-    && metadata.variant === ""
-    && metadata.rclass === radio.className
-    && metadata.vendor === radio.vendor
-    && metadata.model === radio.model
-    && radio.isLiveRadio === false);
-}
-
 export function findCatalogRadioForImageMetadata(radioCatalog, metadata) {
   if (!metadata?.hasMetadata) {
     return null;
