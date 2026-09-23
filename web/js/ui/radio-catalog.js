@@ -5,6 +5,7 @@ import {
 } from "./state.js";
 import { makeModelLabel } from "./format.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
+import { DEFAULT_DRIVER_SET, QUANSHENG_UNOFFICIAL_DRIVER_SET } from "../python-sources.mjs";
 
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
@@ -508,6 +509,17 @@ export function createRadioCatalog(ctx) {
   }
 
   function bindEvents() {
+    // Keep switching links available even if catalog loading fails. Missing or
+    // empty parameters select CHIRP; any other set offers a return to the root.
+    const driverSet = new URLSearchParams(window.location?.search || "").get("drivers")
+      || DEFAULT_DRIVER_SET;
+    dom.useQuanshengDriversEl.hidden = driverSet === QUANSHENG_UNOFFICIAL_DRIVER_SET;
+    dom.useChirpDriversEl.hidden = driverSet === DEFAULT_DRIVER_SET;
+    // Non-CHIRP driver sets carry the stronger hardware-risk warning.
+    const unofficial = driverSet !== DEFAULT_DRIVER_SET;
+    dom.standardDriverWarningEl.hidden = unofficial;
+    dom.unofficialDriverWarningEl.hidden = !unofficial;
+    dom.sidebarWarningEl.classList.toggle("is-unofficial", unofficial);
     // Typing opens an autocomplete list of "<Make> <Model>" suggestions; the
     // (Pyodide-backed) metadata/settings load only happens once the user picks
     // a suggestion via keyboard or mouse.

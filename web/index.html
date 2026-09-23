@@ -240,17 +240,21 @@
             </div>
           </details>
 
-          <section class="sidebar-warning-panel" aria-label="Experimental software warning">
+          <section id="sidebar-warning" class="sidebar-warning-panel" aria-label="Experimental software warning">
             <strong>Warning</strong>
-            <p>
+            <p id="standard-driver-warning">
               This software is experimental and there are no guarantees that it will work -
               you are using it at your own risk.
+            </p>
+            <p id="unofficial-driver-warning" hidden>
+              In addition to using this experimental software, you have chosen to use drivers which are experimental and only meant for experienced tinkerers, unafraid of hardware failures. You need to be aware that you radio may stop working, and may become bricked.
             </p>
             <p>
               73 de <a href="https://www.qrz.com/db/HF2J">HF2J</a>
             </p>
           </section>
-          <a href="?drivers=quansheng-unofficial">Use unofficial Quansheng drivers</a>
+          <a id="use-quansheng-drivers" href="?drivers=quansheng-unofficial" hidden>Use unofficial Quansheng drivers</a>
+          <a id="use-chirp-drivers" href="/" hidden>Use CHIRP drivers only</a>
         </aside>
 
         <section class="editor-panel">

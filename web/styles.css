@@ -671,6 +671,16 @@ button:disabled {
   text-transform: uppercase;
 }
 
+.sidebar-warning-panel.is-unofficial {
+  background: #b91c1c;
+  border-color: #991b1b;
+  color: #fff;
+}
+
+.sidebar-warning-panel.is-unofficial a {
+  color: inherit;
+}
+
 .sidebar-warning-panel p {
   margin: 0;
   font-size: 0.82rem;
