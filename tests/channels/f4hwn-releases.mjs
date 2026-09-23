@@ -21,13 +21,19 @@ import { webDir } from "../support/repo-paths.mjs";
 const MODULE = "f4hwn_v6";
 const CLASS_NAME = "UVK5RadioEgzumer";
 
-// Pin every byte-distinct published asset: a silent local edit would otherwise
-// look like the named upstream release while no longer being it. v4.3.0,
-// v4.3.1 and v4.3.2 deliberately share one entry because all three assets are
-// byte-for-byte identical and identify themselves as driver v4.3.0.
+// Pin the retained releases and their published bytes. The v4.3.2 asset still
+// identifies itself as driver v4.3.0; its catalog label names the release.
 test("the bundled F4HWN drivers are the exact published releases", async () => {
-  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.length, 13);
-  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.flatMap((driver) => driver.releases).length, 15);
+  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.length, 3);
+  assert.deepEqual(
+    QUANSHENG_UNOFFICIAL_DRIVERS.flatMap((driver) => driver.releases),
+    ["v4.3.2", "v5.9.0", "v6.0.0"],
+  );
+  assert.deepEqual(
+    (await fs.readdir(path.join(webDir, "python/extra_drivers/quansheng")))
+      .filter((name) => name.endsWith(".py")).sort(),
+    QUANSHENG_UNOFFICIAL_DRIVERS.map((driver) => path.basename(driver.relPath)).sort(),
+  );
   for (const driver of QUANSHENG_UNOFFICIAL_DRIVERS) {
     const source = await fs.readFile(path.join(webDir, "python", driver.relPath));
     assert.equal(

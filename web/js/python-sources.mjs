@@ -12,74 +12,14 @@ export const DRIVER_SETS = Object.freeze([
 
 // Third-party drivers shipped by WebCHIRP in addition to the pinned upstream
 // CHIRP tree. Keep their release hashes here so tests can prove that the local
-// sources are the exact published assets. The three v4.3.x firmware releases
-// all contain the same v4.3.0 driver bytes, so one module covers all three.
+// sources are the exact published assets. The v4.3.2 release ships a driver
+// that identifies itself as v4.3.0; preserve those published bytes unchanged.
 export const QUANSHENG_UNOFFICIAL_DRIVERS = Object.freeze([
   {
     module: "f4hwn_v4_3",
     relPath: "extra_drivers/quansheng/f4hwn_v4_3.py",
-    releases: ["v4.3.0", "v4.3.1", "v4.3.2"],
+    releases: ["v4.3.2"],
     sha256: "024ff9d263d7aeb8be03414754c99dd696ee20cf322e6e20c6a72f0287cf42a1",
-  },
-  {
-    module: "f4hwn_v5_1_0",
-    relPath: "extra_drivers/quansheng/f4hwn_v5_1_0.py",
-    releases: ["v5.1.0"],
-    sha256: "a92eaa46e544e2c32e62700dc12ec419407300d50f13442ba4cc9dce2a28dcab",
-  },
-  {
-    module: "f4hwn_v5_2_0",
-    relPath: "extra_drivers/quansheng/f4hwn_v5_2_0.py",
-    releases: ["v5.2.0"],
-    sha256: "adf4aa2c02a9a9c61a5e3c4d63088064e59c091b5a16ed649e3d28d15231d121",
-  },
-  {
-    module: "f4hwn_v5_3_0",
-    relPath: "extra_drivers/quansheng/f4hwn_v5_3_0.py",
-    releases: ["v5.3.0"],
-    sha256: "7464bc109dc051c6f8c88ccfffba9d7068bd6a0ea1ce9ff2f553b89136c0f53b",
-  },
-  {
-    module: "f4hwn_v5_3_1",
-    relPath: "extra_drivers/quansheng/f4hwn_v5_3_1.py",
-    releases: ["v5.3.1"],
-    sha256: "052315f4d2d268995b357b7f93734ba2095578e4a02bcee605b3fc3ee7721cd2",
-  },
-  {
-    module: "f4hwn_v5_4_0",
-    relPath: "extra_drivers/quansheng/f4hwn_v5_4_0.py",
-    releases: ["v5.4.0"],
-    sha256: "698c34470b199d42b995be46f3f144c710dcd165cd705721515836cb275f80c0",
-  },
-  {
-    module: "f4hwn_v5_5_0",
-    relPath: "extra_drivers/quansheng/f4hwn_v5_5_0.py",
-    releases: ["v5.5.0"],
-    sha256: "df241243949a70920864b9284990287d4e7ba00280e1f36841a0b498c6cd203c",
-  },
-  {
-    module: "f4hwn_v5_6_0",
-    relPath: "extra_drivers/quansheng/f4hwn_v5_6_0.py",
-    releases: ["v5.6.0"],
-    sha256: "3a8bde054b803f4287b03aab46a1c447d8e46d52110f5c64d979c4cad8ecf6bd",
-  },
-  {
-    module: "f4hwn_v5_6_1",
-    relPath: "extra_drivers/quansheng/f4hwn_v5_6_1.py",
-    releases: ["v5.6.1"],
-    sha256: "2c742582237f38a4a021d72e07449543734a11aa08ce3c093c699a0ec04eb653",
-  },
-  {
-    module: "f4hwn_v5_7_0",
-    relPath: "extra_drivers/quansheng/f4hwn_v5_7_0.py",
-    releases: ["v5.7.0"],
-    sha256: "927df9b31d1622b660da65df3c85a601d9cace371a2bced29ca4be2ff6b8b4a1",
-  },
-  {
-    module: "f4hwn_v5_8_0",
-    relPath: "extra_drivers/quansheng/f4hwn_v5_8_0.py",
-    releases: ["v5.8.0"],
-    sha256: "a5f87cc3781a908ae36ed9e479d3b7d0c59064cf8c53e2865e8ac8e1f89cac97",
   },
   {
     module: "f4hwn_v5_9_0",

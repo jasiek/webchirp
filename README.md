@@ -42,8 +42,9 @@ Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/).
 
 The default and `?drivers=chirp` use the pinned upstream CHIRP drivers. Use
 `?drivers=quansheng-unofficial` to load only the bundled unofficial Quansheng
-driver catalog. Choose the firmware release in the radio picker to load its
-driver. Release labels belong to the catalog; the driver's original CHIRP
+driver catalog containing v4.3.2, v5.9.0 and v6.0.0. Choose the firmware release
+in the radio picker to load its driver. Release labels belong to the catalog;
+the driver's original CHIRP
 identity and image metadata are preserved.
 
 In unofficial mode, select the matching firmware release before opening a
