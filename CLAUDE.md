@@ -116,6 +116,8 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - We do not aim to support screen readers at this time.
 
 ## Change Process
+- Use a worktree unless told otherwise, you may need to check out submodules.
+- Raise a PR unless told otherwise.
 - Commit after every change.
 - Keep commits small and scoped to one functional fix/refactor when practical.
 - Include clear commit messages that describe user-visible behavior or architectural impact.
