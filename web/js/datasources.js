@@ -337,35 +337,6 @@ export function parsePrzemiennikiXml(xmlText) {
     ),
   ).sort((a, b) => a.localeCompare(b));
 
-  const bands = Array.from(
-    new Set(
-      Array.from(xmlDoc.querySelectorAll("dictionary > item"))
-        .filter((item) => firstText(item, "type").toLowerCase() === "band")
-        .map((item) => {
-          const description = firstText(item, "description");
-          const name = firstText(item, "name");
-          return (description || name).toLowerCase();
-        })
-        .filter((value) => value.length > 0),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
-
-  const modes = Array.from(
-    new Set(
-      Array.from(xmlDoc.querySelectorAll("dictionary > item"))
-        .filter((item) => firstText(item, "type").toLowerCase() === "mode")
-        .map((item) => {
-          const description = firstText(item, "description");
-          const name = firstText(item, "name");
-          const queryValue = (name || description).toLowerCase();
-          const label = description || name || queryValue;
-          return JSON.stringify({ value: queryValue, label, title: label });
-        }),
-    ),
-  )
-    .map((raw) => JSON.parse(raw))
-    .sort((a, b) => a.label.localeCompare(b.label));
-
   const repeaters = Array.from(xmlDoc.querySelectorAll("repeaters > repeater"))
     .map((repeaterEl) => {
       return {
@@ -383,7 +354,7 @@ export function parsePrzemiennikiXml(xmlText) {
       };
     });
 
-  return { perspective, countries, bands, modes, repeaters };
+  return { perspective, countries, repeaters };
 }
 
 export function parsePrzemiennikiMetaJson(jsonText) {
