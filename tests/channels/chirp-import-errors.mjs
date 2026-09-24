@@ -14,9 +14,9 @@ const FETCH_FAILURE = "Failed to fetch https://cdn.test/chirp/drivers/kguv8d.py:
 
 // Swap a JS callable a bridge module reaches through. Python bound it by value
 // at "from js import ..." inside the owning module, so neither reassigning
-// globalThis nor the flattened copy in pyodide.globals (which runtime_bridge.py
-// exports from the module, not the other way round) would be seen -- the
-// module attribute is the only handle. Which module owns the name is part of
+// globalThis nor the flattened copy in pyodide.globals (which
+// tests/support/bridge_namespace.py exports from the module, not the other way
+// round) would be seen -- the module attribute is the only handle. Which module owns the name is part of
 // what this pins: the finder in chirp_loader fetches, and logs through
 // jsbridge's _log_debug.
 function patchPythonModule(pyodide, moduleName, overrides) {

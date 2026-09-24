@@ -14,6 +14,7 @@ import {
   markBootstrapFailure,
 } from "./runtime-bootstrap.mjs";
 import { createSelectedDriverRuntime } from "./selected-driver-runtime.mjs";
+import { rpcDispatcherFor } from "./rpc-dispatch.mjs";
 import {
   createBrowserCdnPythonSource,
   DEFAULT_CHIRP_REVISION,
@@ -49,6 +50,7 @@ const RUNTIME_PYTHON_URLS = Object.freeze({
   "webchirp_bridge/radio_memories.py": "./python/webchirp_bridge/radio_memories.py",
   "webchirp_bridge/radio_settings.py": "./python/webchirp_bridge/radio_settings.py",
   "webchirp_bridge/row_validation.py": "./python/webchirp_bridge/row_validation.py",
+  "webchirp_bridge/rpc.py": "./python/webchirp_bridge/rpc.py",
   "webchirp_bridge/runtime_errors.py": "./python/webchirp_bridge/runtime_errors.py",
   "webchirp_bridge/serial_pipe.py": "./python/webchirp_bridge/serial_pipe.py",
   "extra_drivers/quansheng/f4hwn_v4_3.py": "./python/extra_drivers/quansheng/f4hwn_v4_3.py",
@@ -169,8 +171,7 @@ async function ensureSelectedRadioModules(moduleShortName) {
     return;
   }
   pyodide = await runtimeBootstrap.select(moduleShortName);
-  pyodide.globals.set("_sel_module_short", moduleShortName);
-  await pyodide.runPythonAsync("ensure_radio_module(_sel_module_short)");
+  await rpc("ensure_radio_module", { module_short_name: moduleShortName });
 }
 
 // Import every driver module once per session. Only the metadata-less image
@@ -206,12 +207,11 @@ async function ensureAllDriverModules() {
         }
       };
 
-      pyodide.globals.set("_all_driver_modules", modules);
-      pyodide.globals.set("_driver_progress_cb", reportProgress);
       try {
-        const result = await runPythonJson(
-          "json.dumps(import_all_driver_modules(_all_driver_modules, _driver_progress_cb))",
-        );
+        const result = await rpc("import_all_driver_modules", {
+          module_short_names: modules,
+          callback: reportProgress,
+        });
         if (debugLog) {
           const failed = Object.entries(result.failed || {});
           debugLog(
@@ -227,7 +227,6 @@ async function ensureAllDriverModules() {
         // The strip must come down on the failure path too, or a failed sweep
         // leaves a frozen bar on screen for the rest of the session.
         progress?.end();
-        pyodide.globals.set("_driver_progress_cb", null);
       }
     })().catch((error) => {
       // Let a later load retry rather than caching the failure for the session.
@@ -292,11 +291,7 @@ async function loadRadioCatalogFromSources() {
   const modules = await listDriverModules(pythonSource);
 
   await ensurePyodide();
-  pyodide.globals.set("_radio_catalog_modules", modules);
-  const radiosJson = await pyodide.runPythonAsync(
-    "json.dumps(list_registered_radios(_radio_catalog_modules))",
-  );
-  const allRadios = JSON.parse(radiosJson);
+  const allRadios = await rpc("list_registered_radios", { module_short_names: modules });
 
   allRadios.sort((a, b) => {
     const av = `${a.vendor}\u0000${a.model}`;
@@ -349,22 +344,21 @@ async function requirePyodide() {
   await ensurePyodide();
 }
 
-function setSelectedRadioGlobals(payload = {}) {
-  pyodide.globals.set("_sel_module", payload.module || "");
-  pyodide.globals.set("_sel_class", payload.className || "");
+// Call one Python runtime method on the current interpreter. Resolved per
+// call rather than held, because ensureSelectedRadioModules() can swap the
+// interpreter under the isolated driver set; the dispatcher is memoized per
+// interpreter in web/js/rpc-dispatch.mjs.
+function rpc(name, params = {}) {
+  return rpcDispatcherFor(pyodide).call(name, params);
 }
 
-function setRowsJsonGlobal(rows) {
-  pyodide.globals.set("_rows_json", JSON.stringify(rows));
-}
-
-function setSettingsJsonGlobal(groups) {
-  pyodide.globals.set("_settings_json", JSON.stringify(groups));
-}
-
-async function runPythonJson(pythonCode) {
-  const resultJson = await pyodide.runPythonAsync(pythonCode);
-  return JSON.parse(resultJson);
+// The selected driver as every radio-bound method names it, under the Python
+// parameter names, so the UI's {module, className} payload maps in one place.
+function selectedRadioParams(payload = {}) {
+  return {
+    module_name: payload.module || "",
+    class_name: payload.className || "",
+  };
 }
 
 async function handleGetRuntimeInfo() {
@@ -381,42 +375,38 @@ async function handleListRadios() {
 // get_default_schema (web/python/webchirp_bridge/column_metadata.py).
 async function handleGetDefaultSchema() {
   await requirePyodide();
-  return runPythonJson("json.dumps(get_default_schema())");
+  return rpc("get_default_schema");
 }
 
 async function handleParseCsv(payload = {}) {
   await requirePyodide();
-  pyodide.globals.set("_csv_input", payload.csvText);
-  return runPythonJson("json.dumps(parse_csv(_csv_input))");
+  return rpc("parse_csv", { csv_text: String(payload.csvText ?? "") });
 }
 
 async function handleNormalizeRows(payload = {}) {
   await ensureSelectedRadioModules(payload.module || "");
-  setRowsJsonGlobal(payload.rows);
-  setSelectedRadioGlobals(payload);
-  return pyodide.runPythonAsync(
-    "normalize_rows(json.loads(_rows_json), _sel_module, _sel_class)",
-  );
+  return rpc("normalize_rows", {
+    rows: payload.rows || [],
+    ...selectedRadioParams(payload),
+  });
 }
 
 async function handleValidateRowsForUpload(payload = {}) {
   await ensureSelectedRadioModules(payload.module || "");
-  setRowsJsonGlobal(payload.rows);
-  setSelectedRadioGlobals(payload);
-  return runPythonJson(
-    "json.dumps(validate_rows_for_upload(json.loads(_rows_json), _sel_module, _sel_class))",
-  );
+  return rpc("validate_rows_for_upload", {
+    rows: payload.rows || [],
+    ...selectedRadioParams(payload),
+  });
 }
 
 async function handleExportImage(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
-  setRowsJsonGlobal(payload.rows);
-  setSettingsJsonGlobal(payload.settings || []);
-  setSelectedRadioGlobals(payload);
-  return runPythonJson(
-    "json.dumps(export_image_base64(_sel_module, _sel_class, json.loads(_rows_json), json.loads(_settings_json)))",
-  );
+  return rpc("export_image_base64", {
+    ...selectedRadioParams(payload),
+    rows: payload.rows || [],
+    settings_groups: payload.settings || [],
+  });
 }
 
 async function handleLoadImage(payload = {}) {
@@ -427,17 +417,14 @@ async function handleLoadImage(payload = {}) {
       throw new Error("Select the matching firmware release before opening an image.");
     }
     await ensureSelectedRadioModules(selected.module);
-    pyodide.globals.set("_image_b64", payload.imageBase64 || "");
     // Native CHIRP metadata detection now sees only the selected release.
-    return runPythonJson("json.dumps(load_image_base64(_image_b64))");
+    return rpc("load_image_base64", { image_b64: payload.imageBase64 || "" });
   }
   await requirePyodide();
-  pyodide.globals.set("_image_b64", payload.imageBase64 || "");
+  const image_b64 = payload.imageBase64 || "";
   // CHIRP image detection only searches drivers that are already imported, so
   // read the metadata trailer first and import the matching driver module.
-  const metadata = await runPythonJson(
-    "json.dumps(read_image_metadata_base64(_image_b64))",
-  );
+  const metadata = await rpc("read_image_metadata_base64", { image_b64 });
   let resolvedDriver = null;
   if (metadata?.hasMetadata) {
     const radios = await loadRadioCatalog();
@@ -475,7 +462,7 @@ async function handleLoadImage(payload = {}) {
   }
   return loadImageWithDriverFallback({
     resolvedDriver,
-    loadImage: () => runPythonJson("json.dumps(load_image_base64(_image_b64))"),
+    loadImage: () => rpc("load_image_base64", { image_b64 }),
     importAllDrivers: () => ensureAllDriverModules(),
     log: debugLog,
   });
@@ -483,52 +470,43 @@ async function handleLoadImage(payload = {}) {
 
 async function handleSerialConnect(payload = {}) {
   await requirePyodide();
-  pyodide.globals.set("_baud", payload.baudRate || 9600);
-  return runPythonJson("json.dumps(await webserial_connect(_baud))");
+  return rpc("webserial_connect", { baudrate: payload.baudRate || 9600 });
 }
 
 async function handleSerialDisconnect() {
   await requirePyodide();
-  return runPythonJson("json.dumps(await webserial_disconnect())");
+  return rpc("webserial_disconnect");
 }
 
 async function handleSerialTxRx(payload = {}) {
   await requirePyodide();
-  pyodide.globals.set("_tx_hex", payload.txHex || "");
-  pyodide.globals.set("_rx_bytes", payload.rxBytes || 32);
-  pyodide.globals.set("_timeout_ms", payload.timeoutMs || 1200);
-  return runPythonJson(
-    "json.dumps(await webserial_txrx_hex(_tx_hex, _rx_bytes, _timeout_ms))",
-  );
+  return rpc("webserial_txrx_hex", {
+    tx_hex: payload.txHex || "",
+    rx_bytes: payload.rxBytes || 32,
+    timeout_ms: payload.timeoutMs || 1200,
+  });
 }
 
 async function handleDownloadSelectedRadio(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
-  setSelectedRadioGlobals(payload);
-  return runPythonJson(
-    "json.dumps(await download_selected_radio(_sel_module, _sel_class))",
-  );
+  return rpc("download_selected_radio", selectedRadioParams(payload));
 }
 
 async function handleUploadSelectedRadio(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
-  setSelectedRadioGlobals(payload);
-  setRowsJsonGlobal(payload.rows || []);
-  setSettingsJsonGlobal(payload.settings || []);
-  return runPythonJson(
-    "json.dumps(await upload_selected_radio(_sel_module, _sel_class, json.loads(_rows_json), json.loads(_settings_json)))",
-  );
+  return rpc("upload_selected_radio", {
+    ...selectedRadioParams(payload),
+    rows: payload.rows || [],
+    settings_groups: payload.settings || [],
+  });
 }
 
 async function handleGetRadioMetadata(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
-  setSelectedRadioGlobals(payload);
-  return runPythonJson(
-    "json.dumps(get_radio_column_metadata(_sel_module, _sel_class))",
-  );
+  return rpc("get_radio_column_metadata", selectedRadioParams(payload));
 }
 
 // The driver's own per-channel extra settings for one memory slot, typed the
@@ -537,33 +515,32 @@ async function handleGetRadioMetadata(payload = {}) {
 async function handleGetChannelExtra(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
-  setSelectedRadioGlobals(payload);
-  pyodide.globals.set("_extra_location", String(payload.location ?? ""));
-  return runPythonJson(
-    "json.dumps(get_channel_extra(_sel_module, _sel_class, _extra_location))",
-  );
+  return rpc("get_channel_extra", {
+    ...selectedRadioParams(payload),
+    location: String(payload.location ?? ""),
+  });
 }
 
 async function handleGetRadioSettings(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
-  setSelectedRadioGlobals(payload);
-  return runPythonJson(
-    "json.dumps(get_radio_settings(_sel_module, _sel_class))",
-  );
+  return rpc("get_radio_settings", selectedRadioParams(payload));
 }
 
 async function handleValidateRadioSettings(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
-  setSelectedRadioGlobals(payload);
-  setSettingsJsonGlobal(payload.settings || []);
-  return runPythonJson(
-    "json.dumps(validate_radio_settings(_sel_module, _sel_class, json.loads(_settings_json)))",
-  );
+  return rpc("validate_radio_settings", {
+    ...selectedRadioParams(payload),
+    settings_groups: payload.settings || [],
+  });
 }
 
-const RUNTIME_METHODS = Object.freeze({
+// The runtime API the app calls, by the names web/app.js and the UI modules
+// use. Most map onto one RPC method; listRadios, loadImage and getRuntimeInfo
+// compose several or none. The Python-facing names are in RPC_METHODS
+// (web/js/rpc-dispatch.mjs).
+export const RUNTIME_METHODS = Object.freeze({
   getRuntimeInfo: handleGetRuntimeInfo,
   listRadios: handleListRadios,
   getDefaultSchema: handleGetDefaultSchema,

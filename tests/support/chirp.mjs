@@ -1,8 +1,9 @@
 // Shared CHIRP-runtime helpers for the Pyodide-backed node:test files. Each
 // one replaces a snippet that used to be pasted into several test files: the
 // harness boot with repoRoot spelled out, the radio-catalog read, the
-// chirp/tests/images read, and the handful of runtime_bridge.py calls every
-// image-driven test makes before it gets to the thing it actually tests.
+// chirp/tests/images read, and the handful of RPC calls every image-driven
+// test makes before it gets to the thing it actually tests. Those go through
+// harness.rpc(), the same rpc_dispatch contract the browser uses.
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -33,10 +34,9 @@ export function readImage(name) {
 }
 
 // Import one driver module in the runtime, the way the browser does before it
-// touches a selected radio. The trailing json.dumps keeps runPythonJson happy;
-// ensure_radio_module() itself returns None.
+// touches a selected radio.
 export async function ensureModule(harness, moduleName) {
-  await harness.runPythonJson("ensure_radio_module(_m) or json.dumps({})", { _m: moduleName });
+  await harness.rpc("ensure_radio_module", { module_short_name: moduleName });
 }
 
 // The metadata trailer of a CHIRP image, without importing any driver. Takes
@@ -44,39 +44,31 @@ export async function ensureModule(harness, moduleName) {
 // one in Python and get base64 back.
 export function imageMetadata(harness, image) {
   const encoded = typeof image === "string" ? image : Buffer.from(image).toString("base64");
-  return harness.runPythonJson("json.dumps(read_image_metadata_base64(_b))", { _b: encoded });
+  return harness.rpc("read_image_metadata_base64", { image_b64: encoded });
 }
 
 // Every driver, then every driver that could not be imported, the way the
 // browser's all-drivers sweep runs. progressCb is only passed through when
 // the caller gives one, so a test can still exercise the argument's default.
 export function importAllDriverModules(harness, moduleNames, progressCb) {
-  if (progressCb === undefined) {
-    return harness.runPythonJson("json.dumps(import_all_driver_modules(_mods))", {
-      _mods: moduleNames,
-    });
+  const params = { module_short_names: moduleNames };
+  if (progressCb !== undefined) {
+    params.callback = progressCb;
   }
-  return harness.runPythonJson("json.dumps(import_all_driver_modules(_mods, _cb))", {
-    _mods: moduleNames,
-    _cb: progressCb,
-  });
+  return harness.rpc("import_all_driver_modules", params);
 }
 
 // Import the named driver modules and list the radios they registered with
 // CHIRP's directory, as the catalog build and the model picker see them.
 export function listRegisteredRadios(harness, moduleNames) {
-  return harness.runPythonJson("json.dumps(list_registered_radios(_mods))", {
-    _mods: moduleNames,
-  });
+  return harness.rpc("list_registered_radios", { module_short_names: moduleNames });
 }
 
 // What each registered radio can do, from the same sweep that backs
 // radio-features.json. Companion to listRegisteredRadios above: that says
 // which radios exist, this says what they are capable of.
 export function listRadioFeatures(harness, moduleNames) {
-  return harness.runPythonJson("json.dumps(list_radio_features(_mods))", {
-    _mods: moduleNames,
-  });
+  return harness.rpc("list_radio_features", { module_short_names: moduleNames });
 }
 
 // The browser's image-load path for one upstream test image: read its

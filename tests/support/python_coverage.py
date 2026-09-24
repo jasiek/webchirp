@@ -1,9 +1,9 @@
 """coverage.py instrumentation for the Pyodide-hosted webchirp_bridge package.
 
 Executed into Pyodide's globals by tests/support/python-coverage.mjs.
-The runtime namespace is flat (web/python/runtime_bridge.py flattens the
-package into it), so these names sit alongside the bridge's own and are
-prefixed to keep them out of its way.
+Under the tests those globals also carry every bridge name
+(tests/support/bridge_namespace.py flattens the package into them), so these
+names are prefixed to keep them out of the bridge's way.
 
 Deliberately not under web/python/: nothing here ships to the browser. It
 exists so npm run coverage can measure the Python half of the runtime, and it

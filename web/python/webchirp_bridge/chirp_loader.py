@@ -132,7 +132,7 @@ _install_chirp_import_hook()
 
 def import_all_driver_modules(
     module_short_names: Iterable[Any],
-    progress_cb: Optional[Callable[[int, int, str], Any]] = None,
+    callback: Optional[Callable[[int, int, str], Any]] = None,
 ) -> dict[str, Any]:
     """Import every driver so CHIRP can detect images that carry no metadata.
 
@@ -141,8 +141,10 @@ def import_all_driver_modules(
     with a metadata trailer name their own driver, but older ones do not, and for
     those the only way to identify the radio is to have every driver registered.
 
-    ``progress_cb(done, total, module_short)`` is optional and reports after each
-    module. This loop is synchronous, but every import suspends the interpreter
+    ``callback(done, total, module_short)`` is optional and reports after each
+    module. It is named ``callback`` because that is the one argument
+    ``rpc_dispatch`` (web/python/webchirp_bridge/rpc.py) passes outside the
+    JSON parameters -- a JS function cannot cross the boundary as JSON. This loop is synchronous, but every import suspends the interpreter
     on a CDN fetch (``ChirpCdnFinder``), so the browser event loop runs in
     between and the reported progress actually paints — the same reason CHIRP's
     synchronous clone loops can drive a progress bar through ``serial_progress``.
@@ -158,9 +160,9 @@ def import_all_driver_modules(
             imported.append(module_short)
         except Exception as exc:
             failed[module_short] = f"{type(exc).__name__}: {exc}"
-        if progress_cb is not None:
+        if callback is not None:
             try:
-                progress_cb(index + 1, total, module_short)
+                callback(index + 1, total, module_short)
             except Exception:
                 pass  # Progress reporting must never abort the sweep.
     return {

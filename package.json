@@ -20,7 +20,7 @@
     "radio:write": "node --experimental-wasm-stack-switching scripts/radio-codeplug.mjs write",
     "test": "npm run check:syntax && npm run check:types && npm run test:channels && npm run test:webusb && npm run test:settings && npm run test:build",
     "check:syntax": "find web scripts tests -name '*.js' -o -name '*.mjs' | xargs -n1 node --check",
-    "check:python": "python3 -m compileall -q web/python tests/support/python_coverage.py",
+    "check:python": "python3 -m compileall -q web/python tests/support/python_coverage.py tests/support/bridge_namespace.py",
     "check:types": "pyright",
     "test:channels": "node --test --experimental-wasm-stack-switching tests/channels/*.mjs",
     "test:webusb": "node --test tests/webusb/*.mjs",

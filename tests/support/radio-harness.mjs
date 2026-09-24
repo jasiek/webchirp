@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
 import { SerialPort } from "serialport";
 import {
@@ -7,7 +8,17 @@ import {
   installFetchChirpSourceGlobal,
   seedPyodideRuntime,
 } from "../../web/js/python-sources.mjs";
+import { rpcDispatcherFor } from "../../web/js/rpc-dispatch.mjs";
 import { startPythonCoverage } from "./python-coverage.mjs";
+
+// The test-only flattening of the bridge package into Pyodide's globals, run
+// after the production seed so runPython() snippets can keep calling bridge
+// functions by bare name. See the docstring in that file for why it is here
+// and not in web/python.
+const BRIDGE_NAMESPACE_PYTHON_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "bridge_namespace.py",
+);
 
 function decodeBase64ToBytes(base64Text) {
   return Uint8Array.from(Buffer.from(String(base64Text || ""), "base64"));
@@ -516,13 +527,28 @@ export class TestRadioHarness {
     // no-op unless WEBCHIRP_PY_COVERAGE names an output directory.
     await startPythonCoverage(this.pyodide);
     await seedPyodideRuntime(this.pyodide, this.pythonSource);
+    await this.pyodide.runPythonAsync(
+      await fs.readFile(BRIDGE_NAMESPACE_PYTHON_PATH, "utf8"),
+    );
     return this;
+  }
+
+  // Call one runtime method the way the browser does: through rpc_dispatch
+  // (web/python/webchirp_bridge/rpc.py) with named parameters checked
+  // against RPC_METHODS (web/js/rpc-dispatch.mjs). The harness's own
+  // codeplug methods below go this way, so a test that uses them exercises
+  // the production contract rather than a snippet of its own.
+  async rpc(name, params = {}) {
+    await this.init();
+    return rpcDispatcherFor(this.pyodide).call(name, params);
   }
 
   // Run Python in the seeded runtime and hand back whatever the last
   // expression evaluates to. Exists so tests that want a bare call -- an
   // import that is expected to raise, say -- do not have to reach into
-  // harness.pyodide for it. vars are bound as Python globals first.
+  // harness.pyodide for it. vars are bound as Python globals first. The
+  // snippet sees every bridge name flattened into the globals by
+  // tests/support/bridge_namespace.py; production code does not.
   async runPython(python, vars = {}) {
     await this.init();
     for (const [key, value] of Object.entries(vars)) {
@@ -535,10 +561,15 @@ export class TestRadioHarness {
     return JSON.parse(await this.runPython(python, vars));
   }
 
+  // The identity and line rate of one driver class, read off the class the
+  // way the CLI needs them before it opens the port. No RPC method exposes
+  // this -- the browser reads the same fields from the catalog -- so it stays
+  // a snippet, importing from the owning module explicitly.
   async getRadioInfo(moduleName, className) {
+    await this.rpc("ensure_radio_module", { module_short_name: moduleName });
     return this.runPythonJson(
       `
-ensure_radio_module(_sel_module)
+from webchirp_bridge.driver_cache import _import_radio_class
 _cls = _import_radio_class(_sel_module, _sel_class)
 _baud = int(getattr(_cls, "BAUD_RATE", 0) or 9600)
 json.dumps({
@@ -557,14 +588,12 @@ json.dumps({
     const effectiveBaud = Number.isFinite(Number(baudRate))
       ? Number(baudRate)
       : Number(radioInfo?.baudRate || 9600);
-    return this.runPythonJson("json.dumps(await webserial_connect(_baud))", {
-      _baud: effectiveBaud,
-    });
+    return this.rpc("webserial_connect", { baudrate: effectiveBaud });
   }
 
   async disconnect() {
     try {
-      return await this.runPythonJson("json.dumps(await webserial_disconnect())");
+      return await this.rpc("webserial_disconnect");
     } catch (error) {
       try {
         await this.serialBridge?.close();
@@ -576,10 +605,10 @@ json.dumps({
   }
 
   async readCodeplug(moduleName, className) {
-    return this.runPythonJson(
-      "json.dumps(await download_selected_radio(_sel_module, _sel_class))",
-      { _sel_module: moduleName, _sel_class: className },
-    );
+    return this.rpc("download_selected_radio", {
+      module_name: moduleName,
+      class_name: className,
+    });
   }
 
   async writeCodeplug(moduleName, className, rows, settingsGroups = []) {
@@ -587,22 +616,19 @@ json.dumps({
       rows && typeof rows === "object" && !Array.isArray(rows) ? rows : null;
     const normalizedRows = codeplug ? codeplug.rows || [] : rows || [];
     const normalizedSettings = codeplug ? codeplug.settings || [] : settingsGroups || [];
-    return this.runPythonJson(
-      "json.dumps(await upload_selected_radio(_sel_module, _sel_class, json.loads(_rows_json), json.loads(_settings_json)))",
-      {
-        _sel_module: moduleName,
-        _sel_class: className,
-        _rows_json: JSON.stringify(normalizedRows),
-        _settings_json: JSON.stringify(normalizedSettings),
-      },
-    );
+    return this.rpc("upload_selected_radio", {
+      module_name: moduleName,
+      class_name: className,
+      rows: normalizedRows,
+      settings_groups: normalizedSettings,
+    });
   }
 
   async readCodeplugBinary(moduleName, className) {
-    const result = await this.runPythonJson(
-      "json.dumps(get_cached_image_base64(_sel_module, _sel_class))",
-      { _sel_module: moduleName, _sel_class: className },
-    );
+    const result = await this.rpc("get_cached_image_base64", {
+      module_name: moduleName,
+      class_name: className,
+    });
     return {
       ...result,
       image: decodeBase64ToBytes(result.imageBase64),
@@ -614,15 +640,12 @@ json.dumps({
       rows && typeof rows === "object" && !Array.isArray(rows) ? rows : null;
     const normalizedRows = codeplug ? codeplug.rows || [] : rows || [];
     const normalizedSettings = codeplug ? codeplug.settings || [] : settingsGroups || [];
-    const result = await this.runPythonJson(
-      "json.dumps(export_image_base64(_sel_module, _sel_class, json.loads(_rows_json), json.loads(_settings_json)))",
-      {
-        _sel_module: moduleName,
-        _sel_class: className,
-        _rows_json: JSON.stringify(normalizedRows),
-        _settings_json: JSON.stringify(normalizedSettings),
-      },
-    );
+    const result = await this.rpc("export_image_base64", {
+      module_name: moduleName,
+      class_name: className,
+      rows: normalizedRows,
+      settings_groups: normalizedSettings,
+    });
     return {
       ...result,
       image: decodeBase64ToBytes(result.imageBase64),
@@ -630,12 +653,9 @@ json.dumps({
   }
 
   async loadCodeplugBinary(imageBytes) {
-    const result = await this.runPythonJson(
-      "json.dumps(load_image_base64(_image_b64))",
-      {
-        _image_b64: encodeBytesToBase64(imageBytes),
-      },
-    );
+    const result = await this.rpc("load_image_base64", {
+      image_b64: encodeBytesToBase64(imageBytes),
+    });
     return {
       ...result,
       image: Uint8Array.from(imageBytes || []),
