@@ -1,5 +1,27 @@
 # Release Notes
 
+## 2026-09-24
+- The per-model pages now cover the whole catalog rather than just the 55 Baofengs: 535 radios across 62 vendors, each described from its own driver, with a hub page for the 31 vendors that have more than one radio.
+- Each model page now says whether the radio's firmware can be updated and where to get it; 465 of the 535 answer, and the rest show no section rather than guess a download that could brick a radio (#190).
+- The app is now served at webchirp.org (#192).
+- Unofficial Quansheng UV-K5 firmware drivers (F4HWN v4.3.2, v5.9.0 and v6.0.0) can be loaded with `?drivers=quansheng-unofficial`, one release at a time in a fresh runtime, keeping CHIRP's own driver identity so desktop images still open (#199).
+- Added an Install app button at the front of the toolbar on browsers that can install the app, and Chrome's install dialog now carries a description and phone/desktop screenshots instead of a bare icon sheet (#187).
+- Radios CHIRP only drives in live mode no longer appear in the radio search, since none of the clone-based actions can talk to them (#195).
+- An Offline badge now appears when the browser reports no connection, and the repeater directory buttons, submissions and previews stay disabled until it is back (#193).
+- Query API is now disabled until the form carries what the directory needs — a location for RSGB ETCC, a country or a location for przemienniki.net, RepeaterBook and IRTS — which also stops an unfiltered RepeaterBook query from downloading its entire 18 MB directory (#191).
+- Digital modes the app cannot program are now shown as disabled checkboxes in the przemienniki.net, RepeaterBook and IRTS query forms, and clearing every mode falls back to analogue instead of returning every mode (#178).
+- A fractional value typed into an integer setting is now rejected instead of being stored truncated — the iRadio UV-5118 squelch took 1.5 as 1 — across both the radio settings editor and the per-channel extras (#183, #184, fixes #116).
+- Uploading before any download now explains that the radio must be read first, as a modal instead of a Python traceback.
+- Any channel named after a callsign now offers the repeater map, not only rows that arrived from a directory import.
+- The repeater query modal now lays bands and modes out in three columns, puts the coordinates on one row with the range above the map, keeps its label column on a phone, and calls the City/Locality box Place name.
+- The radio settings groups and the editor view switch are now folder tabs, and the toolbar's right edge carries a Supported radios link beside bare GitHub and Facebook logos.
+- Denying the browser's location prompt is now reported as a cancellation rather than filed as an error (#177).
+- The About page now carries its own description, canonical URL and social tags instead of the app's.
+- Updated the bundled CHIRP to 098f57b2.
+- A CSV with no channels, a tone the radio cannot send, an unrecognised `.img` and a dead cable are no longer filed as bug reports; eight CHIRP exceptions that describe the user's input are dropped before Sentry, while the three that mean the app asked for something impossible are kept (#188).
+- Sessions on webchirp.org now report into the same analytics property and Sentry project as codeplug.org, instead of going uncounted (#189).
+- Removed unused band and mode extraction from RXF response parsing; no user-visible change (#198).
+
 ## 2026-09-14
 - Every repeater query form now opens with a City/Locality box that fills the position from a gazetteer, and the modal's map previews the repeaters the current filters would actually return — in range solid, just outside dimmed — so a search that would find nothing is visible before it is run (#171).
 - Added an Edit in bulk button to the channel toolbar: one dialog writes the same value to every selected channel, across the grid's editable columns and the driver's own per-channel extras, with each field applied only when its box is ticked (#176, closes #146).

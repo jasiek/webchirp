@@ -282,6 +282,7 @@ after 2026-09-14 are against this pin, and dated counts name their own.
 - **v8-line-coverage-counts-comments-and-blanks** (2026-09-08): Node's lcov reporter emits a `DA` record for *every physical line* of a source file, comment and blank lines included, so `LF` equals the file's line count and the reported "line %" is not statement coverage. `web/js/ui/dom.js` is 134 lines and reports `LF:134` with line 1 -- a comment -- marked hit. This codebase is heavily commented, so the JS line figure is not comparable to the statement coverage `coverage.py` reports for the Python runtime; compare each against its own history. Branch and function percentages are unaffected.
 - **cdn-imports-need-a-resolve-hook-under-node** (2026-09-08): `web/js/runtime-rpc.js` imports Pyodide from an absolute jsDelivr URL, which is the only specifier that works in a browser with no bundler and no import map -- and which Node cannot resolve at all. That single line, not any property of the module, is why 600 lines of core RPC logic had no test and no coverage. `tests/support/cdn-imports.mjs` is a `module.register()` resolve hook mapping the URL onto the pinned `pyodide` package in `node_modules`; import `register-cdn-imports.mjs` *before* the dependent import, and make that import dynamic, because a static import is resolved before any top-level code runs.
 - **fake-select-returns-first-option-verbatim** (2026-09-06): the old per-file `<select>` fakes skipped a placeholder option with value `""` and answered with the next one; the shared `FakeElement` returns the first option's value, `""` included, as a browser does. No existing assertion depended on the old behaviour.
+- **node-26-rejects-the-stack-switching-flag** (2026-09-24): every Pyodide-backed script and suite passes `--experimental-wasm-stack-switching`, which Node 26 no longer recognises and refuses to start on, so `npm test`, `npm run test:channels`, `npm run test:settings`, `build:catalog` and the `radio:*` CLIs all fail at launch rather than in a test. Stack switching is on by default there, so the suites pass when run directly (`node --test tests/channels/*.mjs`); the flag cannot simply be dropped because Node 22 and 25, which this repo pins and CI runs, still need it. Reported independently on PRs #195 and #199; unverified on this checkout, which runs Node 25.2.1.
 
 ## Process
 
@@ -299,7 +300,7 @@ after 2026-09-14 are against this pin, and dated counts name their own.
 
 `GET https://api.codeplug.org/cities?q=<prefix>` returns
 `{ query, results: [{ id, name, region, country, cc, lat, lon, population?, kind, score }] }`.
-Notes found while wiring the City/Locality autocomplete:
+Notes found while wiring the Place name autocomplete (the field was called City/Locality until 2026-09-17):
 
 - The longitude key is `lon`, not `lng`.
 - `lat` and `lon` are an optional proximity hint that raises the score of nearby
