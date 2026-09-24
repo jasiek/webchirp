@@ -12,6 +12,12 @@
 //
 // Usage: npm run screenshots
 //
+// The npm script builds the CHIRP archive (npm run build:chirp) first: the
+// dev server is started here directly, and the app's runtime fetches
+// web/chirp/chirp-<pin>.zip at boot, which is generated and not checked in,
+// so on a clean checkout the catalog would never load and the capture would
+// time out waiting for it.
+//
 // No extra dependencies: serves web/ with scripts/dev-server.mjs, drives a
 // locally installed Chrome in headless mode over the DevTools protocol using
 // Node's built-in WebSocket client, waits until the selected radio schema has

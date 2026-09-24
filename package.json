@@ -10,7 +10,7 @@
     "build:icons": "node scripts/build-icons.mjs",
     "build:pages": "node scripts/build-model-pages.mjs",
     "build:dist": "npm run build:version && npm run build:chirp && npm run build:catalog && npm run build:pages && node scripts/build-dist.mjs",
-    "screenshots": "npm run build:version && node scripts/update-screenshots.mjs",
+    "screenshots": "npm run build:version && npm run build:chirp && node scripts/update-screenshots.mjs",
     "coverage": "node scripts/coverage.mjs",
     "coverage:patch": "node scripts/coverage-patch.mjs",
     "coverage:report": "node scripts/coverage-report.mjs",
