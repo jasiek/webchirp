@@ -39,8 +39,14 @@ const RETAINED_LIST = "retained-assets.json";
 // Keep prior generations well past the 10-minute Pages cache window; cheap
 // insurance for edge caches and long-lived tabs that lazy-load modules.
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-// A hashed asset looks like name.<10 hex chars>.ext (see build-dist.mjs).
-const HASHED_NAME_RE = /\.([0-9a-f]{10})\.[a-z]+$/;
+// An immutable asset is either content-hashed, name.<10 hex chars>.ext (see
+// build-dist.mjs), or the CHIRP archive and manifest named after their 40-hex
+// submodule pin (see scripts/build-chirp-bundle.mjs): a pin bump is a new
+// name, so an old name always means the old bytes and is as safe to carry
+// forward as a hashed one. The previous pin's archive is the one worth
+// keeping most -- a cached page from the last deploy boots from it, and
+// without it every user in the cache window gets a runtime that cannot start.
+const HASHED_NAME_RE = /\.([0-9a-f]{10})\.[a-z]+$|^chirp-[0-9a-f]{40}\.(zip|json)$/;
 
 function normalizeAssetPath(ref) {
   // Manifest values appear as both "./js/ui.<hash>.js" and "/js/ui.<hash>.js".
@@ -129,7 +135,7 @@ async function main() {
   for (const [assetPath, firstSeen] of candidates) {
     const hashMatch = path.basename(assetPath).match(HASHED_NAME_RE);
     if (!hashMatch) {
-      continue; // only content-hashed files are safe to carry forward
+      continue; // only immutably named files are safe to carry forward
     }
     const target = path.join(DIST_DIR, assetPath);
     if (!path.resolve(target).startsWith(path.resolve(DIST_DIR) + path.sep)) {

@@ -5,7 +5,9 @@ import path from "node:path";
 import test from "node:test";
 
 import {
-  createBrowserCdnPythonSource,
+  chirpBundleFileNames,
+  createBrowserPythonSource,
+  DEFAULT_CHIRP_REVISION,
   DEFAULT_DRIVER_SET,
   driverSetFromSearch,
   EXTRA_DRIVER_RELATIVE_FILES,
@@ -57,45 +59,56 @@ test("the drivers query selects one driver collection", () => {
   assert.equal(driverSetFromSearch("?drivers=unknown"), DEFAULT_DRIVER_SET);
 });
 
-test("browser sources fetch only the selected driver collection", async () => {
+test("browser sources list only the selected driver collection", async () => {
   const runtimeFileUrls = Object.fromEntries(
     [...RUNTIME_PYTHON_FILES, ...EXTRA_DRIVER_RELATIVE_FILES].map((relPath) => [
       relPath,
       `/runtime/${relPath}`,
     ]),
   );
-  const fetchedText = [];
-  let fetchedIndexes = 0;
+  const fetchedJson = [];
   const sourceOptions = {
     runtimeFileUrls,
-    fetchTextImpl: async (url) => {
-      fetchedText.push(url);
-      return url;
-    },
-    fetchJsonImpl: async () => {
-      fetchedIndexes += 1;
-      return { files: [{ name: "/chirp/drivers/uv5r.py" }] };
+    chirpBundleBaseUrl: "https://example.test/chirp/",
+    fetchTextImpl: async (url) => url,
+    fetchJsonImpl: async (url) => {
+      fetchedJson.push(url);
+      return { chirpRevision: DEFAULT_CHIRP_REVISION, drivers: ["uv5r"] };
     },
   };
 
-  const unofficial = createBrowserCdnPythonSource({
+  const unofficial = createBrowserPythonSource({
     ...sourceOptions,
     driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET,
   });
   assert.deepEqual(await unofficial.listDriverModules(), QUANSHENG_UNOFFICIAL_DRIVER_MODULES);
-  assert.equal(fetchedIndexes, 0, "unofficial discovery should not fetch the CHIRP driver index");
-  await unofficial.fetchChirpSource("/chirp/drivers/f4hwn_v6.py");
-  assert.equal(
-    fetchedText.at(-1),
-    "/runtime/extra_drivers/quansheng/f4hwn_v6.py",
-  );
+  assert.equal(fetchedJson.length, 0, "unofficial discovery should not read the bundle manifest");
+  assert.equal(unofficial.getRuntimeInfo().driverSet, QUANSHENG_UNOFFICIAL_DRIVER_SET);
 
-  const chirp = createBrowserCdnPythonSource(sourceOptions);
+  const chirp = createBrowserPythonSource(sourceOptions);
   assert.deepEqual(await chirp.listDriverModules(), ["uv5r"]);
-  assert.equal(fetchedIndexes, 1);
-  await chirp.fetchChirpSource("/chirp/drivers/f4hwn_v6.py");
-  assert.match(fetchedText.at(-1), /\/chirp\/drivers\/f4hwn_v6\.py$/);
-  assert.notEqual(fetchedText.at(-1), "/runtime/extra_drivers/quansheng/f4hwn_v6.py");
+  assert.deepEqual(await chirp.listDriverModules(), ["uv5r"]);
+  assert.deepEqual(
+    fetchedJson,
+    [`https://example.test/chirp/${chirpBundleFileNames(DEFAULT_CHIRP_REVISION).manifest}`],
+    "the manifest is read from the bundle directory, once",
+  );
+  assert.equal(chirp.getRuntimeInfo().driverSet, DEFAULT_DRIVER_SET);
+});
+
+test("a manifest for another pin is refused before any driver is imported", async () => {
+  const runtimeFileUrls = Object.fromEntries(
+    [...RUNTIME_PYTHON_FILES, ...EXTRA_DRIVER_RELATIVE_FILES].map((relPath) => [
+      relPath,
+      `/runtime/${relPath}`,
+    ]),
+  );
+  const stale = createBrowserPythonSource({
+    runtimeFileUrls,
+    chirpBundleBaseUrl: "https://example.test/chirp/",
+    fetchJsonImpl: async () => ({ chirpRevision: "0".repeat(40), drivers: ["uv5r"] }),
+  });
+  await assert.rejects(stale.listDriverModules(), /manifest is for revision 0{40}/);
 });
 
 test("unofficial mode discovers only bundled F4HWN drivers", async () => {

@@ -21,6 +21,7 @@ const MIME_BY_EXT = {
   ".txt": "text/plain; charset=utf-8",
   ".wasm": "application/wasm",
   ".xml": "application/xml; charset=utf-8",
+  ".zip": "application/zip",
 };
 
 function resolveRequestPath(urlPath) {

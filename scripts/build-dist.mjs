@@ -2,11 +2,24 @@ import { createHash } from "node:crypto";
 import { access, cp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  CHIRP_BUNDLE_DIR,
+  chirpBundleFileNames,
+  DEFAULT_CHIRP_REVISION,
+} from "../web/js/python-sources.mjs";
+
 const ROOT = process.cwd();
 const DIST_DIR = path.join(ROOT, "dist");
 const WEB_DIR = path.join(ROOT, "web");
 const HASHED_EXTS = new Set([".js", ".css", ".py"]);
 const REWRITE_EXTS = new Set([".html", ".js", ".css"]);
+// The CHIRP archive and manifest for the pinned revision
+// (scripts/build-chirp-bundle.mjs). Immutable by name like the hashed assets,
+// but named after the pin rather than their content, so they are neither
+// hashed nor rewritten here -- only required, and listed in the asset manifest
+// so scripts/retain-deployed-assets.mjs carries the previous pin forward.
+const CHIRP_BUNDLE_FILES = Object.values(chirpBundleFileNames(DEFAULT_CHIRP_REVISION))
+  .map((name) => `${CHIRP_BUNDLE_DIR}/${name}`);
 // Assets whose absence is invisible at runtime until a user notices something
 // missing: the manifest and its icons only matter when someone tries to install
 // the app to a home screen, which no test page load exercises.
@@ -22,6 +35,10 @@ const REQUIRED_WEB_FILES = [
   // it back, which no page load reveals.
   "images/screenshot-narrow.png",
   "images/screenshot-wide.png",
+  // Without the archive the runtime cannot boot at all, but the page itself
+  // loads and shows the catalog, so a deploy that forgot to build it looks
+  // fine until the first radio is selected.
+  ...CHIRP_BUNDLE_FILES,
 ];
 
 function toPosix(relPath) {
@@ -284,11 +301,19 @@ async function main() {
     replacements.push([`./${rel}`, `./${hashedRel}`]);
     replacements.push([`/${rel}`, `/${hashedRel}`]);
   }
+  // The pin-named CHIRP archive and manifest map to themselves: they are not
+  // renamed, but they are immutable and a cached page from the previous deploy
+  // still asks for the previous pin's pair, so retention has to see them.
+  for (const rel of CHIRP_BUNDLE_FILES) {
+    replacements.push([`./${rel}`, `./${rel}`]);
+    replacements.push([`/${rel}`, `/${rel}`]);
+  }
   replacements.sort((a, b) => b[0].length - a[0].length);
 
   // Every hashed name now covers its own emitted bytes and, transitively, those
   // of everything it imports, so a digest over the name list is a digest of the
-  // whole build.
+  // whole build. The pin names cover the archive the same way: same pin, same
+  // bytes.
   const buildHash = contentHash(JSON.stringify([...replacements].sort()));
   const manifest = {
     buildHash,

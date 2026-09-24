@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { resolveChirpPackageDir } from "../support/radio-harness.mjs";
+import {
+  collectChirpBundleFiles,
+  resolveChirpPackageDir,
+} from "../../scripts/build-chirp-bundle.mjs";
 import { sharedHarness } from "../support/chirp.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
@@ -13,22 +15,11 @@ import { repoRoot } from "../support/repo-paths.mjs";
 // runtime imports.
 const TRANSLATION_BUILTINS = ["_", "gettext", "ngettext", "pgettext", "npgettext"];
 
-// Directories the browser runtime can import. chirp/wxui is excluded on
-// purpose: it installs these builtins itself and never loads in Pyodide.
-const RUNTIME_SOURCE_DIRS = [".", "drivers", "sources"];
-
-async function listRuntimeSourceFiles(chirpPackageDir) {
-  const files = [];
-  for (const dirName of RUNTIME_SOURCE_DIRS) {
-    const dir = path.join(chirpPackageDir, dirName);
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isFile() && entry.name.endsWith(".py")) {
-        files.push(path.join(dir, entry.name));
-      }
-    }
-  }
-  return files;
+// The modules the browser runtime can import are exactly the archive's
+// contents; chirp/wxui is left out of it, and on purpose here too: it installs
+// these builtins itself and never loads in Pyodide.
+function listRuntimeSourceFiles(chirpPackageDir) {
+  return collectChirpBundleFiles(chirpPackageDir);
 }
 
 // Match a bare call like `_("FM Radio")`, but not an attribute (`self._(`) or a
@@ -37,16 +28,16 @@ function callPattern(name) {
   return new RegExp(`(^|[^A-Za-z0-9_.])${name}\\s*\\(`);
 }
 
-async function findTranslationBuiltinUses(files) {
+function findTranslationBuiltinUses(files) {
   const uses = new Map();
   for (const file of files) {
-    const source = await fs.readFile(file, "utf8");
+    const source = file.bytes.toString("utf8");
     for (const name of TRANSLATION_BUILTINS) {
       if (callPattern(name).test(source)) {
         if (!uses.has(name)) {
           uses.set(name, []);
         }
-        uses.get(name).push(path.basename(file));
+        uses.get(name).push(path.posix.basename(file.archivePath));
       }
     }
   }
@@ -57,7 +48,7 @@ test("CHIRP's translation builtins are available to the browser runtime", async 
   const chirpPackageDir = await resolveChirpPackageDir(
     process.env.WEBCHIRP_CHIRP_DIR || path.join(repoRoot, "chirp"),
   );
-  const uses = await findTranslationBuiltinUses(await listRuntimeSourceFiles(chirpPackageDir));
+  const uses = findTranslationBuiltinUses(await listRuntimeSourceFiles(chirpPackageDir));
   const harness = await sharedHarness();
 
   // Probe defensively: a missing builtin must fail the subtest that names it,

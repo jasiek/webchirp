@@ -3,12 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
 import { SerialPort } from "serialport";
-import {
-  createFilesystemPythonSource,
-  installFetchChirpSourceGlobal,
-  seedPyodideRuntime,
-} from "../../web/js/python-sources.mjs";
+import { seedPyodideRuntime } from "../../web/js/python-sources.mjs";
 import { rpcDispatcherFor } from "../../web/js/rpc-dispatch.mjs";
+import { createLocalPythonSource } from "./chirp-bundle-source.mjs";
 import { startPythonCoverage } from "./python-coverage.mjs";
 
 // The test-only flattening of the bridge package into Pyodide's globals, run
@@ -54,53 +51,6 @@ function bytesToHex(bytes) {
     .map((v) => Number(v & 0xff).toString(16).padStart(2, "0"))
     .join("")
     .toUpperCase();
-}
-
-async function pathExists(fullPath) {
-  try {
-    await fs.access(fullPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function resolveChirpPackageDir(inputDir) {
-  const candidate = path.resolve(inputDir);
-  const directInit = path.join(candidate, "__init__.py");
-  const directDrivers = path.join(candidate, "drivers");
-  if ((await pathExists(directInit)) && (await pathExists(directDrivers))) {
-    return candidate;
-  }
-
-  const nested = path.join(candidate, "chirp");
-  const nestedInit = path.join(nested, "__init__.py");
-  const nestedDrivers = path.join(nested, "drivers");
-  if ((await pathExists(nestedInit)) && (await pathExists(nestedDrivers))) {
-    return nested;
-  }
-
-  throw new Error(
-    `Invalid CHIRP source dir: ${candidate}. Expected dir containing __init__.py and drivers/`,
-  );
-}
-
-async function createLocalPythonSource(repoRoot, chirpDirArg, driverSet) {
-  const chirpInputDir =
-    chirpDirArg || process.env.WEBCHIRP_CHIRP_DIR || path.join(repoRoot, "chirp");
-  const chirpPackageDir = await resolveChirpPackageDir(chirpInputDir);
-  const runtimePythonDir = path.join(repoRoot, "web/python");
-  return createFilesystemPythonSource({
-    chirpPackageDir,
-    runtimePythonDir,
-    driverSet,
-    readText: (fullPath) => fs.readFile(fullPath, "utf8"),
-    readDirNames: async (fullPath) => {
-      const entries = await fs.readdir(fullPath, { withFileTypes: true });
-      return entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
-    },
-    joinPath: (...parts) => path.join(...parts),
-  });
 }
 
 async function openSerialPort(port) {
@@ -506,12 +456,11 @@ export class TestRadioHarness {
     if (this.pyodide) {
       return this;
     }
-    this.pythonSource = await createLocalPythonSource(
-      this.repoRoot,
-      this.chirpDir,
-      this.driverSet,
-    );
-    installFetchChirpSourceGlobal(this.pythonSource);
+    this.pythonSource = await createLocalPythonSource({
+      repoRoot: this.repoRoot,
+      chirpDir: this.chirpDir,
+      driverSet: this.driverSet,
+    });
 
     if (!this.serialBridge) {
       this.serialBridge =
@@ -704,7 +653,7 @@ function harnessCacheKey({
 
 // Sharing is the default for two reasons. A Pyodide boot plus the runtime seed
 // costs about 1.3 s, and a file with eight tests was paying that eight times
-// over. And every boot writes the serial_* and fetch_chirp_source callables to
+// over. And every boot writes the serial_* callables to
 // globalThis, so the second harness in a process repoints those globals at its
 // own bridge; the first harness's Python keeps the callables it bound at seed
 // time, but anything in JS that reads them afterwards sees the newest bridge.

@@ -147,6 +147,42 @@ test("a live site with a manifest writes the retained list", async () => {
   }));
 });
 
+// The previous deploy's CHIRP archive is named by its submodule pin rather
+// than a content digest (scripts/build-chirp-bundle.mjs). A cached page from
+// that deploy boots from it, so it has to be carried forward like a hashed
+// asset -- while a plain, mutable name in the same directory still must not.
+test("the previous pin's CHIRP archive and manifest are retained", async () => {
+  const oldPin = "a".repeat(40);
+  const routes = {
+    "/": "{}",
+    "/asset-manifest.json": JSON.stringify({
+      assets: {
+        [`./chirp/chirp-${oldPin}.zip`]: `./chirp/chirp-${oldPin}.zip`,
+        [`/chirp/chirp-${oldPin}.json`]: `/chirp/chirp-${oldPin}.json`,
+        "./chirp/latest.zip": "./chirp/latest.zip",
+      },
+    }),
+    [`/chirp/chirp-${oldPin}.zip`]: "PK old archive",
+    [`/chirp/chirp-${oldPin}.json`]: "{}",
+    "/chirp/latest.zip": "PK mutable",
+  };
+  await withSite(routes, (url) => withTempRepo("unused.test", async (dir) => {
+    const result = await run(dir, [url]);
+    assert.equal(result.status, 0, result.stderr);
+    const retained = JSON.parse(
+      await readFile(path.join(dir, "dist", "retained-assets.json"), "utf8"),
+    );
+    assert.deepEqual(
+      Object.keys(retained).sort(),
+      [`chirp/chirp-${oldPin}.json`, `chirp/chirp-${oldPin}.zip`],
+    );
+    assert.equal(
+      await readFile(path.join(dir, "dist", "chirp", `chirp-${oldPin}.zip`), "utf8"),
+      "PK old archive",
+    );
+  }));
+});
+
 test("no CNAME and no argument is an error, not a silent skip", async () => {
   await withTempRepo(null, async (dir) => {
     const result = await run(dir);
