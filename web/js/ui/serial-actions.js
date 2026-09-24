@@ -22,6 +22,13 @@ import { requireRuntimeApi } from "./state.js";
 
 const LIVE_RADIO_TITLE = "Live-mode radios are not supported in this UI yet";
 const NO_RADIO_SELECTED_TITLE = "Search for and select a radio first";
+// Shown when a clone is started on a browser without WebAssembly stack
+// switching: CHIRP's clone loops block on the serial bridge through Pyodide's
+// run_sync, which is the one thing in the app that needs JSPI.
+const CLONE_UNSUPPORTED_MESSAGE =
+  "This browser cannot program radios: it lacks WebAssembly stack switching (JSPI), "
+  + "which the radio download/upload needs. Recent Chrome, Edge and Firefox support it. "
+  + "Editing CSV and image files still works here.";
 
 // Everything on the serial path: connect/disconnect over Web Serial or WebUSB,
 // the enabled/visible state of the sidebar's radio actions, the clone progress
@@ -42,6 +49,10 @@ export function createSerialActions(ctx) {
 
   let transportController = null;
   let capability = { supported: false, native: false, webusb: false };
+  // Whether this browser can run a clone at all (WebAssembly JSPI). Checked
+  // when a connection is started, not at init: the rest of the app works
+  // without it and the user only needs to hear about it when it matters.
+  let cloneSupported = true;
   let sidebarControlsEnabled = false;
   let connected = false;
   // Transport of the active connection ("webserial" or "webusb"), used to
@@ -62,9 +73,20 @@ export function createSerialActions(ctx) {
     dom.webusbConnectToggleEl.disabled = busy;
   }
 
+  // Record whether a clone can run here at all; web/app.js decides from the
+  // WebAssembly feature check and web/js/ui.js passes it through init().
+  function setCloneSupported(supported) {
+    cloneSupported = Boolean(supported);
+  }
+
   // Connect using the requested transport ("auto" or "webusb").
   async function connectSerial(preferredTransport) {
     if (connected) {
+      return;
+    }
+    if (!cloneSupported) {
+      log.setStatus(CLONE_UNSUPPORTED_MESSAGE);
+      log.logSerial(CLONE_UNSUPPORTED_MESSAGE);
       return;
     }
     transportController?.setPreferredTransport(preferredTransport);
@@ -203,27 +225,22 @@ export function createSerialActions(ctx) {
   // The unsupported-browser treatment is two synchronized pieces: the
   // explanation overlay and the greyscale on the app shell behind it. Toggle
   // them together so the page never ends up grey with no explanation (or the
-  // reverse). `problems` picks which explanations the card shows — they are
-  // independent, not variants: Safari lacks both serial transports AND WASM
-  // stack switching, so both blocks appear there at once. iOS/iPadOS is the
-  // exception: whatever the capability gap is there, it is the platform rather
-  // than the browser choice, so its block replaces both generic ones instead
-  // of telling people to install a browser that would be the same WebKit.
+  // reverse). `problems` picks which explanation the card shows. iOS/iPadOS is
+  // the exception: whatever the capability gap is there, it is the platform
+  // rather than the browser choice, so its block replaces the generic one
+  // instead of telling people to install a browser that would be the same
+  // WebKit. Missing WebAssembly stack switching is deliberately not an overlay
+  // any more: it only stops a clone, and connectSerial() says so when one is
+  // started.
   function setBrowserUnsupportedOverlayVisible(visible, problems = { serial: true }) {
     const show = Boolean(visible);
     const iosShown = isIosPlatform();
     const serialShown = !iosShown && Boolean(problems.serial);
-    const jspiShown = !iosShown && Boolean(problems.jspi);
     dom.unsupportedBrowserIosInfoEl.hidden = !iosShown;
     dom.unsupportedBrowserSerialInfoEl.hidden = !serialShown;
-    dom.unsupportedBrowserJspiInfoEl.hidden = !jspiShown;
-    // Label the dialog by the more fundamental problem when both apply.
-    let labelledBy = "unsupported-browser-serial-title";
-    if (iosShown) {
-      labelledBy = "unsupported-browser-ios-title";
-    } else if (jspiShown) {
-      labelledBy = "unsupported-browser-jspi-title";
-    }
+    const labelledBy = iosShown
+      ? "unsupported-browser-ios-title"
+      : "unsupported-browser-serial-title";
     dom.unsupportedBrowserOverlayEl.setAttribute("aria-labelledby", labelledBy);
     dom.unsupportedBrowserOverlayEl.classList.toggle("hidden", !show);
     dom.appShellEl.classList.toggle("browser-unsupported", show);
@@ -628,6 +645,7 @@ export function createSerialActions(ctx) {
   return {
     bindEvents,
     setSerialController,
+    setCloneSupported,
     handlePortLost,
     setSidebarControlsEnabled,
     setBrowserUnsupportedOverlayVisible,

@@ -235,9 +235,11 @@ export function createUiController() {
   }
 
   // Bootstrap UI: capability checks, catalog load, metadata load, empty grid.
-  // The two capability gaps are independent (Safari has both): missing serial
-  // only disables radio programming, while missing JSPI means driver imports
-  // fail and init itself will land in the catch below.
+  // The two capability gaps are independent (Safari has both) and both only
+  // cost the radio-programming path: missing serial means no port to open,
+  // missing JSPI means the blocking clone loops cannot wait on one. Neither
+  // touches driver imports, which read the mounted CHIRP archive, so init
+  // completes either way and the clone actions carry the explanation.
   async function init(serialSupported, jspiSupported = true) {
     // Covers the whole cold start the user waits through — including the
     // Pyodide boot the metadata and settings loads below trigger — so this is
@@ -245,10 +247,8 @@ export function createUiController() {
     const startedAt = Date.now();
     bindEvents();
     serial.refreshSerialConnectToggleLabel();
-    serial.setBrowserUnsupportedOverlayVisible(!serialSupported || !jspiSupported, {
-      serial: !serialSupported,
-      jspi: !jspiSupported,
-    });
+    serial.setBrowserUnsupportedOverlayVisible(!serialSupported, { serial: !serialSupported });
+    serial.setCloneSupported(jspiSupported);
     serial.setSidebarControlsEnabled(false);
     catalog.setRadioSelectPlaceholder("Loading...");
     try {
@@ -258,8 +258,9 @@ export function createUiController() {
         log.logSerial("Web Serial available.");
       }
       if (!jspiSupported) {
-        log.logDebug(
-          "WASM stack switching (JSPI) unsupported; CHIRP driver imports will fail in this browser.",
+        log.logSerial(
+          "WASM stack switching (JSPI) unsupported; radio download/upload is "
+          + "unavailable in this browser, file editing works.",
         );
       }
       const catalogResponse = await requireRuntimeApi(state).listRadios();
