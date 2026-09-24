@@ -59,7 +59,7 @@ test("a radio that cannot be instantiated is reported, not silently dropped", as
   // exactly one of the two buckets, so a missing page is always traceable to a
   // named failure rather than to a radio the sweep forgot about.
   const registered = await harness.runPythonJson(
-    "json.dumps([r['key'] for r in list_registered_radios(_mods)])",
+    "json.dumps([r['key'] for r in await list_registered_radios(_mods)])",
     { _mods: MODULES },
   );
   assert.equal(described + failed, registered.length);

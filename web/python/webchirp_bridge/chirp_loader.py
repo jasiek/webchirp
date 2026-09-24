@@ -33,6 +33,51 @@ def ensure_radio_module(module_short_name: str) -> None:
     importlib.import_module(f"chirp.drivers.{module_short_name}")
 
 
+def _clean_module_names(module_short_names: Iterable[Any]) -> list[str]:
+    """Normalise a driver-module list from JS: stringified, stripped, blanks dropped."""
+    names = [str(name or "").strip() for name in module_short_names or []]
+    return [name for name in names if name]
+
+
+async def _import_driver_modules(
+    names: list[str],
+    callback: Optional[Callable[[int, int, str], Any]] = None,
+) -> tuple[list[str], dict[str, str]]:
+    """Import each named driver in turn, yielding to the event loop after every one.
+
+    The one bulk-import loop, shared by ``import_all_driver_modules`` and
+    ``list_registered_radios`` so that neither sweep can freeze the page. The
+    imports read the mounted tree and never suspend the interpreter, so a
+    plain loop would hold the browser's main thread from the first module to
+    the last -- a progress strip would jump from 0 to done, and the fallback
+    catalog build would lock the UI for the whole sweep. The
+    ``asyncio.sleep(0)`` after each import hands control back to Pyodide's
+    webloop -- a ``setTimeout`` hop on the JS event loop -- which is what lets
+    a DOM update reach the screen between imports.
+
+    ``callback(done, total, module_short)`` is optional and reports after each
+    module; it must never abort the sweep. Returns the modules that imported
+    and, by name, why each of the others did not: a driver that cannot be
+    imported in this runtime is skipped, not fatal.
+    """
+    total = len(names)
+    imported: list[str] = []
+    failed: dict[str, str] = {}
+    for index, module_short in enumerate(names):
+        try:
+            ensure_radio_module(module_short)
+            imported.append(module_short)
+        except Exception as exc:
+            failed[module_short] = f"{type(exc).__name__}: {exc}"
+        if callback is not None:
+            try:
+                callback(index + 1, total, module_short)
+            except Exception:
+                pass  # Progress reporting must never abort the sweep.
+        await asyncio.sleep(0)
+    return imported, failed
+
+
 async def import_all_driver_modules(
     module_short_names: Iterable[Any],
     callback: Optional[Callable[[int, int, str], Any]] = None,
@@ -50,30 +95,10 @@ async def import_all_driver_modules(
     JSON parameters -- a JS function cannot cross the boundary as JSON.
 
     A coroutine, not for any I/O of its own but so the reported progress can
-    paint. The imports read the mounted tree and never suspend the
-    interpreter, so a plain loop would hold the browser's main thread from the
-    first module to the last and the strip would jump from 0 to done. The
-    ``asyncio.sleep(0)`` after each import hands control back to Pyodide's
-    webloop -- a ``setTimeout`` hop on the JS event loop -- which is what lets
-    the DOM update the callback just made reach the screen.
+    paint: the imports go through ``_import_driver_modules``, which yields to
+    the event loop after each one.
     """
-    names = [str(name or "").strip() for name in module_short_names or []]
-    names = [name for name in names if name]
-    total = len(names)
-    imported = []
-    failed = {}
-    for index, module_short in enumerate(names):
-        try:
-            ensure_radio_module(module_short)
-            imported.append(module_short)
-        except Exception as exc:
-            failed[module_short] = f"{type(exc).__name__}: {exc}"
-        if callback is not None:
-            try:
-                callback(index + 1, total, module_short)
-            except Exception:
-                pass  # Progress reporting must never abort the sweep.
-        await asyncio.sleep(0)
+    imported, failed = await _import_driver_modules(_clean_module_names(module_short_names), callback)
     return {
         "imported": len(imported),
         "failed": failed,
@@ -81,20 +106,30 @@ async def import_all_driver_modules(
     }
 
 
-def list_registered_radios(module_short_names: Iterable[Any]) -> list[dict[str, Any]]:
-    """Import drivers and return radios from CHIRP's registration directory."""
-    loaded_modules = set()
-    for name in module_short_names or []:
-        module_short = str(name or "").strip()
-        if not module_short:
-            continue
-        try:
-            ensure_radio_module(module_short)
-            loaded_modules.add(module_short)
-        except Exception:
-            # Skip modules that cannot be imported in this runtime.
-            continue
+async def list_registered_radios(module_short_names: Iterable[Any]) -> list[dict[str, Any]]:
+    """Import drivers and return radios from CHIRP's registration directory.
 
+    A coroutine for the same reason ``import_all_driver_modules`` is. When the
+    static catalog is missing or was built for another CHIRP pin, the browser
+    falls back to this sweep (``loadRadioCatalogFromSources()`` in
+    web/js/runtime-rpc.js), which imports the same ~190 modules with no
+    progress callback; a synchronous loop would hold the main thread for the
+    whole of it. The imports go through ``_import_driver_modules`` so the
+    event loop runs between them, and only the enumeration that follows is
+    plain. Modules that cannot be imported are left out of the result.
+    """
+    imported, _failed = await _import_driver_modules(_clean_module_names(module_short_names))
+    return _registered_radios(set(imported))
+
+
+def _registered_radios(loaded_modules: set[str]) -> list[dict[str, Any]]:
+    """Describe the radios in ``directory.DRV_TO_RADIO`` for the catalog.
+
+    Restricted to classes from ``loaded_modules`` when that set is non-empty,
+    so a caller that named specific drivers sees only those; an empty set
+    means every registered radio, which is what a caller with no module list
+    asked for.
+    """
     seen = set()
     radios = []
     for radio_cls in directory.DRV_TO_RADIO.values():
@@ -214,7 +249,7 @@ def _describe_features(features: chirp_common.RadioFeatures) -> dict[str, Any]:
     }
 
 
-def list_radio_features(
+async def list_radio_features(
     module_short_names: Iterable[Any],
 ) -> dict[str, dict[str, Any]]:
     """Describe every catalogued radio from its driver's own RadioFeatures.
@@ -228,10 +263,13 @@ def list_radio_features(
     Failures are returned rather than raised: a driver that cannot describe
     itself on a blank instance is a page the generator should skip, not a build
     that stops on radio 300 of 554.
+
+    A coroutine only because ``list_registered_radios`` is one; the feature
+    walk itself runs in a single go, as no browser path calls it.
     """
     features_by_key: dict[str, Any] = {}
     failed: dict[str, str] = {}
-    for entry in list_registered_radios(module_short_names):
+    for entry in await list_registered_radios(module_short_names):
         key = entry["key"]
         try:
             features = _driver_features(entry["module"], entry["className"])
