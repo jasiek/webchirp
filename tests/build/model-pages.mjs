@@ -37,11 +37,12 @@ async function stageRealInputs(root) {
     path.join(repoRoot, "radio-firmware.json"),
     path.join(root, "radio-firmware.json"),
   );
+  await copyFile(path.join(repoRoot, "radio-specs.json"), path.join(root, "radio-specs.json"));
 }
 
 // A catalog and feature set of exactly the shape the real ones have, so a test
 // can put one radio in a state the real catalog does not contain.
-async function stageFixture(root, { radios, features, firmware, revision = "fixture" }) {
+async function stageFixture(root, { radios, features, firmware, specs, revision = "fixture" }) {
   await mkdir(path.join(root, "web"), { recursive: true });
   await writeFile(path.join(root, "CNAME"), "example.test\n", "utf8");
   await writeFile(
@@ -61,6 +62,11 @@ async function stageFixture(root, { radios, features, firmware, revision = "fixt
   await writeFile(
     path.join(root, "radio-firmware.json"),
     JSON.stringify(firmware || { vendors: {}, models: {} }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, "radio-specs.json"),
+    JSON.stringify(specs || { models: {} }),
     "utf8",
   );
 }
@@ -604,6 +610,109 @@ test("the real catalog's firmware answers reach the pages they belong to", async
       }
       assert.match(page, /<h2>Can I update the firmware/, `${key} has no firmware section`);
     }
+  });
+});
+
+// --- Hardware specifications -------------------------------------------------
+//
+// radio-specs.json is hand-researched like the firmware file. What matters is
+// that a page states only what was established, and that it never passes an
+// unknown off as a "no".
+
+// A fully researched entry, so a test can null out exactly the field it is about.
+const SPECS = {
+  formFactor: "handheld",
+  batteryMah: 1800,
+  charging: ["usb-c", "cradle"],
+  powerW: { min: 1, max: 5 },
+  txMHz: [[136, 174], [400, 520]],
+  rxMHz: [[65, 108], [136, 174], [400, 520]],
+  modulations: ["FM", "WFM"],
+  display: true,
+  inProduction: false,
+  dualReceive: false,
+  crossBandRepeater: false,
+  aprs: false,
+  gps: "optional",
+  bluetoothProgramming: true,
+  sources: ["https://example.com/uv-5r-manual.pdf"],
+  note: "",
+};
+
+test("a radio with researched specs gets a hardware table saying what was found", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    await stageFixture(root, {
+      radios: [fixtureRadio({ vendor: "Baofeng", model: "UV-5R" })],
+      features: { "alpha:AlphaRadio": FEATURES },
+      specs: { models: { "Baofeng|UV-5R": SPECS } },
+    });
+    await runGenerator(root);
+    const page = await readFile(path.join(root, "web", "radios", "baofeng-uv-5r.html"), "utf8");
+
+    assert.match(page, /<h2>UV-5R hardware<\/h2>/);
+    assert.match(page, /<th scope="row">Battery<\/th><td>1800 mAh<\/td>/);
+    assert.match(page, /<td>USB-C, Desktop charging cradle<\/td>/);
+    assert.match(page, /<th scope="row">Transmit power<\/th><td>1–5 W<\/td>/);
+    assert.match(page, /<th scope="row">Transmit<\/th><td>136–174 MHz, 400–520 MHz<\/td>/);
+    assert.match(page, /<th scope="row">Still manufactured<\/th><td>No<\/td>/);
+    assert.match(page, /<th scope="row">GPS<\/th><td>Optional add-on<\/td>/);
+    assert.match(page, /<th scope="row">Bluetooth programming<\/th><td>Yes<\/td>/);
+    assert.match(page, /href="https:\/\/example\.com\/uv-5r-manual\.pdf" rel="nofollow noopener">example\.com/);
+  });
+});
+
+test("an unestablished spec is left out rather than shown as a no", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // A mobile has no battery, and nobody found whether this one does APRS.
+    // Neither may become a "No" row: the first is not applicable, the second is
+    // not known, and a reader cannot tell either from a real "No".
+    await stageFixture(root, {
+      radios: [
+        fixtureRadio({ vendor: "Yaesu", model: "FT-1900" }),
+        fixtureRadio({ key: "beta:BetaRadio", vendor: "WLN", model: "KD-C1" }),
+      ],
+      features: { "alpha:AlphaRadio": FEATURES, "beta:BetaRadio": FEATURES },
+      specs: {
+        models: {
+          "Yaesu|FT-1900": {
+            ...SPECS,
+            formFactor: "mobile",
+            batteryMah: null,
+            charging: [],
+            // Only the maximum published: a range would invent the minimum.
+            powerW: { min: null, max: 50 },
+            aprs: null,
+            sources: [],
+          },
+          "WLN|KD-C1": Object.fromEntries(
+            Object.keys(SPECS).map((field) => [field, field === "sources" ? [] : null]),
+          ),
+        },
+      },
+    });
+    await runGenerator(root);
+    const mobile = await readFile(path.join(root, "web", "radios", "yaesu-ft-1900.html"), "utf8");
+    const unknown = await readFile(path.join(root, "web", "radios", "wln-kd-c1.html"), "utf8");
+
+    assert.match(mobile, /<td>Mobile<\/td>/);
+    assert.match(mobile, /<td>Up to 50 W<\/td>/);
+    assert.doesNotMatch(mobile, /Battery|Charging|>APRS</);
+    assert.doesNotMatch(mobile, /Sources:/);
+    // Every field null is a radio with nothing to say, so it gets no heading.
+    assert.doesNotMatch(unknown, /KD-C1 hardware/);
+  });
+});
+
+test("a spec value the generator cannot state fails the build", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // "maybe" is neither a yes nor a no, and "optional" is only meaningful for
+    // the flags an add-on unit can supply -- not for having a display.
+    await stageFixture(root, {
+      radios: [fixtureRadio({ vendor: "Baofeng", model: "UV-5R" })],
+      features: { "alpha:AlphaRadio": FEATURES },
+      specs: { models: { "Baofeng|UV-5R": { ...SPECS, display: "optional" } } },
+    });
+    await assert.rejects(runGenerator(root), /Baofeng\|UV-5R.*display "optional"/s);
   });
 });
 

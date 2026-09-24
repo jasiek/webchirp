@@ -264,6 +264,34 @@ body {
   font-size: 0.85rem;
 }
 
+/* The researched hardware table on a model page: label column sized to its
+   longest label so values line up, and no borders beyond a hairline between
+   rows -- it is a spec sheet, not a data grid. */
+.radio-specs {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.92rem;
+}
+
+.radio-specs th,
+.radio-specs td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.3rem 0.6rem 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.radio-specs th {
+  font-weight: 600;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.radio-specs-sources {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .radio-page-related {
   margin-top: 1.4rem;
   padding-top: 0.8rem;
