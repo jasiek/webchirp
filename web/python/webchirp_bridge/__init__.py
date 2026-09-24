@@ -7,7 +7,8 @@ point (``web/python/runtime_bridge.py``) happens to import first finds the
 builtins and compatibility stand-ins already in place. Nothing else belongs
 in this file; the runtime logic is in the submodules, each covering one
 concern (loading CHIRP sources, channel rows, the serial pipe, ...), and the
-entry point flattens their namespaces into the RPC globals.
+entry point exposes them to JS through ``rpc_dispatch``
+(``web/python/webchirp_bridge/rpc.py``).
 """
 
 from __future__ import annotations

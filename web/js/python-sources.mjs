@@ -71,7 +71,8 @@ const CORE_CHIRP_RELATIVE_FILES = [
 // also where it lands under /webchirp_runtime in the Pyodide filesystem, so
 // the webchirp_bridge package imports by exactly these names. The entry point
 // is executed rather than written: it is the one file whose names land in
-// Pyodide's globals. Where the browser fetches each file from is the caller's
+// Pyodide's globals, and rpc_dispatch (web/python/webchirp_bridge/rpc.py) is
+// the only one JS reads back. Where the browser fetches each file from is the caller's
 // business (RUNTIME_PYTHON_URLS in web/js/runtime-rpc.js): scripts/build-dist.mjs
 // rewrites asset references to their hashed names in .js files only and copies
 // this .mjs file verbatim, so a URL literal written here would 404 in a deploy.
@@ -91,6 +92,7 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
   "webchirp_bridge/radio_memories.py",
   "webchirp_bridge/radio_settings.py",
   "webchirp_bridge/row_validation.py",
+  "webchirp_bridge/rpc.py",
   "webchirp_bridge/runtime_errors.py",
   "webchirp_bridge/serial_pipe.py",
 ]);

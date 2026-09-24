@@ -91,17 +91,12 @@ function normalizeJsonCodeplug(parsed) {
 }
 
 async function parseCsvToRows(harness, csvText) {
-  return harness.runPythonJson(
-    `
-_parsed = parse_csv(_csv_text)
-json.dumps({
-  "rows": _parsed.get("rows") or [],
-  "headers": _parsed.get("headers") or [],
-  "errors": _parsed.get("errors") or [],
-})
-    `,
-    { _csv_text: String(csvText || "") },
-  );
+  const parsed = await harness.rpc("parse_csv", { csv_text: String(csvText || "") });
+  return {
+    rows: parsed.rows || [],
+    headers: parsed.headers || [],
+    errors: parsed.errors || [],
+  };
 }
 
 async function runReadCommand(harness, { moduleName, className, format, outputPath }) {

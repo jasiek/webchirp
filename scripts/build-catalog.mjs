@@ -48,18 +48,15 @@ async function resolveChirpRevision(chirpPackageDir) {
 async function buildDriverCatalog(driverSet, selectedModules) {
   const harness = await createTestRadioHarness({ repoRoot: REPO_ROOT, driverSet });
   const modules = selectedModules || await harness.pythonSource.listDriverModules();
-  const radios = await harness.runPythonJson(
-    "json.dumps(list_registered_radios(_modules))",
-    { _modules: modules },
-  );
+  const radios = await harness.rpc("list_registered_radios", {
+    module_short_names: modules,
+  });
 
   // list_registered_radios drops unimportable modules silently; surface them
   // here so a driver missing from the catalog is recorded, not inferred. The
   // same sweep backs the runtime's metadata-less image detection.
   const importFailures = (
-    await harness.runPythonJson("json.dumps(import_all_driver_modules(_modules))", {
-      _modules: modules,
-    })
+    await harness.rpc("import_all_driver_modules", { module_short_names: modules })
   ).failed;
   for (const name of Object.keys(importFailures).sort()) {
     console.warn(`Driver module not importable, absent from catalog: ${name} (${importFailures[name]})`);
@@ -161,10 +158,9 @@ async function main() {
   // What each catalogued radio can do, read from the driver's own
   // RadioFeatures. Written from the same sweep because the drivers are already
   // imported here; doing it in a second pass would repeat the expensive part.
-  const featureSweep = await chirpCatalog.harness.runPythonJson(
-    "json.dumps(list_radio_features(_modules))",
-    { _modules: chirpCatalog.modules },
-  );
+  const featureSweep = await chirpCatalog.harness.rpc("list_radio_features", {
+    module_short_names: chirpCatalog.modules,
+  });
   for (const key of Object.keys(featureSweep.failed).sort()) {
     console.warn(`Radio could not describe itself, absent from features: ${key} (${featureSweep.failed[key]})`);
   }
