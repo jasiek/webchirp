@@ -2,7 +2,7 @@
 // chirp/ submodule and the committed web/radio-catalog.json must match this
 // revision; scripts/build-catalog.mjs enforces it at catalog build time and
 // the runtime rejects a mismatched static catalog.
-export const DEFAULT_CHIRP_REVISION = "098f57b2563af7d9411f2f42722947c52d569929";
+export const DEFAULT_CHIRP_REVISION = "4acbeb8a40ec247e0a0e89ff78d52eaa1b128def";
 export const DEFAULT_DRIVER_SET = "chirp";
 export const QUANSHENG_UNOFFICIAL_DRIVER_SET = "quansheng-unofficial";
 export const DRIVER_SETS = Object.freeze([

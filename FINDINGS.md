@@ -14,15 +14,12 @@ around, external API behaviour, browser and platform constraints, and rules abou
 Corpus counts (image totals, driver/class counts) are measurements against one CHIRP submodule pin —
 they are stated with the date they were taken and are expected to drift on the next bump; the method
 that produced them is the durable part. A count is dated by its entry unless it names a date of its
-own. The pin is CHIRP `098f57b2` (2026-09-11); the bump from `33a76a63` (2026-09-06) carried seven
-upstream commits: two new registered radios — Yaesu FT-5D (added to `ft2d.py`) and the experimental
-Yaesu FTM-300DR (new module `ftm300d.py`) — plus a Baofeng setting-description unification across
-`uv5r`, `h777`, `baofeng_digital`, `radtel_t18`, `retevis_rt22`, `ft1d` and `ft2d` (description text
-only; no capability or serial-framing site changed), an `ar8200` AM-mode import fix and an
-APRS-string refactor in `ft1d`/`ft2d`, and a Ukrainian locale plus French stock config the browser
-runtime never loads. The default catalog is 556 radios from 193 upstream driver modules; the
+own. The pin is CHIRP `4acbeb8a` (2026-09-24); the bump from `098f57b2` (2026-09-11) carried eight
+upstream commits, including the new Retevis RT18 driver, another Radtel T18 identification string,
+and Kenwood memory and FTM-300D settings changes. The wxPython and Ukrainian localization changes
+do not run in the browser. The default catalog is 557 radios from 194 upstream driver modules; the
 `drivers=quansheng-unofficial` catalog contains 13 separately bundled drivers. Counts measured on or
-after 2026-09-14 are against this pin, and dated counts name their own.
+after 2026-09-24 are against this pin, and dated counts name their own.
 
 ## CHIRP / Pyodide runtime
 
