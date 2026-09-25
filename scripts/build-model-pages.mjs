@@ -207,6 +207,19 @@ const CHARGING_LABELS = {
   external: "External charger",
 };
 
+// The band names an entry may use, so every page names the same band the same
+// way ("2 m", never "2m" on one page and "VHF ham" on another). Amateur bands
+// are named for what a ham radio is sold for; VHF/UHF are the land-mobile
+// spans the unlocked and commercial sets cover; the rest are services and
+// receive-only broadcast or scanner coverage.
+const BAND_NAMES = new Set([
+  "160 m", "80 m", "60 m", "40 m", "30 m", "20 m", "17 m", "15 m", "12 m", "10 m",
+  "6 m", "4 m", "2 m", "1.25 m", "70 cm", "33 cm", "23 cm", "13 cm",
+  "VHF low", "VHF", "UHF",
+  "FRS", "GMRS", "MURS", "PMR446", "LPD433", "CB", "Marine", "Weather",
+  "Airband", "FM broadcast", "AM broadcast", "Shortwave", "General coverage", "Other",
+]);
+
 const MODULATIONS = new Set([
   "FM", "AM", "SSB", "CW", "WFM", "DMR", "D-STAR", "C4FM", "NXDN", "dPMR", "P25", "RTTY", "PSK",
 ]);
@@ -238,17 +251,22 @@ function validateSpecs(specs) {
   const fail = (key, message) => {
     throw new Error(`radio-specs.json models["${key}"] ${message}`);
   };
-  // A frequency list is [low, high] MHz pairs, each ascending. Anything else
-  // would print as a range that reads backwards or as "NaN MHz".
-  const isRanges = (value) =>
-    Array.isArray(value)
-    && value.every(
-      (range) =>
-        Array.isArray(range)
-        && range.length === 2
-        && range.every((mhz) => typeof mhz === "number" && mhz > 0)
-        && range[0] < range[1],
-    );
+  // A range is one [low, high] MHz pair, ascending. Anything else would print
+  // as a range that reads backwards or as "NaN MHz".
+  const isRange = (range) =>
+    Array.isArray(range)
+    && range.length === 2
+    && range.every((mhz) => typeof mhz === "number" && mhz > 0)
+    && range[0] < range[1];
+  // A band has a known name and at least one of its two ranges; a band with
+  // neither says nothing a reader could use.
+  const isBand = (band) =>
+    band !== null
+    && typeof band === "object"
+    && BAND_NAMES.has(band.band)
+    && (band.rxMHz === null || isRange(band.rxMHz))
+    && (band.txMHz === null || isRange(band.txMHz))
+    && (band.rxMHz !== null || band.txMHz !== null);
   for (const [key, entry] of Object.entries(specs.models)) {
     if (entry.formFactor !== null && !(entry.formFactor in FORM_FACTOR_LABELS)) {
       fail(key, `has formFactor "${entry.formFactor}"`);
@@ -270,10 +288,8 @@ function validateSpecs(specs) {
         fail(key, `has powerW ${JSON.stringify(entry.powerW)}`);
       }
     }
-    for (const field of ["txMHz", "rxMHz"]) {
-      if (entry[field] !== null && !isRanges(entry[field])) {
-        fail(key, `has ${field} ${JSON.stringify(entry[field])}`);
-      }
+    if (entry.bands !== null && !(Array.isArray(entry.bands) && entry.bands.every(isBand))) {
+      fail(key, `has bands ${JSON.stringify(entry.bands)}`);
     }
     if (
       entry.modulations !== null
@@ -305,10 +321,11 @@ function specsFor(radio, specs) {
   return specs.models[`${radio.vendor}|${radio.model}`] || null;
 }
 
-// Researched ranges as one readable line. They are already in MHz, unlike the
-// driver's Hz bands that formatBands converts.
-function formatMHzRanges(ranges) {
-  return ranges.map(([low, high]) => `${low}–${high} MHz`).join(", ");
+// One researched range as a table cell. Already in MHz, unlike the driver's Hz
+// bands that formatBands converts; a missing range is a band the radio only
+// listens on (or only the other direction is known), shown as a dash.
+function formatMHzRange(range) {
+  return range ? `${range[0]}–${range[1]} MHz` : "—";
 }
 
 // A yes/no row's cell. "optional" gets its own wording because "Yes" would
@@ -345,12 +362,6 @@ function specRows(entry) {
     }
     rows.push(["Transmit power", power]);
   }
-  if (entry.txMHz?.length) {
-    rows.push(["Transmit", formatMHzRanges(entry.txMHz)]);
-  }
-  if (entry.rxMHz?.length) {
-    rows.push(["Receive", formatMHzRanges(entry.rxMHz)]);
-  }
   if (entry.modulations?.length) {
     rows.push(["Modulation", entry.modulations.join(", ")]);
   }
@@ -372,7 +383,8 @@ function specRows(entry) {
 // of an AR8200), and the table without it would overstate the evidence.
 function specsSection(radio, entry) {
   const rows = entry ? specRows(entry) : [];
-  if (!rows.length || !entry.sources.length) {
+  const bands = entry?.bands || [];
+  if ((!rows.length && !bands.length) || !entry.sources.length) {
     return "";
   }
   const table = rows
@@ -392,6 +404,28 @@ function specsSection(radio, entry) {
           .map(([url, host]) => `<a href="${escapeHtml(url)}" rel="nofollow noopener">${escapeHtml(host)}</a>`)
           .join(" · ")}</p>`
     : "";
+  // One row per band rather than one line per direction, because a radio's
+  // receive and transmit spans pair up by band -- a 2 m set that listens on
+  // 136-174 MHz but transmits on 144-148 reads wrongly as two unrelated lists.
+  const bandTable = bands.length
+    ? `
+        <h3>Frequency bands</h3>
+        <table class="radio-specs radio-bands">
+          <thead>
+            <tr><th scope="col">Band</th><th scope="col">Receive</th><th scope="col">Transmit</th></tr>
+          </thead>
+          <tbody>
+${bands
+  .map(
+    (band) =>
+      `            <tr><th scope="row">${escapeHtml(band.band)}</th>`
+      + `<td>${escapeHtml(formatMHzRange(band.rxMHz))}</td>`
+      + `<td>${escapeHtml(formatMHzRange(band.txMHz))}</td></tr>`,
+  )
+  .join("\n")}
+          </tbody>
+        </table>`
+    : "";
   const caveat = entry.caveat
     ? `
         <p class="radio-specs-caveat">${escapeHtml(entry.caveat)}</p>`
@@ -407,7 +441,7 @@ function specsSection(radio, entry) {
           <tbody>
 ${table}
           </tbody>
-        </table>${caveat}${sources}`;
+        </table>${bandTable}${caveat}${sources}`;
 }
 
 // Any label as one filename-safe token.

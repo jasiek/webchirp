@@ -625,8 +625,11 @@ const SPECS = {
   batteryMah: 1800,
   charging: ["usb-c", "cradle"],
   powerW: { min: 1, max: 5 },
-  txMHz: [[136, 174], [400, 520]],
-  rxMHz: [[65, 108], [136, 174], [400, 520]],
+  bands: [
+    { band: "FM broadcast", rxMHz: [65, 108], txMHz: null },
+    { band: "2 m", rxMHz: [136, 174], txMHz: [144, 148] },
+    { band: "70 cm", rxMHz: [400, 520], txMHz: [420, 450] },
+  ],
   modulations: ["FM", "WFM"],
   display: true,
   inProduction: false,
@@ -654,7 +657,11 @@ test("a radio with researched specs gets a hardware table saying what was found"
     assert.match(page, /<th scope="row">Battery<\/th><td>1800 mAh<\/td>/);
     assert.match(page, /<td>USB-C, Desktop charging cradle<\/td>/);
     assert.match(page, /<th scope="row">Transmit power<\/th><td>1–5 W<\/td>/);
-    assert.match(page, /<th scope="row">Transmit<\/th><td>136–174 MHz, 400–520 MHz<\/td>/);
+    // Receive and transmit pair up per band, and a listen-only band shows a
+    // dash for transmit rather than being dropped or given a blank cell.
+    assert.match(page, /<h3>Frequency bands<\/h3>/);
+    assert.match(page, /<th scope="row">2 m<\/th><td>136–174 MHz<\/td><td>144–148 MHz<\/td>/);
+    assert.match(page, /<th scope="row">FM broadcast<\/th><td>65–108 MHz<\/td><td>—<\/td>/);
     assert.match(page, /<th scope="row">Still manufactured<\/th><td>No<\/td>/);
     assert.match(page, /<th scope="row">GPS<\/th><td>Optional add-on<\/td>/);
     assert.match(page, /<th scope="row">Bluetooth programming<\/th><td>Yes<\/td>/);
@@ -741,6 +748,23 @@ test("a spec value the generator cannot state fails the build", async () => {
       specs: { models: { "Baofeng|UV-5R": { ...SPECS, display: "optional" } } },
     });
     await assert.rejects(runGenerator(root), /Baofeng\|UV-5R.*display "optional"/s);
+  });
+});
+
+test("a band with an unknown name or a backwards range fails the build", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // Band names come from a fixed list so "2m", "2 m" and "VHF ham" cannot
+    // all appear across pages for the same thing.
+    await stageFixture(root, {
+      radios: [fixtureRadio({ vendor: "Baofeng", model: "UV-5R" })],
+      features: { "alpha:AlphaRadio": FEATURES },
+      specs: {
+        models: {
+          "Baofeng|UV-5R": { ...SPECS, bands: [{ band: "2m", rxMHz: [174, 136], txMHz: null }] },
+        },
+      },
+    });
+    await assert.rejects(runGenerator(root), /Baofeng\|UV-5R.*has bands/s);
   });
 });
 

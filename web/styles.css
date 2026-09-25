@@ -287,6 +287,19 @@ body {
   width: 1%;
 }
 
+/* The band table's header row names its columns; the label column of the
+   hardware table above needs no header, since each row names itself. */
+.radio-bands thead th {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.radio-bands th,
+.radio-bands td {
+  width: auto;
+}
+
 .radio-specs-caveat {
   font-size: 0.9rem;
   margin: 0.6rem 0 0.3rem;
