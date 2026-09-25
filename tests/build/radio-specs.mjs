@@ -26,9 +26,11 @@ const FIELDS = [
   "gps",
   "bluetoothProgramming",
   "sources",
+  "caveat",
   "note",
 ];
 
+// Both inputs are read fresh per test, so no test can see another's mutation.
 async function readJson(...segments) {
   return JSON.parse(await fs.readFile(path.join(...segments), "utf8"));
 }
@@ -57,18 +59,24 @@ test("every model in the catalog has been researched", async () => {
   assert.deepEqual(missing, [], "new radios need a specs entry, even if every field is null");
 });
 
-test("every entry has exactly the recorded fields, with usable sources and notes", async () => {
+test("every entry has exactly the recorded fields, with usable sources and text", async () => {
   const specs = await readJson(repoRoot, "radio-specs.json");
 
   for (const [key, entry] of Object.entries(specs.models)) {
     assert.deepEqual(Object.keys(entry).sort(), [...FIELDS].sort(), `${key} has the wrong fields`);
-    assert.equal(typeof entry.note, "string", `${key} has a non-string note`);
-    assert.equal(entry.note, entry.note.trim(), `${key} has a note with loose whitespace`);
-    assert.ok(entry.note.length <= 200, `${key} has a note of ${entry.note.length} characters`);
+    // note is the research log and is never rendered, so it may run long; the
+    // caveat is printed under the table and has to stay a sentence or two.
+    for (const field of ["note", "caveat"]) {
+      assert.equal(typeof entry[field], "string", `${key} has a non-string ${field}`);
+      assert.equal(entry[field], entry[field].trim(), `${key} has a ${field} with loose whitespace`);
+    }
+    assert.ok(entry.caveat.length <= 200, `${key} has a caveat of ${entry.caveat.length} characters`);
     assert.ok(Array.isArray(entry.sources), `${key} has no sources list`);
+    // Plain http is allowed: several makers' manuals are only served that way,
+    // and dropping the citation would leave the figures unsourced.
     for (const source of entry.sources) {
       const url = new URL(source);
-      assert.equal(url.protocol, "https:", `${key} cites ${source} over ${url.protocol}`);
+      assert.ok(["https:", "http:"].includes(url.protocol), `${key} cites ${source}`);
     }
   }
 });

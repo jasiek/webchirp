@@ -1,5 +1,5 @@
 {
-  "documentation": "Researched hardware specifications for each catalogued radio, keyed vendor|model exactly as radio-catalog.json spells it. Hand-maintained: no CHIRP driver knows a radio's battery, charging, or feature set, so this cannot be generated. Figures come from manufacturer spec sheets, manuals and reputable retailers (see sources). null means not established and renders nothing; never guess. formFactor is handheld, portable (battery-carrying field sets like the FT-817), mobile, base or receiver. charging holds usb-c, usb, cradle or external ([] for radios without a battery). powerW is watts; txMHz and rxMHz are [low, high] MHz ranges of the stock radio, which can be narrower than the driver's. dualReceive means two simultaneous receivers, not dual watch. aprs, gps and bluetoothProgramming may be \"optional\" when an add-on unit supplies them. scripts/build-model-pages.mjs turns these into a hardware table on each model page.",
+  "documentation": "Researched hardware specifications for each catalogued radio, keyed vendor|model exactly as radio-catalog.json spells it. Hand-maintained: no CHIRP driver knows a radio's battery, charging, or feature set, so this cannot be generated. Figures come from manufacturer spec sheets, manuals and reputable retailers (see sources). null means not established and renders nothing; never guess. An entry with no sources renders nothing at all. caveat is shown under the table and carries the qualifiers a reader needs (which regional or hardware version the figures describe); note is the maintainer's research log and is never rendered. formFactor is handheld, portable (battery-carrying field sets like the FT-817), mobile, base or receiver. charging holds usb-c, usb, cradle or external ([] for radios without a battery). powerW is watts; txMHz and rxMHz are [low, high] MHz ranges of the stock radio, which can be narrower than the driver's. dualReceive means two simultaneous receivers, not dual watch. aprs, gps and bluetoothProgramming may be \"optional\" when an add-on unit supplies them. scripts/build-model-pages.mjs turns these into a hardware table on each model page.",
   "models": {
     "AOR|AR8200": {
       "formFactor": "receiver",
@@ -33,6 +33,7 @@
         "https://www.rigpix.com/aor/aor_ar8200mkiii.htm",
         "https://moonrakeronline.com/us/discontinued-aor-ar-8200-mk3-530khz-to-3ghz-handheld-scanner"
       ],
+      "caveat": "Figures are for the Mk3: 0.1–3000 MHz with US cellular bands blocked, 4× AA 1500 mAh NiMH. The original AR8200 covered 0.1–2040 MHz.",
       "note": "Mk3 figures: 0.1-3000MHz (US cellular blocked), 4x AA 1500mAh NiMH. Original AR8200 covered 0.1-2040MHz."
     },
     "ARRL|Travel Plus": {
@@ -51,6 +52,7 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [],
+      "caveat": "",
       "note": "Repeater directory software file format, not a radio."
     },
     "Abbree|AR-518": {
@@ -92,6 +94,7 @@
         "https://www.besthamradio.com/abbree-ar-518/",
         "https://alexnld.com/product/abbree-ar-518-full-bands-walkie-talkie-128-channels-lcd-color-screen-two-way-radio-air-band-dtmf-sos-emergency-function/"
       ],
+      "caveat": "Sellers advertise 136–660 MHz TX, airband receive, 10 W and 8800 mAh; an independent review measured about 3.4 W and 970 mAh and found airband did not work.",
       "note": "Advertised 136-660MHz TX, 108-136 airband RX, 10W, 8800mAh; a review measured ~3.4W and ~970mAh and found airband did not work, so power, battery and AM left out."
     },
     "Abbree|AR-63": {
@@ -130,6 +133,7 @@
         "https://www.alibaba.com/product-detail/ABBREE-AR-63-Automatic-Wireless-Copy_1600512207047.html",
         "https://www.banggood.com/ABBREE-AR-63-UHF-Walkie-Talkie-Wireless-Copy-Frequency-Powerful-Receiver-Scanner-Frequency-Long-Range-Two-Way-Radio-reviews-p1989276.html"
       ],
+      "caveat": "Retailers advertise a 5800 mAh battery, which is implausible for a radio this size.",
       "note": "Retailers claim a 5800mAh battery, implausible for this size; left null."
     },
     "Abbree|AR-730": {
@@ -201,6 +205,7 @@
         "https://www.szanysecu.com/h-pd-212.html",
         "https://www.rigpix.com/mischam/abbree_ar730.htm"
       ],
+      "caveat": "Same radio as the Anysecu UV-A37. Abbree gives no battery capacity; a review measured about 1030 mAh. The USB-C socket is on the battery.",
       "note": "Same radio as Anysecu UV-A37. Maker gives no mAh; a review measured ~1030mAh. USB-C socket is on the battery."
     },
     "Abbree|AR-869": {
@@ -235,6 +240,7 @@
         "https://www.rtsystemsinc.com/APS-AR869-Programming-Software-Only-for-the-brAbbree-AR-869-radio-_p_2094.html",
         "https://www.aliexpress.com/item/1005004180375475.html"
       ],
+      "caveat": "Figures (136–520 MHz, 10 W, 4800 mAh, FM radio, GPS, Bluetooth app programming) are seller claims; Abbree's claims for the sibling AR-518 proved inflated.",
       "note": "Advertised figures (136-520MHz, 10W, 4800mAh, FM radio, GPS, Bluetooth app programming) from listings; Abbree's claims for sibling AR-518 were inflated. FM-broadcast RX range not stated."
     },
     "Abbree|AR-F5": {
@@ -275,6 +281,7 @@
       "sources": [
         "https://www.alibaba.com/product-detail/ABBREE-AR-F5-Wireless-Copy-Frequency_1600307560674.html"
       ],
+      "caveat": "Listings advertise 10 W and a 5800 mAh 7.4 V battery; these seller claims are unverified.",
       "note": "Listings claim 10W and 5800mAh 7.4V battery; unverified, left null."
     },
     "Alinco|DJ-G7EG": {
@@ -324,6 +331,7 @@
         "https://www.rigpix.com/alinco/djg7t.htm",
         "https://www.manualslib.com/manual/1047142/Alinco-Dj-G7.html?page=63"
       ],
+      "caveat": "European version. Per the manual, cross-band repeat is on the T version only. Standard EBP-73 Li-ion pack.",
       "note": "European version; cross-band repeater is T-version only per manual. Standard EBP-73 Li-ion pack."
     },
     "Alinco|DJ-G7T": {
@@ -380,6 +388,7 @@
         "https://www.rigpix.com/alinco/djg7t.htm",
         "https://www.manualslib.com/manual/1047142/Alinco-Dj-G7.html?page=63"
       ],
+      "caveat": "Standard EBP-73 Li-ion pack with EDC-173 drop-in charger.",
       "note": "Standard EBP-73 Li-ion pack with EDC-173 drop-in charger."
     },
     "Alinco|DJ175": {
@@ -418,6 +427,7 @@
         "https://www.rigpix.com/alinco/dj175t.htm",
         "https://www.universal-radio.com/catalog/ht/4175.html"
       ],
+      "caveat": "The US DJ-175T shipped with an EBP-72 NiMH pack and EDC-165 drop-in stand; the optional EBP-71 Li-ion pack is 1200 mAh.",
       "note": "US DJ-175T shipped with EBP-72 NiMH pack and EDC-165 drop-in stand; optional EBP-71 Li-ion is 1200 mAh."
     },
     "Alinco|DJ596": {
@@ -462,6 +472,7 @@
         "https://www.rigpix.com/alinco/dj596t.htm",
         "https://www.rigpix.com/alinco/dj596te_service.pdf"
       ],
+      "caveat": "Ranges are for the US DJ-596T; the DJ-596E transmits 144–146/430–440 MHz. 5 W needs 13.8 V external power; 4.5 W on the EBP-50N 9.6 V NiMH pack.",
       "note": "US DJ-596T ranges; DJ-596E TX 144-146/430-440. 5 W needs 13.8 V external; 4.5 W on EBP-50N 9.6 V NiMH."
     },
     "Alinco|DR03T": {
@@ -498,6 +509,7 @@
         "https://www.rigpix.com/alinco/dr03t.htm",
         "https://alinco.com/tax-item/amateur/"
       ],
+      "caveat": "",
       "note": ""
     },
     "Alinco|DR06T": {
@@ -534,6 +546,7 @@
         "https://www.rigpix.com/alinco/dr06t.htm",
         "https://alinco.com/tax-item/amateur/"
       ],
+      "caveat": "RigPix lists the DR-06T as discontinued; Alinco currently sells the DR-06TA variant. Receive can be expanded to 40–70 MHz by modification.",
       "note": "RigPix lists DR-06T discontinued; Alinco currently sells the DR-06TA variant. RX expandable to 40-70 MHz by modification."
     },
     "Alinco|DR135T": {
@@ -571,6 +584,7 @@
         "https://www.rigpix.com/alinco/dr135tmkiii.htm",
         "https://alinco.com/tax-item/amateur/"
       ],
+      "caveat": "Figures are for the US DR-135T MkIII. APRS/packet needs the optional EJ-41U TNC board plus an external GPS input.",
       "note": "Specs of DR-135T MkIII (US). APRS/packet needs optional EJ-41U TNC board plus external GPS input."
     },
     "Alinco|DR235T": {
@@ -607,6 +621,7 @@
         "https://www.rigpix.com/alinco/dr235tmkiii.htm",
         "https://alinco.com/tax-item/amateur/"
       ],
+      "caveat": "Figures are for the DR-235T MkIII. Packet/APRS needs the optional TNC board.",
       "note": "Specs of DR-235T MkIII. Packet/APRS needs optional TNC board."
     },
     "Alinco|DR435T": {
@@ -643,6 +658,7 @@
         "https://www.rigpix.com/alinco/dr435tmkiii.htm",
         "https://alinco.com/tax-item/amateur/"
       ],
+      "caveat": "Figures are for the DR-435T MkIII. APRS/packet needs the optional EJ-41U TNC board.",
       "note": "Specs of DR-435T MkIII per RigPix. APRS/packet needs optional EJ-41U TNC board."
     },
     "Alinco|DR735T": {
@@ -688,6 +704,7 @@
         "https://www.rigpix.com/alinco/dr735t.htm",
         "https://alinco.com/tax-item/amateur/"
       ],
+      "caveat": "US version. Receives AM airband 108–136 MHz.",
       "note": "US version. AM airband receive 108-136 MHz."
     },
     "AnyTone|5888UV": {
@@ -737,6 +754,7 @@
         "https://anytoneusa.com/Anytone-AT-5888UV-Dual-Band-Commercial-Mobile/",
         "https://www.passion-radio.com/mobile/at588uv-2287.html"
       ],
+      "caveat": "US commercial version; the EU ham version transmits 144–146/430–440 MHz. 50 W VHF / 40 W UHF.",
       "note": "US commercial version; EU ham version TX 144-146/430-440MHz. 50W VHF / 40W UHF."
     },
     "AnyTone|5888UVIII": {
@@ -790,6 +808,7 @@
         "https://letsgetreadyinc.com/AT-5888UVIII",
         "https://www.manualslib.com/manual/3277116/Anytone-At-5888uviii.html"
       ],
+      "caveat": "US tri-band version. 50 W VHF, 25 W on 220 MHz, 40 W UHF.",
       "note": "US tri-band version. 50W VHF, 25W 220MHz, 40W UHF."
     },
     "AnyTone|778UV": {
@@ -834,6 +853,7 @@
         "https://www.anytone.net/video/a-products-at-778uv-dual-band-mobile-ham-radio-2m-70cm-hands-free-vox",
         "https://www.radiomasterlist.com/en/anytone-at-778uv.html"
       ],
+      "caveat": "Ham-only versions transmit on 144–148/420–450 MHz only.",
       "note": "Ham-only versions transmit 144-148/420-450MHz only."
     },
     "AnyTone|778UV VOX": {
@@ -877,6 +897,7 @@
       "sources": [
         "https://www.anytone.net/video/a-products-at-778uv-dual-band-mobile-ham-radio-2m-70cm-hands-free-vox"
       ],
+      "caveat": "VOX-firmware variant of the AT-778UV with the same hardware.",
       "note": "VOX-firmware variant of the AT-778UV; same hardware specs."
     },
     "AnyTone|779UV": {
@@ -926,6 +947,7 @@
         "https://www.passion-radio.com/mobile/at779uv-357.html",
         "https://www.anytone.net/pro_info100.html"
       ],
+      "caveat": "Ranges are for the USA version; the EU version transmits and receives 144–146/430–440 MHz.",
       "note": "USA version ranges; EU version TX/RX 144-146/430-440MHz."
     },
     "AnyTone|OBLTR-8R": {
@@ -977,6 +999,7 @@
         "https://www.amateurradio.com/review-anytone-obltr-8r/",
         "https://miklor.com/AT/OB-TE-ProgMem.php"
       ],
+      "caveat": "Sold by AnyTone Tech (US) around 2015; Part 90, GMRS and MURS certified.",
       "note": "Sold by AnyTone Tech (US) around 2015; Part 90/GMRS/MURS certified."
     },
     "AnyTone|TERMN-8R": {
@@ -1041,6 +1064,7 @@
         "https://ultratechlife.com/reviews/anytone-tech-termn-8r-dual-band-radio-featured-review/",
         "https://www.miklor.com/AT/8R-FAQ.php"
       ],
+      "caveat": "Sold by AnyTone Tech (US) around 2015. Receives AM broadcast, shortwave and airband.",
       "note": "Sold by AnyTone Tech (US) around 2015. Receives AM broadcast, shortwave and airband."
     },
     "Anysecu|AC-580": {
@@ -1089,6 +1113,7 @@
         "https://www.szanysecu.com/h-pd-172.html",
         "https://dxcanada.ca/anysecu-ac-580-gs-5b/"
       ],
+      "caveat": "Also sold as the Radioddity GS-5B. Some ham versions limit TX to 144–148/430–450 MHz. Bluetooth is for programming only.",
       "note": "Also sold as Radioddity GS-5B. Some ham versions limit TX to 144-148/430-450MHz. Bluetooth is for programming only."
     },
     "Anysecu|UV-A37": {
@@ -1162,6 +1187,7 @@
         "https://www.szanysecu.com/h-pd-212.html",
         "https://www.besthamradio.com/abbree-ar-730/"
       ],
+      "caveat": "Rebadged Abbree AR-730. Some listings claim a 2000 mAh battery; a review of the AR-730 measured about 1030 mAh.",
       "note": "Rebadged Abbree AR-730. Some listings claim a 2000mAh battery; a review of the AR-730 measured ~1030mAh."
     },
     "Anysecu|WP-9900": {
@@ -1206,6 +1232,7 @@
         "https://www.szanysecu.com/h-pd-191.html",
         "https://www.cqradiouk.co.uk/product/anysecu-wp-9900"
       ],
+      "caveat": "25 W VHF / 20 W UHF, high/low switchable. Tri display and standby, not simultaneous receive.",
       "note": "25W VHF / 20W UHF, high/low switchable (low level not stated). Tri display/standby, not simultaneous receive."
     },
     "BTECH|FRS-A1": {
@@ -1253,6 +1280,7 @@
         "https://baofengtech.com/product/frs-a1/",
         "https://www.miklor.com/COM/Review_FRS-A1.php"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|FRS-B1": {
@@ -1296,6 +1324,7 @@
         "https://baofengtech.com/product/frs-b1/",
         "https://manuals.plus/btech/frsb1-two-way-radio-manual"
       ],
+      "caveat": "Output is forced to 0.5 W on FRS channels 8–14.",
       "note": "0.5W is forced on FRS channels 8-14; no selectable low setting documented."
     },
     "BTECH|GMRS-20V2": {
@@ -1340,6 +1369,7 @@
       "sources": [
         "https://baofengtech.com/product/gmrs-20v2/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|GMRS-50V2": {
@@ -1384,6 +1414,7 @@
       "sources": [
         "https://baofengtech.com/product/gmrs-50v2/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|GMRS-50X1": {
@@ -1428,6 +1459,7 @@
       "sources": [
         "https://baofengtech.com/product/gmrs-50x1/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|GMRS-V1": {
@@ -1474,6 +1506,7 @@
       "sources": [
         "https://baofengtech.com/product/gmrs-v1/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|GMRS-V2": {
@@ -1521,6 +1554,7 @@
       "sources": [
         "https://baofengtech.com/product/gmrs-v2/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|MURS-V1": {
@@ -1563,6 +1597,7 @@
       "sources": [
         "https://baofengtech.com/product/murs-v1/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|MURS-V2": {
@@ -1610,6 +1645,7 @@
       "sources": [
         "https://baofengtech.com/product/murs-v2/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|UV-2501": {
@@ -1658,6 +1694,7 @@
       "sources": [
         "https://baofengtech.com/product/uv-2501/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|UV-2501+220": {
@@ -1714,6 +1751,7 @@
       "sources": [
         "https://baofengtech.com/uv-2501+220"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|UV-25X2": {
@@ -1762,6 +1800,7 @@
       "sources": [
         "https://www.miklor.com/BT50X2/50X2-Specs.php"
       ],
+      "caveat": "First generation; superseded by the UV-25X2 G2.",
       "note": "First generation; superseded by the UV-25X2 G2."
     },
     "BTECH|UV-25X2_G2": {
@@ -1810,6 +1849,7 @@
       "sources": [
         "https://baofengtech.com/product/uv-25x2/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|UV-25X4": {
@@ -1867,6 +1907,7 @@
         "https://www.miklor.com/BT50X2/50X2-Specs.php",
         "https://foothillflyers.org/uv25x4notes.html"
       ],
+      "caveat": "First generation; superseded by the UV-25X4 G2. The 220 MHz range is the US version's.",
       "note": "First generation; superseded by the UV-25X4 G2. 220 band range is the US version."
     },
     "BTECH|UV-25X4_G2": {
@@ -1923,6 +1964,7 @@
       "sources": [
         "https://baofengtech.com/product/uv-25x4/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|UV-5001": {
@@ -1971,6 +2013,7 @@
       "sources": [
         "https://baofengtech.com/product/uv-5001/"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|UV-50X2": {
@@ -2020,6 +2063,7 @@
         "https://www.miklor.com/BT50X2/50X2-Specs.php",
         "https://www.commgearsupply.com/products/btech-uv-50x2latest-gen-50watt-dual-band-mobile-radio-136-174mhz-vhf-400-520mhz-uhf"
       ],
+      "caveat": "First generation; superseded by the UV-50X2 G2.",
       "note": "First generation; superseded by the UV-50X2 G2."
     },
     "BTECH|UV-50X2_G2": {
@@ -2069,6 +2113,7 @@
         "https://baofengtech.com/product/uv-50x2/",
         "https://www.commgearsupply.com/products/btech-uv-50x2latest-gen-50watt-dual-band-mobile-radio-136-174mhz-vhf-400-520mhz-uhf"
       ],
+      "caveat": "",
       "note": ""
     },
     "BTECH|UV-50X3": {
@@ -2138,6 +2183,7 @@
       "sources": [
         "https://baofengtech.com/product/uv-50x3/"
       ],
+      "caveat": "The 220 MHz band is 5 W only. BTECH lists it as a legacy model, out of stock.",
       "note": "220 MHz band is 5W only. Maker lists it as a legacy model, out of stock."
     },
     "BTECH|UV-5X3": {
@@ -2197,6 +2243,7 @@
       "sources": [
         "https://baofengtech.com/product/uv-5x3/"
       ],
+      "caveat": "",
       "note": ""
     },
     "Bajeton|BJ7800": {
@@ -2249,6 +2296,7 @@
         "https://manuals.plus/ae/1005009510275408",
         "https://www.radtels.com/products/radtel-rt-920-walkie-talkie-long-range-sw-mw-lw-am-ssb-cb-10w-receive-wireless-bluetooth-phone-programming-noaa-two-way-radio"
       ],
+      "caveat": "Rebadged Radtel RT-920. Listings disagree on TX range (the RT-920 is 136–174/400–480 MHz). Dual watch only.",
       "note": "Rebadged Radtel RT-920. TX range claims conflict between listings (RT-920: 136-174/400-480MHz), so TX left null. Dual watch only."
     },
     "Baofeng|5RM": {
@@ -2314,6 +2362,7 @@
         "https://www.onesdr.com/baofeng-5rm-ham-radio-review/",
         "https://www.amazon.com/BAOFENG-5RM-TIDRADIO-Programmer-Frequency/dp/B0DMN4WQPH"
       ],
+      "caveat": "US-market ham version; 3 power levels, with low and mid wattage not published. A desktop charger is sold for the UV-5RM series.",
       "note": "US-market ham version; 3 power levels, low/mid wattage not published. Desktop charger sold for UV-5RM series."
     },
     "Baofeng|5RX": {
@@ -2362,6 +2411,7 @@
       "sources": [
         "https://manuals.plus/asin/B0CZDRC4L6"
       ],
+      "caveat": "US listings sell it as 144–148 MHz/1.25 m/420–450 MHz TX; exact TX ranges are not confirmed by Baofeng.",
       "note": "TX sold as 144-148/1.25m/420-450 (US listings); exact TX ranges and battery not confirmed from maker."
     },
     "Baofeng|BF-1901": {
@@ -2398,6 +2448,7 @@
       "sources": [
         "https://www.sunsky-online.com/view/1470432.htm"
       ],
+      "caveat": "16-channel UHF business radio; figures come from reseller listings only.",
       "note": "16-channel UHF business radio; specs from reseller listings only."
     },
     "Baofeng|BF-1904": {
@@ -2434,6 +2485,7 @@
         "https://www.baofengglobal.com/Baofeng-BF-1904-UHF-Single-Band-Walkie-Talkie-pd534233698.html",
         "https://alafone.com/product/baofeng-bf-1904/"
       ],
+      "caveat": "16-channel UHF radio with USB-C charging. Baofeng's site gives 400–520 MHz, 12 W, 2000 mAh; resellers quote 400–470 MHz and 2800–4800 mAh.",
       "note": "16-channel UHF radio with USB-C charging. Baofeng global site: 400-520MHz, 12W, 2000mAh; resellers quote 2800-4800mAh and 400-470MHz, so battery left null."
     },
     "Baofeng|BF-1909": {
@@ -2472,6 +2524,7 @@
       "sources": [
         "https://www.radiospro.com/products/baofeng-bf-1909-two-way-radio/"
       ],
+      "caveat": "16-channel UHF business radio; figures are one retailer's. Other resellers quote 12 W and larger batteries.",
       "note": "16-channel UHF business radio; retailer spec. Other resellers quote 12W and larger batteries."
     },
     "Baofeng|BF-888": {
@@ -2509,6 +2562,7 @@
       "sources": [
         "https://www.baofengradio.com/products/bf-888s"
       ],
+      "caveat": "Covers the BF-888S: 16 channels, no screen.",
       "note": "BF-888S; 16 channels, no screen."
     },
     "Baofeng|BF-A58": {
@@ -2554,6 +2608,7 @@
       "sources": [
         "https://www.twowayradio.us/product/baofeng-bf-a58-ip67-waterproof-dual-band-fm-transceiver/"
       ],
+      "caveat": "IP67 waterproof dual-band handheld.",
       "note": "IP67 waterproof dual-band HT."
     },
     "Baofeng|BF-A58S": {
@@ -2608,6 +2663,7 @@
       "sources": [
         "https://www.baofengradio.com/products/catalog-bf-a58s"
       ],
+      "caveat": "Tri-band IP67 handheld; ranges as on Baofeng's catalog page.",
       "note": "Tri-band IP67 HT; ranges as on Baofeng's catalog page."
     },
     "Baofeng|BF-F8HP": {
@@ -2658,6 +2714,7 @@
       "sources": [
         "https://baofengtech.com/product/bf-f8hp/"
       ],
+      "caveat": "BTECH (US) model.",
       "note": "BTECH (US) model."
     },
     "Baofeng|BF-F8HP-PRO": {
@@ -2731,6 +2788,7 @@
         "https://baofengtech.com/product/bf-f8hp-pro/",
         "https://baofengtech.com/wp-content/uploads/2024/09/manual_BF-F8HPPRO.pdf"
       ],
+      "caveat": "BTECH (US) model. 10 W VHF/UHF, 5 W on 1.25 m; low and mid wattage not published. The manual shows a Bluetooth icon but describes no Bluetooth programming.",
       "note": "BTECH (US). 10W VHF/UHF, 5W on 1.25m; low/mid wattage not published. Manual shows a Bluetooth icon but no BT programming described."
     },
     "Baofeng|BF-M4": {
@@ -2766,6 +2824,7 @@
       "sources": [
         "https://fjbaofeng.en.made-in-china.com/product/yasrICmTHtkq/China-Baofeng-Bf-M4-Hotselling-UHF-400-470MHz-Two-Way-Radio-High-Capacity-Battery-Walkie-Talkie.html"
       ],
+      "caveat": "16-channel UHF radio. Resellers claim a 5800 mAh battery; that claim is not credible.",
       "note": "16-channel UHF radio; battery claims (5800mAh) from resellers not trusted."
     },
     "Baofeng|BF-T1": {
@@ -2805,6 +2864,7 @@
       "sources": [
         "https://baofengradio.co.uk/bf-t1-mini-radio/"
       ],
+      "caveat": "Mini UHF radio with micro-USB charging. Output power is quoted inconsistently, from 0.5/1 W to up to 3 W.",
       "note": "Mini UHF radio, micro-USB charging; power quoted inconsistently (0.5/1W vs up to 3W)."
     },
     "Baofeng|BF-T20": {
@@ -2842,6 +2902,7 @@
       "sources": [
         "https://manuals.plus/ae/1005008718810357"
       ],
+      "caveat": "16-channel screenless UHF radio with mini-USB charging.",
       "note": "16-channel screenless UHF radio, mini-USB charging."
     },
     "Baofeng|BF-T20D": {
@@ -2879,6 +2940,7 @@
       "sources": [
         "https://manuals.plus/ae/1005008718810357"
       ],
+      "caveat": "Also has a Baofeng-proprietary GMSK digital mode.",
       "note": "Also has a Baofeng-proprietary GMSK digital mode (not in vocabulary)."
     },
     "Baofeng|BF-T20FRS": {
@@ -2913,6 +2975,7 @@
       "sources": [
         "https://www.amazon.com/BAOFENG-T20-Compact-Talkies-Earpiece/dp/B0GYHB4L4R"
       ],
+      "caveat": "22-channel FRS version of the BF-T20.",
       "note": "22-channel FRS version of the BF-T20."
     },
     "Baofeng|BF-T8": {
@@ -2955,6 +3018,7 @@
       "sources": [
         "https://www.baofengradio.com/products/catalog-bf-t8"
       ],
+      "caveat": "FRS radio with USB charging per Baofeng; the charger supplied in the box is not specified.",
       "note": "FRS radio; USB charging per Baofeng, charger type in box not specified."
     },
     "Baofeng|BF-V12D": {
@@ -2993,6 +3057,7 @@
         "https://manuals.plus/ae/1005009064850752",
         "https://alafone.com/product/baofeng-bf-v12d-gmsk-digital-walkie-talkie/"
       ],
+      "caveat": "16-channel screenless UHF radio with a Baofeng-proprietary GMSK digital mode. The manual states 410–469 MHz and 3–5 W output.",
       "note": "16-channel screenless UHF radio; also Baofeng GMSK digital mode (not in vocabulary). Manual states 410-469MHz and 3W-5W output."
     },
     "Baofeng|BF-V8A": {
@@ -3028,6 +3093,7 @@
       "sources": [
         "https://alafone.com/product/baofeng-bf-v8a-radio/"
       ],
+      "caveat": "16-channel UHF radio; figures come from reseller listings only.",
       "note": "16-channel UHF radio; reseller specs only."
     },
     "Baofeng|F-11": {
@@ -3059,6 +3125,7 @@
       "sources": [
         "https://www.worldwidedx.com/threads/baofeng-f-11.150580/"
       ],
+      "caveat": "UV-5R variant with US-specific firmware. The 136–174/400–520 MHz ranges come from owners on forums, not from Baofeng.",
       "note": "UV-5R variant with US-specific firmware; 136-174/400-520MHz per forum owners only, no maker spec found."
     },
     "Baofeng|GM-15Pro": {
@@ -3100,6 +3167,7 @@
       "sources": [
         "https://www.baofengradio.com/products/gm-15-pro"
       ],
+      "caveat": "GMRS radio.",
       "note": "GMRS radio."
     },
     "Baofeng|GM-21": {
@@ -3143,6 +3211,7 @@
       "sources": [
         "https://dennisamith.com/2024/10/20/the-one-about-the-baofeng-gm21-gmrs-handheld-radio/"
       ],
+      "caveat": "GMRS radio; the USB-C port is on the battery.",
       "note": "GMRS radio; USB-C port on the battery."
     },
     "Baofeng|GM-5RH": {
@@ -3177,6 +3246,7 @@
         "https://airsoftpro.cz/import/soubory/Baofeng%20GM-5RH%20GMRS%20OWNERS%20MANUAL%20FCC.pdf",
         "https://www.baofengradio.com/products/baofeng-original-uv-5rm-plus-charger"
       ],
+      "caveat": "GMRS radio.",
       "note": "GMRS radio."
     },
     "Baofeng|GT-3WP": {
@@ -3218,6 +3288,7 @@
       "sources": [
         "https://www.baofengradio.com/products/gt-3wp"
       ],
+      "caveat": "IP67. The US version is limited to ham-band TX.",
       "note": "IP67. Baofeng's TX range text is garbled; US version is ham-band limited."
     },
     "Baofeng|GT-5R": {
@@ -3263,6 +3334,7 @@
       "sources": [
         "https://www.baofengradio.com/products/gt-5r"
       ],
+      "caveat": "US version; the EU version transmits and receives 144–146/430–440 MHz.",
       "note": "US version; EU version is 144-146/430-440 TX/RX."
     },
     "Baofeng|K5-Plus": {
@@ -3328,6 +3400,7 @@
       "sources": [
         "https://www.baofengradio.com/products/k5-plus"
       ],
+      "caveat": "",
       "note": ""
     },
     "Baofeng|K6": {
@@ -3396,6 +3469,7 @@
       "sources": [
         "https://www.baofengradio.com/products/k6"
       ],
+      "caveat": "",
       "note": ""
     },
     "Baofeng|MP31": {
@@ -3433,6 +3507,7 @@
       "sources": [
         "https://www.baofengradio.com/products/mp31"
       ],
+      "caveat": "22-channel FRS-class GMRS radio.",
       "note": "FRS-class GMRS radio, 22 channels."
     },
     "Baofeng|UV-13Pro": {
@@ -3460,6 +3535,7 @@
       "sources": [
         "https://www.baofengradio.com/products/tp-8plus"
       ],
+      "caveat": "Sold as UV-13 PRO / TP-8Plus. Sellers claim 10 W and large batteries; Baofeng lists 8 W.",
       "note": "Sold as UV-13 PRO/TP-8Plus; sellers claim 10W and large batteries, Baofeng lists 8W; ranges not published by maker."
     },
     "Baofeng|UV-17": {
@@ -3514,6 +3590,7 @@
       "sources": [
         "https://www.baofengradio.com/products/uv-17"
       ],
+      "caveat": "Ranges and power come from reseller listings; Baofeng confirms USB-C and a base charger.",
       "note": "Ranges/power from reseller listings; Baofeng page confirms USB-C and base charger."
     },
     "Baofeng|UV-17Pro": {
@@ -3567,6 +3644,7 @@
       "sources": [
         "https://baofengradio.co.uk/baofeng-uv-17-pro-5w-tri-band-1800mah-999-channels-vhf-uhf-long-range-walkie-talkie-two-way-radio/"
       ],
+      "caveat": "",
       "note": ""
     },
     "Baofeng|UV-17ProGPS": {
@@ -3635,6 +3713,7 @@
       "sources": [
         "https://www.miklor.com/COM/Review_UV17proGPS.php"
       ],
+      "caveat": "Miklor measured about 5 W VHF / 4 W UHF on high and about 2 W on low; 220 MHz TX is very weak.",
       "note": "Miklor measured ~5W VHF / ~4W UHF high, ~2W low; 220 MHz TX very weak."
     },
     "Baofeng|UV-17R-Plus": {
@@ -3696,6 +3775,7 @@
       "sources": [
         "https://www.baofengradio.com/products/uv-17r-plus-5w-multi-band-radio"
       ],
+      "caveat": "US version; the Canadian version transmits 144–148/430–450 MHz. A desktop charger is sold for it.",
       "note": "US version; Canadian TX 144-148/430-450. Desktop charger sold for it."
     },
     "Baofeng|UV-21ProGPS": {
@@ -3760,6 +3840,7 @@
       "sources": [
         "https://www.lenovowalkietalkie.com/product/baofeng-uv-21-pro-gps-walkie-talkie-long-range/"
       ],
+      "caveat": "Figures come from reseller listings only; Baofeng publishes no spec sheet for it.",
       "note": "Reseller specs only (136-174/220-260/400-480MHz TX, airband and FM radio RX, 5-10W, Type-C plus base charger); no Baofeng spec sheet found."
     },
     "Baofeng|UV-21ProV2": {
@@ -3800,6 +3881,7 @@
         "https://manuals.plus/ae/1005005976343882",
         "https://www.cbradioshop.com.au/product/baofeng-uv-21-pro-v2/"
       ],
+      "caveat": "Some listings add 220–260 MHz TX.",
       "note": "Some listings add 220-260 TX."
     },
     "Baofeng|UV-25": {
@@ -3868,6 +3950,7 @@
       "sources": [
         "https://www.baofengradio.com/products/uv-25"
       ],
+      "caveat": "Three power levels; the lower two are not published.",
       "note": "Tri-power; lower levels not published."
     },
     "Baofeng|UV-28Plus": {
@@ -3936,6 +4019,7 @@
       "sources": [
         "https://www.baofengradio.com/products/uv-28-plus"
       ],
+      "caveat": "",
       "note": ""
     },
     "Baofeng|UV-32": {
@@ -4004,6 +4088,7 @@
       "sources": [
         "https://www.baofengradio.com/products/uv-32"
       ],
+      "caveat": "High/mid/low power; only the 10 W maximum is published.",
       "note": "High/mid/low power; only 10W max published."
     },
     "Baofeng|UV-3R": {
@@ -4050,6 +4135,7 @@
       "sources": [
         "https://www.essexham.co.uk/baofeng-uv-3r-handheld-radio-review.html"
       ],
+      "caveat": "Different sources quote the battery as 1200 or 1500 mAh.",
       "note": "Battery quoted as 1200 or 1500mAh by different sources."
     },
     "Baofeng|UV-5G Mini": {
@@ -4106,6 +4192,7 @@
         "https://www.baofengradio.com/products/uv-5g-mini",
         "https://www.baofengradio.com/products/battery-for-uv-5r-mini"
       ],
+      "caveat": "GMRS version of the UV-5R Mini, sharing its battery.",
       "note": "GMRS version of UV-5R Mini; battery shared with UV-5R Mini."
     },
     "Baofeng|UV-5G Pro": {
@@ -4163,6 +4250,7 @@
       "sources": [
         "https://www.baofengradio.com/products/uv-5g-pro"
       ],
+      "caveat": "GMRS radio.",
       "note": "GMRS radio."
     },
     "Baofeng|UV-5R": {
@@ -4214,6 +4302,7 @@
         "https://www.baofengradio.com/products/uv-5r",
         "https://baofengtech.com/product/uv-5r/"
       ],
+      "caveat": "Baofeng rates it 4 W/1 W, though it is marketed as 5 W. Many regional and firmware variants exist.",
       "note": "Baofeng rates it 4W/1W though marketed as 5W; many regional/firmware variants."
     },
     "Baofeng|UV-5R Mini": {
@@ -4273,6 +4362,7 @@
       "sources": [
         "https://www.baofengradio.com/products/5r-mini"
       ],
+      "caveat": "",
       "note": ""
     },
     "Baofeng|UV-5RH": {
@@ -4324,6 +4414,7 @@
       "sources": [
         "https://baofengradio.co.uk/baofeng-uv-5rh-10w-multi-band-radio-airband-receive-am-2500mah-battery-long-range/"
       ],
+      "caveat": "Figures come from resellers; real output is reported as about 7–8 W.",
       "note": "Reseller specs; real output reported ~7-8W."
     },
     "Baofeng|UV-5RM Plus": {
@@ -4393,6 +4484,7 @@
         "https://www.baofengradio.com/products/uv-5rm-plus-8w-multi-band-radio",
         "https://www.baofengradio.com/products/battery-2500mah-for-uv-5g-plus"
       ],
+      "caveat": "",
       "note": ""
     },
     "Baofeng|UV-6": {
@@ -4439,6 +4531,7 @@
       "sources": [
         "https://www.hi-radio.com/product/baofeng-uv-6-vhf-uhf-dual-band-handheld-radio-long-range-transceiver-interphone/"
       ],
+      "caveat": "Figures come from a reseller listing only.",
       "note": "Reseller spec only."
     },
     "Baofeng|UV-6R": {
@@ -4486,6 +4579,7 @@
         "https://www.baofengradio.com/products/catalog-uv-6r",
         "https://www.radioddity.com/products/baofeng-uv-6r-dual-band-two-way-radio"
       ],
+      "caveat": "Baofeng lists ham-band ranges; export units are sold as 136–174/400–520 MHz with 65–108 MHz FM receive.",
       "note": "Baofeng lists ham-band ranges; export units sold as 136-174/400-520 with 65-108 FM RX."
     },
     "Baofeng|UV-82": {
@@ -4531,6 +4625,7 @@
       "sources": [
         "https://www.baofengradio.com/products/uv-82-5w-1w-dual-ptt-two-way-radio"
       ],
+      "caveat": "Ranges as listed by Baofeng (US); older export units are 136–174/400–520 MHz.",
       "note": "Ranges as listed by Baofeng (US); older export units 136-174/400-520."
     },
     "Baofeng|UV-82HP": {
@@ -4581,6 +4676,7 @@
       "sources": [
         "https://baofengtech.com/product/uv-82hp/"
       ],
+      "caveat": "BTECH (US) model; 8 W VHF / 7 W UHF on high.",
       "note": "BTECH (US); 8W VHF / 7W UHF high."
     },
     "Baofeng|UV-82WP": {
@@ -4626,6 +4722,7 @@
       "sources": [
         "https://chirpmyradio.com/issues/3485"
       ],
+      "caveat": "Waterproof UV-82 variant (T-56); figures come from user reports.",
       "note": "Waterproof UV-82 variant (T-56); specs from user reports."
     },
     "Baofeng|UV-9G": {
@@ -4656,6 +4753,7 @@
       "sources": [
         "https://www.baofengradio.com/products/uv-9g"
       ],
+      "caveat": "IP67 GMRS radio; also receives VHF/UHF (ranges not published).",
       "note": "IP67 GMRS radio; also receives VHF/UHF (ranges not published)."
     },
     "Baofeng|UV-9R": {
@@ -4706,6 +4804,7 @@
       "sources": [
         "https://www.baofengradio.com/products/uv-9r-dual-band-radio"
       ],
+      "caveat": "IP67. Battery capacity varies with the pack sold.",
       "note": "IP67. Battery size varies by pack sold."
     },
     "Baofeng|UV-B5": {
@@ -4750,8 +4849,10 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [
-        "https://hamgear.wordpress.com/2012/12/18/review-baofeng-uv-b5-baofeng-uv-b6/"
+        "https://hamgear.wordpress.com/2012/12/18/review-baofeng-uv-b5-baofeng-uv-b6/",
+        "http://www.balisemeteo.com/radio/manuels_radios/Baofeng_UV-B5_en.pdf"
       ],
+      "caveat": "Some listings give 144–148/420–450 MHz.",
       "note": "Some listings give 144-148/420-450."
     },
     "Baofeng|UV-S9X3": {
@@ -4804,6 +4905,7 @@
         "https://www.baofengradio.com/products/uv-9s",
         "https://www.newegg.com/p/0R3-008T-00896"
       ],
+      "caveat": "Tri-band UV-9S family; ranges as on Baofeng's UV-9S page.",
       "note": "Tri-band UV-9S family; ranges per Baofeng UV-9S page."
     },
     "Baofeng|W31D": {
@@ -4838,6 +4940,7 @@
       "sources": [
         "https://manuals.plus/ae/1005007841629868"
       ],
+      "caveat": "30 channels; channels 11–16 use Baofeng's proprietary GMSK digital mode.",
       "note": "30 channels; channels 11-16 use Baofeng GMSK digital (not in vocabulary)."
     },
     "Baofeng|W31E": {
@@ -4874,6 +4977,7 @@
         "https://www.baofengglobal.com/BAOFENG-W31E-Waterproof-Long-Range-Radio-pd47629029.html",
         "https://www.waybiker.com/products/baofeng-w31e-ip55-5-watt-uhf-cheapest-sport-waterproof-walkie-talkie"
       ],
+      "caveat": "16-channel waterproof UHF radio; Baofeng's site gives 400–520 MHz and 5 W. Only one reseller quotes a 1500 mAh battery.",
       "note": "16-channel waterproof UHF radio; Baofeng global site gives 400-520MHz and 5W. Battery quoted 1500mAh by one reseller only."
     },
     "Baojie|BJ-218": {
@@ -4920,8 +5024,10 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [
-        "https://www.rigpix.com/mischam/baojie_bj218.htm"
+        "https://www.rigpix.com/mischam/baojie_bj218.htm",
+        "http://m.zastone.com/product/showproduct.php?id=178&lang=en"
       ],
+      "caveat": "Also sold as Zastone Z218/BJ-218. The earliest version was 10 W max. Some units list 220–248 MHz instead of VHF.",
       "note": "Also sold as Zastone Z218/BJ-218. Earliest version was 10W max. Some units list 220-248MHz instead of VHF."
     },
     "Baojie|BJ-318": {
@@ -4967,6 +5073,7 @@
         "https://alafone.com/product/baojie-bj-318-bj318-mini-mobile-radio-transceiver/",
         "https://www.bitbaru.com/site/wp-content/uploads/2024/05/bj318.pdf"
       ],
+      "caveat": "Some listings give UHF as 400–490 MHz. Dual display and dual standby only.",
       "note": "Some listings give UHF 400-490MHz. Dual display/dual standby only."
     },
     "Baojie|BJ-9900": {
@@ -5016,6 +5123,7 @@
         "https://hamgear.wordpress.com/2013/06/27/baojie-bj-9900-dual-band-mobile/",
         "https://rigreference.com/rigs/6004-baojie-bj-9900"
       ],
+      "caveat": "40 W VHF / 35 W UHF. Ham-only versions transmit 144–148/430–440 MHz. Airband receive is AM.",
       "note": "40W VHF / 35W UHF. Ham-only versions TX 144-148/430-440MHz. Airband RX specified as AM."
     },
     "Baojie|BJ-UV55": {
@@ -5060,6 +5168,7 @@
         "https://rigreference.com/rigs/6005-baojie-bj-uv55",
         "https://qrpblog.com/2013/09/baojie-bj-uv55-new-chinese-mobile-vhfuhf-radio/"
       ],
+      "caveat": "45 W VHF / 35 W UHF. Twin receive.",
       "note": "45W VHF / 35W UHF. Twin RX."
     },
     "Boblov|X3Plus": {
@@ -5096,6 +5205,7 @@
         "https://www.ebay.com.au/p/28032712955",
         "https://cartnear.com/itm/boblov-x3plus-helmet-wireless-walkie-talkie-intercom-2way-radio-interphone-bike-1731899"
       ],
+      "caveat": "Helmet-mounted 16-channel UHF intercom (850 mAh LiPo, 1 W per listing) with a Bluetooth headset link, not a conventional handheld.",
       "note": "Helmet-mounted 16-channel UHF intercom/walkie-talkie (850mAh LiPo, 1W per listing) with Bluetooth headset link, not a conventional HT."
     },
     "Boristone|8RS": {
@@ -5162,6 +5272,7 @@
       "sources": [
         "https://www.radtels.com/products/none-gps-buletooth-ver-radtel-rt-490-amateur-ham-radio-256ch-air-band-walkie-talkie-vox-sos-lcd-police-scanner-aviation"
       ],
+      "caveat": "Figures are from the Radtel RT-490 this radio is cloned from and have not been confirmed for this rebadge.",
       "note": "Radtel RT-490 / JC-8629 family clone; bands taken from the RT-490 spec, not verified for this rebadge."
     },
     "CRT|Micron UV": {
@@ -5205,6 +5316,7 @@
       "sources": [
         "https://www.rigpix.com/mischam/crt_micronuv.htm"
       ],
+      "caveat": "Rebadged AnyTone AT-778UV (EU version).",
       "note": "Rebadged AnyTone AT-778UV (EU version)."
     },
     "CRT|Micron UV V2": {
@@ -5248,6 +5360,7 @@
       "sources": [
         "https://www.rigpix.com/mischam/crt_micronuv.htm"
       ],
+      "caveat": "VOX-firmware V2 of the CRT Micron UV, an AnyTone AT-778UV rebadge; figures are from the V1.",
       "note": "V2 (VOX firmware) of the CRT Micron UV, an AnyTone AT-778UV rebadge; specs from the V1."
     },
     "Cignus|XTR-5": {
@@ -5296,6 +5409,7 @@
         "https://www.szanysecu.com/h-pd-172.html",
         "https://dxcanada.ca/anysecu-ac-580-gs-5b/"
       ],
+      "caveat": "Senhaix 8800 rebadge, the same radio as the Anysecu AC-580 / Radioddity GS-5B; figures are from those.",
       "note": "Senhaix 8800 rebadge, same radio as Anysecu AC-580 / Radioddity GS-5B; specs from those."
     },
     "Commander|KG-UV": {
@@ -5314,6 +5428,7 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [],
+      "caveat": "",
       "note": "CSV file format driver (Commander software export), not a radio."
     },
     "Explorer|QRZ-1": {
@@ -5365,6 +5480,7 @@
         "https://www.gigaparts.com/explorer-qrz-1-5w-vhf-uhf-handheld-transceiver.html",
         "https://manuals.plus/explorer/qrz-1-5w-vhfuhf-handheld-transceiver-manual-pdf"
       ],
+      "caveat": "GigaParts-branded TYT TH-UV88 derivative. Dual watch, not dual receive. A USB-C charging battery is sold as an accessory.",
       "note": "GigaParts-branded TYT TH-UV88 derivative. Dual watch, not dual receive. A USB-C charging battery is sold as an accessory."
     },
     "Feidaxin|FD-150A": {
@@ -5402,6 +5518,7 @@
       "sources": [
         "https://www.manualslib.com/manual/852508/Fdc-Fd-150a.html"
       ],
+      "caveat": "NiMH pack shared with the FD-160A/450A/460A.",
       "note": "Battery shared with FD-160A/450A/460A; NiMH pack, capacity not confirmed."
     },
     "Feidaxin|FD-160A": {
@@ -5437,8 +5554,10 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [
-        "https://www.manualslib.com/manual/852508/Fdc-Fd-150a.html"
+        "https://www.manualslib.com/manual/852508/Fdc-Fd-150a.html",
+        "http://foxxs.blogspot.com/2010/01/review-of-feidaxin-fdc-460a-ham-radio.html"
       ],
+      "caveat": "NiMH pack shared with the FD-150A/450A/460A.",
       "note": "Battery shared with FD-150A/450A/460A; NiMH pack, capacity not confirmed."
     },
     "Feidaxin|FD-268A": {
@@ -5476,6 +5595,7 @@
       "sources": [
         "https://hamgear.wordpress.com/2011/05/18/review-feidaxin-fd-268a-fd-268b/"
       ],
+      "caveat": "",
       "note": ""
     },
     "Feidaxin|FD-268B": {
@@ -5513,6 +5633,7 @@
       "sources": [
         "https://hamgear.wordpress.com/2011/05/18/review-feidaxin-fd-268a-fd-268b/"
       ],
+      "caveat": "",
       "note": ""
     },
     "Feidaxin|FD-288A": {
@@ -5531,6 +5652,7 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [],
+      "caveat": "Reportedly the VHF sibling of the FD-288B.",
       "note": "No specification found online; reportedly the VHF sibling of FD-288B."
     },
     "Feidaxin|FD-288B": {
@@ -5561,6 +5683,7 @@
       "sources": [
         "https://www.409shop.com/409shop_product.php?id=102630"
       ],
+      "caveat": "UHF sibling of the FD-288A and a variant of the FD-268; one retailer lists the UHF model as 400–470 MHz.",
       "note": "Retailer lists FDC FD-288 UHF as 400-470MHz (search snippet only); UHF sibling of FD-288A, variant of FD-268. Nothing else found."
     },
     "Feidaxin|FD-450A": {
@@ -5598,6 +5721,7 @@
       "sources": [
         "https://www.manualslib.com/manual/852508/Fdc-Fd-150a.html"
       ],
+      "caveat": "NiMH pack shared with the FD-150A/160A/460A.",
       "note": "Battery shared with FD-150A/160A/460A; NiMH pack, capacity not confirmed."
     },
     "Feidaxin|FD-460A": {
@@ -5633,8 +5757,10 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [
-        "https://www.manualslib.com/manual/852508/Fdc-Fd-150a.html"
+        "https://www.manualslib.com/manual/852508/Fdc-Fd-150a.html",
+        "http://foxxs.blogspot.com/2010/01/review-of-feidaxin-fdc-460a-ham-radio.html"
       ],
+      "caveat": "NiMH pack. Some units are sold as 410–480 MHz.",
       "note": "NiMH pack, capacity not confirmed. Some units sold as 410-480 MHz."
     },
     "Feidaxin|FD-460UH": {
@@ -5673,6 +5799,7 @@
         "https://www.radioshop888.com/radioshop_product.php?id=102610",
         "https://chirpmyradio.com/issues/4283"
       ],
+      "caveat": "410–480 MHz variant of the FD-460A; other figures are taken from the FD-460A.",
       "note": "410-480 MHz variant of the FD-460A; other specs taken from FD-460A."
     },
     "Generic|CSV": {
@@ -5691,6 +5818,7 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [],
+      "caveat": "",
       "note": "CHIRP CSV file format, not a radio."
     },
     "HamGeek|HG-590": {
@@ -5757,6 +5885,7 @@
       "sources": [
         "https://www.radtels.com/products/none-gps-buletooth-ver-radtel-rt-490-amateur-ham-radio-256ch-air-band-walkie-talkie-vox-sos-lcd-police-scanner-aviation"
       ],
+      "caveat": "Figures are from the Radtel RT-490 this radio is cloned from and have not been confirmed for this rebadge.",
       "note": "Radtel RT-490 / JC-8629 family clone; bands taken from the RT-490 spec, not verified for this rebadge."
     },
     "Hiroyasu|HI-8811": {
@@ -5823,6 +5952,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-470l-5w-6-bands-amateur-ham-two-way-radio-station-256ch-air-band-walkie-talkie-noaa-lcd-color-police-scanner-aviation"
       ],
+      "caveat": "Figures are from the Radtel RT-470L (JC-8810) this radio is cloned from and have not been confirmed for this rebadge.",
       "note": "Radtel RT-470L (JC-8810) family clone; bands taken from the RT-470L spec, not verified for this rebadge."
     },
     "HobbyPCB|RS-UV3": {
@@ -5875,6 +6005,7 @@
         "https://www.hobbypcb.com/products/radio-shield-rs-uv3",
         "https://www.hobbypcb.com/products/radio-shield-rs-uv3a"
       ],
+      "caveat": "Board-level 3-band FM transceiver (Arduino shield), 23 dBm output. Obsolete, replaced by the RS-UV3A. The maker cites on-board APRS/packet support.",
       "note": "Board-level 3-band FM transceiver (Arduino shield), 23dBm output. Obsolete, replaced by RS-UV3A. Maker cites on-board APRS/packet support."
     },
     "Icom|IC-208H": {
@@ -5923,6 +6054,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic208h.htm"
       ],
+      "caveat": "TX ranges are the USA/Australia version's; Europe is 144–146/430–440 MHz. US receive has cellular bands blocked.",
       "note": "TX per rigpix USA/Australia listing; Europe 144-146/430-440. Cellular blocked on US RX."
     },
     "Icom|IC-2100H": {
@@ -5958,6 +6090,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic2100h.htm"
       ],
+      "caveat": "",
       "note": ""
     },
     "Icom|IC-2200H": {
@@ -5993,6 +6126,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic2200h.htm"
       ],
+      "caveat": "D-STAR DV needs the optional UT-118 module; GPS position only via an external GPS with the DV option.",
       "note": "D-STAR DV via optional UT-118 module; GPS position only via external GPS with the DV option."
     },
     "Icom|IC-2300H": {
@@ -6028,6 +6162,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic2300h.htm"
       ],
+      "caveat": "",
       "note": ""
     },
     "Icom|IC-2720H": {
@@ -6072,6 +6207,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic2720h.htm"
       ],
+      "caveat": "USA version; 35 W max on 70 cm. Receive has cellular bands blocked.",
       "note": "USA version; 35 W max on 70 cm. Cellular blocked on US RX."
     },
     "Icom|IC-2730A": {
@@ -6116,6 +6252,7 @@
       "sources": [
         "https://www.icomamerica.com/lineup/products/IC-2730A/"
       ],
+      "caveat": "The optional UT-133 Bluetooth unit is for the VS-3 headset only.",
       "note": "Optional UT-133 Bluetooth is for the VS-3 headset only."
     },
     "Icom|IC-2730E": {
@@ -6152,6 +6289,7 @@
         "https://www.icomamerica.com/lineup/products/IC-2730A/",
         "https://www.icomjapan.com/lineup/products/IC-2730A/"
       ],
+      "caveat": "European version of the IC-2730A, with European amateur TX band edges.",
       "note": "European version of IC-2730A; European amateur TX band edges. RX range for E version not confirmed."
     },
     "Icom|IC-2820H": {
@@ -6196,6 +6334,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic2820h.htm"
       ],
+      "caveat": "D-STAR DV and GPS need the optional UT-123 unit. US receive has cellular bands blocked.",
       "note": "D-STAR DV and GPS via optional UT-123 unit. Cellular blocked on US RX."
     },
     "Icom|IC-7000": {
@@ -6288,6 +6427,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic7000.htm"
       ],
+      "caveat": "USA amateur band TX. 50 W on 2 m, 35 W on 70 cm.",
       "note": "USA amateur band TX. 50 W on 2 m, 35 W on 70 cm."
     },
     "Icom|IC-7100": {
@@ -6381,6 +6521,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic7100.htm"
       ],
+      "caveat": "USA amateur band TX; the EU version adds 4 m. 50 W on 2 m, 35 W on 70 cm.",
       "note": "USA amateur band TX; EU adds 4 m. 50 W on 2 m, 35 W on 70 cm."
     },
     "Icom|IC-7200": {
@@ -6459,6 +6600,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic7200.htm"
       ],
+      "caveat": "USA amateur band TX.",
       "note": "USA amateur band TX."
     },
     "Icom|IC-7300": {
@@ -6538,6 +6680,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic7300.htm"
       ],
+      "caveat": "USA amateur band TX; the EU version adds 4 m. Discontinued in 2025, succeeded by the IC-7300MK2.",
       "note": "USA amateur band TX; EU adds 4 m. Discontinued 2025, succeeded by IC-7300MK2."
     },
     "Icom|IC-7400": {
@@ -6622,6 +6765,7 @@
         "https://www.rigpix.com/icom/ic7400.htm",
         "https://www.qsl.net/pa2jbn/ic7400pg.htm"
       ],
+      "caveat": "Ranges are the US-equivalent IC-746PRO's; the European IC-7400 transmits only 144–146 MHz on VHF and reportedly receives only 144–146 MHz there.",
       "note": "Ranges of the US-equivalent IC-746PRO; the IC-7400 (EU) transmits only 144-146 and reportedly receives only 144-146 on VHF."
     },
     "Icom|IC-7410": {
@@ -6701,6 +6845,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic7410.htm"
       ],
+      "caveat": "USA amateur band TX.",
       "note": "USA amateur band TX."
     },
     "Icom|IC-746": {
@@ -6784,6 +6929,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic746.htm"
       ],
+      "caveat": "USA version; Europe transmits 144–146 MHz.",
       "note": "USA version; Europe transmits 144-146."
     },
     "Icom|IC-7610": {
@@ -6864,6 +7010,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic7610.htm"
       ],
+      "caveat": "USA amateur band TX; the EU version adds 137 kHz.",
       "note": "USA amateur band TX; EU adds 137 kHz."
     },
     "Icom|IC-91/92AD": {
@@ -6906,6 +7053,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic91ad.htm"
       ],
+      "caveat": "The IC-91AD needs the optional UT-121 for D-STAR; the IC-92AD has it built in and takes the HM-175GPS mic. US receive has cellular bands blocked.",
       "note": "IC-91AD needs optional UT-121 for D-STAR; IC-92AD has it built in and takes the HM-175GPS mic. Cellular blocked on US RX."
     },
     "Icom|IC-910": {
@@ -6951,6 +7099,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic910h.htm"
       ],
+      "caveat": "IC-910H, USA version. 75 W on 70 cm. 23 cm (1240–1300 MHz, 1–10 W) needs the optional UX-910.",
       "note": "IC-910H, USA version. 75 W on 70 cm. 23 cm (1240-1300, 1-10 W) with optional UX-910."
     },
     "Icom|IC-9700": {
@@ -7007,6 +7156,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ic9700.htm"
       ],
+      "caveat": "USA version. 75 W on 70 cm, 10 W on 23 cm; the lowest setting is 0.1 W on 23 cm.",
       "note": "USA version. 75 W on 70 cm, 10 W on 23 cm; lowest setting 0.1 W on 23 cm."
     },
     "Icom|IC-E90": {
@@ -7055,6 +7205,7 @@
         "https://www.rigpix.com/icom/ict90a.htm",
         "https://www.rigpix.com/icom/ice90.htm"
       ],
+      "caveat": "Ranges are the US IC-T90A's; the European IC-E90 transmits 50–52/144–146/430–440 MHz. BP-217 Li-ion; desktop charger optional.",
       "note": "Ranges for the US IC-T90A; IC-E90 (EU) transmits 50-52/144-146/430-440. BP-217 Li-ion; desktop charger optional."
     },
     "Icom|IC-F621-2": {
@@ -7088,6 +7239,7 @@
         "https://used-radios.com/products/icom-ic-f621-2-tr-uhf-440-490-mhz-256-ch-45-watt-trunking-mobile-radio",
         "https://fccid.io/AFJIC-F621-2"
       ],
+      "caveat": "UHF land-mobile, 45 W max. LTR/PassPort trunking version.",
       "note": "UHF land-mobile, 45 W max; low power settings not found. LTR/PassPort trunking version."
     },
     "Icom|IC-M710": {
@@ -7127,6 +7279,7 @@
         "https://www.icomjapan.com/lineup/products/IC-M710/",
         "https://mobilesystems.nz/products/icom-ic-m710"
       ],
+      "caveat": "MF/HF marine SSB; 60 W PEP above 24 MHz. Succeeded by the IC-M803.",
       "note": "MF/HF marine SSB; 60 W PEP above 24 MHz. Succeeded by IC-M803."
     },
     "Icom|IC-P7": {
@@ -7168,6 +7321,7 @@
       "sources": [
         "https://www.rigpix.com/icom/icp7a.htm"
       ],
+      "caveat": "Ranges are the US IC-P7A's. 1 W max on 70 cm. US receive has cellular bands blocked.",
       "note": "Ranges for US IC-P7A. 1 W max on 70 cm. Cellular blocked on US RX."
     },
     "Icom|IC-Q7A": {
@@ -7209,6 +7363,7 @@
       "sources": [
         "https://www.rigpix.com/icom/icq7a.htm"
       ],
+      "caveat": "Runs on 2 AA cells; single power level (350 mW on 2 m, 300 mW on 70 cm). US receive has cellular bands blocked.",
       "note": "Runs on 2 AA cells; single power level (350 mW 2 m, 300 mW 70 cm). Cellular blocked on US RX."
     },
     "Icom|IC-T10": {
@@ -7260,6 +7415,7 @@
         "https://www.icomamerica.com/lineup/products/IC-T10/",
         "https://www.rigpix.com/icom/ict10.htm"
       ],
+      "caveat": "USA version; BP-280 battery and BC-213 desktop charger supplied.",
       "note": "USA version; BP-280 battery and BC-213 desktop charger supplied."
     },
     "Icom|IC-T70": {
@@ -7306,6 +7462,7 @@
         "https://www.icomamerica.com/lineup/products/IC-T70A/",
         "https://www.rigpix.com/icom/ict70a.htm"
       ],
+      "caveat": "The supplied battery varies by version (BP-265 Li-ion or BP-263 AA case); BC-193 desktop charger.",
       "note": "Supplied battery varies by version (BP-265 Li-ion or BP-263 AA case); BC-193 desktop charger."
     },
     "Icom|IC-T7H": {
@@ -7346,6 +7503,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ict7h.htm"
       ],
+      "caveat": "USA version TX; 6 W needs 13.5 V external power.",
       "note": "USA version TX; 6 W at 13.5 V external power."
     },
     "Icom|IC-T8A": {
@@ -7399,6 +7557,7 @@
       "sources": [
         "https://www.rigpix.com/icom/ict8a.htm"
       ],
+      "caveat": "USA version; 5 W needs 13.5 V external power.",
       "note": "USA version; 5 W at 13.5 V external power."
     },
     "Icom|IC-U82": {
@@ -7434,6 +7593,7 @@
       "sources": [
         "https://www.rigpix.com/icom/icu82.htm"
       ],
+      "caveat": "Ranges are the non-US version's as listed by RigPix. D-STAR DV needs the optional UT-118.",
       "note": "Ranges as listed by rigpix (non-US version). D-STAR DV via optional UT-118."
     },
     "Icom|IC-V80": {
@@ -7469,6 +7629,7 @@
       "sources": [
         "https://www.icomamerica.com/lineup/products/IC-V80/"
       ],
+      "caveat": "USA version; the supplied battery and charger vary by version. Succeeded by the IC-V86.",
       "note": "USA version; supplied battery and charger vary by version. Succeeded by IC-V86."
     },
     "Icom|IC-V82": {
@@ -7504,6 +7665,7 @@
       "sources": [
         "https://www.rigpix.com/icom/icv82.htm"
       ],
+      "caveat": "USA version. D-STAR DV needs the optional UT-118.",
       "note": "USA version. D-STAR DV via optional UT-118."
     },
     "Icom|IC-V86": {
@@ -7541,6 +7703,7 @@
       "sources": [
         "https://www.icomamerica.com/lineup/products/IC-V86/"
       ],
+      "caveat": "USA version; BP-298 Li-ion and BC-240 desktop charger supplied.",
       "note": "USA version; BP-298 Li-ion and BC-240 desktop charger supplied."
     },
     "Icom|IC-W32A": {
@@ -7585,6 +7748,7 @@
       "sources": [
         "https://www.rigpix.com/icom/icw32a.htm"
       ],
+      "caveat": "",
       "note": ""
     },
     "Icom|IC-W32E": {
@@ -7625,6 +7789,7 @@
         "https://rigreference.com/rigs/3268-icom-ic-w32e",
         "https://www.repeater-builder.com/icom/pdfs/ic-w32a-e-inst-man.pdf"
       ],
+      "caveat": "European version of the IC-W32A; receive range per RigReference.",
       "note": "European version of IC-W32A; RX range per RigReference."
     },
     "Icom|ID-31A": {
@@ -7664,6 +7829,7 @@
         "https://www.gigaparts.com/icom-id-31a.html",
         "https://icomuk.co.uk/files/icom/PDF/productManual/ID31_UserManual_0.pdf"
       ],
+      "caveat": "USA version; BP-271 and BC-167 wall charger supplied. Position reporting is D-PRS, not RF APRS.",
       "note": "USA version; BP-271 and BC-167 wall charger supplied. D-PRS position reporting, not RF APRS."
     },
     "Icom|ID-4100": {
@@ -7709,6 +7875,7 @@
       "sources": [
         "https://www.icomamerica.com/lineup/products/ID-4100A/"
       ],
+      "caveat": "ID-4100A USA version. The optional UT-137 Bluetooth unit links the RS-MS1A/I apps. Position reporting is D-PRS, not RF APRS.",
       "note": "ID-4100A USA version. Optional UT-137 Bluetooth links RS-MS1A/I apps; D-PRS, not RF APRS."
     },
     "Icom|ID-51": {
@@ -7761,6 +7928,7 @@
       "sources": [
         "https://www.rigpix.com/icom/id51a.htm"
       ],
+      "caveat": "ID-51A USA version; BP-271 battery. Position reporting is D-PRS, not RF APRS.",
       "note": "ID-51A USA version; BP-271 battery. D-PRS position reporting, not RF APRS."
     },
     "Icom|ID-51 Plus": {
@@ -7813,6 +7981,7 @@
       "sources": [
         "https://www.rigpix.com/icom/id51a.htm"
       ],
+      "caveat": "Firmware/feature update of the ID-51A with the same RF specs. Position reporting is D-PRS, not RF APRS.",
       "note": "Firmware/feature update of the ID-51A; same RF specs. D-PRS, not RF APRS."
     },
     "Icom|ID-51 Plus2": {
@@ -7865,6 +8034,7 @@
       "sources": [
         "https://www.rigpix.com/icom/id51a.htm"
       ],
+      "caveat": "Update of the ID-51A with the same RF specs; succeeded by the ID-52A. Position reporting is D-PRS, not RF APRS.",
       "note": "Update of the ID-51A with same RF specs; succeeded by ID-52A. D-PRS, not RF APRS."
     },
     "Icom|ID-5100": {
@@ -7910,6 +8080,7 @@
       "sources": [
         "https://www.icomamerica.com/lineup/products/ID-5100A/"
       ],
+      "caveat": "ID-5100A USA version. Bluetooth needs the optional UT-133. Position reporting is D-PRS, not RF APRS.",
       "note": "ID-5100A USA version. Optional UT-133 Bluetooth; D-PRS, not RF APRS."
     },
     "Icom|ID-800H": {
@@ -7963,6 +8134,7 @@
       "sources": [
         "https://www.rigpix.com/icom/id800h.htm"
       ],
+      "caveat": "USA version; 50 W max on 70 cm. GPS only via an external receiver.",
       "note": "USA version; 50 W max on 70 cm. GPS only via external receiver."
     },
     "Icom|ID-80H": {
@@ -8004,6 +8176,7 @@
       "sources": [
         "https://www.icom.co.jp/lineup/products/ID-80/"
       ],
+      "caveat": "Japanese domestic ID-80 handheld (5 W max). BP-267 1200 mAh minimum; BC-167S charger. GPS via the HM-189GPS mic.",
       "note": "Japanese domestic ID-80 handheld (5 W max). BP-267 1200 mAh min; BC-167S charger. GPS via HM-189GPS mic."
     },
     "Icom|ID-880H": {
@@ -8054,6 +8227,7 @@
         "https://www.gigaparts.com/icom-id-880h.html",
         "https://www.manualslib.com/manual/1280030/Icom-Id-880h.html"
       ],
+      "caveat": "USA version with cellular bands blocked on receive. GPS only via an external receiver.",
       "note": "USA version, cellular blocked on RX. GPS only via external receiver."
     },
     "Intek|HR-2040": {
@@ -8081,6 +8255,7 @@
         "https://www.rigpix.com/anytone/at5888uv.htm",
         "https://www.passion-radio.com/mobile/at588uv-2287.html"
       ],
+      "caveat": "Rebadged AnyTone AT-5888UV; figures are from the 5888UV. EU ranges are not confirmed for the Intek.",
       "note": "Rebadged AnyTone AT-5888UV (per CHIRP); specs from the 5888UV. EU ranges not confirmed for the Intek."
     },
     "Intek|KT-980HP": {
@@ -8132,6 +8307,7 @@
         "https://www.elettronicagm.com/catalogo/portmultibanda/KT-980H/pag-KT-980HP.html",
         "https://www.manualslib.com/manual/766349/Intek-Kt-980hp.html"
       ],
+      "caveat": "EU/Italian spec: 144–146/430–440 MHz (optionally 136–174/400–480 MHz where permitted), 0.5/4/8 W (7 W UHF). Based on the Baofeng UV-5R family.",
       "note": "EU/Italian spec: 144-146/430-440MHz (optionally 136-174/400-480 where permitted), 0.5/4/8W (7W UHF). Baofeng UV-5R-family based."
     },
     "JJCC|JC-8629": {
@@ -8202,6 +8378,7 @@
         "https://www.radtels.com/products/none-gps-buletooth-ver-radtel-rt-490-amateur-ham-radio-256ch-air-band-walkie-talkie-vox-sos-lcd-police-scanner-aviation",
         "https://www.radtels.com/products/walkie-talkie-li-ion-battery-pack-2000mah-for-radtel-rt-490-two-way-ham-radio"
       ],
+      "caveat": "OEM of the Radtel RT-490; figures are from the RT-490. GPS and Bluetooth depend on the version.",
       "note": "OEM of the Radtel RT-490; specs from the RT-490. GPS/Bluetooth depend on version."
     },
     "Jetstream|JT220M": {
@@ -8237,6 +8414,7 @@
       "sources": [
         "https://www.rigpix.com/mischam/jetstream_jt220m.htm"
       ],
+      "caveat": "1.25 m single-band mobile from 2009, discontinued.",
       "note": "1.25m single-band mobile, 2009, discontinued."
     },
     "Jetstream|JT270M": {
@@ -8285,6 +8463,7 @@
       "sources": [
         "https://www.rigpix.com/mischam/leixen_vv898.htm"
       ],
+      "caveat": "Rebadged Leixen VV-898; figures are from the VV-898.",
       "note": "Rebadged Leixen VV-898 (per CHIRP); specs from the VV-898."
     },
     "Jetstream|JT270MH": {
@@ -8309,6 +8488,7 @@
         "https://batteriesamerica.com/products/jt270mh",
         "https://www.ebay.com/p/1158130794"
       ],
+      "caveat": "25 W version of the Jetstream JT-270M (Leixen VV-898S family); listings give 144–148/430–450 MHz. The 10 W JT-270M's manual shows dual watch only and FM broadcast receive.",
       "note": "25W version of the Jetstream JT-270M (Leixen VV-898S family); listings give 144-148/430-450MHz. The 10W JT-270M manual shows dual watch only and FM broadcast RX."
     },
     "Jianpai|8800_Plus": {
@@ -8375,6 +8555,7 @@
       "sources": [
         "https://www.radtels.com/products/none-gps-buletooth-ver-radtel-rt-490-amateur-ham-radio-256ch-air-band-walkie-talkie-vox-sos-lcd-police-scanner-aviation"
       ],
+      "caveat": "Figures are from the Radtel RT-490 this radio is cloned from and have not been confirmed for this rebadge.",
       "note": "Radtel RT-490 / JC-8629 family clone; bands taken from the RT-490 spec, not verified for this rebadge."
     },
     "KSUN|M6": {
@@ -8410,6 +8591,7 @@
         "https://manuals.plus/ae/1005002935500120",
         "https://www.amazon.com/Earpiece-Waterproof-Rechargeable-KSUN-M6/dp/B098WTKJ57"
       ],
+      "caveat": "Mini UHF radio with dot-matrix display and USB-C. Export manual: 400–470 MHz, 16 channels; the US version is sold as 22-channel FRS. Advertised 4000 mAh/6 W is not credible at 114 g.",
       "note": "Mini UHF radio with dot-matrix display and USB-C. Export manual: 400-470MHz, 16ch; US version sold as 22ch FRS. Advertised 4000mAh/6W not credible at 114g, left null."
     },
     "KYD|IP-620": {
@@ -8435,6 +8617,7 @@
       "sources": [
         "https://www.kydera.com/products-details/565.html"
       ],
+      "caveat": "Sold in 136–174, 245–260, 350–390 and 400–470 MHz versions at 5/4 W; it is unclear which version this page covers. Russian variant: Argut A-36.",
       "note": "Maker page lists band versions 136-174, 245-260, 350-390 and 400-470MHz and 5/4W; which version CHIRP targets is unclear. Russian variant Argut A-36."
     },
     "KYD|NC-630A": {
@@ -8460,6 +8643,7 @@
       "sources": [
         "https://www.kydera.com/products-details/545.html"
       ],
+      "caveat": "16-channel 3 W radio sold in single-band versions: 136–174, 350–390, 400–430, 440–480 and 480–520 MHz. Also sold as Plant-Tours MT-700.",
       "note": "16-channel radio; maker lists single-band versions 136-174, 350-390, 400-430, 440-480 and 480-520MHz, 3W. Also sold as Plant-Tours MT-700."
     },
     "Kenwood|HMK": {
@@ -8478,6 +8662,7 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [],
+      "caveat": "",
       "note": "Kenwood HMK memory file format, not a radio"
     },
     "Kenwood|ITM": {
@@ -8496,6 +8681,7 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [],
+      "caveat": "",
       "note": "Kenwood ITM memory file format, not a radio"
     },
     "Kenwood|NX-800": {
@@ -8517,6 +8703,7 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [],
+      "caveat": "UHF NEXEDGE mobile.",
       "note": "UHF NEXEDGE mobile; band/power not verified from a source"
     },
     "Kenwood|TH-D7": {
@@ -8562,6 +8749,7 @@
         "https://www.rigpix.com/kenwood/thd7a.htm",
         "https://www.wiscointl.com/kenwood/amateur/thd7a/specs.htm"
       ],
+      "caveat": "Ranges are the US TH-D7A's; 6 W at 13.8 V DC, about 5 W on the 9.6 V pack.",
       "note": "US TH-D7A ranges; 6 W at 13.8 V DC, ~5 W on 9.6 V pack"
     },
     "Kenwood|TH-D72 (clone mode)": {
@@ -8608,6 +8796,7 @@
         "https://www.kenwood.com/usa/com/amateur/th-d72a/spec.html",
         "https://www.manualslib.com/manual/515244/Kenwood-Th-D72a.html?page=14"
       ],
+      "caveat": "Ranges are the US TH-D72A's; the supplied wall charger plugs into DC-IN.",
       "note": "TH-D72A (US) ranges; supplied wall charger plugs into DC-IN"
     },
     "Kenwood|TH-D72 (live mode)": {
@@ -8654,6 +8843,7 @@
         "https://www.kenwood.com/usa/com/amateur/th-d72a/spec.html",
         "https://www.manualslib.com/manual/515244/Kenwood-Th-D72a.html?page=14"
       ],
+      "caveat": "Ranges are the US TH-D72A's; the supplied wall charger plugs into DC-IN.",
       "note": "TH-D72A (US) ranges; supplied wall charger plugs into DC-IN"
     },
     "Kenwood|TH-D74 (clone mode)": {
@@ -8706,6 +8896,7 @@
         "https://www.manualslib.com/manual/1170023/Kenwood-Th-D74a.html?page=5",
         "https://kk4vcz.com/posts/th-d74-android/"
       ],
+      "caveat": "Ranges are the US TH-D74A's; 222 MHz TX is on the A model only.",
       "note": "TH-D74A (US) ranges; 222 MHz TX on A model only"
     },
     "Kenwood|TH-D74 (live mode)": {
@@ -8758,6 +8949,7 @@
         "https://www.manualslib.com/manual/1170023/Kenwood-Th-D74a.html?page=5",
         "https://kk4vcz.com/posts/th-d74-android/"
       ],
+      "caveat": "Ranges are the US TH-D74A's; 222 MHz TX is on the A model only.",
       "note": "TH-D74A (US) ranges; 222 MHz TX on A model only"
     },
     "Kenwood|TH-D75": {
@@ -8809,6 +9001,7 @@
         "https://www.kenwood.com/usa/com/amateur/th-d75a/spec.html",
         "https://www.kenwood.com/i/products/info/amateur/mcpd75_e.html"
       ],
+      "caveat": "Ranges are the US TH-D75A's; 222 MHz TX is on the A model only.",
       "note": "TH-D75A (US) ranges; 222 MHz TX on A model only"
     },
     "Kenwood|TH-D7G": {
@@ -8853,6 +9046,7 @@
       "sources": [
         "https://www.rigpix.com/kenwood/thd7ag.htm"
       ],
+      "caveat": "TH-D7A(G), US ranges; 6 W at 13.8 V DC, about 5 W on the 9.6 V pack.",
       "note": "TH-D7A(G), US ranges; 6 W at 13.8 V DC, ~5 W on 9.6 V pack"
     },
     "Kenwood|TH-F6": {
@@ -8901,6 +9095,7 @@
         "https://www.wiscointl.com/kenwood/amateur/thf6a/specs.htm",
         "https://www.rigpix.com/kenwood/thf6a.htm"
       ],
+      "caveat": "US TH-F6A. Band B receives 0.1–1300 MHz with cellular gaps; SSB/CW only below 470 MHz.",
       "note": "TH-F6A (US); B band RX 0.1-1300 MHz with cellular gaps; SSB/CW only below 470 MHz"
     },
     "Kenwood|TH-F7": {
@@ -8936,6 +9131,7 @@
         "https://www.wiscointl.com/kenwood/amateur/thf6a/specs.htm",
         "https://www.rigpix.com/kenwood/thf6a.htm"
       ],
+      "caveat": "The TH-F7E is the European TH-F6A (no 222 MHz); figures are from the TH-F6A, and TX bands are region-limited.",
       "note": "TH-F7E is the European TH-F6A (no 222 MHz); specs taken from TH-F6A, TX bands region-limited"
     },
     "Kenwood|TH-G71": {
@@ -8971,6 +9167,7 @@
       "sources": [
         "https://www.rigpix.com/kenwood/thg71a.htm"
       ],
+      "caveat": "US TH-G71A; high power is 2.5–6 W depending on supply voltage.",
       "note": "TH-G71A US; high power 2.5-6 W depending on supply voltage"
     },
     "Kenwood|TH-K2": {
@@ -9007,6 +9204,7 @@
         "https://www.wiscointl.com/kenwood/amateur/thk2at/specs.htm",
         "https://www.rigpix.com/kenwood/thk2at.htm"
       ],
+      "caveat": "TH-K2AT; ships with the PB-43N NiMH pack.",
       "note": "TH-K2AT; ships with PB-43N NiMH pack, capacity not documented"
     },
     "Kenwood|TK-2140K": {
@@ -9045,6 +9243,7 @@
         "https://www.wiscointl.com/kenwood/LandMobile/tk2140-3140/specs.htm",
         "https://mra-raycom.com/wp-content/uploads/simple-file-list/Specifications/Mobile/TK-2140-3140-Product-Brochure.pdf"
       ],
+      "caveat": "",
       "note": ""
     },
     "Kenwood|TK-2180": {
@@ -9083,6 +9282,7 @@
         "https://www.wiscointl.com/kenwood/LandMobile/tk2180-3180/specs.htm",
         "https://kenwoodcommunications.co.uk/files/file/comms/uk/brochures/analogue/handhelds/temp/tk2180_3180_web_V3.pdf"
       ],
+      "caveat": "",
       "note": ""
     },
     "Kenwood|TK-260": {
@@ -9110,6 +9310,7 @@
       "sources": [
         "https://surplusradios.com/products/used-kenwood-tk-260-vhf-portable-radio"
       ],
+      "caveat": "Older (1990s) 4-channel non-G model; a retailer lists up to 5 W. 136–150 and 150–174 MHz versions exist.",
       "note": "Older (1990s) 4-channel non-G model; retailer lists up to 5W. CHIRP knows 136-150 and 150-174MHz versions; no maker spec found."
     },
     "Kenwood|TK-260G": {
@@ -9147,6 +9348,7 @@
       "sources": [
         "https://mra-raycom.com/wp-content/uploads/simple-file-list/Specifications/portables/TK-260G-360G-Product-Brochure.pdf"
       ],
+      "caveat": "8 channels, LED only. US K type is 150–174 MHz; a 136–150 MHz variant exists.",
       "note": "8 ch, LED only; US K type 150-174 MHz, 136-150 MHz variant exists"
     },
     "Kenwood|TK-270": {
@@ -9182,6 +9384,7 @@
         "https://wiki.radioreference.com/index.php/Kenwood_TK-270/370",
         "https://www.manualslib.com/manual/4162219/Kenwood-Tk-270.html"
       ],
+      "caveat": "Older non-G model, 32 channels, about 5 W.",
       "note": "Older non-G model, 32 ch, ~5 W"
     },
     "Kenwood|TK-270G": {
@@ -9219,6 +9422,7 @@
       "sources": [
         "https://mra-raycom.com/wp-content/uploads/simple-file-list/Specifications/portables/TK-270G-370G-Product-Brochure.pdf"
       ],
+      "caveat": "US K type is 150–174 MHz; a 136–150 MHz variant exists.",
       "note": "US K type 150-174 MHz; 136-150 MHz variant exists"
     },
     "Kenwood|TK-272": {
@@ -9241,6 +9445,7 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [],
+      "caveat": "Older (1990s) non-G model.",
       "note": "Older (1990s) non-G model; no specification source found"
     },
     "Kenwood|TK-272G": {
@@ -9278,6 +9483,7 @@
       "sources": [
         "https://mra-raycom.com/wp-content/uploads/simple-file-list/Specifications/TK-372G-Product-Brochure.pdf"
       ],
+      "caveat": "Type 1 is 150–174 MHz; Type 2 is 136–150 MHz.",
       "note": "Type 1 150-174 MHz; Type 2 136-150 MHz"
     },
     "Kenwood|TK-278": {
@@ -9315,6 +9521,7 @@
       "sources": [
         "https://manuals.repeater-builder.com/Kenwood/tk/TK-270/TK-270(N)-278(N)-278T%20Revised_B51-8320-10.pdf"
       ],
+      "caveat": "M version 150–174 MHz, M2 version 136–150 MHz. Offered with a KNB-14 (600 mAh) or KNB-15 (1100 mAh) NiCd pack.",
       "note": "Service manual: M version 150-174MHz, M2 version 136-150MHz. Offered with KNB-14 (600mAh) or KNB-15 (1100mAh) NiCd pack; which shipped is unclear."
     },
     "Kenwood|TK-278G": {
@@ -9339,6 +9546,7 @@
       "sources": [
         "https://archive.org/details/manuallib-id-2593586"
       ],
+      "caveat": "Shares its manual with the TK-270G.",
       "note": "Shares manual with TK-270G; band split and power not verified"
     },
     "Kenwood|TK-280": {
@@ -9376,6 +9584,7 @@
       "sources": [
         "https://wiki.radioreference.com/index.php/Kenwood_TK-280/380"
       ],
+      "caveat": "Type 1 is 146–174 MHz; Type 2 is 136–162 MHz.",
       "note": "Type 1 146-174 MHz; Type 2 136-162 MHz"
     },
     "Kenwood|TK-3140K": {
@@ -9414,6 +9623,7 @@
         "https://www.wiscointl.com/kenwood/LandMobile/tk2140-3140/specs.htm",
         "https://mra-raycom.com/wp-content/uploads/simple-file-list/Specifications/Mobile/TK-2140-3140-Product-Brochure.pdf"
       ],
+      "caveat": "K = Type 1 (450–490 MHz).",
       "note": "K = Type 1 (450-490 MHz)"
     },
     "Kenwood|TK-3140K2": {
@@ -9452,6 +9662,7 @@
         "https://www.wiscointl.com/kenwood/LandMobile/tk2140-3140/specs.htm",
         "https://mra-raycom.com/wp-content/uploads/simple-file-list/Specifications/Mobile/TK-2140-3140-Product-Brochure.pdf"
       ],
+      "caveat": "K2 = Type 2 (470–512 MHz).",
       "note": "K2 = Type 2 (470-512 MHz)"
     },
     "Kenwood|TK-3140K3": {
@@ -9490,6 +9701,7 @@
         "https://www.wiscointl.com/kenwood/LandMobile/tk2140-3140/specs.htm",
         "https://mra-raycom.com/wp-content/uploads/simple-file-list/Specifications/Mobile/TK-2140-3140-Product-Brochure.pdf"
       ],
+      "caveat": "K3 = Type 3 (400–430 MHz).",
       "note": "K3 = Type 3 (400-430 MHz)"
     },
     "Kenwood|TK-3180E": {
@@ -9527,6 +9739,7 @@
       "sources": [
         "https://kenwoodcommunications.co.uk/files/file/comms/uk/brochures/analogue/handhelds/temp/tk2180_3180_web_V3.pdf"
       ],
+      "caveat": "European version.",
       "note": "European version"
     },
     "Kenwood|TK-3180K": {
@@ -9561,6 +9774,7 @@
       "sources": [
         "https://www.wiscointl.com/kenwood/LandMobile/tk2180-3180/specs.htm"
       ],
+      "caveat": "Type 1. Sources quote UHF power as 4 W or 5 W.",
       "note": "Type 1; UHF power quoted as 4 W and 5 W by different sources"
     },
     "Kenwood|TK-3180K2": {
@@ -9595,6 +9809,7 @@
       "sources": [
         "https://www.wiscointl.com/kenwood/LandMobile/tk2180-3180/specs.htm"
       ],
+      "caveat": "Type 2. Sources quote UHF power as 4 W or 5 W.",
       "note": "Type 2; UHF power quoted as 4 W and 5 W by different sources"
     },
     "Kenwood|TK-360": {
@@ -9633,6 +9848,7 @@
         "https://surplusradios.com/products/used-kenwood-tk-360-uhf-portable-radio",
         "https://www.ameradio.com/product/5006/description.html"
       ],
+      "caveat": "4-channel UHF portable; figures are the 450–470 MHz US version's, also sold in 403–430 and 490–512 MHz versions.",
       "note": "4-channel UHF portable; 450-470 MHz US version, also sold in 403-430 and 490-512 MHz versions."
     },
     "Kenwood|TK-360G": {
@@ -9670,6 +9886,7 @@
       "sources": [
         "https://mra-raycom.com/wp-content/uploads/simple-file-list/Specifications/portables/TK-260G-360G-Product-Brochure.pdf"
       ],
+      "caveat": "8 channels, LED only. US K type is 450–470 MHz; other UHF splits exist.",
       "note": "8 ch, LED only; US K type 450-470 MHz, other UHF splits exist"
     },
     "Kenwood|TK-370": {
@@ -9694,6 +9911,7 @@
       "sources": [
         "https://wiki.radioreference.com/index.php/Kenwood_TK-270/370"
       ],
+      "caveat": "Older non-G UHF model, 32 channels.",
       "note": "Older non-G UHF model, 32 ch; band split not verified"
     },
     "Kenwood|TK-370G": {
@@ -9731,6 +9949,7 @@
       "sources": [
         "https://mra-raycom.com/wp-content/uploads/simple-file-list/Specifications/portables/TK-270G-370G-Product-Brochure.pdf"
       ],
+      "caveat": "US K type is 450–470 MHz; other UHF splits exist.",
       "note": "US K type 450-470 MHz; other UHF splits exist"
     },
     "Kenwood|TK-372": {
@@ -9753,6 +9972,7 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [],
+      "caveat": "Older (1990s) non-G model.",
       "note": "Older (1990s) non-G model; no specification source found"
     },
     "Kenwood|TK-372G": {
@@ -9790,6 +10010,7 @@
       "sources": [
         "https://mra-raycom.com/wp-content/uploads/simple-file-list/Specifications/TK-372G-Product-Brochure.pdf"
       ],
+      "caveat": "Type 1 is 450–470 MHz; 470–490, 490–512 and 403–430 MHz types exist.",
       "note": "Type 1 450-470 MHz; 470-490, 490-512, 403-430 MHz types exist"
     },
     "Kenwood|TK-378": {
@@ -9812,6 +10033,7 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [],
+      "caveat": "Older (1990s) non-G model.",
       "note": "Older (1990s) non-G model; no specification source found"
     },
     "Kenwood|TK-378G": {
@@ -9836,6 +10058,7 @@
       "sources": [
         "https://archive.org/details/manuallib-id-2593586"
       ],
+      "caveat": "Shares its manual with the TK-370G.",
       "note": "Shares manual with TK-370G; band split and power not verified"
     },
     "Kenwood|TK-380": {
@@ -9873,6 +10096,7 @@
       "sources": [
         "https://wiki.radioreference.com/index.php/Kenwood_TK-280/380"
       ],
+      "caveat": "Type 1 is 450–490 MHz; 470–512 and 400–430 MHz types exist.",
       "note": "Type 1 450-490 MHz; 470-512 and 400-430 MHz types exist"
     },
     "Kenwood|TK-388G": {
@@ -9910,6 +10134,7 @@
       "sources": [
         "https://manuals.repeater-builder.com/Kenwood/tk/TK-388/TK-388G(M6)_B51-8635-00.pdf"
       ],
+      "caveat": "M6 (China) version, 128 channels with LCD. The battery (KNB-14 600 mAh / KNB-15A 1100 mAh NiCd) and charger are options, not included.",
       "note": "M6 (China) version, 128 ch with LCD. Battery (KNB-14 600mAh / KNB-15A 1100mAh NiCd) and charger are options, not included."
     },
     "Kenwood|TK-481": {
@@ -9951,6 +10176,7 @@
       "sources": [
         "https://www.wiscointl.com/kenwood/LandMobile/tk480-481/spec.htm"
       ],
+      "caveat": "900 MHz trunked/conventional; 935–941 MHz TX is talkaround.",
       "note": "900 MHz trunked/conventional; 935-941 MHz TX is talkaround"
     },
     "Kenwood|TK-690": {
@@ -9983,6 +10209,7 @@
       "sources": [
         "https://www.wiscointl.com/kenwood/LandMobile/tk690h-790h-890h/spec.htm"
       ],
+      "caveat": "Low band sold in 3 splits (29.7–37, 35–43, 40–50 MHz); the TK-690H is 45–110 W.",
       "note": "Low band sold in 3 splits (29.7-37, 35-43, 40-50 MHz); TK-690H is 45-110 W"
     },
     "Kenwood|TK-7102": {
@@ -10015,6 +10242,7 @@
       "sources": [
         "https://www.wiscointl.com/kenwood/LandMobile/tk7102h-8102h/specs.htm"
       ],
+      "caveat": "4 channels. Type 1 is 146–174 MHz, Type 2 is 136–162 MHz. The TK-7102H is 50 W.",
       "note": "4 ch; Type 1 146-174, Type 2 136-162 MHz; TK-7102H is 50 W"
     },
     "Kenwood|TK-7108": {
@@ -10050,6 +10278,7 @@
       "sources": [
         "https://www.manualslib.com/manual/1376987/Kenwood-Tk-7108.html"
       ],
+      "caveat": "8-channel VHF mobile: 146–174 MHz, 25/5 W per the service manual. The TK-7108H is 50/25 W.",
       "note": "8-channel VHF mobile; service manual gives 146-174 MHz, 25/5 W (the TK-7108H is 50/25 W)."
     },
     "Kenwood|TK-7160K": {
@@ -10085,6 +10314,7 @@
       "sources": [
         "https://www.wiscointl.com/kenwood/LandMobile/tk7160h-8160h/specs.htm"
       ],
+      "caveat": "The TK-7160H variant is 25–50 W.",
       "note": "TK-7160H variant is 25-50 W"
     },
     "Kenwood|TK-7160M": {
@@ -10121,6 +10351,7 @@
         "https://www.ameradio.com/doc/Kenwood_TK-7160_TK-8160.pdf",
         "https://www.wiscointl.com/kenwood/LandMobile/tk7160h-8160h/specs.htm"
       ],
+      "caveat": "The M-type range is the single VHF range in the brochure. The TK-7160H version is 25/50 W.",
       "note": "M-type range taken from the single VHF range in the brochure. TK-7160H version is 25/50 W."
     },
     "Kenwood|TK-7162": {
@@ -10156,6 +10387,7 @@
       "sources": [
         "https://www.vagtshop.dk/upload_dir/docs/TK7162-8162.pdf"
       ],
+      "caveat": "16-channel E-type (European) mobile.",
       "note": "16-channel E-type (European) mobile."
     },
     "Kenwood|TK-7180": {
@@ -10192,6 +10424,7 @@
         "https://www.kenwood.com/usa/Support/pdf/TK-7180_8180.pdf",
         "https://www.kenwood.com/india/com/lmr/tk-7180_8180/spec.html"
       ],
+      "caveat": "The high-power TK-7180H is 30–50 W. GPS via an external FleetSync GPS receiver.",
       "note": "TK-7180H high-power version is 30-50 W. GPS via external FleetSync GPS receiver."
     },
     "Kenwood|TK-7180E": {
@@ -10227,6 +10460,7 @@
       "sources": [
         "https://www.kenwood.com/india/com/lmr/tk-7180_8180/spec.html"
       ],
+      "caveat": "E (European) type; figures are from the TK-7180 sheet.",
       "note": "E (European) type; specs taken from the TK-7180 sheet."
     },
     "Kenwood|TK-760": {
@@ -10259,6 +10493,7 @@
       "sources": [
         "https://www.repeater-builder.com/kenwood/pdfs/tk-760-svc-man.pdf"
       ],
+      "caveat": "K type is 148–174 MHz, 25 W; K2 type is 136–156 MHz. The TK-760H is 45 W.",
       "note": "K type 148-174 MHz 25 W (low power level not documented); K2 type 136-156 MHz. TK-760H is 45 W."
     },
     "Kenwood|TK-760G": {
@@ -10294,6 +10529,7 @@
       "sources": [
         "https://www.ameradio.com/doc/Kenwood_TK-860G(H).pdf"
       ],
+      "caveat": "Type 1 shown; Type 2 is 136–162 MHz. The TK-760HG is 50 W.",
       "note": "Type 1 shown; Type 2 is 136-162 MHz. TK-760HG is 50 W."
     },
     "Kenwood|TK-762": {
@@ -10326,6 +10562,7 @@
       "sources": [
         "https://www.repeater-builder.com/kenwood/pdfs/tk-760-svc-man.pdf"
       ],
+      "caveat": "2 channels with LED indicators only. K type 25 W; K2 type 136–156 MHz. The TK-762H is 45 W.",
       "note": "2-channel model with LED indicators only. K type 25 W; K2 type 136-156 MHz; TK-762H 45 W."
     },
     "Kenwood|TK-762G": {
@@ -10361,6 +10598,7 @@
       "sources": [
         "https://www.ameradio.com/doc/Kenwood_TK-762G(H).pdf"
       ],
+      "caveat": "8 channels, 1-character LCD. Type 2 is 136–162 MHz. The TK-762HG is 50 W.",
       "note": "8-channel, 1-character LCD. Type 2 is 136-162 MHz. TK-762HG is 50 W."
     },
     "Kenwood|TK-768": {
@@ -10393,6 +10631,7 @@
       "sources": [
         "https://manuals.repeater-builder.com/Kenwood/tk/TK-768/TK-768(H)_B51-8329-00(N).pdf"
       ],
+      "caveat": "M type is 148–174 MHz, 25 W high.",
       "note": "M type 148-174 MHz, 25 W high (low level not documented)."
     },
     "Kenwood|TK-768G": {
@@ -10425,6 +10664,7 @@
       "sources": [
         "https://www.ameradio.com/doc/Kenwood_TK-860G(H).pdf"
       ],
+      "caveat": "C/M type is 148–174 MHz; C2/M2 type is 136–162 MHz.",
       "note": "C/M type 148-174 MHz, C2/M2 type 136-162 MHz. Power not confirmed."
     },
     "Kenwood|TK-780": {
@@ -10460,6 +10700,7 @@
       "sources": [
         "https://industrialcomm.net/wp-content/uploads/2018/07/m780-880.pdf"
       ],
+      "caveat": "Type 1 shown; Type 2 is 136–162 MHz. The TK-780H is 45 W. LTR trunked/conventional.",
       "note": "Type 1 shown; Type 2 is 136-162 MHz. TK-780H is 45 W. LTR trunked/conventional."
     },
     "Kenwood|TK-790": {
@@ -10492,7 +10733,11 @@
       "aprs": false,
       "gps": false,
       "bluetoothProgramming": false,
-      "sources": [],
+      "sources": [
+        "http://hammadeparts.jivetones.com/Amateur_Radio_Manuals_Schematics/KENWOOD/TK-690_790_890.pdf",
+        "http://www.wiscointl.com/kenwood/LandMobile/tk690h-790h-890h/spec.htm"
+      ],
+      "caveat": "K type shown; K2 is 136–156 MHz. The TK-790H is 45–110 W.",
       "note": "K type shown; K2 is 136-156 MHz. TK-790H is 45-110 W."
     },
     "Kenwood|TK-8102": {
@@ -10529,6 +10774,7 @@
         "https://www.manualslib.com/manual/832845/Kenwood-Tk-8102.html?page=39",
         "https://www.ameradio.com/doc/Kenwood_TK-7102-TK-8102.pdf"
       ],
+      "caveat": "4 channels. The TK-8102H is 45 W; Type 2 is 485–512 MHz.",
       "note": "4-channel. TK-8102H is 45 W; Type 2 is 485-512 MHz."
     },
     "Kenwood|TK-8108": {
@@ -10551,6 +10797,7 @@
       "sources": [
         "https://www.manualslib.com/manual/1376987/Kenwood-Tk-7108.html"
       ],
+      "caveat": "UHF sibling of the TK-7108 (shared service manual, LED indicators).",
       "note": "UHF sibling of TK-7108 (shared service manual, LED indicators); its band and power not confirmed."
     },
     "Kenwood|TK-8160K": {
@@ -10587,6 +10834,7 @@
         "https://www.ameradio.com/doc/Kenwood_TK-7160_TK-8160.pdf",
         "https://www.wiscointl.com/kenwood/LandMobile/tk7160h-8160h/specs.htm"
       ],
+      "caveat": "The high-power TK-8160H is 25/45 W.",
       "note": "TK-8160H (high power) version is 25/45 W."
     },
     "Kenwood|TK-8160M": {
@@ -10612,6 +10860,7 @@
       "sources": [
         "https://www.ameradio.com/doc/Kenwood_TK-7160_TK-8160.pdf"
       ],
+      "caveat": "The US K type is 450–490 MHz; the M type's split is not documented. The TK-8160H version is 25/45 W.",
       "note": "M-type (non-US) frequency split not documented; US K type is 450-490 MHz. TK-8160H version is 25/45 W."
     },
     "Kenwood|TK-8180": {
@@ -10648,6 +10897,7 @@
         "https://www.kenwood.com/usa/Support/pdf/TK-7180_8180.pdf",
         "https://www.kenwood.com/india/com/lmr/tk-7180_8180/spec.html"
       ],
+      "caveat": "K/K1 type is 450–520 MHz (25 W above 490 MHz); K2 type is 400–470 MHz. The TK-8180H is 30–45 W.",
       "note": "K/K1 type 450-520 MHz (25 W above 490); K2 type 400-470 MHz. TK-8180H is 30-45 W."
     },
     "Kenwood|TK-8180E": {
@@ -10683,6 +10933,7 @@
       "sources": [
         "https://www.kenwood.com/india/com/lmr/tk-7180_8180/spec.html"
       ],
+      "caveat": "E (European) type; the 400–470 MHz range is assumed from the TK-8180's 400–470 MHz variant.",
       "note": "E (European) type; 400-470 MHz range assumed from the TK-8180 400-470 variant."
     },
     "Kenwood|TK-860": {
@@ -10708,6 +10959,7 @@
       "sources": [
         "https://used-radios.com/products/kenwood-tk-860-uhf-450-470-mhz-32-channel-25-watt-complete-kit"
       ],
+      "caveat": "32-channel UHF mobile, 25 W (TK-860H 40 W).",
       "note": "32-channel UHF mobile, 25 W (TK-860H 40 W). Factory band splits not confirmed from a Kenwood source."
     },
     "Kenwood|TK-860G": {
@@ -10743,6 +10995,7 @@
       "sources": [
         "https://www.ameradio.com/doc/Kenwood_TK-860G(H).pdf"
       ],
+      "caveat": "Type 1 shown; Type 2 is 485–512 MHz, Type 3 400–430 MHz. The TK-860HG is 40 W.",
       "note": "Type 1 shown; Type 2 485-512, Type 3 400-430 MHz. TK-860HG is 40 W."
     },
     "Kenwood|TK-862": {
@@ -10768,6 +11021,7 @@
       "sources": [
         "https://used-radios.com/products/kenwood-tk862-tk-862-uhf-450-490-mhz-2-channel-25-watt-complete-kit/"
       ],
+      "caveat": "2-channel UHF mobile, 25 W.",
       "note": "2-channel UHF mobile, 25 W. Factory band splits not confirmed from a Kenwood source."
     },
     "Kenwood|TK-862G": {
@@ -10803,6 +11057,7 @@
       "sources": [
         "https://www.ameradio.com/doc/Kenwood_TK-762G(H).pdf"
       ],
+      "caveat": "8 channels, 1-character LCD. The TK-862HG is 40 W.",
       "note": "8-channel, 1-character LCD. TK-862HG is 40 W."
     },
     "Kenwood|TK-868": {
@@ -10838,6 +11093,7 @@
       "sources": [
         "https://manuals.repeater-builder.com/Kenwood/tk/TK-868/TK-868(H)(N)%20Revised_B51-8330-20.pdf"
       ],
+      "caveat": "M type shown; other types are 470–496, 488–512, 400–425 and 350–390 MHz. 32 channels. The TK-868H is 35 W.",
       "note": "M type shown; other types 470-496, 488-512, 400-425, 350-390 MHz. 32 channels. TK-868H is 35 W."
     },
     "Kenwood|TK-868G": {
@@ -10873,6 +11129,7 @@
       "sources": [
         "https://manuals.repeater-builder.com/Kenwood/tk/TK-868/TK-868G%20Supplement_B51-8566-00.pdf"
       ],
+      "caveat": "C/M type shown; C3/M3 is 400–430 MHz, C6 is 350–390 MHz.",
       "note": "C/M type shown; C3/M3 is 400-430 MHz, C6 is 350-390 MHz."
     },
     "Kenwood|TK-880": {
@@ -10908,6 +11165,7 @@
       "sources": [
         "https://industrialcomm.net/wp-content/uploads/2018/07/m780-880.pdf"
       ],
+      "caveat": "Type 1 shown; Type 2 is 485–512 MHz, Type 3 400–430 MHz. The TK-880H is 40 W. LTR trunked/conventional.",
       "note": "Type 1 shown; Type 2 485-512, Type 3 400-430 MHz. TK-880H is 40 W. LTR trunked/conventional."
     },
     "Kenwood|TK-890": {
@@ -10940,7 +11198,10 @@
       "aprs": false,
       "gps": false,
       "bluetoothProgramming": false,
-      "sources": [],
+      "sources": [
+        "http://hammadeparts.jivetones.com/Amateur_Radio_Manuals_Schematics/KENWOOD/TK-690_790_890.pdf"
+      ],
+      "caveat": "Type 1 shown; 480–512 and 403–430 MHz types also exist. The TK-890H (450–480 MHz) is 40–100 W.",
       "note": "Type 1 shown; also 480-512 and 403-430 MHz types. TK-890H (450-480 MHz) is 40-100 W."
     },
     "Kenwood|TK-981": {
@@ -10980,6 +11241,7 @@
       "sources": [
         "https://www.repeater-builder.com/kenwood/pdfs/tk-980-981-spec-sheet.pdf"
       ],
+      "caveat": "900 MHz LTR/conventional; 935–941 MHz TX is talkaround.",
       "note": "900 MHz LTR/conventional; 935-941 TX is talk-around. Low power level not documented."
     },
     "Kenwood|TM-271": {
@@ -11016,6 +11278,7 @@
         "https://www.rigpix.com/kenwood/tm271a.htm",
         "https://www.kenwood.com/au/com/amateur/tm-271a/spec.html"
       ],
+      "caveat": "Ranges are the US/Canada TM-271A's.",
       "note": "US/Canada TM-271A ranges."
     },
     "Kenwood|TM-281": {
@@ -11052,6 +11315,7 @@
         "https://www.kenwood.com/usa/com/amateur/tm-281a/spec.html",
         "https://www.rigpix.com/kenwood/tm281a.htm"
       ],
+      "caveat": "Ranges are the US TM-281A's. No longer in the Kenwood USA amateur lineup.",
       "note": "US TM-281A ranges. No longer in the Kenwood USA amateur lineup."
     },
     "Kenwood|TM-471": {
@@ -11087,6 +11351,7 @@
       "sources": [
         "https://www.manualslib.com/manual/1145099/Kenwood-Tm-471a.html?page=46"
       ],
+      "caveat": "C2 type shown; the C type is 400–430 MHz. Low power is about 25 W.",
       "note": "C2 type shown; C type is 400-430 MHz. Low power approx. 25 W."
     },
     "Kenwood|TM-D700": {
@@ -11131,6 +11396,7 @@
       "sources": [
         "https://www.rigpix.com/kenwood/tmd700a.htm"
       ],
+      "caveat": "US TM-D700A; 35 W max on 70 cm. GPS via an external receiver.",
       "note": "US TM-D700A; 70 cm max 35 W. GPS via external receiver."
     },
     "Kenwood|TM-D710": {
@@ -11177,6 +11443,7 @@
         "https://www.kenwood.com/au/com/amateur/tm-d710a/",
         "https://www.dxengineering.com/parts/kwd-tm-d710g"
       ],
+      "caveat": "US TM-D710A; receive has cellular bands blocked. GPS via an external NMEA receiver (the TM-D710GA has it built in).",
       "note": "US TM-D710A; RX has cellular bands blocked. GPS via external NMEA receiver (TM-D710GA has it built in)."
     },
     "Kenwood|TM-D710G": {
@@ -11222,6 +11489,7 @@
         "https://www.rigpix.com/kenwood/tmd710ga.htm",
         "https://www.dxengineering.com/parts/kwd-tm-d710g"
       ],
+      "caveat": "US TM-D710GA; receive has cellular bands blocked. GPS is built into the control head.",
       "note": "US TM-D710GA; RX has cellular bands blocked. Built-in GPS in the control head."
     },
     "Kenwood|TM-D710G_CloneMode": {
@@ -11267,6 +11535,7 @@
         "https://www.rigpix.com/kenwood/tmd710ga.htm",
         "https://www.dxengineering.com/parts/kwd-tm-d710g"
       ],
+      "caveat": "US TM-D710GA; receive has cellular bands blocked. GPS is built into the control head.",
       "note": "US TM-D710GA; RX has cellular bands blocked. Built-in GPS in the control head."
     },
     "Kenwood|TM-D710_CloneMode": {
@@ -11313,6 +11582,7 @@
         "https://www.kenwood.com/au/com/amateur/tm-d710a/",
         "https://www.dxengineering.com/parts/kwd-tm-d710g"
       ],
+      "caveat": "US TM-D710A; receive has cellular bands blocked. GPS via an external NMEA receiver (the TM-D710GA has it built in).",
       "note": "US TM-D710A; RX has cellular bands blocked. GPS via external NMEA receiver (TM-D710GA has it built in)."
     },
     "Kenwood|TM-G707": {
@@ -11361,6 +11631,7 @@
       "sources": [
         "https://www.rigpix.com/kenwood/tmg707a.htm"
       ],
+      "caveat": "US TM-G707A; 35 W max on 70 cm.",
       "note": "US TM-G707A; 70 cm max 35 W."
     },
     "Kenwood|TM-V7": {
@@ -11405,6 +11676,7 @@
       "sources": [
         "https://www.rigpix.com/kenwood/tmv7a.htm"
       ],
+      "caveat": "US TM-V7A; 35 W max on 70 cm.",
       "note": "US TM-V7A; 70 cm max 35 W."
     },
     "Kenwood|TM-V71": {
@@ -11451,6 +11723,7 @@
         "https://www.dxengineering.com/parts/kwd-tm-v71a",
         "https://www.kenwood.com/au/com/amateur/tm-v71a/"
       ],
+      "caveat": "US TM-V71A; receive has cellular bands blocked.",
       "note": "US TM-V71A; RX has cellular bands blocked."
     },
     "Kenwood|TS-2000": {
@@ -11544,6 +11817,7 @@
         "https://www.kenwood.com/au/com/amateur/ts-2000/",
         "https://www.dxengineering.com/parts/kwd-ts-2000"
       ],
+      "caveat": "TX shown as the US amateur HF bands (160–10 m incl. WARC); band edges and 60 m vary by market. 50 W max on 70 cm; 1.2 GHz needs the optional UT-20.",
       "note": "TX listed as the US amateur HF bands (160-10 m incl. WARC); exact band edges and 60 m vary by market version. 70 cm max 50 W; 1.2 GHz with optional UT-20."
     },
     "Kenwood|TS-480_CloneMode": {
@@ -11620,6 +11894,7 @@
         "https://www.rigpix.com/kenwood/ts480sat.htm",
         "https://www.rigpix.com/kenwood/ts480hx.htm"
       ],
+      "caveat": "TS-480SAT is 100 W; the TS-480HX is 200 W on HF. TX shown as the US amateur HF bands plus 6 m.",
       "note": "TS-480SAT 100 W; TS-480HX is 200 W on HF. TX = US amateur HF bands + 6 m."
     },
     "Kenwood|TS-480_LiveMode": {
@@ -11696,6 +11971,7 @@
         "https://www.rigpix.com/kenwood/ts480sat.htm",
         "https://www.rigpix.com/kenwood/ts480hx.htm"
       ],
+      "caveat": "TS-480SAT is 100 W; the TS-480HX is 200 W on HF. TX shown as the US amateur HF bands plus 6 m.",
       "note": "TS-480SAT 100 W; TS-480HX is 200 W on HF. TX = US amateur HF bands + 6 m."
     },
     "Kenwood|TS-590S/SG_LiveMode": {
@@ -11772,6 +12048,7 @@
         "https://www.rigpix.com/kenwood/ts590s.htm",
         "https://www.rigpix.com/kenwood/ts590sg.htm"
       ],
+      "caveat": "Covers the TS-590S (discontinued) and TS-590SG (current); receive shown is the TS-590S's. TX shown as the US amateur HF bands plus 6 m.",
       "note": "Covers TS-590S (discontinued) and TS-590SG (current); TS-590S RX shown. TX = US amateur HF bands + 6 m."
     },
     "Kenwood|TS-590SG_CloneMode": {
@@ -11852,6 +12129,7 @@
         "https://www.rigpix.com/kenwood/ts590sg.htm",
         "https://www.kenwood.com/usa/com/amateur/ts-590sg/"
       ],
+      "caveat": "TX shown as the US amateur HF bands (160–10 m incl. WARC); band edges and 60 m vary by market.",
       "note": "TX listed as the US amateur HF bands (160-10 m incl. WARC); exact band edges and 60 m vary by market version."
     },
     "Kenwood|TS-590S_CloneMode": {
@@ -11927,6 +12205,7 @@
       "sources": [
         "https://www.rigpix.com/kenwood/ts590s.htm"
       ],
+      "caveat": "TX shown as the US amateur HF bands (160–10 m incl. WARC); band edges and 60 m vary by market.",
       "note": "TX listed as the US amateur HF bands (160-10 m incl. WARC); exact band edges and 60 m vary by market version."
     },
     "Kenwood|TS-790E": {
@@ -11972,6 +12251,7 @@
       "sources": [
         "https://www.rigpix.com/kenwood/ts790e.htm"
       ],
+      "caveat": "European version. 40 W max on 70 cm; the optional UT-10 adds 23 cm (1–10 W).",
       "note": "European version. 70 cm max 40 W; optional UT-10 adds 23 cm (1-10 W)."
     },
     "Kenwood|TS-850": {
@@ -12043,6 +12323,7 @@
       "sources": [
         "https://www.rigpix.com/kenwood/ts850s.htm"
       ],
+      "caveat": "TX shown as the US amateur HF bands (160–10 m incl. WARC); band edges and 60 m vary by market. AM is 10–40 W.",
       "note": "TX listed as the US amateur HF bands (160-10 m incl. WARC); exact band edges and 60 m vary by market version. AM 10-40 W."
     },
     "LUITON|LT-316": {
@@ -12068,6 +12349,7 @@
         "https://www.luiton.com/lt-316-pmr446/",
         "https://www.amazon.com/LUITON-Walkie-Talkies-Charging-LT-316/dp/B01N027QR3"
       ],
+      "caveat": "Sold as an 8-channel PMR446 version and a 16-channel 400–470 MHz UHF version. Charges from a micro-USB cable (charger optional). Listings give 1500 or 1800 mAh.",
       "note": "Sold both as 8-ch PMR446 and as 16-ch 400-470 MHz UHF versions; charges from micro-USB cable (optional charger). Battery 1500/1800 mAh by listing."
     },
     "LUITON|LT-580_UHF": {
@@ -12100,7 +12382,10 @@
       "aprs": false,
       "gps": false,
       "bluetoothProgramming": false,
-      "sources": [],
+      "sources": [
+        "http://luiton.com/product/lt-580-uhf-mobile-radio/"
+      ],
+      "caveat": "The UHF model is sold in 400–490 and 450–520 MHz variants.",
       "note": "UHF sold as 400-490 or 450-520 MHz variants"
     },
     "LUITON|LT-580_VHF": {
@@ -12133,7 +12418,10 @@
       "aprs": false,
       "gps": false,
       "bluetoothProgramming": false,
-      "sources": [],
+      "sources": [
+        "http://luiton.com/product/lt-580-uhf-mobile-radio/"
+      ],
+      "caveat": "",
       "note": ""
     },
     "LUITON|LT-588UV": {
@@ -12179,6 +12467,7 @@
         "https://luiton.en.made-in-china.com/product/lveEOjSViNcK/China-High-Power-Mobile-Car-Radio-Lt-588UV-VHF-UHF-Dual-Band-Transceiver.html",
         "https://www.alibaba.com/product-detail/LUITON-LT-588UV-45W-25W-UHF_60732262581.html"
       ],
+      "caveat": "60 W VHF / 45 W UHF, 25 W low. Dual standby.",
       "note": "60W VHF / 45W UHF, 25W low; dual standby"
     },
     "LUITON|LT-725UV": {
@@ -12225,8 +12514,10 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [
+        "http://www.luiton.com/2024/07/29/lt-725uv-dual-band-mobile-radio/",
         "https://www.rtsystemsinc.com/LT-725UV_c_665.html"
       ],
+      "caveat": "The maker claims dual reception; it is not verified that there are two receivers.",
       "note": "Maker claims dual reception; not verified as two receivers"
     },
     "Lanchonlh|HG-UV98": {
@@ -12273,6 +12564,7 @@
         "https://notebook.hvdn.org/2019/10/review-lanch-hg-uv98-aprs-2m70cm-ht.html",
         "https://www.nerfd.net/2021/07/29/quirky-aprs-hg-uv98-lanch-nlh-ham-radio-handheld-review/"
       ],
+      "caveat": "5 W VHF / 4 W UHF. Micro-USB charging (cradle optional). Simultaneous VHF+UHF receive; same-band is dual watch only. GPS/BeiDou/GLONASS.",
       "note": "5 W VHF / 4 W UHF. Micro-USB charging (optional cradle). Simultaneous V+U receive; same-band dual watch only. GPS/BeiDou/GLONASS."
     },
     "Leixen|VV-898": {
@@ -12321,6 +12613,7 @@
       "sources": [
         "https://www.rigpix.com/mischam/leixen_vv898.htm"
       ],
+      "caveat": "Compact 10 W mobile from 2014, discontinued.",
       "note": "Compact 10W mobile, 2014, discontinued."
     },
     "Leixen|VV-898E": {
@@ -12362,8 +12655,10 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [
-        "https://www.radioddity.com/products/leixen-vv-898e-dual-band-mobile-radio"
+        "https://www.radioddity.com/products/leixen-vv-898e-dual-band-mobile-radio",
+        "http://www.kc1mjp.us/2020/07/review-leixen-vv-898e-25w-vhf-uhf-radio/"
       ],
+      "caveat": "Same radio as the VV-898S. Radioddity also lists 245 MHz receive only. Dual watch, not true dual receive. A retailer marks it discontinued.",
       "note": "Same radio as VV-898S. Radioddity also lists 245 MHz receive only; dual watch, not true dual receive. Retailer marks it discontinued."
     },
     "Leixen|VV-898S": {
@@ -12414,8 +12709,10 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [
-        "https://www.alafone.com/product/leixen-vv-898s/"
+        "https://www.alafone.com/product/leixen-vv-898s/",
+        "http://www.kc1mjp.us/2020/07/review-leixen-vv-898e-25w-vhf-uhf-radio/"
       ],
+      "caveat": "4/10/25 W. Dual watch only. Receive ranges are one retailer's; others quote 136–174/400–470 MHz.",
       "note": "4/10/25 W. Dual watch only (VV-898E review). RX ranges per retailer listing; other retailers quote 136-174/400-470 MHz."
     },
     "MMLradio|JC-8629": {
@@ -12470,6 +12767,7 @@
         "https://manuals.plus/mmlradio/jc-8629-uv-full-band-walkie-talkie-two-way-radio-manual",
         "https://fccid.io/2AZVIJC-8629/Users-Manual/User-Manual-5335337"
       ],
+      "caveat": "GPS and Bluetooth programming are listed as optional in the manual; only some retail versions include them.",
       "note": "GPS and Bluetooth programming listed as optional in manual; some retail SKUs include them"
     },
     "MTC|UV-5R-3": {
@@ -12529,6 +12827,7 @@
         "https://www.rtsystemsinc.com/UV-5R-3_c_852.html",
         "https://hamtwowayradio.com/product/baofeng-uv-5r-tri-band-amateur-two-way-radio-vhf-220mhz-uhf-walkie-talkie/"
       ],
+      "caveat": "Figures come from retailer listings of the Baofeng UV-5R tri-band (UV-5R III), which MTC distributed.",
       "note": "Specs from retailer listings of the Baofeng UV-5R tri-band (UV-5R III) that MTC distributed"
     },
     "Maverick|RA-100": {
@@ -12567,6 +12866,7 @@
       "sources": [
         "https://www.grupopv.mx/maverick/analogos/portatiles/ra-100/ra-100u/"
       ],
+      "caveat": "16-channel UHF business radio.",
       "note": "UHF 16-channel business radio; BA-100 battery mAh not published"
     },
     "Maverick|RA-425": {
@@ -12604,6 +12904,7 @@
       "sources": [
         "https://www.grupopv.mx/maverick/analogos/portatiles/ra-425/ra-425u/"
       ],
+      "caveat": "16-channel UHF business radio; only maximum power is published.",
       "note": "UHF 16-channel business radio; only max power published"
     },
     "MaxTalker|MT-5RM": {
@@ -12633,6 +12934,7 @@
         "https://maxtalkerradio.com/collections/amateur/products/maxtalker-uv-5rm-ham-radio",
         "https://www.amazon.com/MaxTalker-5RM-Ham-Radio-Handheld/dp/B0F59YGQLC"
       ],
+      "caveat": "NOAA weather receive.",
       "note": "Frequency ranges not published by maker; NOAA weather receive"
     },
     "MaxTalker|MT-8S": {
@@ -12659,6 +12961,7 @@
         "https://www.amazon.com/MaxTalker-MT-8S-Rechargeable-Earpiece-Flashlight/dp/B0D8BB3FSL",
         "https://maxtalkerradio.com/products/maxtalker-mt-8s-walkie-talkies-4pack"
       ],
+      "caveat": "16-channel UHF walkie-talkie; ships with a multi-unit charging base.",
       "note": "16-channel UHF walkie talkie; ships with multi-unit charging base"
     },
     "MaxTalker|P15": {
@@ -12689,6 +12992,7 @@
         "https://us.amazon.com/MaxTalker-P15-Handheld-Rechargeable-Programming/dp/B0DP75V5PL",
         "https://www.maxtalkerradio.com/products/maxtalker-p15-ham-radio-handheld"
       ],
+      "caveat": "Monochrome display.",
       "note": "Monochrome display; frequency ranges not published"
     },
     "MaxTalker|TK-6": {
@@ -12707,6 +13011,7 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [],
+      "caveat": "",
       "note": "No specifications found"
     },
     "Midland|DBR2500": {
@@ -12751,6 +13056,7 @@
         "https://www.manualslib.com/manual/1571010/Midland-Dbr2500.html",
         "https://www.walcottradio.com/midland-dbr2500-dual-band-ham-radio-p-3448.html"
       ],
+      "caveat": "Has dual watch; simultaneous two-receiver operation is not confirmed.",
       "note": "Has dual watch; simultaneous two-receiver operation not confirmed"
     },
     "Polmar|DB-50M": {
@@ -12795,6 +13101,7 @@
         "https://hamgear.wordpress.com/2013/10/20/review-polmar-db-50m-powerwerx-db-750x/",
         "https://www.locuradigital.com/en/vhf_uhf_transceivers/polmar_transceivers/polmardb50.htm"
       ],
+      "caveat": "European version of the Powerwerx DB-750X; 50 W VHF / 40 W UHF, 4 levels. Cross-band repeat is restricted on the EU model.",
       "note": "European version of Powerwerx DB-750X; 50W VHF/40W UHF, 4 levels; cross-band repeat restricted on EU model"
     },
     "Powerwerx|DB-750X": {
@@ -12844,6 +13151,7 @@
         "https://cdn.powerwerx.com/asset/download/DB750X-UserManual.pdf",
         "https://www.repeaterbook.com/wiki/doku.php?id=db-750"
       ],
+      "caveat": "50 W VHF / 40 W UHF, 4 power levels. AM airband receive 108–136 MHz.",
       "note": "50W VHF / 40W UHF, 4 power levels; AM airband receive 108-136 MHz"
     },
     "Puxing|PX-2R": {
@@ -12879,6 +13187,7 @@
       "sources": [
         "https://rigreference.com/rigs/4500-puxing-px-2r"
       ],
+      "caveat": "",
       "note": ""
     },
     "Puxing|PX-777": {
@@ -12917,6 +13226,7 @@
         "https://rigreference.com/rigs/4504-puxing-px-777",
         "https://argentdata.com/files/px-777.pdf"
       ],
+      "caveat": "Single-band; the 136–174 MHz VHF version is shown. Also sold in 67–72, 240–250, 350–390, 400–470 and 450–512 MHz versions. 5 W VHF, 4 W UHF.",
       "note": "Single-band; VHF 136-174 version shown; also sold as 67-72, 240-250, 350-390, 400-470, 450-512 MHz versions. 5 W VHF, 4 W UHF."
     },
     "Puxing|PX-888K": {
@@ -12964,6 +13274,7 @@
         "https://www.hi-radio.com/product/puxing-px-888k-dual-band-handheld-two-way-radio-vhf-136-174mhz-and-uhf-400-480mhz-transceiver-walkie-talkie-px888k/",
         "https://hamgear.wordpress.com/2013/01/16/review-puxing-px-888k/"
       ],
+      "caveat": "5 W VHF / 4 W UHF; a review measured low power at about 0.5–0.7 W. Dual watch. Some listings give UHF as 400–470 MHz; a 1600 mAh pack is also sold.",
       "note": "5 W VHF / 4 W UHF; review measured low power about 0.5-0.7 W. Dual watch. Some listings give UHF as 400-470 MHz; 1600 mAh pack also sold."
     },
     "Q-MAC|HF-90": {
@@ -12998,8 +13309,10 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [
+        "http://hfradio.com.au/codan_%20barrett_qmac%20hf_radio_information/RADIOS/Qmac_HF90.htm",
         "https://www.radiodv.net/schemes_manuals.files/QMAC_HF-90_brief.pdf"
       ],
+      "caveat": "HF SSB transceiver for vehicle, manpack or base use, running from external 12–24 V DC. AM is receive only; CW and frequency hopping are options.",
       "note": "HF SSB transceiver for vehicle, manpack or base; runs from external 12-24 V DC. AM receive only; CW and frequency hopping are options."
     },
     "QYT|KT-5000": {
@@ -13049,6 +13362,7 @@
         "https://www.qytradio.com/new-arrival-qyt-kt-5000-detachable-front-panel-25w-vhf-uhf-mobile-radio_p244.html",
         "https://signasystems.us/products/qyt-kt-5000-vehicle-vhf-uhf-radio"
       ],
+      "caveat": "The maker's page gives ham ranges; retailers sell 136–174/400–480 MHz units (25 W VHF / 20 W UHF).",
       "note": "Maker page gives ham ranges; retailers sell 136-174/400-480 MHz units (25 W VHF / 20 W UHF). Low power not published."
     },
     "QYT|KT-8R": {
@@ -13108,6 +13422,7 @@
       "sources": [
         "https://www.rigpix.com/qyt/kt8r.htm"
       ],
+      "caveat": "Retailers disagree on the stock battery (2000 vs 2200 mAh) and power (4 W vs 5 W); figures shown are RigPix's.",
       "note": "Retailers disagree on the stock battery (2000 vs 2200 mAh) and power (4 W vs 5 W); RigPix figures used."
     },
     "QYT|KT-UV980": {
@@ -13152,6 +13467,7 @@
         "https://hamgear.wordpress.com/2015/01/29/review-qyt-kt-uv980/",
         "https://www.brickolore.com/2015/01/qyt-kt-uv980.html?m=1"
       ],
+      "caveat": "Rated 40/10 W VHF, 30/10 W UHF. Single VFO with dual watch. Rebadged as the Jetstream JT2705M.",
       "note": "Rated 40/10 W VHF, 30/10 W UHF. Single VFO with dual watch. Rebadged as Jetstream JT2705M."
     },
     "QYT|KT-WP12": {
@@ -13196,6 +13512,7 @@
         "https://www.rigpix.com/qyt/ktwp12.htm",
         "https://www.qytradio.com/qyt-mini-25w-waterproof-mobile-radio-kt-wp12_n44"
       ],
+      "caveat": "Radio built into the microphone body (also sold as KT-9900). Retail units are often 136–174/400–480 MHz. 25 W VHF / 20 W UHF.",
       "note": "Radio built into the microphone body (also sold as KT-9900). Retail units often 136-174/400-480 MHz. 25 W VHF / 20 W UHF."
     },
     "QYT|KT5800": {
@@ -13239,6 +13556,7 @@
       "sources": [
         "https://www.qytradio.com/12-24v-voltage-dual-band-quad-standby-mobile-ham-radio-kt-5800_p61.html"
       ],
+      "caveat": "25 W VHF / 20 W UHF; runs on 12 or 24 V.",
       "note": "25 W VHF / 20 W UHF; runs on 12 or 24 V. Low power not published."
     },
     "QYT|KT7900D": {
@@ -13298,6 +13616,7 @@
       "sources": [
         "https://www.rigpix.com/qyt/kt7900d.htm"
       ],
+      "caveat": "Quad-band; 25 W on 2 m, 1.25 m and 350 MHz, 20 W on 70 cm.",
       "note": "Quad-band; 25 W on 2m/1.25m/350 MHz, 20 W on 70cm."
     },
     "QYT|KT8900": {
@@ -13347,6 +13666,7 @@
         "https://www.qytradio.com/kt-8900-vhf-uhf-dual-band-mobile-ham-radio_p9.html",
         "https://www.rigpix.com/qyt/kt8900.htm"
       ],
+      "caveat": "25 W VHF / 20 W UHF. RigPix gives UHF TX as 400–520 MHz; the maker's page says 400–480 MHz.",
       "note": "25 W VHF / 20 W UHF. RigPix gives TX 400-520 MHz; maker page 400-480 MHz."
     },
     "QYT|KT8900D": {
@@ -13395,6 +13715,7 @@
       "sources": [
         "https://www.rigpix.com/qyt/kt8900d.htm"
       ],
+      "caveat": "25/15 W VHF, 20/12 W UHF. Quad standby is scanning, not multiple receivers.",
       "note": "25/15 W VHF, 20/12 W UHF. Quad standby is scanning, not multiple receivers."
     },
     "QYT|KT8900R": {
@@ -13451,6 +13772,7 @@
       "sources": [
         "https://www.rigpix.com/qyt/kt8900r.htm"
       ],
+      "caveat": "Tri-band; 25 W VHF / 20 W UHF.",
       "note": "Tri-band; 25 W VHF / 20 W UHF."
     },
     "QYT|KT980PLUS": {
@@ -13494,6 +13816,7 @@
       "sources": [
         "https://www.qytradio.com/vhf-uhf-75-55-watts-dual-band-mobile-ham-radio-kt-980plus_p13.html"
       ],
+      "caveat": "75/50/20 W VHF, 55/40/20 W UHF. The maker claims simultaneous dual-band receive; not independently confirmed.",
       "note": "75/50/20 W VHF, 55/40/20 W UHF. Maker claims simultaneous dual-band receive; not independently confirmed."
     },
     "Quansheng|TG-UV2+": {
@@ -13552,6 +13875,7 @@
       "sources": [
         "https://alafone.com/product/quansheng-tg-uv2-plus-2/"
       ],
+      "caveat": "Figures come from a retailer listing (high/mid/low power, 10 W max). Dual watch only.",
       "note": "Specs from retailer listing (high/mid/low power, 10 W max). Dual watch only."
     },
     "Quansheng|TK11": {
@@ -13606,6 +13930,7 @@
         "https://www.sinotel.co.uk/products/quansheng-tk11-5-wideband-handheld-transceiver",
         "https://hamimports.com/radio/quansheng-taiko-kong-tk11/"
       ],
+      "caveat": "Export version shown (5 W on 10 m/6 m, 10 W on VHF/UHF); the US version is ham-band limited. SSB is receive only. Dual watch. The TK11(8) ships with 3000 mAh.",
       "note": "Export version shown (5 W on 10m/6m, 10 W on VHF/UHF); US version is ham-band limited. SSB is receive only. Dual watch. TK11(8) ships 3000 mAh."
     },
     "Quansheng|UV-K1": {
@@ -13651,6 +13976,7 @@
         "https://hamimports.com/radio/quansheng-uv-k1-mini-kong/",
         "https://mrrashbone.substack.com/p/quansheng-uv-k1-handheld-in-depth"
       ],
+      "caveat": "2500 mAh is the common pack; some kits ship a 1400 mAh pack. Wideband receive including AM airband and broadcast FM.",
       "note": "Some kits ship a 1400 mAh pack; 2500 mAh is the common one. Wideband receive incl. AM airband and broadcast FM."
     },
     "Quansheng|UV-K5": {
@@ -13699,6 +14025,7 @@
       "sources": [
         "https://rigreference.com/rigs/6664-quansheng-uv-k5"
       ],
+      "caveat": "TX is 144–148/420–450 MHz on FCC units and 144–146/430–440 MHz on CE units.",
       "note": "TX 144-148/420-450 on FCC units, 144-146/430-440 on CE units"
     },
     "RT Systems|CSV": {
@@ -13717,6 +14044,7 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [],
+      "caveat": "",
       "note": "File format, not a radio"
     },
     "Radioddity|DB20-G": {
@@ -13761,6 +14089,7 @@
       "sources": [
         "https://www.radioddity.com/products/radioddity-db20g"
       ],
+      "caveat": "Limited to 5 W on channels 1–7 (462.5625–462.7125 MHz); 18–20 W elsewhere.",
       "note": "5W is the limit on channels 1-7 (462.5625-462.7125); 18-20W elsewhere."
     },
     "Radioddity|DB25-G": {
@@ -13800,6 +14129,7 @@
       "sources": [
         "https://www.radioddity.com/products/radioddity-db25g"
       ],
+      "caveat": "",
       "note": ""
     },
     "Radioddity|DB40-G": {
@@ -13835,6 +14165,7 @@
       "sources": [
         "https://www.radioddity.com/products/radioddity-db40-g"
       ],
+      "caveat": "Radioddity quotes high power as at least 40 W (up to 48 W).",
       "note": "Maker quotes HI >=40W (up to 48W)."
     },
     "Radioddity|GA-2S": {
@@ -13870,6 +14201,7 @@
       "sources": [
         "https://www.radioddity.com/products/ga-2s-uhf-two-way-radio-vox-squelch-2-pack"
       ],
+      "caveat": "2 W max.",
       "note": "2W max; low setting not documented."
     },
     "Radioddity|GA-510": {
@@ -13915,6 +14247,7 @@
       "sources": [
         "https://www.radioddity.com/products/radioddity-ga-510"
       ],
+      "caveat": "",
       "note": ""
     },
     "Radioddity|GM-30": {
@@ -13961,6 +14294,7 @@
       "sources": [
         "https://www.radioddity.com/products/radioddity-gm-30"
       ],
+      "caveat": "",
       "note": ""
     },
     "Radioddity|GM-30 Plus": {
@@ -13993,6 +14327,7 @@
         "https://www.radioddity.com/products/radioddity-gm-30-plus",
         "https://www.radioddity.com/blogs/all/radioddity-gm-30-plus-review"
       ],
+      "caveat": "5 W max. Receives GMRS, FM broadcast, VHF, UHF, NOAA, airband, 220–260 and 350–390 MHz; exact limits are not published.",
       "note": "5W max. RX bands: GMRS, FM, VHF, UHF, NOAA, airband, 220-260, 350-390 MHz; exact limits not published."
     },
     "Radioddity|GM-30 Pro": {
@@ -14025,6 +14360,7 @@
         "https://www.radioddity.com/products/radioddity-gm-30-pro",
         "https://hamshackreviews.com/radioddity-gm-30-pro-gmrs-transceiver/"
       ],
+      "caveat": "5 W max. Receives FM broadcast, airband, VHF, UHF, 1.25 m, 1 m and NOAA; exact limits are not published.",
       "note": "5W max. RX: FM, airband, VHF, UHF, 1.25M, 1M, NOAA; exact limits not published."
     },
     "Radioddity|GS-10B": {
@@ -14090,6 +14426,7 @@
         "https://www.radioddity.com/products/radioddity-gs-10b",
         "https://www.radioddity.com/products/radioddity-gs-10b-pro"
       ],
+      "caveat": "8 W max. TX ranges as published by the maker.",
       "note": "8W max; low settings not documented. TX ranges as published by the maker."
     },
     "Radioddity|GS-5B": {
@@ -14141,6 +14478,7 @@
       "sources": [
         "https://www.radioddity.com/products/radioddity-gs-5b"
       ],
+      "caveat": "The current upgraded version is 8 W; early units were 5 W/1 W.",
       "note": "Current upgraded version is 8W; early units were 5W/1W."
     },
     "Radioddity|MU-5": {
@@ -14171,6 +14509,7 @@
       "sources": [
         "https://www.radioddity.com/products/radioddity-mu-5"
       ],
+      "caveat": "2 W max. Also receives VHF/UHF, NOAA and FM broadcast; exact receive limits are not published.",
       "note": "2W max. Also receives VHF/UHF, NOAA and FM broadcast; exact RX limits not published."
     },
     "Radioddity|R2": {
@@ -14206,6 +14545,7 @@
       "sources": [
         "https://www.radioddity.com/products/radioddity-r2-two-way-radios"
       ],
+      "caveat": "2 W max. Some listings quote an 1100 mAh pack. USB-powered desktop charger.",
       "note": "2W max. Some listings quote an 1100mAh pack. USB-powered desktop charger."
     },
     "Radioddity|UV-5G": {
@@ -14244,6 +14584,7 @@
       "sources": [
         "https://www.radioddity.com/products/uv-5x"
       ],
+      "caveat": "Sold as Baofeng UV-5X / UV-5G. 5 W max on GMRS.",
       "note": "Sold as Baofeng UV-5X / UV-5G. 5W max on GMRS."
     },
     "Radioddity|UV-5G Plus": {
@@ -14287,6 +14628,7 @@
       "sources": [
         "https://www.radioddity.com/products/baofeng-uv-5g-plus"
       ],
+      "caveat": "5 W max; desktop charger sold separately.",
       "note": "5W max; desktop charger sold separately."
     },
     "Radioddity|UV-5RX3": {
@@ -14337,6 +14679,7 @@
       "sources": [
         "https://www.radioddity.com/products/baofeng-x-radioddity-uv-5rx3-tri-band-walkie-talkie"
       ],
+      "caveat": "5 W max on all bands.",
       "note": "5W max on all bands; low setting not documented."
     },
     "Radioddity|UV-82X3": {
@@ -14393,6 +14736,7 @@
       "sources": [
         "https://www.radioddity.com/products/baofeng-x-radioddity-uv-82x3"
       ],
+      "caveat": "3.5 W max on 1.25 m. Listed as discontinued.",
       "note": "3.5W max on 1.25M. Listed as discontinued."
     },
     "Radtel|RT-470": {
@@ -14458,6 +14802,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-470-6-bands-amateur-ham-two-way-radio-station-256ch-10w-air-band-walkie-talkie-noaa-lcd-color-police-scanner-aviation"
       ],
+      "caveat": "10 W on some bands only.",
       "note": "10 W on some bands only; low power not published. Stock battery capacity not stated by Radtel."
     },
     "Radtel|RT-470L": {
@@ -14525,6 +14870,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-470l-5w-6-bands-amateur-ham-two-way-radio-station-256ch-air-band-walkie-talkie-noaa-lcd-color-police-scanner-aviation"
       ],
+      "caveat": "The USB-C socket is on the battery; a desktop charger is sold separately.",
       "note": "USB-C socket on the battery; a desktop charger is sold separately."
     },
     "Radtel|RT-470X": {
@@ -14573,6 +14919,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-470x-tri-band-radio-walkie-talkies-256ch-aviation-air-band-two-way-radio-noaa-police-scanner-marine-long-range-handheld-transceiver-usb-c-wireless-copy-frequency"
       ],
+      "caveat": "Transmits 136–629 MHz, but Radtel says power is only useful on 136–174/400–470 MHz. The replacement pack is 2800 mAh.",
       "note": "TX 136-629 MHz, but Radtel says power is only useful on 136-174/400-470. Replacement pack is 2800 mAh; stock not stated."
     },
     "Radtel|RT-470X_BT": {
@@ -14621,6 +14968,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-470x-plus-bluetooth-ham-walkie-talkies-256ch-air-band-two-way-radio-station-aviation-noaa-police-marine-transceiver"
       ],
+      "caveat": "Bluetooth app-programming version of the RT-470X (RT-470X Plus), on a different PCB.",
       "note": "Bluetooth app-programming version of the RT-470X (RT-470X Plus); different PCB."
     },
     "Radtel|RT-490": {
@@ -14687,6 +15035,7 @@
         "https://www.radtels.com/products/none-gps-buletooth-ver-radtel-rt-490-amateur-ham-radio-256ch-air-band-walkie-talkie-vox-sos-lcd-police-scanner-aviation",
         "https://www.radtels.com/products/walkie-talkie-li-ion-battery-pack-2000mah-for-radtel-rt-490-two-way-ham-radio"
       ],
+      "caveat": "Sold with and without GPS/Bluetooth; GPS, APRS and Bluetooth depend on the variant.",
       "note": "Sold with and without GPS/Bluetooth; GPS, APRS and Bluetooth depend on the variant."
     },
     "Radtel|RT-495": {
@@ -14758,6 +15107,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-495-ip67-waterproof-radio-air-band-walkie-talkie-with-256ch-long-range-high-power-uhf-8w-vhf-10w-two-way-radio-one-touch-frequency-finder-usb-c-charging-noaa-vox-2800mah-battery"
       ],
+      "caveat": "10 W VHF / 8 W UHF. The listing title says 2800 mAh; the packing list says 2600 mAh.",
       "note": "10 W VHF / 8 W UHF. Listing title says 2800 mAh, packing list says 2600 mAh."
     },
     "Radtel|RT-620": {
@@ -14795,6 +15145,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-620-gps-10w-136-620mhz-amateur-ham-two-way-radio-999ch-air-band-walkie-talkie-color-lcd-police-noaa-aviation"
       ],
+      "caveat": "Radtel lists 136–620 MHz TX/RX (regional limits apply), AM airband 108–136 MHz receive, broadcast FM and a 1.77 in colour LCD. GPS is optional.",
       "note": "Maker lists 136-620 MHz TX/RX (regional limits apply), AM airband 108-136 RX, broadcast FM, 1.77in color LCD; GPS listed as an option."
     },
     "Radtel|RT-630": {
@@ -14846,6 +15197,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-630-ip67-waterproof-10w-full-bands-ham-radio-aviation-air-band-long-range-handheld-walkie-talkie-wireless-copy-frequency-usb-c-2600mah-battery"
       ],
+      "caveat": "7–10 W only on 136–174/400–470 MHz; much less on other bands.",
       "note": "7-10 W only on 136-174/400-470 MHz; other bands much less."
     },
     "Radtel|RT-730": {
@@ -14893,6 +15245,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-730-ip67-waterproof-10w-air-band-walkie-talkie-full-band-amateur-ham-199ch-ht-usb-c-battery-noaa-fm-am-uhf-vhf-satcom-1"
       ],
+      "caveat": "",
       "note": ""
     },
     "Radtel|RT-880G": {
@@ -14954,6 +15307,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-880g-gps-aprs-10w-multi-band-ham-radio-hf-uhf-vhf-with-am-usb-lsb-cw-cb-lw-mw-sw-ssb-1024-channels-cross-band-repeater"
       ],
+      "caveat": "TX on 18–32 MHz is FM only. SSB/CW are receive only.",
       "note": "TX on 18-32 MHz is FM only. SSB/CW are receive only."
     },
     "Radtel|RT-900": {
@@ -15003,6 +15357,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-900-8w-multi-band-ham-radio-walkie-talkie-256ch-vhf-uhf-two-way-radio-air-band-noaa-marine-river-for-outdoor-emergency-aviation-communication-none-bluetooth-version"
       ],
+      "caveat": "Non-Bluetooth version.",
       "note": "Non-Bluetooth version."
     },
     "Radtel|RT-900_BT": {
@@ -15052,6 +15407,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-900-8w-full-band-ham-radio-walkie-talkie-256ch-air-band-two-way-radio-station-aviation-noaa-police-marine-river-ptt"
       ],
+      "caveat": "Bluetooth app-programming version of the RT-900.",
       "note": "Bluetooth app-programming version of the RT-900."
     },
     "Radtel|RT-910": {
@@ -15112,6 +15468,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-910-5w-multi-band-walkie-talkie-45-59mhz-tx-rx-with-960-channels-am-fm-two-way-radio-air-band-type-c-spectrum-copy-frequency"
       ],
+      "caveat": "Non-Bluetooth version.",
       "note": "No Bluetooth version."
     },
     "Radtel|RT-910_BT": {
@@ -15172,6 +15529,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-910b-bluetooth-app-programming-multi-band-6-meter-walkie-talkie-45-59mhz-tx-rx-with-960-channels-am-fm-two-way-radio-air-band-type-c-spectrum"
       ],
+      "caveat": "Sold as the RT-910B, the Bluetooth app-programming version.",
       "note": "Sold as RT-910B, the Bluetooth app-programming version."
     },
     "Radtel|RT-920": {
@@ -15237,6 +15595,7 @@
       "sources": [
         "https://www.radtels.com/products/radtel-rt-920-walkie-talkie-long-range-sw-mw-lw-am-ssb-cb-10w-receive-wireless-bluetooth-phone-programming-noaa-two-way-radio-1"
       ],
+      "caveat": "Shortwave/SSB are receive only. Some resellers omit the desktop charger.",
       "note": "Shortwave/SSB are receive only. Some resellers omit the desktop charger."
     },
     "Radtel|T18": {
@@ -15275,6 +15634,7 @@
         "https://www.miklor.com/COM/Review_T18.php",
         "https://www.miklor.com/T18/"
       ],
+      "caveat": "16-channel UHF handheld with no keypad; programmed by cable.",
       "note": "16-channel UHF handheld with no keypad; programmed by cable."
     },
     "Retevis|C2": {
@@ -15321,6 +15681,7 @@
       "sources": [
         "https://www.retevis.com/products/retevis-c2-gmrs-5w-ai-noise-reduction-noaa-with-dual-watch-durable-business-radio"
       ],
+      "caveat": "NOAA receive. Retevis lists 100–134 MHz receive, but AM airband is not confirmed.",
       "note": "NOAA RX. Maker lists RX 100-134MHz but AM airband is not confirmed."
     },
     "Retevis|H777": {
@@ -15359,6 +15720,7 @@
       "sources": [
         "https://www.retevis.com/products/h777-affordable-business-frs-radio"
       ],
+      "caveat": "Covers the current (2024+) FRS H777; a PMR446 version is sold in the EU. The original H-777 was a 400–470 MHz radio.",
       "note": "Current (2024+) FRS H777; a PMR446 version is sold in EU. The original H-777 was a 400-470MHz radio."
     },
     "Retevis|H777 Plus": {
@@ -15381,6 +15743,7 @@
       "sources": [
         "https://chirpmyradio.com/issues/8565"
       ],
+      "caveat": "PMR446 twin of the H777/BF-888S (fixed antenna, no display); a US listing calls it FRS 2 W. Band and power are unconfirmed.",
       "note": "CHIRP: PMR446 twin of H777/BF-888S (fixed antenna, no display); a US listing calls it FRS 2W. Band and power unconfirmed."
     },
     "Retevis|H777H_FRS": {
@@ -15419,6 +15782,7 @@
       "sources": [
         "https://www.retevis.com/products/retevis-h777h-frs-portable-2-way-radios-with-hidden-display-2-pack"
       ],
+      "caveat": "Hidden (show-through) display.",
       "note": "Hidden (dim-through) display."
     },
     "Retevis|H777H_PMR": {
@@ -15458,6 +15822,7 @@
         "https://www.retevis.com/products/retevis-h777h-rechargeable-pmr446-walkie-talkie-with-hidden-display-2-pack",
         "https://www.retevis.com/products/retevis-h777h-frs-portable-2-way-radios-with-hidden-display-2-pack"
       ],
+      "caveat": "PMR446 version of the H777H; figures other than band and power are the FRS version's.",
       "note": "PMR446 version of H777H; specs taken from FRS version except band/power."
     },
     "Retevis|H777S": {
@@ -15493,6 +15858,7 @@
       "sources": [
         "https://www.retevis.com/products/h777s-frs-business-radio"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|HA1G": {
@@ -15540,6 +15906,7 @@
       "sources": [
         "https://www.retevis.com/products/ailunce-ha1g-5w-ip67-gmrs-radio-with-250-channels"
       ],
+      "caveat": "Sold as Ailunce HA1G. NOAA receive.",
       "note": "Sold as Ailunce HA1G. NOAA RX."
     },
     "Retevis|HA1UV": {
@@ -15590,6 +15957,7 @@
       "sources": [
         "https://www.retevis.com/products/retevis-ailunce-ha1uv-ip67-waterproof-sub-ptt-rechargeable-dual-band-two-way-radio"
       ],
+      "caveat": "US version; the EU version transmits 144–146/430–440 MHz.",
       "note": "US version; EU TX 144-146/430-440MHz. Desk charger not confirmed."
     },
     "Retevis|HA2": {
@@ -15633,6 +16001,7 @@
       "sources": [
         "https://www.retevis.com/products/ailunce-ha2-fpp-uv-band-gps/aprs-high-power-ham-radio"
       ],
+      "caveat": "US version; the EU version transmits 144–146/430–440 MHz. Has Bluetooth, but programming over Bluetooth is not confirmed.",
       "note": "US version; EU TX 144-146/430-440MHz. Has Bluetooth, but programming over BT not confirmed."
     },
     "Retevis|MA1": {
@@ -15686,6 +16055,7 @@
       "sources": [
         "https://www.retevis.com/products/retevis-ma1-uhf-vhf-50w-high-power-amateur-ham-radio-with-detachable-front-panel"
       ],
+      "caveat": "Marketed as 70 W VHF / 60 W UHF; the spec table says 50/40 W high. US ham TX ranges.",
       "note": "Marketed 70W VHF/60W UHF; spec table says 50/40W high. US ham TX ranges."
     },
     "Retevis|P2": {
@@ -15719,6 +16089,7 @@
       "sources": [
         "https://www.retevis.com/products/p2-high-power-noise-reduction-ip68-waterproof-gmrs-radio"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|P62": {
@@ -15765,6 +16136,7 @@
       "sources": [
         "https://www.retevis.com/products/p62-long-range-ip68-waterproof-rugged-uv-dual-band-walkie-talkie"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|RA25": {
@@ -15802,6 +16174,7 @@
       "sources": [
         "https://www.retevis.com/products/ra25-20w-gmrs-mobile-radio"
       ],
+      "caveat": "GMRS version, 20 W max. A dual-band (144–146/430–440 MHz) version is also sold.",
       "note": "GMRS version, 20W max (low level not stated). A UV dual-band (144-146/430-440MHz) version is also sold."
     },
     "Retevis|RA685": {
@@ -15854,6 +16227,7 @@
         "https://www.ailunce.com/blog/new-5w-dual-band-ham-radio-retevis-ra685",
         "https://www.manualslib.com/manual/2769241/Retevis-Ra685.html"
       ],
+      "caveat": "TX 144–146/430–440 MHz is the EU/export spec; US listings show 144–148/420–450 MHz. Dual standby, not dual receive.",
       "note": "TX 144-146/430-440 is the EU/export spec; US listings show 144-148/420-450. Dual standby, not dual receive."
     },
     "Retevis|RA79": {
@@ -15896,6 +16270,7 @@
         "https://www.retevis.com/products/ra79-noaa-multiband-receiving-air-band-amateur-radio",
         "https://v3.retevis.com/Themes/Retevis/Assets/files/download/Manuals_Portable_Radios/RA79-English-Manual.pdf"
       ],
+      "caveat": "US version; the EU version transmits 144–146/430–440 MHz. High/mid/low power, 5 W max.",
       "note": "US version; EU TX 144-146/430-440MHz. H/M/L power, max 5W; low level not stated."
     },
     "Retevis|RA85": {
@@ -15939,6 +16314,7 @@
       "sources": [
         "https://v3.retevis.com/Themes/Retevis/Assets/files/download/Manuals_Portable_Radios/RA85-English-Manual.pdf"
       ],
+      "caveat": "NOAA receive. Charges by USB cable.",
       "note": "NOAA RX. Manual says USB charging cable; connector type not stated."
     },
     "Retevis|RA86": {
@@ -15974,6 +16350,7 @@
       "sources": [
         "https://www.retevis.com/products/ra86-gmrs-mobile-two-way-radio"
       ],
+      "caveat": "NOAA receive.",
       "note": "NOAA RX."
     },
     "Retevis|RA87": {
@@ -16004,6 +16381,7 @@
       "sources": [
         "https://www.retevis.com/products/ra87-40w-powerful-long-range-gmrs-mobile-radio"
       ],
+      "caveat": "Dual standby, not dual receive.",
       "note": "Dual standby, not dual receive."
     },
     "Retevis|RA89": {
@@ -16051,6 +16429,7 @@
       "sources": [
         "https://www.retevis.com/products/retevis-ra89-high-power-ip68-ham-radio-with-intelligent-noise-reduction"
       ],
+      "caveat": "US version; the EU version transmits 144–146/430–440 MHz. Receives FM broadcast.",
       "note": "US version; EU TX 144-146/430-440MHz. FM broadcast RX range not stated."
     },
     "Retevis|RB15": {
@@ -16089,6 +16468,7 @@
         "https://www.amazon.com/Retevis-Rechargeable-Talkies-Vibration-Emergency/dp/B084TG9K64",
         "https://mans.io/files/viewer/1279085/1"
       ],
+      "caveat": "22-channel FRS; micro-USB charging per a retailer listing.",
       "note": "FRS 22ch; micro-USB charging per retailer listing."
     },
     "Retevis|RB17": {
@@ -16127,6 +16507,7 @@
         "https://www.retevis.com/products/rb17-long-battery-life-frs-radio",
         "https://v3.retevis.com/Themes/Retevis/Assets/files/download/Manuals_Portable_Radios/RB17-English-Manual.pdf"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|RB17A": {
@@ -16159,6 +16540,7 @@
       "sources": [
         "https://www.retevis.com/products/retevis-rb17a-portable-gmrs-handheld-two-way-radio-with-earpiece-6pack"
       ],
+      "caveat": "5 W high. Retevis lists receive as 462.55–462.725 MHz only.",
       "note": "5W high; low level not stated. Maker lists RX 462.55-462.725 only."
     },
     "Retevis|RB17P": {
@@ -16191,6 +16573,7 @@
       "sources": [
         "https://www.retevis.com/products/rb17p-powerful-handheld-gmrs-radio-rechargeable-two-way-radios"
       ],
+      "caveat": "5 W high. NOAA receive. USB charging; a charging base is sold for it.",
       "note": "5W high; low level not stated. NOAA RX. Charging base sold for it; USB charging connector not stated."
     },
     "Retevis|RB17V": {
@@ -16229,6 +16612,7 @@
         "https://www.retevis.com/products/retevis-rb17v-long-standby-murs-radio-with-high-gain-antenna-bundle-4-pack",
         "https://v3.retevis.com/Themes/Retevis/Assets/files/download/Manuals_Portable_Radios/RB17V-English-Manual.pdf"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|RB18": {
@@ -16263,6 +16647,7 @@
       "sources": [
         "https://manuals.plus/retevis/rb18-walkie-talkies-for-adults-manual"
       ],
+      "caveat": "FRS, 2 W max. NOAA receive. Charges by USB cable.",
       "note": "FRS, max 2W. NOAA RX. USB cable charging; connector type not stated."
     },
     "Retevis|RB19": {
@@ -16300,6 +16685,7 @@
       "sources": [
         "https://www.retevis.com/products/rb19-ultra-thin-matrix-display-frs-radio"
       ],
+      "caveat": "Retevis lists 2 W; FRS channels 8–14 are 0.5 W.",
       "note": "Maker lists 2W; FRS ch 8-14 are 0.5W."
     },
     "Retevis|RB19P": {
@@ -16343,6 +16729,7 @@
         "https://shop.mygmrs.com/products/retevis-rb19p-slim-gmrs-handheld-radio",
         "https://manuals.plus/retevis/rb19p-rechargeable-frs-band-two-way-radio-manual"
       ],
+      "caveat": "GMRS, 30 channels, 3 W max. NOAA weather receive; 1.7 in screen.",
       "note": "GMRS 30ch, 3W max; NOAA weather receive; 1.7in screen."
     },
     "Retevis|RB23": {
@@ -16378,6 +16765,7 @@
         "https://www.retevis.com/products/rb23-waterproof-gmrs-two-way-radio",
         "https://v3.retevis.com/Themes/Retevis/Assets/files/download/Manuals_Portable_Radios/RB23-English-Manual.pdf"
       ],
+      "caveat": "5 W max. IP67.",
       "note": "5W max; low level not stated. IP67."
     },
     "Retevis|RB26": {
@@ -16412,6 +16800,7 @@
       "sources": [
         "https://www.retevis.com/products/rb26-gmrs-two-way-radio-with-usb-charger-and-torch-light"
       ],
+      "caveat": "3 W max. Charging base sold separately.",
       "note": "3W max; low level not stated. Charging base sold separately."
     },
     "Retevis|RB27": {
@@ -16453,6 +16842,7 @@
         "https://www.manualslib.com/manual/2207363/Retevis-Rb27.html",
         "https://www.amazon.com/Retevis-RB27-Flashlight-Rechargeable-Handheld/dp/B08VP1TDYV"
       ],
+      "caveat": "GMRS. NOAA receive. Dual watch only.",
       "note": "GMRS; power levels not stated. NOAA RX. Dual watch only."
     },
     "Retevis|RB27B": {
@@ -16496,6 +16886,7 @@
       "sources": [
         "https://www.newegg.com/p/0R3-07E1-000H6"
       ],
+      "caveat": "NOAA receive. Dual watch only.",
       "note": "NOAA RX. Dual watch only."
     },
     "Retevis|RB27V": {
@@ -16531,6 +16922,7 @@
       "sources": [
         "https://amazon.com/Retevis-Rechargeable-Talkies-Flashlight-Adventure/dp/B08XBHSQVV"
       ],
+      "caveat": "MURS. NOAA receive. Figures come from a retailer.",
       "note": "MURS; power not stated. NOAA RX. Retailer data."
     },
     "Retevis|RB28": {
@@ -16568,6 +16960,7 @@
       "sources": [
         "https://www.retevis.com/products/rb28-noaa-frs-two-way-radio"
       ],
+      "caveat": "NOAA receive.",
       "note": "NOAA RX."
     },
     "Retevis|RB28B": {
@@ -16605,6 +16998,7 @@
       "sources": [
         "https://v3.retevis.com/Themes/Retevis/Assets/files/download/Manuals_Portable_Radios/RB28B-English-Manual.pdf"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|RB29": {
@@ -16640,6 +17034,7 @@
         "https://www.retevis.com/products/rb29-frs-radio-with-wireless-copy-function",
         "https://v3.retevis.com/Themes/Retevis/Assets/files/download/Manuals_Portable_Radios/RB29-English-Manual.pdf"
       ],
+      "caveat": "2 W max. Retevis says USB charging (not Type-C).",
       "note": "2W max. Maker says USB charging (not Type-C)."
     },
     "Retevis|RB615": {
@@ -16677,6 +17072,7 @@
       "sources": [
         "https://www.sunsky-online.com/p/EDA001555801A/RETEVIS-RB615-0.5W-EU-Frequency-PMR446-16CHS-License-free-Two-Way-Radio-Handheld-Walkie-Talkie-with-Vibration-Wireless-Cloning-Function-Black-.htm"
       ],
+      "caveat": "PMR446 version of the RB15; figures come from a retailer.",
       "note": "PMR446 version of RB15; retailer data."
     },
     "Retevis|RB617": {
@@ -16711,6 +17107,7 @@
       "sources": [
         "https://www.retevis.fr/products/retevis-rb617-radio-pmr4464400-mah-avec-chargeur-de-type-c"
       ],
+      "caveat": "PMR446 version of the RB17. Retevis states 2 W, apparently copied from the RB17; PMR446 is 0.5 W.",
       "note": "PMR446 version of RB17. Maker page states 2W, apparently copied from RB17; PMR446 is 0.5W."
     },
     "Retevis|RB618": {
@@ -16746,6 +17143,7 @@
       "sources": [
         "https://treasurecoastrfsupply.com/products/retevis-rb618-mini-walkie-talkie-rechargeable-walkie-talkies-1-or-2-pcs-ptt-pmr446-long-range-portable-two-way-radio-for-hunting"
       ],
+      "caveat": "PMR446 version of the RB18; figures come from a retailer.",
       "note": "PMR446 version of RB18; retailer data."
     },
     "Retevis|RB619": {
@@ -16781,6 +17179,7 @@
       "sources": [
         "https://www.retevis.fr/products/retevis-rb619-radio-bidirectionnelle-l%C3%A9g%C3%A8re-pmr446-10-pi%C3%A8ces-avec-chargeur-10-voies"
       ],
+      "caveat": "PMR446 version of the RB19; LED matrix display.",
       "note": "PMR446 version of RB19; LED matrix display."
     },
     "Retevis|RB626": {
@@ -16819,6 +17218,7 @@
       "sources": [
         "https://www.retevis.com/products/rb626-uhf-2000mah-type-c-rechargeable-walkie-talkies"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|RB627B": {
@@ -16862,6 +17262,7 @@
       "sources": [
         "https://www.newegg.com/p/0R3-07E1-000H6"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|RB628": {
@@ -16899,6 +17300,7 @@
       "sources": [
         "https://www.retevis.fr/products/rb628-radio-portable-pmr446-%C3%A0-chargement-type-c-%C3%A0-16-canaux"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|RB628B": {
@@ -16936,6 +17338,7 @@
       "sources": [
         "https://www.amazon.co.uk/Retevis-Rechargeable-Charging-Earpiece-Restaurant-Black/dp/B09GMCWCG1"
       ],
+      "caveat": "PMR446, 16 channels, 500 mW; variant of the RB628 (which has an LCD).",
       "note": "PMR446 16ch, 500 mW; variant of RB628 (which has an LCD)."
     },
     "Retevis|RB629": {
@@ -16971,6 +17374,7 @@
       "sources": [
         "https://www.retevis.com/products/rb629-pmr-radio-with-wireless-copy-function"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|RB75": {
@@ -17006,6 +17410,7 @@
       "sources": [
         "https://www.retevis.com/products/rb75-waterproof-long-standby-gmrs-two-way-radios"
       ],
+      "caveat": "GMRS; a single 5 W power level is listed.",
       "note": "GMRS; single 5W power level listed"
     },
     "Retevis|RB85": {
@@ -17043,6 +17448,7 @@
       "sources": [
         "https://www.retevis.com/products/rb85-intelligent-noise-reduction-high-power-uhf-business-radios"
       ],
+      "caveat": "",
       "note": ""
     },
     "Retevis|RB87": {
@@ -17080,6 +17486,7 @@
       "sources": [
         "https://www.retevis.com/products/rb87-high-cost-performance-gmrs-5w-commercial-walkie-talkies"
       ],
+      "caveat": "A desk charger is sold as an accessory; it is unclear whether one is included.",
       "note": "Desk charger sold as accessory; unclear if included"
     },
     "Retevis|RB89": {
@@ -17119,6 +17526,7 @@
         "https://www.retevis.com/products/rb89-long-range-bluetooth-gmrs-radio-with-bluetooth-headset",
         "https://manuals.plus/retevis/rb89-high-power-gmrs-radio-with-bluetooth-earpiece-manual"
       ],
+      "caveat": "Hidden LED display. Bluetooth is for the headset only.",
       "note": "Hidden LED display; Bluetooth is for the headset only; low power level value not published"
     },
     "Retevis|RT1": {
@@ -17154,6 +17562,7 @@
       "sources": [
         "https://www.retevis.com/products/rt1-high-power-uhf-or-vhf-analog-business-radio"
       ],
+      "caveat": "UHF version shown; a VHF version also exists.",
       "note": "UHF version shown; a VHF version also exists (separate software)"
     },
     "Retevis|RT15": {
@@ -17191,6 +17600,7 @@
       "sources": [
         "https://www.retevis.com/products/rt15-mini-lightweight-frs-for-business-radio"
       ],
+      "caveat": "US FRS version; desktop charger sold separately.",
       "note": "US FRS version; desktop charger sold separately"
     },
     "Retevis|RT16": {
@@ -17233,6 +17643,7 @@
       "sources": [
         "https://www.walkie-talkie-guide.com/retevis-rt16-review/"
       ],
+      "caveat": "FRS with NOAA and FM broadcast receive; charged by a dual USB cable.",
       "note": "FRS with NOAA and FM broadcast receive; charged by dual USB cable"
     },
     "Retevis|RT18": {
@@ -17268,6 +17679,7 @@
       "sources": [
         "https://www.retevis.com/products/rt18-and-usb-charger-bundle"
       ],
+      "caveat": "US FRS version.",
       "note": "US FRS version"
     },
     "Retevis|RT19": {
@@ -17303,6 +17715,7 @@
       "sources": [
         "https://www.retevis.com/products/rt19-frs-business-radio"
       ],
+      "caveat": "US FRS version; the RT619 is the PMR446 sibling.",
       "note": "US FRS version; RT619 is the PMR446 sibling"
     },
     "Retevis|RT20": {
@@ -17345,6 +17758,7 @@
       "sources": [
         "https://www.retevis.com/products/rt20-frs-mini-commercial-radios"
       ],
+      "caveat": "US FRS version with FM broadcast receive.",
       "note": "US FRS version with FM broadcast receive"
     },
     "Retevis|RT21": {
@@ -17382,6 +17796,7 @@
       "sources": [
         "https://www.retevis.com/products/rt21-robust-durable-license-free-business-radio-6-pack"
       ],
+      "caveat": "US FRS version; output is quoted as up to 2 W.",
       "note": "US FRS version; output power quoted as up to 2W"
     },
     "Retevis|RT21H": {
@@ -17420,6 +17835,7 @@
       "sources": [
         "https://www.retevis.com/products/retevis-rt21h-license-free-walkie-talkie-with-hidden-display"
       ],
+      "caveat": "Hidden display; FRS and PMR446 versions exist.",
       "note": "Hidden display; FRS and PMR446 versions exist"
     },
     "Retevis|RT21V": {
@@ -17456,6 +17872,7 @@
         "https://manuals.plus/retevis/rt21v-murs-radio-manual",
         "https://www.retevis.com/products/rt21-rt21v-1100mah-3-7v-original-rechargeable-li-ion-battery"
       ],
+      "caveat": "MURS version of the RT21; output quoted as up to 2 W. Charges by USB.",
       "note": "MURS version of RT21; power quoted as up to 2W; USB charging, connector type not confirmed"
     },
     "Retevis|RT22": {
@@ -17493,6 +17910,7 @@
       "sources": [
         "https://www.retevis.com/products/rt22-channel-lock-frs-business-radio"
       ],
+      "caveat": "Figures are for the current US FRS RT22 (Type-C); older units charged by micro-USB.",
       "note": "Specs of current US FRS RT22 (Type-C); older units charged by micro-USB"
     },
     "Retevis|RT22FRS": {
@@ -17530,6 +17948,7 @@
       "sources": [
         "https://www.retevis.com/products/rt22-channel-lock-frs-business-radio"
       ],
+      "caveat": "FRS-locked RT22; current units charge by Type-C, older units by micro-USB.",
       "note": "FRS-locked RT22; current units Type-C, older units micro-USB"
     },
     "Retevis|RT22S": {
@@ -17567,6 +17986,7 @@
       "sources": [
         "https://www.retevis.com/products/license-free-22-channel-frs-band-rt22s"
       ],
+      "caveat": "Hidden channel display.",
       "note": "Hidden channel display"
     },
     "Retevis|RT23": {
@@ -17612,6 +18032,7 @@
         "https://www.ailunce.com/blog/retevis-rt23-analog-cross-band-repeater-radio",
         "https://www.hamradioreviews.eu/2016/11/29/retevis-rt23-analog-radio/"
       ],
+      "caveat": "5 W VHF / 4 W UHF. Sources quote the battery as 1600 or 2800 mAh.",
       "note": "5W VHF / 4W UHF; battery quoted as 1600 or 2800mAh by different sources"
     },
     "Retevis|RT24": {
@@ -17649,6 +18070,7 @@
       "sources": [
         "https://www.retevis.com/products/retevis-rt24-license-free-pmr446-business-walkie-talkie-10-pack"
       ],
+      "caveat": "EU PMR446 version; USB-powered charging base.",
       "note": "EU PMR446 version; USB-powered charging base"
     },
     "Retevis|RT24V": {
@@ -17684,6 +18106,7 @@
       "sources": [
         "https://www.ebay.com/itm/283693636956"
       ],
+      "caveat": "German Freenet variant of the RT24 (149 MHz, 6 channels, 0.5 W); the range is the Freenet allocation.",
       "note": "German Freenet (149 MHz, 6ch, 0.5W) variant of the RT24; range is the Freenet allocation."
     },
     "Retevis|RT26": {
@@ -17716,6 +18139,7 @@
       "sources": [
         "https://www.amazon.com/Retevis-400-470MHz-Handheld-Transceiver-Programming/dp/B0723BQ7FP"
       ],
+      "caveat": "UHF; hidden LCD. Listings quote power as 3 W or 10 W.",
       "note": "UHF; hidden LCD; power quoted as 3W and 10W by different listings"
     },
     "Retevis|RT29_UHF": {
@@ -17753,6 +18177,7 @@
       "sources": [
         "https://www.retevis.com/products/rt29-long-range-waterproof-uhf-radio"
       ],
+      "caveat": "",
       "note": "Low power level value not published"
     },
     "Retevis|RT29_VHF": {
@@ -17790,6 +18215,7 @@
       "sources": [
         "https://www.retevis.com/products/rt29-long-range-waterproof-vhf-walkie-talkies"
       ],
+      "caveat": "",
       "note": "Low power level value not published"
     },
     "Retevis|RT40B": {
@@ -17824,6 +18250,7 @@
       "sources": [
         "https://www.amazon.com/Retevis-Rechargeable-Lightweight-Wireless-Restaurant/dp/B095LMSNTN"
       ],
+      "caveat": "US FRS radio, 22 channels; charging base with micro-USB input. Not the DMR RT40.",
       "note": "US FRS radio, 22 channels; charging base with micro-USB input; not the DMR RT40"
     },
     "Retevis|RT47": {
@@ -17861,6 +18288,7 @@
       "sources": [
         "https://www.retevis.com/products/rt47-rugged-ip67-waterproof-walkie-talkies"
       ],
+      "caveat": "US FRS version; IP67.",
       "note": "US FRS version; IP67"
     },
     "Retevis|RT47V": {
@@ -17898,6 +18326,7 @@
       "sources": [
         "https://www.retevis.com/products/rt47v-murs-handheld-rechargeable-waterproof-two-way-radios"
       ],
+      "caveat": "MURS; IP67.",
       "note": "MURS; IP67"
     },
     "Retevis|RT6": {
@@ -17947,6 +18376,7 @@
         "https://www.manualslib.com/manual/1127281/Retevis-Rt6.html",
         "https://www.sunsky-online.com/p/EDA001443801/RETEVIS-RT6-400-520MHz-136-174MHz-128CH-Two-Way-Radio-Waterproof-Dust-proof-Walkie-Talkie-US-Plug.htm"
       ],
+      "caveat": "IP67; 5/3/1 W.",
       "note": "IP67; 5/3/1W"
     },
     "Retevis|RT619": {
@@ -17982,6 +18412,7 @@
       "sources": [
         "https://www.retevis.com/products/rt619-pmr-business-radio"
       ],
+      "caveat": "EU PMR446 sibling of the RT19.",
       "note": "EU PMR446 sibling of RT19"
     },
     "Retevis|RT622": {
@@ -18019,6 +18450,7 @@
       "sources": [
         "https://www.retevis.com/products/rt622-small-pocketable-license-free-radio"
       ],
+      "caveat": "EU PMR446 version; charged by USB cable.",
       "note": "EU PMR446 version; charged by USB cable"
     },
     "Retevis|RT647": {
@@ -18054,6 +18486,7 @@
       "sources": [
         "https://www.retevis.com/products/rt647-ip67-pmr-two-way-radio-6-pack"
       ],
+      "caveat": "PMR446 sibling of the RT47; IP67.",
       "note": "PMR446 sibling of RT47; IP67"
     },
     "Retevis|RT668": {
@@ -18091,6 +18524,7 @@
       "sources": [
         "https://www.retevis.com/products/rt668-rugged-pmr446-walkie-talkie-with-air-tube-earpiece"
       ],
+      "caveat": "EU PMR446.",
       "note": "EU PMR446"
     },
     "Retevis|RT68": {
@@ -18130,6 +18564,7 @@
         "https://www.retevis.com/products/rt68-frs-business-radio",
         "https://www.retevis.com/products/usb-charging-base-for-rt68"
       ],
+      "caveat": "US FRS version.",
       "note": "US FRS version"
     },
     "Retevis|RT76": {
@@ -18168,6 +18603,7 @@
       "sources": [
         "https://www.amazon.com/Retevis-Channels-Outdoor-Talkies-Speaker/dp/B0828FF54B"
       ],
+      "caveat": "GMRS; NOAA weather receive.",
       "note": "GMRS; NOAA weather receive"
     },
     "Retevis|RT76P": {
@@ -18209,6 +18645,7 @@
         "https://www.retevis.com/blog/rt76p-a-gmrs-radio-suitable-for-beginners",
         "https://www.amazon.com/Retevis-Talkies-Rechargeable-Display-Outdoor/dp/B08FWWTZT4"
       ],
+      "caveat": "GMRS with LCD and NOAA receive; Retevis's product page now redirects to the RT86S.",
       "note": "GMRS with LCD, NOAA; retevis.com product page now redirects to RT86S"
     },
     "Retevis|RT85": {
@@ -18255,6 +18692,7 @@
       "sources": [
         "https://www.retevis.com/products/rt85-full-power-fpp-dual-band-ham-radio"
       ],
+      "caveat": "Dual band, dual standby (not simultaneous).",
       "note": "Dual band, dual standby (not simultaneous)"
     },
     "Retevis|RT86": {
@@ -18290,6 +18728,7 @@
       "sources": [
         "https://www.retevis.com/products/rt86-hidden-display-uhf-two-way-radio-with-flashlight-long-distance-call"
       ],
+      "caveat": "UHF; hidden digital-tube display.",
       "note": "UHF; hidden digital-tube display"
     },
     "Retevis|RT86S": {
@@ -18327,6 +18766,7 @@
       "sources": [
         "https://www.retevis.com/products/retevis-rt86s-long-range-gmrs-two-way-radio-with-lcd-display"
       ],
+      "caveat": "GMRS version (a UHF version is also sold); NOAA weather receive.",
       "note": "GMRS version (UHF version also sold); NOAA weather receive"
     },
     "Retevis|RT87": {
@@ -18371,6 +18811,7 @@
         "https://blog.funil.de/635/sinuspl/english/ham-radio-rigs/retevis-rt87-page/",
         "https://www.retevis.com/blog/compare-ra89-and-rt87-waterproof-ham-radio"
       ],
+      "caveat": "IP67 dual band.",
       "note": "IP67 dual band; old retevis.com page now redirects elsewhere"
     },
     "Retevis|RT9000D_136-174": {
@@ -18407,6 +18848,7 @@
         "https://www.retevis.com/products/rt9000d-vhf-mobile-car-ham-radio-transceiver",
         "https://www.retevis.com/products/rt9000d-uhf-high-power-mobile-radio-car-ham-transceiver"
       ],
+      "caveat": "Single-band VHF model.",
       "note": "Single-band VHF model"
     },
     "Retevis|RT9000D_220-260": {
@@ -18443,6 +18885,7 @@
         "https://www.retevis.com/products/rt9000d-vhf-mobile-car-ham-radio-transceiver",
         "https://www.retevis.com/products/rt9000d-uhf-high-power-mobile-radio-car-ham-transceiver"
       ],
+      "caveat": "Single-band 1.25 m model; Retevis lists it with the VHF model's 50/25/10 W power.",
       "note": "Single-band 1.25m model; Retevis lists it with VHF power 50/25/10W"
     },
     "Retevis|RT9000D_400-490": {
@@ -18479,6 +18922,7 @@
         "https://www.retevis.com/products/rt9000d-vhf-mobile-car-ham-radio-transceiver",
         "https://www.retevis.com/products/rt9000d-uhf-high-power-mobile-radio-car-ham-transceiver"
       ],
+      "caveat": "Single-band UHF model.",
       "note": "Single-band UHF model"
     },
     "Retevis|RT9000D_66-88": {
@@ -18511,6 +18955,7 @@
       "sources": [
         "https://www.amazon.com/Retevis-RT-9000D-Transceiver-400-490MHz-Scrambler/dp/B00NQVYFW4"
       ],
+      "caveat": "Single-band 4 m model.",
       "note": "Single-band 4m model; power for this band not confirmed"
     },
     "Retevis|RT95": {
@@ -18554,6 +18999,7 @@
       "sources": [
         "https://www.retevis.com/products/rt95-dual-band-ham-mobile-radio-us-version"
       ],
+      "caveat": "Ranges as listed by Retevis; regional versions differ.",
       "note": "Ranges as listed on Retevis page; regional versions differ"
     },
     "Retevis|RT95 VOX": {
@@ -18597,6 +19043,7 @@
       "sources": [
         "https://www.retevis.com/products/rt95-dual-band-ham-mobile-radio-us-version"
       ],
+      "caveat": "RT95 variant with VOX firmware and the same hardware.",
       "note": "RT95 variant with VOX firmware; same hardware as RT95"
     },
     "Retevis|RT98": {
@@ -18632,6 +19079,7 @@
       "sources": [
         "https://www.retevis.com/products/rt98-mini-transceiver-powerful-vhf-mobile-radio-car-radio"
       ],
+      "caveat": "VHF version; a UHF version also exists.",
       "note": "VHF version; UHF version also exists"
     },
     "Rugged|RH5R-V2": {
@@ -18661,6 +19109,7 @@
         "https://sir-vivor.com/products/rh-5r-rugged-radios-5-watt-dual-band-uhf-vhf-handheld-radio",
         "https://www.manualslib.com/manual/1318087/Rugged-Radios-Rh5r-V2.html"
       ],
+      "caveat": "UV-5R-style dual-band handheld with FM broadcast receive. Retailers disagree on ranges (150–174/450–470, 150–174/420–470, 136–174/400–480 MHz).",
       "note": "UV-5R-style dual-band HT with FM broadcast RX. Retailers disagree on ranges (150-174/450-470, 150-174/420-470, 136-174/400-480)."
     },
     "Ruyage|UV58Plus": {
@@ -18734,6 +19183,7 @@
         "https://www.radtels.com/products/radtel-rt-890-radio-bidireccional-con-banda-completa-999-ch-walkie-talkie-am-transceptor-lcd-ht-en-color",
         "https://entropysurvival.com/products/ruyage-radio-analog-signal-5w-walkie-talkieuv58plus"
       ],
+      "caveat": "Rebadge of the Radtel RT-890 / iRadio UV-5118Plus. TX ranges are the maker's marketing bands; AM is airband receive only.",
       "note": "Rebadge of Radtel RT-890 / iRadio UV-5118Plus. TX ranges are the maker's marketing bands; AM is airband RX only."
     },
     "Sainsonic|AP510": {
@@ -18760,6 +19210,7 @@
         "https://www.brickolore.com/2014/09/sainsonic-ap510-aprs-tracker.html",
         "https://9w2dya.blogspot.com/2015/08/sainsonic-ap510-tracker.html?m=0"
       ],
+      "caveat": "APRS tracker (AVRT5): 1 W VHF, GPS, Bluetooth 2.0, LEDs only, 5 V charge input. One spec table lists 2200 mAh instead of 3300 mAh.",
       "note": "APRS tracker (AVRT5), 1W VHF, GPS, BT 2.0, LEDs only. One spec table lists 2200mAh instead of 3300mAh. 5V charge input."
     },
     "SenhaiX|8800": {
@@ -18804,6 +19255,7 @@
       "sources": [
         "https://www.senhaix.com/"
       ],
+      "caveat": "The maker lists Bluetooth app programming and an FM radio receiver.",
       "note": "Maker lists Bluetooth app programming and FM radio receiver"
     },
     "Socotran|FB-8629": {
@@ -18858,6 +19310,7 @@
         "https://www.amazon.es/SOCOTRAN-Programaci%C3%B3n-Bidireccional-FB-8629-Profesional/dp/B097DNWRV2",
         "https://manuals.plus/mmlradio/jc-8629-uv-full-band-walkie-talkie-two-way-radio-manual"
       ],
+      "caveat": "GPS and Bluetooth programming are listed as optional in the manual; only some retail versions include them.",
       "note": "GPS and Bluetooth programming listed as optional in manual; some retail SKUs include them"
     },
     "Socotran|JC-8629": {
@@ -18913,6 +19366,7 @@
         "https://fccid.io/2AZVIJC-8629/Users-Manual/User-Manual-5335337",
         "https://firezy.co.uk/product/socotran-gps-full-band-walkie-talkie-rechargeable-bluetooth-programming-handheld-two-way-radio-jc-8629-5w-high-power-professional-ham-radio-transceiver-automatic-frequency-modulation-fm-radio/"
       ],
+      "caveat": "GPS and Bluetooth programming are listed as optional in the manual; only some retail versions include them.",
       "note": "GPS and Bluetooth programming listed as optional in manual; some retail SKUs include them"
     },
     "TDXone|TD-Q8A": {
@@ -18959,6 +19413,7 @@
       "sources": [
         "https://www.universal-radio.com/catalog/ht/6008.html"
       ],
+      "caveat": "High/low power, 4 W max; FM broadcast receive. Ships with a charge tray and AC adapter.",
       "note": "High/low power, 4W max; FM broadcast RX. Ships with charge tray and AC adapter."
     },
     "TIDRADIO|TD-H3": {
@@ -19011,6 +19466,7 @@
       "sources": [
         "https://tidradio.com/products/tidradio-td-h3-ham-gmrs-unlocked-8-band-walkie-talkie"
       ],
+      "caveat": "Unlocked version; Bluetooth programming via the Odmaster app.",
       "note": "Unlocked version; Bluetooth programming via Odmaster app"
     },
     "TIDRADIO|TD-H3-GMRS": {
@@ -19056,6 +19512,7 @@
       "sources": [
         "https://tidradio.com/products/tidradio-td-h3-ham-gmrs-unlocked-8-band-walkie-talkie"
       ],
+      "caveat": "GMRS-locked US variant; TX is limited to GMRS channels.",
       "note": "GMRS-locked US variant; TX limited to GMRS channels"
     },
     "TIDRADIO|TD-H3-HAM": {
@@ -19108,6 +19565,7 @@
       "sources": [
         "https://tidradio.com/products/tidradio-td-h3-ham-gmrs-unlocked-8-band-walkie-talkie"
       ],
+      "caveat": "Ham-locked US variant; TX is limited to amateur bands.",
       "note": "Ham-locked US variant; TX limited to amateur bands"
     },
     "TIDRADIO|TD-H6": {
@@ -19154,6 +19612,7 @@
         "https://www.miklor.com/COM/Review_TDH6.php",
         "https://manuals.plus/tidradio/td-h6-dual-band-radio-manual"
       ],
+      "caveat": "Ranges are the US listing's; the manual quotes 136–174/400–520 MHz. Rated 10/5/1 W; Miklor measured about 7.7 W on VHF. FM broadcast receive.",
       "note": "US listing ranges; manual quotes 136-174/400-520. 10/5/1W rated (Miklor measured ~7.7W VHF). FM broadcast RX."
     },
     "TIDRADIO|TD-H8": {
@@ -19206,6 +19665,7 @@
       "sources": [
         "https://tidradio.com/products/3rd-gen-td-h8-10w-ham-gmrs-radio-handheld-8-band"
       ],
+      "caveat": "Unlocked version.",
       "note": "Unlocked version"
     },
     "TIDRADIO|TD-H8-GMRS": {
@@ -19251,6 +19711,7 @@
       "sources": [
         "https://tidradio.com/products/3rd-gen-td-h8-10w-ham-gmrs-radio-handheld-8-band"
       ],
+      "caveat": "GMRS-locked US variant.",
       "note": "GMRS-locked US variant"
     },
     "TIDRADIO|TD-H8-HAM": {
@@ -19303,6 +19764,7 @@
       "sources": [
         "https://tidradio.com/products/3rd-gen-td-h8-10w-ham-gmrs-radio-handheld-8-band"
       ],
+      "caveat": "Ham-locked US variant.",
       "note": "Ham-locked US variant"
     },
     "TIDRADIO|TD-M11": {
@@ -19345,6 +19807,7 @@
         "https://www.amazon.com/Waterproof-TIDRADIO-TD-M11-Programming-Frequency/dp/B0DD3SF3Z5",
         "https://www.amazon.com/TIDRADIO-TD-M11-Waterproof-Handheld-Industry/dp/B0CX4WRC2N"
       ],
+      "caveat": "22-channel FRS (2 W; channels 8–14 0.5 W), NOAA receive, LED channel display, IP67. A PMR446 variant exists. App/web Bluetooth programming per listing.",
       "note": "FRS 22ch (2W; ch 8-14 0.5W), NOAA RX, LED channel display, IP67. A PMR446 variant exists. App/Web Bluetooth programming per listing."
     },
     "TID|TD-M8": {
@@ -19367,6 +19830,7 @@
       "sources": [
         "https://www.amazon.com/TIDRADIO-Walkie-Talkies-Rechargeable-Adults/dp/B08CH897F4/"
       ],
+      "caveat": "16-channel UHF radio, superseded by the 22-channel FRS TD-M8s (1500 mAh, USB-C).",
       "note": "16ch UHF radio sharing CHIRP's Retevis RT22 driver; superseded by the 22ch FRS TD-M8s (1500mAh, USB-C). Original specs not found."
     },
     "TID|TD-UV68": {
@@ -19410,6 +19874,7 @@
       "sources": [
         "https://tid-china.com/espana.php?m=product&a=details&content_id=447"
       ],
+      "caveat": "Maker spec: 136–174/400–520 MHz, 0.5/5/10 W, 2200 mAh (2500 mAh optional), 199 channels, dual standby.",
       "note": "Maker spec: 136-174/400-520 MHz, 0.5/5/10W, 2200mAh (2500mAh optional), 199ch, dual standby."
     },
     "TYT|TH-350": {
@@ -19464,6 +19929,7 @@
         "https://rigreference.com/rigs/6409-tyt-th-350",
         "https://tyt888.com/pro_info138.html"
       ],
+      "caveat": "US version TX ranges; some sellers list 136–174/220–260/400–470 MHz. Tri-standby is scanning, not three receivers.",
       "note": "US version TX ranges; some sellers list 136-174/220-260/400-470 MHz. Tri-standby is scanning, not three receivers."
     },
     "TYT|TH-7800": {
@@ -19508,6 +19974,7 @@
       "sources": [
         "https://tyt888.com/pro_info39.html"
       ],
+      "caveat": "Wide export ranges per the maker; US units transmit 144–148/420–450 MHz. 50 W VHF / 40 W UHF. Separate left/right receivers; AM airband receive.",
       "note": "Maker spec (wide export); US units TX 144-148/420-450. 50 W VHF / 40 W UHF. Separate left/right receivers; AM airband receive."
     },
     "TYT|TH-7800 File": {
@@ -19526,6 +19993,7 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [],
+      "caveat": "",
       "note": "CHIRP file format, not a radio"
     },
     "TYT|TH-9800": {
@@ -19592,6 +20060,7 @@
         "https://www.rigpix.com/mischam/tyt_th9800.htm",
         "https://www.radioddity.com/products/tyt-th-9800-quad-band-mobile-radio-programming-cable"
       ],
+      "caveat": "US version, now sold as the TYTECH TH-9800 Plus. 50 W on 10/6/2 m, 40 W on 70 cm. Receive at 750–950 MHz has cellular bands blocked.",
       "note": "US version; sold now as TYTECH TH-9800 Plus. 50 W on 10/6/2 m, 40 W on 70 cm. RX 750-950 MHz has cellular blocked."
     },
     "TYT|TH-9800 File": {
@@ -19610,6 +20079,7 @@
       "gps": null,
       "bluetoothProgramming": null,
       "sources": [],
+      "caveat": "",
       "note": "CHIRP file format, not a radio"
     },
     "TYT|TH-UV3R": {
@@ -19654,6 +20124,7 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [],
+      "caveat": "Charges from a mini-USB socket. Also receives FM broadcast.",
       "note": "Charges from a mini-USB socket. Also receives FM broadcast (range not confirmed). Stock battery capacity not confirmed."
     },
     "TYT|TH-UV3R-25": {
@@ -19697,6 +20168,7 @@
       "gps": false,
       "bluetoothProgramming": false,
       "sources": [],
+      "caveat": "Firmware variant of the TH-UV3R with 2.5 kHz tuning steps; hardware figures are the TH-UV3R's.",
       "note": "Firmware variant of the TH-UV3R with 2.5 kHz tuning steps; hardware specs taken from the TH-UV3R."
     },
     "TYT|TH-UV8000": {
@@ -19748,6 +20220,7 @@
         "https://tyt888.com/pro_info137.html",
         "https://www.radioddity.com/products/tyt-uv8000e-dual-band-two-way-radio-walkie-talkie-3600mah-battery-car-charger-2-antennas-programming-cable"
       ],
+      "caveat": "Figures are the UV8000E's; the UV8000D is the same family. Ships with desktop and car chargers.",
       "note": "Specs of UV8000E; UV8000D is the same family. Ships with desktop and car chargers."
     },
     "TYT|TH-UV88": {
@@ -19795,6 +20268,7 @@
         "https://radioranked.com/radios/tyt-th-uv88",
         "https://radiogearoutlet.com/product/tyt-th-uv88-dual-band-analog-two-way-radio"
       ],
+      "caveat": "US version; 5 W VHF / 4 W UHF. Newer kits ship a 2200 mAh USB-C pack instead.",
       "note": "US version; 5 W VHF / 4 W UHF. Newer kits ship a 2200 mAh USB-C pack instead."
     },
     "TYT|TH-UV98": {
@@ -19844,6 +20318,7 @@
         "https://alafone.com/product/tyt-th-uv98-walkie-talkie/",
         "https://offgridgear2go.com/products/tyt-th-uv98-two-way-10-watt-vhf/uhf-analog-radio-w/3200mah-extended-li-ion-battery"
       ],
+      "caveat": "10 W VHF / 9 W UHF per retailers; TYT publishes no spec sheet for it.",
       "note": "10 W VHF / 9 W UHF per retailers; no maker spec sheet found."
     },
     "TYT|TH-UVF1": {
@@ -19898,6 +20373,7 @@
       "sources": [
         "https://www.universal-radio.com/catalog/ht/5541spec.html"
       ],
+      "caveat": "US version. Sellers disagree on the stock battery (1500 vs 1800 mAh).",
       "note": "US version. Sellers disagree on the stock battery (1500 vs 1800 mAh)."
     },
     "TYT|TH-UVF8D": {
@@ -19942,6 +20418,7 @@
         "https://www.antennewinkel.com/en/zendamateur/th-uvf8d-detail",
         "https://www.manualslib.com/manual/1002337/Tyt-Th-Uvf8d.html"
       ],
+      "caveat": "Power levels are not published beyond high/low.",
       "note": "Power levels not published beyond high/low."
     },
     "TYT|TH9000_144": {
@@ -19977,6 +20454,7 @@
       "sources": [
         "https://www.radioddity.com/products/tyt-th-9000d-136-174mhz-60w-200ch-8-group-scrambler-car-truck-mobile-ham-radio"
       ],
+      "caveat": "TH-9000D 2 m version (US); commercial units cover 136–174 MHz.",
       "note": "TH-9000D 2 m version (US); commercial units 136-174 MHz."
     },
     "TYT|TH9000_220": {
@@ -20012,6 +20490,7 @@
       "sources": [
         "https://www.radioddity.com/products/tyt-th-9000d-220-260mhz-60w-200ch-scrambler-car-truck-mobile-ham-two-way-radio"
       ],
+      "caveat": "TH-9000D 1.25 m version.",
       "note": "TH-9000D 1.25 m version."
     },
     "TYT|TH9000_440": {
@@ -20047,6 +20526,7 @@
       "sources": [
         "https://www.radioddity.com/products/tyt-th-9000d-400-490mhz-45w-200ch-scrambler-car-mobile-radio-transceiver"
       ],
+      "caveat": "TH-9000D UHF version.",
       "note": "TH-9000D UHF version."
     },
     "Talkpod|A36plus": {
@@ -20090,6 +20570,7 @@
       "sources": [
         "https://talkpod.com/products/talkpod%C2%AE-a36plus-vhf-and-uhf-fm-tri-band-2m-radio"
       ],
+      "caveat": "USA model. Receives 136–520 MHz plus AM airband 108–136 and 225–375 MHz, and FM broadcast 88–108 MHz.",
       "note": "USA model; RX 136-520 plus airband 108-136 and 225-375 AM, FM broadcast 88-108"
     },
     "Talkpod|A36plus_8w": {
@@ -20134,6 +20615,7 @@
         "https://talkpod.com/products/talkpod%C2%AE-a36plus-144-430-mhz-uhf-vhf-gmrs-ham-hand-held-transceiver",
         "https://talkpod.com/products/talkpod%C2%AE-a36plus-vhf-and-uhf-fm-tri-band-2m-radio"
       ],
+      "caveat": "International 8 W version (8/5/2 W); TX ranges shown are the USA listing's.",
       "note": "International 8W version (8/5/2W); TX ranges shown are the USA listing"
     },
     "WACCOM|MINI-8900": {
@@ -20178,6 +20660,7 @@
         "https://simonthewizard.com/2015/06/30/waccom-mini-8900-94/",
         "https://www.409shop.com/409shop_product.php?id=123663"
       ],
+      "caveat": "Compact dual-band mobile, 25 W VHF / 20 W UHF. Same radio as the Juentai JT-6188 Plus.",
       "note": "Compact dual-band mobile, 25W VHF / 20W UHF. Same radio as Juentai JT-6188 Plus (CHIRP alias)."
     },
     "WLN|KD-C1": {
@@ -20213,6 +20696,7 @@
         "https://www.hi-radio.com/product/wln-kd-c1-uhf-5w-mini-handheld-radio/",
         "https://www.amazon.com/WLN-400-470Mhz-Desktop-Charger-Earpiece/dp/B077SY8GRG"
       ],
+      "caveat": "16-channel UHF mini radio with desktop charger. Retailers disagree on power (2 W vs under 5 W).",
       "note": "16ch UHF mini radio with desktop charger. Retailers disagree on power (2W vs <5W)."
     },
     "Wouxun|KG-1000G": {
@@ -20265,6 +20749,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-1000G.aspx"
       ],
+      "caveat": "",
       "note": ""
     },
     "Wouxun|KG-1000G Plus": {
@@ -20317,6 +20802,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-1000G-Plus.aspx"
       ],
+      "caveat": "Wouxun lists simultaneous reception; FM broadcast and NOAA receive.",
       "note": "Maker page lists simultaneous reception; FM broadcast and NOAA receive."
     },
     "Wouxun|KG-805G": {
@@ -20354,6 +20840,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-805G.aspx"
       ],
+      "caveat": "22-channel GMRS radio; receive coverage beyond GMRS is not published.",
       "note": "22-channel GMRS radio; exact RX coverage beyond GMRS not published."
     },
     "Wouxun|KG-816": {
@@ -20382,6 +20869,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-816.aspx"
       ],
+      "caveat": "Single-band radio sold in versions: VHF 66–88/136–174/245–246 MHz or UHF 400–470/400–480/420–520 MHz. 5 W VHF, 4 W UHF.",
       "note": "Single-band radio sold in versions: VHF 66-88/136-174/245-246 or UHF 400-470/400-480/420-520 MHz. 5W VHF, 4W UHF."
     },
     "Wouxun|KG-818": {
@@ -20410,6 +20898,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-818.aspx"
       ],
+      "caveat": "Single-band radio sold in versions: VHF 66–88/136–174/245–246 MHz or UHF 400–470/400–480/420–520 MHz. 5 W VHF, 4 W UHF.",
       "note": "Single-band radio sold in versions: VHF 66-88/136-174/245-246 or UHF 400-470/400-480/420-520 MHz. 5W VHF, 4W UHF."
     },
     "Wouxun|KG-935G": {
@@ -20451,6 +20940,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-935G.aspx"
       ],
+      "caveat": "",
       "note": ""
     },
     "Wouxun|KG-935G Plus": {
@@ -20493,6 +20983,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-935G-Plus.aspx"
       ],
+      "caveat": "",
       "note": ""
     },
     "Wouxun|KG-935H": {
@@ -20546,6 +21037,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-935H.aspx"
       ],
+      "caveat": "US amateur version. 7 W max on UHF.",
       "note": "US amateur version. 7W max on UHF."
     },
     "Wouxun|KG-UV6": {
@@ -20593,6 +21085,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV6D.aspx"
       ],
+      "caveat": "KG-UV6D; also sold in 136–174/216–280, 144–148/222–225 and 66–88 MHz versions. 5 W VHF, 4 W UHF.",
       "note": "KG-UV6D; also sold as 136-174/216-280, 144-148/222-225 and 66-88 MHz versions. 5W VHF, 4W UHF, low not stated."
     },
     "Wouxun|KG-UV8D": {
@@ -20638,6 +21131,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV8D.aspx"
       ],
+      "caveat": "4 W max on UHF.",
       "note": "4W max on UHF."
     },
     "Wouxun|KG-UV8D Plus": {
@@ -20683,6 +21177,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV8D(Plus).aspx"
       ],
+      "caveat": "Also sold as a 136–174/420–520 MHz version. 4 W max on UHF.",
       "note": "Also sold as 136-174/420-520 MHz version. 4W max on UHF."
     },
     "Wouxun|KG-UV8E": {
@@ -20712,6 +21207,7 @@
         "https://www.brickolore.com/2016/03/wouxun-kg-uv8e.html?m=1",
         "https://www.buytwowayradios.com/wouxun-kg-uv8e.html"
       ],
+      "caveat": "Tri-band 2 m/1.25 m/70 cm (US dealer); an EU listing gives 135–174/350–399/400–520 MHz. 5 W VHF, 4 W UHF. 1700 mAh stock; 2600 mAh in some kits.",
       "note": "Tri-band 2m/1.25m/70cm (US dealer); an EU listing gives 135-174/350-399/400-520. 5W VHF, 4W UHF. 1700mAh stock; 2600mAh in some kits."
     },
     "Wouxun|KG-UV8H": {
@@ -20757,6 +21253,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV8H.aspx"
       ],
+      "caveat": "Also sold as a 136–174/400–470 MHz version. 8 W max on UHF.",
       "note": "Also sold as 136-174/400-470 MHz version. UHF max 8W."
     },
     "Wouxun|KG-UV920P-A": {
@@ -20805,6 +21302,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV920P.aspx"
       ],
+      "caveat": "Figures are from the KG-UV920P page; a 136–174/216–280 MHz version also exists. 40 W max on UHF.",
       "note": "Specs from the KG-UV920P page; also a 136-174/216-280 MHz version. UHF max 40W."
     },
     "Wouxun|KG-UV980P": {
@@ -20878,6 +21376,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV980P.aspx"
       ],
+      "caveat": "40 W max on UHF.",
       "note": "UHF max 40W."
     },
     "Wouxun|KG-UV9D Plus": {
@@ -20945,6 +21444,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV9D(Plus).aspx"
       ],
+      "caveat": "",
       "note": ""
     },
     "Wouxun|KG-UV9G Pro": {
@@ -20996,6 +21496,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV9G-Pro.aspx"
       ],
+      "caveat": "",
       "note": ""
     },
     "Wouxun|KG-UV9GX": {
@@ -21030,6 +21531,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV9GX.aspx"
       ],
+      "caveat": "Figures are from Wouxun's KG-UV9GX+ page. Receives 7 bands including airband and 220 MHz; exact limits are not published.",
       "note": "Maker page covers the KG-UV9GX+. Receives 7 bands incl. airband and 220; exact limits not published."
     },
     "Wouxun|KG-UV9K": {
@@ -21097,6 +21599,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV9K.aspx"
       ],
+      "caveat": "",
       "note": ""
     },
     "Wouxun|KG-UV9PX": {
@@ -21164,6 +21667,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UV9PX.aspx"
       ],
+      "caveat": "",
       "note": ""
     },
     "Wouxun|KG-UVD1P": {
@@ -21206,6 +21710,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-UVD1P.aspx"
       ],
+      "caveat": "Also sold as a 144–146/430–440 MHz version. 5 W VHF, 4 W UHF. Dual standby.",
       "note": "Also sold as 144-146/430-440 MHz version. 5W VHF, 4W UHF; low not stated. Dual standby."
     },
     "Wouxun|KG-XS20G": {
@@ -21237,6 +21742,7 @@
         "https://www.buytwowayradios.com/wouxun-kg-xs20g-6182.html",
         "https://forums.mygmrs.com/topic/3073-new-gmrs-mobile-radio-wouxun-kg-xs20g/"
       ],
+      "caveat": "20 W GMRS compact mobile, high/low power, colour dual-channel LCD, IP65. Superseded by the KG-XS20G Plus.",
       "note": "20W GMRS compact mobile, high/low power, colour dual-channel LCD, IP65. Superseded by KG-XS20G Plus."
     },
     "Wouxun|KG-XS20G Plus": {
@@ -21274,6 +21780,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-XS20G-PLUS.aspx"
       ],
+      "caveat": "20 W max.",
       "note": "20W max; low setting not stated."
     },
     "Wouxun|KG-XS20H": {
@@ -21323,6 +21830,7 @@
       "sources": [
         "https://www.wouxun.com/radios/KG-XS20H.aspx"
       ],
+      "caveat": "20 W max.",
       "note": "20W max; low setting not stated."
     },
     "Yaesu|FT-1500M": {
@@ -21359,6 +21867,7 @@
         "https://www.rigpix.com/yaesu/ft1500m.htm",
         "https://rigreference.com/rigs/4242-yaesu-ft-1500m"
       ],
+      "caveat": "",
       "note": ""
     },
     "Yaesu|FT-1802M": {
@@ -21395,6 +21904,7 @@
         "https://yaesu.com/product-detail.aspx?Model=FT-1802M&CatName=Legacy",
         "https://www.universal-radio.com/catalog/fm_txvrs/1802spec.html"
       ],
+      "caveat": "",
       "note": ""
     },
     "Yaesu|FT-1D": {
@@ -21438,6 +21948,7 @@
         "https://www.rigpix.com/yaesu/ft1dr.htm",
         "https://public2024.yaesu.com/product-detail.aspx?Model=FT1DR%2FXDR&CatName=Legacy"
       ],
+      "caveat": "US version with cellular bands blocked. Band B receives 108–580 MHz. FNB-101LI battery.",
       "note": "US version; cellular bands blocked. Band B receives 108-580 MHz. FNB-101LI battery."
     },
     "Yaesu|FT-25R": {
@@ -21480,6 +21991,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ft25r.htm"
       ],
+      "caveat": "SBR-25LI battery and SBH-22 charger included.",
       "note": "SBR-25LI battery, SBH-22 charger included."
     },
     "Yaesu|FT-2800M": {
@@ -21516,6 +22028,7 @@
         "https://rigreference.com/rigs/4277-yaesu-ft-2800m",
         "https://www.yaesu.com/jp/en/products/pdf/AMR/FT-2800M.pdf"
       ],
+      "caveat": "",
       "note": ""
     },
     "Yaesu|FT-2900R/1900R": {
@@ -21553,6 +22066,7 @@
         "https://www.rigpix.com/yaesu/ft1900r.htm",
         "https://en.wikipedia.org/wiki/Yaesu_FT-2900R"
       ],
+      "caveat": "FT-2900R max 75 W; FT-1900R max 55 W. US version transmits 144–148 MHz (EU 144–146 MHz).",
       "note": "FT-2900R max 75 W; FT-1900R max 55 W. US version TX 144-148 MHz (EU 144-146)."
     },
     "Yaesu|FT-2900R/1900R(TXMod)": {
@@ -21590,6 +22104,7 @@
         "https://www.rigpix.com/yaesu/ft1900r.htm",
         "https://en.wikipedia.org/wiki/Yaesu_FT-2900R"
       ],
+      "caveat": "Same radio as the FT-2900R/1900R with the expanded-TX modification; stock TX is 144–148 MHz. The FT-1900R is 55 W max.",
       "note": "Same radio as FT-2900R/1900R with the expanded-TX modification; stock TX 144-148 MHz. FT-1900R max 55 W."
     },
     "Yaesu|FT-450": {
@@ -21668,6 +22183,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ft450.htm"
       ],
+      "caveat": "Transmits on amateur bands only (US edges shown). AM max 25 W.",
       "note": "TX on amateur bands only (US edges shown). AM max 25 W. Minimum power setting not established."
     },
     "Yaesu|FT-450D": {
@@ -21747,6 +22263,7 @@
         "https://www.rigpix.com/yaesu/ft450d.htm",
         "https://swling.com/blog/tag/yaesu-ft-450d-discontinued/"
       ],
+      "caveat": "Transmits on amateur bands only (US edges shown). AM max 25 W.",
       "note": "TX on amateur bands only (US edges shown). AM max 25 W. Minimum power setting not established."
     },
     "Yaesu|FT-4VR": {
@@ -21789,6 +22306,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ft4vr.htm"
       ],
+      "caveat": "SBR-28LI battery.",
       "note": "SBR-28LI battery."
     },
     "Yaesu|FT-4XE": {
@@ -21840,6 +22358,7 @@
         "https://www.rigpix.com/yaesu/ft4xr.htm",
         "https://qrpblog.com/2018/09/yaesu-ft-4x-review-it-is-after-all-a-baofeng/"
       ],
+      "caveat": "European version of the FT-4XR; TX ranges are assumed to be the EU amateur bands, other figures are the FT-4XR's.",
       "note": "European version of FT-4XR; TX ranges assumed to be the EU amateur bands, specs otherwise as FT-4XR."
     },
     "Yaesu|FT-4XR": {
@@ -21891,6 +22410,7 @@
         "https://www.rigpix.com/yaesu/ft4xr.htm",
         "https://www.yaesu.com/product-detail.aspx?Model=FT-4XR&CatName=VHF%2FUHF+Handhelds"
       ],
+      "caveat": "SBR-28LI battery and SBH-22 cradle included.",
       "note": "SBR-28LI battery, SBH-22 cradle included."
     },
     "Yaesu|FT-50": {
@@ -21938,6 +22458,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ft50r.htm"
       ],
+      "caveat": "US version with cellular bands blocked. 5 W needs the 9.6 V pack; several battery packs were offered.",
       "note": "US version; cellular blocked. 5 W needs the 9.6 V pack; several battery packs were offered."
     },
     "Yaesu|FT-60": {
@@ -21985,6 +22506,7 @@
         "https://www.rigpix.com/yaesu/ft60r.htm",
         "https://www.yaesu.com/product-detail.aspx?Model=FT-60R&CatName=VHF%2FUHF+Handhelds"
       ],
+      "caveat": "FNB-83 NiMH with NC-88 wall charger. RigPix lists it as discontinued but Yaesu still lists it. US version with cellular bands blocked.",
       "note": "FNB-83 NiMH with NC-88 wall charger. RigPix lists it discontinued but Yaesu still lists it. US version, cellular blocked."
     },
     "Yaesu|FT-65E": {
@@ -22035,6 +22557,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ft65r.htm"
       ],
+      "caveat": "European version of the FT-65R; TX ranges are assumed to be the EU amateur bands, other figures are the FT-65R's.",
       "note": "European version of FT-65R; TX ranges assumed to be the EU amateur bands, specs otherwise as FT-65R."
     },
     "Yaesu|FT-65R": {
@@ -22086,6 +22609,7 @@
         "https://www.rigpix.com/yaesu/ft65r.htm",
         "https://www.yaesu.com/product-detail.aspx?Model=FT-65R&CatName=VHF%2FUHF+Handhelds"
       ],
+      "caveat": "SBR-25LI battery and SBH-22 cradle included.",
       "note": "SBR-25LI battery, SBH-22 cradle included."
     },
     "Yaesu|FT-70D": {
@@ -22131,6 +22655,7 @@
         "https://www.gigaparts.com/yaesu-ft-70dr.html",
         "https://yaesu.com/product-detail.aspx?Model=FT-70DR&CatName=VHF%2FUHF+Handhelds"
       ],
+      "caveat": "SBR-24LI battery, charged in the radio by the SAD-25B charger; the SBH-28 cradle is optional.",
       "note": "SBR-24LI with SAD-25B charger into the radio; SBH-28 cradle optional."
     },
     "Yaesu|FT-7100M": {
@@ -22179,6 +22704,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ft7100m.htm"
       ],
+      "caveat": "35 W max on 70 cm. US version with cellular bands blocked.",
       "note": "70cm max 35 W. US version, cellular blocked."
     },
     "Yaesu|FT-7800/7900": {
@@ -22224,6 +22750,7 @@
         "https://www.rigpix.com/yaesu/ft7900r.htm",
         "https://wiki.radioreference.com/index.php/Yaesu_FT-7800"
       ],
+      "caveat": "70 cm max: FT-7800 40 W, FT-7900 45 W. US version with cellular bands blocked.",
       "note": "70cm max: FT-7800 40 W, FT-7900 45 W. US version, cellular blocked."
     },
     "Yaesu|FT-8100": {
@@ -22269,6 +22796,7 @@
         "https://www.rigpix.com/yaesu/ft8100r.htm",
         "https://www.manualslib.com/manual/889583/Yaesu-Ft-8100r.html?page=56"
       ],
+      "caveat": "35 W max on 70 cm. US version with cellular bands blocked.",
       "note": "70cm max 35 W. US version, cellular blocked."
     },
     "Yaesu|FT-817": {
@@ -22360,6 +22888,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ft817.htm"
       ],
+      "caveat": "Portable QRP rig with an internal battery bay; no pack is supplied as standard (FNB-72 optional). Non-US TX edges shown.",
       "note": "Portable QRP rig with internal battery bay; no pack supplied as standard (FNB-72 optional). Non-US TX edges shown."
     },
     "Yaesu|FT-817ND": {
@@ -22453,6 +22982,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ft817nd.htm"
       ],
+      "caveat": "Portable QRP rig with an internal FNB-85 NiMH pack charged via the DC jack. Non-US TX edges shown.",
       "note": "Portable QRP rig with internal FNB-85 NiMH pack charged via DC jack. Non-US TX edges shown."
     },
     "Yaesu|FT-817ND (US)": {
@@ -22550,6 +23080,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ft817nd.htm"
       ],
+      "caveat": "US version including 60 m channels. Portable QRP rig with an internal FNB-85 NiMH pack charged via the DC jack.",
       "note": "US version incl. 60m channels. Portable QRP rig with internal FNB-85 NiMH pack charged via DC jack."
     },
     "Yaesu|FT-818": {
@@ -22644,6 +23175,7 @@
         "https://rigreference.com/rigs/6364-yaesu-ft-818",
         "https://www.passion-radio.com/hf-transceiver/ft818-584.html"
       ],
+      "caveat": "Portable QRP rig with an internal SBR-32MH NiMH pack; 6 W on 13.8 V, 2.5 W on battery. Discontinued 2023. Non-US TX edges shown.",
       "note": "Portable QRP rig with internal SBR-32MH NiMH pack; 6 W on 13.8 V, 2.5 W on battery. Discontinued 2023. Non-US TX edges shown."
     },
     "Yaesu|FT-818ND (US)": {
@@ -22742,6 +23274,7 @@
         "https://rigreference.com/rigs/6364-yaesu-ft-818",
         "https://yaesu.com/product-detail.aspx?Model=FT-818&CatName=Legacy"
       ],
+      "caveat": "US version including 60 m. Internal SBR-32MH NiMH pack; 6 W on 13.8 V, 2.5 W on battery. Discontinued 2023.",
       "note": "US version incl. 60m. Internal SBR-32MH NiMH pack; 6 W on 13.8 V, 2.5 W on battery. Discontinued 2023."
     },
     "Yaesu|FT-857/897": {
@@ -22838,6 +23371,7 @@
         "https://www.rigpix.com/yaesu/ft857d.htm",
         "https://www.rigpix.com/yaesu/ft897d.htm"
       ],
+      "caveat": "The FT-897 is a base/portable (optional internal battery). 100 W HF/6 m, 50 W 2 m, 20 W 70 cm. Non-US TX edges shown.",
       "note": "FT-897 is a base/portable (optional internal battery). 100 W HF/6m, 50 W 2m, 20 W 70cm. Non-US TX edges; min power not established."
     },
     "Yaesu|FT-857/897 (US)": {
@@ -22938,6 +23472,7 @@
         "https://www.rigpix.com/yaesu/ft857d.htm",
         "https://www.rigpix.com/yaesu/ft897d.htm"
       ],
+      "caveat": "US version including 60 m. The FT-897 is a base/portable (optional internal battery). 100 W HF/6 m, 50 W 2 m, 20 W 70 cm.",
       "note": "US version incl. 60m. FT-897 is a base/portable (optional internal battery). 100 W HF/6m, 50 W 2m, 20 W 70cm; min power not established."
     },
     "Yaesu|FT-8800": {
@@ -22983,6 +23518,7 @@
         "https://www.rigpix.com/yaesu/ft8800r.htm",
         "https://www.manualslib.com/manual/339749/Yaesu-Ft-8800r.html?page=58"
       ],
+      "caveat": "35 W max on 70 cm. US version with cellular bands blocked.",
       "note": "70cm max 35 W. US version, cellular blocked."
     },
     "Yaesu|FT-8900": {
@@ -23048,6 +23584,7 @@
         "https://www.rigpix.com/yaesu/ft8900r.htm",
         "https://www.manualslib.com/manual/339751/Yaesu-Ft-8900r.html?page=56"
       ],
+      "caveat": "35 W max on 70 cm. US version with cellular bands blocked.",
       "note": "70cm max 35 W. US version, cellular blocked."
     },
     "Yaesu|FT-90": {
@@ -23096,6 +23633,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ft90r.htm"
       ],
+      "caveat": "35 W max on 70 cm. US version with cellular bands blocked.",
       "note": "70cm max 35 W. US version, cellular blocked."
     },
     "Yaesu|FT2D": {
@@ -23139,6 +23677,7 @@
         "https://www.rigpix.com/yaesu/ft2dr.htm",
         "https://yaesu.com/product-detail.aspx?Model=FT2DR&CatName=Legacy"
       ],
+      "caveat": "US version with cellular bands blocked; sub band receives 108–580 MHz. Yaesu lists the SBR-14LI 2200 mAh pack as supplied.",
       "note": "US version, cellular blocked; sub band 108-580 MHz. Yaesu lists SBR-14LI 2200 mAh as supplied."
     },
     "Yaesu|FT3D": {
@@ -23182,6 +23721,7 @@
         "https://www.rigpix.com/yaesu/ft3dr.htm",
         "https://www.yaesu.com/product-detail.aspx?Model=FT3DR&CatName=Legacy"
       ],
+      "caveat": "Charges over the supplied USB cable with the SAD-25 adapter. Bluetooth is for headsets only. US version with cellular bands blocked.",
       "note": "Charges over the supplied USB cable with SAD-25 adapter (connector type not verified). Bluetooth is for headsets only. US, cellular blocked."
     },
     "Yaesu|FT5D": {
@@ -23225,6 +23765,7 @@
         "https://www.rigpix.com/yaesu/ft5dr.htm",
         "https://www.yaesu.com/product-detail.aspx?Model=FT5DR&CatName=VHF%2FUHF+Handhelds"
       ],
+      "caveat": "SBR-14LI pack. Bluetooth is for headsets only. US version with cellular bands blocked.",
       "note": "SBR-14LI pack; charging connector not verified. Bluetooth is for headsets only. US, cellular blocked."
     },
     "Yaesu|FTM-300DR": {
@@ -23267,6 +23808,7 @@
         "https://www.rigpix.com/yaesu/ftm300dr.htm",
         "https://www.yaesu.com/product-detail.aspx?Model=FTM-300DR&CatName=Mobile+Radios"
       ],
+      "caveat": "Built-in Bluetooth is for headsets only. US version with cellular bands blocked.",
       "note": "Built-in Bluetooth is for headsets only. US version, cellular blocked."
     },
     "Yaesu|FTM-3200D": {
@@ -23303,6 +23845,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ftm3200dr.htm"
       ],
+      "caveat": "",
       "note": ""
     },
     "Yaesu|FTM-350": {
@@ -23356,6 +23899,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/ftm350.htm"
       ],
+      "caveat": "US version: 222 MHz TX is fixed at 1 W. GPS via the GPS antenna unit (supplied on some variants). Bluetooth is for headsets only.",
       "note": "US version: 222 MHz TX fixed 1 W. GPS via GPS antenna unit (supplied on some variants). Bluetooth for headsets only."
     },
     "Yaesu|FTM-7250D": {
@@ -23397,6 +23941,7 @@
       "sources": [
         "https://www.yaesu.com/product-detail.aspx?Model=FTM-7250DR&CatName=Mobile+Radios"
       ],
+      "caveat": "",
       "note": "Mid/low power levels not verified from a primary spec table."
     },
     "Yaesu|VX-1": {
@@ -23442,6 +23987,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx1r.htm"
       ],
+      "caveat": "US version with cellular bands blocked. 1 W at 6 V external, 0.5 W on the 3.6 V Li-ion pack.",
       "note": "US version, cellular blocked. 1 W at 6 V external, 0.5 W on the 3.6 V Li-ion pack."
     },
     "Yaesu|VX-150": {
@@ -23479,6 +24025,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx150.htm"
       ],
+      "caveat": "FNB-64 NiCd with NC-72 wall charger.",
       "note": "FNB-64 NiCd with NC-72 wall charger."
     },
     "Yaesu|VX-170": {
@@ -23516,6 +24063,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx170.htm"
       ],
+      "caveat": "FNB-83 NiMH pack.",
       "note": "FNB-83 NiMH pack."
     },
     "Yaesu|VX-177": {
@@ -23553,6 +24101,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx177.htm"
       ],
+      "caveat": "US version; FNB-83 NiMH pack.",
       "note": "US version; FNB-83 NiMH pack."
     },
     "Yaesu|VX-2": {
@@ -23596,6 +24145,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx2r.htm"
       ],
+      "caveat": "FNB-82LI pack. 3 W on 2 m only at 6 V external; 1.5 W on battery. US version with cellular bands blocked.",
       "note": "FNB-82LI. 3 W (2m) only at 6 V external; 1.5 W on battery. US, cellular blocked."
     },
     "Yaesu|VX-3": {
@@ -23639,6 +24189,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx3r.htm"
       ],
+      "caveat": "3 W on 2 m only at 6 V external; 1.5 W on battery. US version with cellular bands blocked.",
       "note": "3 W (2m) only at 6 V external; 1.5 W on battery. US, cellular blocked."
     },
     "Yaesu|VX-5": {
@@ -23692,6 +24243,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx5r.htm"
       ],
+      "caveat": "US version with cellular bands blocked. 1100 and 1300 mAh Li-ion packs existed.",
       "note": "US version, cellular blocked. 1100 and 1300 mAh Li-ion packs existed."
     },
     "Yaesu|VX-6": {
@@ -23737,6 +24289,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx6r.htm"
       ],
+      "caveat": "US version (222 MHz TX max 1.5 W) with cellular bands blocked. FNB-80LI pack.",
       "note": "US version (222 MHz TX max 1.5 W), cellular blocked. FNB-80LI pack."
     },
     "Yaesu|VX-7": {
@@ -23786,6 +24339,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx7r.htm"
       ],
+      "caveat": "US version (the EU version lacks 222 MHz) with cellular bands blocked. FNB-80LI pack. AM TX on 6 m.",
       "note": "US version (EU lacks 222 MHz), cellular blocked. FNB-80LI pack. AM TX on 6m."
     },
     "Yaesu|VX-8DR": {
@@ -23835,6 +24389,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx8dr.htm"
       ],
+      "caveat": "US version with cellular bands blocked. Bluetooth is for headsets only and needs an optional unit.",
       "note": "US version, cellular blocked. Bluetooth for headsets only (optional unit)."
     },
     "Yaesu|VX-8GE": {
@@ -23875,6 +24430,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx8gr.htm"
       ],
+      "caveat": "European version of the VX-8GR; figures are the VX-8GR's, with TX edges assumed to be the EU amateur bands.",
       "note": "European version of VX-8GR; specs from VX-8GR, TX edges assumed EU amateur bands."
     },
     "Yaesu|VX-8R": {
@@ -23924,6 +24480,7 @@
       "sources": [
         "https://www.rigpix.com/yaesu/vx8r.htm"
       ],
+      "caveat": "US version with cellular bands blocked. FNB-101LI pack. Bluetooth is for headsets only and needs an optional unit.",
       "note": "US version, cellular blocked. FNB-101LI pack. Bluetooth for headsets only (optional unit)."
     },
     "Yedro|YC-M04VUS": {
@@ -23968,6 +24525,7 @@
         "https://www.yedro.com.ar/web/product/base-movil-bibanda-yc-m04vus/",
         "https://www.yedro.com.ar/web/2026/03/18/transceptor-vhf-uhf/"
       ],
+      "caveat": "Argentine rebadge of the AnyTone AT-778UV. 25/15/5 W, 200 channels, dual watch.",
       "note": "Argentine rebadge of AnyTone AT-778UV (shared CHIRP driver). 25/15/5W, 200ch, dual watch."
     },
     "Zastone|ZT-X6": {
@@ -24003,6 +24561,7 @@
         "https://www.alafone.com/product/zastone-x6-radio/",
         "https://www.amazon.com/Zastone-Rechargeable-Two-Way-Earpiece-16-Channel/dp/B01LX8YBD8"
       ],
+      "caveat": "16-channel UHF mini radio with desktop charger. Sources disagree on power (2 W vs 3 W) and battery (1000 vs 1100 mAh).",
       "note": "16ch UHF mini radio with desktop charger. Sources disagree on power (2W vs 3W) and battery (1000 vs 1100mAh)."
     }
   }
