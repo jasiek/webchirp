@@ -636,7 +636,8 @@ const SPECS = {
   gps: "optional",
   bluetoothProgramming: true,
   sources: ["https://example.com/uv-5r-manual.pdf"],
-  note: "",
+  caveat: "Figures are for the US version; the EU version transmits 144–146 and 430–440 MHz.",
+  note: "Maintainer-only research log.",
 };
 
 test("a radio with researched specs gets a hardware table saying what was found", async () => {
@@ -658,6 +659,12 @@ test("a radio with researched specs gets a hardware table saying what was found"
     assert.match(page, /<th scope="row">GPS<\/th><td>Optional add-on<\/td>/);
     assert.match(page, /<th scope="row">Bluetooth programming<\/th><td>Yes<\/td>/);
     assert.match(page, /href="https:\/\/example\.com\/uv-5r-manual\.pdf" rel="nofollow noopener">example\.com/);
+    // The caveat is what keeps a one-version figure from reading as universal,
+    // so it is shown; the research note is for maintainers and is not.
+    assert.match(page, /<p class="radio-specs-caveat">Figures are for the US version;/);
+    assert.doesNotMatch(page, /Maintainer-only research log/);
+    // Not "from the manufacturer": plenty of entries rest on retailer listings.
+    assert.doesNotMatch(page, /manufacturer's specifications/);
   });
 });
 
@@ -682,10 +689,15 @@ test("an unestablished spec is left out rather than shown as a no", async () => 
             // Only the maximum published: a range would invent the minimum.
             powerW: { min: null, max: 50 },
             aprs: null,
-            sources: [],
+            caveat: "",
           },
           "WLN|KD-C1": Object.fromEntries(
-            Object.keys(SPECS).map((field) => [field, field === "sources" ? [] : null]),
+            Object.keys(SPECS).map((field) => {
+              if (field === "sources") {
+                return [field, []];
+              }
+              return [field, field === "caveat" || field === "note" ? "" : null];
+            }),
           ),
         },
       },
@@ -697,9 +709,25 @@ test("an unestablished spec is left out rather than shown as a no", async () => 
     assert.match(mobile, /<td>Mobile<\/td>/);
     assert.match(mobile, /<td>Up to 50 W<\/td>/);
     assert.doesNotMatch(mobile, /Battery|Charging|>APRS</);
-    assert.doesNotMatch(mobile, /Sources:/);
+    assert.doesNotMatch(mobile, /radio-specs-caveat/);
     // Every field null is a radio with nothing to say, so it gets no heading.
     assert.doesNotMatch(unknown, /KD-C1 hardware/);
+  });
+});
+
+test("an entry that cites no source gets no hardware table", async () => {
+  await withTempDir("webchirp-pages-", async (root) => {
+    // Values nobody can point at are a claim with no evidence behind it, and
+    // publishing them would state them more strongly than the research did.
+    await stageFixture(root, {
+      radios: [fixtureRadio({ vendor: "Baofeng", model: "UV-5R" })],
+      features: { "alpha:AlphaRadio": FEATURES },
+      specs: { models: { "Baofeng|UV-5R": { ...SPECS, sources: [] } } },
+    });
+    await runGenerator(root);
+    const page = await readFile(path.join(root, "web", "radios", "baofeng-uv-5r.html"), "utf8");
+
+    assert.doesNotMatch(page, /UV-5R hardware/);
   });
 });
 

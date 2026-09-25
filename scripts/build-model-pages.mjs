@@ -233,9 +233,13 @@ const OPTIONAL_FLAGS = new Set(["aprs", "gps", "bluetoothProgramming"]);
 // naming the key, so a bad hand edit fails the build where it was made rather
 // than as a garbled table on some page nobody opens.
 function validateSpecs(specs) {
+  // Every rejection names the file and key, so the build log points at the
+  // line to fix instead of at the template that tripped over it.
   const fail = (key, message) => {
     throw new Error(`radio-specs.json models["${key}"] ${message}`);
   };
+  // A frequency list is [low, high] MHz pairs, each ascending. Anything else
+  // would print as a range that reads backwards or as "NaN MHz".
   const isRanges = (value) =>
     Array.isArray(value)
     && value.every(
@@ -287,6 +291,11 @@ function validateSpecs(specs) {
         fail(key, `has ${field} ${JSON.stringify(value)}`);
       }
     }
+    // The caveat is printed verbatim under the table, so it has to be one
+    // short clause-sized string, not a paragraph or a missing field.
+    if (typeof entry.caveat !== "string" || entry.caveat.length > 200) {
+      fail(key, `has caveat ${JSON.stringify(entry.caveat)}`);
+    }
   }
 }
 
@@ -296,10 +305,14 @@ function specsFor(radio, specs) {
   return specs.models[`${radio.vendor}|${radio.model}`] || null;
 }
 
+// Researched ranges as one readable line. They are already in MHz, unlike the
+// driver's Hz bands that formatBands converts.
 function formatMHzRanges(ranges) {
   return ranges.map(([low, high]) => `${low}–${high} MHz`).join(", ");
 }
 
+// A yes/no row's cell. "optional" gets its own wording because "Yes" would
+// promise a feature the radio only has once an add-on unit is bought.
 function formatFlag(value) {
   if (value === "optional") {
     return "Optional add-on";
@@ -349,13 +362,17 @@ function specRows(entry) {
   return rows;
 }
 
-// The hardware table, or nothing when no row was established. It says where
-// its figures come from because they can disagree with the driver's bullets
-// above: a driver often accepts a wider band than the radio is sold for, and a
-// reader seeing two ranges deserves to know which one is the spec sheet.
+// The hardware table, or nothing when no row was established or nothing was
+// cited: a figure with no source is a claim with no evidence, and the page
+// would be stating it more strongly than the research did. It says the figures
+// are not the driver's because the two can disagree -- a driver often accepts
+// a wider band than the radio is sold for, and a reader seeing two ranges
+// deserves to know which is which. The caveat follows the table because many
+// entries only hold for one version of the radio (a US model's ranges, the Mk3
+// of an AR8200), and the table without it would overstate the evidence.
 function specsSection(radio, entry) {
   const rows = entry ? specRows(entry) : [];
-  if (!rows.length) {
+  if (!rows.length || !entry.sources.length) {
     return "";
   }
   const table = rows
@@ -375,17 +392,22 @@ function specsSection(radio, entry) {
           .map(([url, host]) => `<a href="${escapeHtml(url)}" rel="nofollow noopener">${escapeHtml(host)}</a>`)
           .join(" · ")}</p>`
     : "";
+  const caveat = entry.caveat
+    ? `
+        <p class="radio-specs-caveat">${escapeHtml(entry.caveat)}</p>`
+    : "";
   return `
         <h2>${escapeHtml(radio.model)} hardware</h2>
         <p>
-          From the manufacturer's specifications and manuals rather than the CHIRP driver, so
-          these describe the radio as sold. Anything not established is left out.
+          Researched from the sources listed below — spec sheets, manuals and retailer
+          listings — rather than taken from the CHIRP driver. Anything not established is left
+          out.
         </p>
         <table class="radio-specs">
           <tbody>
 ${table}
           </tbody>
-        </table>${sources}`;
+        </table>${caveat}${sources}`;
 }
 
 // Any label as one filename-safe token.
@@ -1056,10 +1078,7 @@ async function main() {
 
   const merged = radios.filter((radio) => radio.variants.length > 1);
   const answered = radios.filter((radio) => firmwareFor(radio, firmware)).length;
-  const specified = radios.filter((radio) => {
-    const entry = specsFor(radio, specs);
-    return entry && specRows(entry).length > 0;
-  }).length;
+  const specified = radios.filter((radio) => specsSection(radio, specsFor(radio, specs))).length;
   const written = (await readdir(PAGES_DIR)).length;
   // eslint-disable-next-line no-console
   console.log(
