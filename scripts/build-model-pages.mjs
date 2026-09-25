@@ -7,7 +7,10 @@
 // driver: radio-catalog.json says which radios exist and what they are called,
 // radio-features.json (scripts/build-catalog.mjs) says what each one can do.
 // Nothing here invents a capability, which is also what keeps 535 pages from
-// being 535 copies of one template.
+// being 535 copies of one template. The two exceptions are hand-researched and
+// kept in their own files so they are never mistaken for driver output:
+// radio-firmware.json (can the firmware be updated) and radio-specs.json (the
+// hardware itself -- battery, charging, power, bands, features).
 //
 // Three page kinds come out of this, all in one flat directory: a model page
 // per vendor-and-model, a vendor hub for every vendor with more than one of
@@ -24,6 +27,10 @@ const FEATURES_PATH = path.join(REPO_ROOT, "radio-features.json");
 // it talks to can take new firmware, so that fact cannot be generated from the
 // catalog and is recorded by hand instead. This script only states it.
 const FIRMWARE_PATH = path.join(REPO_ROOT, "radio-firmware.json");
+// Hand-curated too: a driver knows the codeplug, not the battery it ships with
+// or whether it charges over USB-C. Researched from manufacturer spec sheets
+// and manuals, keyed vendor|model like the firmware file's model entries.
+const SPECS_PATH = path.join(REPO_ROOT, "radio-specs.json");
 const CNAME_PATH = path.join(REPO_ROOT, "CNAME");
 
 // The USB-serial chips WebUSB drivers exist for (web/js/ch340-webusb.js and
@@ -176,6 +183,265 @@ function firmwareSection(radio, entry) {
         <h2>Can I update the firmware on the ${escapeHtml(radio.model)}?</h2>
         <p>${escapeHtml(firmwareSentence(entry, radio.vendor, radio.model))}</p>${link}
         <p>${escapeHtml(FIRMWARE_DISCLAIMER)}</p>`;
+}
+
+// --- Hardware specifications (radio-specs.json) ------------------------------
+//
+// What each recorded value is called on the page. A value outside these tables
+// fails the build (validateSpecs) instead of rendering as a raw token, because
+// the file is typed by hand and a typo in it would otherwise reach every page.
+const FORM_FACTOR_LABELS = {
+  handheld: "Handheld",
+  mobile: "Mobile",
+  // Battery-carrying HF/multimode sets such as the FT-817: neither a handheld
+  // nor a mobile, and calling it either misstates whether it has a battery.
+  portable: "Portable",
+  base: "Base station",
+  receiver: "Receiver (no transmit)",
+};
+
+const CHARGING_LABELS = {
+  "usb-c": "USB-C",
+  usb: "USB (micro or mini)",
+  cradle: "Desktop charging cradle",
+  external: "External charger",
+};
+
+// The band names an entry may use, so every page names the same band the same
+// way ("2 m", never "2m" on one page and "VHF ham" on another). Amateur bands
+// are named for what a ham radio is sold for; VHF/UHF are the land-mobile
+// spans the unlocked and commercial sets cover; the rest are services and
+// receive-only broadcast or scanner coverage.
+const BAND_NAMES = new Set([
+  "160 m", "80 m", "60 m", "40 m", "30 m", "20 m", "17 m", "15 m", "12 m", "10 m",
+  "6 m", "4 m", "2 m", "1.25 m", "70 cm", "33 cm", "23 cm", "13 cm",
+  "VHF low", "VHF", "UHF",
+  "FRS", "GMRS", "MURS", "PMR446", "LPD433", "CB", "Marine", "Weather",
+  "Airband", "FM broadcast", "AM broadcast", "Shortwave", "General coverage", "Other",
+]);
+
+const MODULATIONS = new Set([
+  "FM", "AM", "SSB", "CW", "WFM", "DMR", "D-STAR", "C4FM", "NXDN", "dPMR", "P25", "RTTY", "PSK",
+]);
+
+// The yes/no rows, in the order a reader shopping for a radio asks about them.
+// Each is true, false, "optional" (needs an add-on unit) or null (not
+// established), and null contributes no row -- the same rule the spec bullets
+// and the firmware section follow: an unknown is not a "no".
+const SPEC_FLAGS = [
+  ["display", "Display"],
+  ["inProduction", "Still manufactured"],
+  ["dualReceive", "Dual receive"],
+  ["crossBandRepeater", "Cross-band repeater"],
+  ["aprs", "APRS"],
+  ["gps", "GPS"],
+  ["bluetoothProgramming", "Bluetooth programming"],
+];
+
+// Only these three flags have add-on units that supply them; "optional" on a
+// display or on production status would be a typo, not a fact.
+const OPTIONAL_FLAGS = new Set(["aprs", "gps", "bluetoothProgramming"]);
+
+// Rejects anything in radio-specs.json the page could not state truthfully,
+// naming the key, so a bad hand edit fails the build where it was made rather
+// than as a garbled table on some page nobody opens.
+function validateSpecs(specs) {
+  // Every rejection names the file and key, so the build log points at the
+  // line to fix instead of at the template that tripped over it.
+  const fail = (key, message) => {
+    throw new Error(`radio-specs.json models["${key}"] ${message}`);
+  };
+  // A range is one [low, high] MHz pair, ascending. Anything else would print
+  // as a range that reads backwards or as "NaN MHz".
+  const isRange = (range) =>
+    Array.isArray(range)
+    && range.length === 2
+    && range.every((mhz) => typeof mhz === "number" && mhz > 0)
+    && range[0] < range[1];
+  // A band has a known name and at least one of its two ranges; a band with
+  // neither says nothing a reader could use.
+  const isBand = (band) =>
+    band !== null
+    && typeof band === "object"
+    && BAND_NAMES.has(band.band)
+    && (band.rxMHz === null || isRange(band.rxMHz))
+    && (band.txMHz === null || isRange(band.txMHz))
+    && (band.rxMHz !== null || band.txMHz !== null);
+  for (const [key, entry] of Object.entries(specs.models)) {
+    if (entry.formFactor !== null && !(entry.formFactor in FORM_FACTOR_LABELS)) {
+      fail(key, `has formFactor "${entry.formFactor}"`);
+    }
+    if (entry.batteryMah !== null && !(Number.isInteger(entry.batteryMah) && entry.batteryMah > 0)) {
+      fail(key, `has batteryMah ${JSON.stringify(entry.batteryMah)}`);
+    }
+    if (
+      entry.charging !== null
+      && !(Array.isArray(entry.charging) && entry.charging.every((way) => way in CHARGING_LABELS))
+    ) {
+      fail(key, `has charging ${JSON.stringify(entry.charging)}`);
+    }
+    if (entry.powerW !== null) {
+      const { min, max } = entry.powerW;
+      // A null min is a maker that publishes only its maximum output.
+      const minOk = min === null || (typeof min === "number" && min > 0 && min <= max);
+      if (!(typeof max === "number" && max > 0 && minOk)) {
+        fail(key, `has powerW ${JSON.stringify(entry.powerW)}`);
+      }
+    }
+    if (entry.bands !== null && !(Array.isArray(entry.bands) && entry.bands.every(isBand))) {
+      fail(key, `has bands ${JSON.stringify(entry.bands)}`);
+    }
+    if (
+      entry.modulations !== null
+      && !(Array.isArray(entry.modulations) && entry.modulations.every((mode) => MODULATIONS.has(mode)))
+    ) {
+      fail(key, `has modulations ${JSON.stringify(entry.modulations)}`);
+    }
+    for (const [field] of SPEC_FLAGS) {
+      const value = entry[field];
+      const allowed =
+        value === null
+        || typeof value === "boolean"
+        || (value === "optional" && OPTIONAL_FLAGS.has(field));
+      if (!allowed) {
+        fail(key, `has ${field} ${JSON.stringify(value)}`);
+      }
+    }
+    // The caveat is printed verbatim under the table, so it has to be one
+    // short clause-sized string, not a paragraph or a missing field.
+    if (typeof entry.caveat !== "string" || entry.caveat.length > 200) {
+      fail(key, `has caveat ${JSON.stringify(entry.caveat)}`);
+    }
+  }
+}
+
+// The researched entry for one page, or null. Keyed by the name the page is
+// about, which is the merged survivor's own vendor and model.
+function specsFor(radio, specs) {
+  return specs.models[`${radio.vendor}|${radio.model}`] || null;
+}
+
+// One researched range as a table cell. Already in MHz, unlike the driver's Hz
+// bands that formatBands converts; a missing range is a band the radio only
+// listens on (or only the other direction is known), shown as a dash.
+function formatMHzRange(range) {
+  return range ? `${range[0]}–${range[1]} MHz` : "—";
+}
+
+// A yes/no row's cell. "optional" gets its own wording because "Yes" would
+// promise a feature the radio only has once an add-on unit is bought.
+function formatFlag(value) {
+  if (value === "optional") {
+    return "Optional add-on";
+  }
+  return value ? "Yes" : "No";
+}
+
+// One radio's researched hardware as label/value rows, skipping whatever was
+// not established. An empty charging list or transmit range is a mobile or a
+// receiver saying "not applicable", which the Type row already tells a reader,
+// so it contributes no row either rather than an empty cell.
+function specRows(entry) {
+  const rows = [];
+  if (entry.formFactor) {
+    rows.push(["Type", FORM_FACTOR_LABELS[entry.formFactor]]);
+  }
+  if (entry.batteryMah) {
+    rows.push(["Battery", `${entry.batteryMah} mAh`]);
+  }
+  if (entry.charging?.length) {
+    rows.push(["Charging", entry.charging.map((way) => CHARGING_LABELS[way]).join(", ")]);
+  }
+  if (entry.powerW) {
+    const { min, max } = entry.powerW;
+    let power = `${min}–${max} W`;
+    if (min === null) {
+      power = `Up to ${max} W`;
+    } else if (min === max) {
+      power = `${max} W`;
+    }
+    rows.push(["Transmit power", power]);
+  }
+  if (entry.modulations?.length) {
+    rows.push(["Modulation", entry.modulations.join(", ")]);
+  }
+  for (const [field, label] of SPEC_FLAGS) {
+    if (entry[field] !== null && entry[field] !== undefined) {
+      rows.push([label, formatFlag(entry[field])]);
+    }
+  }
+  return rows;
+}
+
+// The hardware table, or nothing when no row was established or nothing was
+// cited: a figure with no source is a claim with no evidence, and the page
+// would be stating it more strongly than the research did. It says the figures
+// are not the driver's because the two can disagree -- a driver often accepts
+// a wider band than the radio is sold for, and a reader seeing two ranges
+// deserves to know which is which. The caveat follows the table because many
+// entries only hold for one version of the radio (a US model's ranges, the Mk3
+// of an AR8200), and the table without it would overstate the evidence.
+function specsSection(radio, entry) {
+  const rows = entry ? specRows(entry) : [];
+  const bands = entry?.bands || [];
+  if ((!rows.length && !bands.length) || !entry.sources.length) {
+    return "";
+  }
+  const table = rows
+    .map(
+      ([label, value]) =>
+        `            <tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`,
+    )
+    .join("\n");
+  const hosts = (entry.sources || [])
+    .map((url) => [url, firmwareLinkHost(url)])
+    .filter(([, host]) => host);
+  // nofollow for the same reason as the firmware link: hundreds of pages
+  // pointing outward at a few dozen hosts.
+  const sources = hosts.length
+    ? `
+        <p class="radio-specs-sources">Sources: ${hosts
+          .map(([url, host]) => `<a href="${escapeHtml(url)}" rel="nofollow noopener">${escapeHtml(host)}</a>`)
+          .join(" · ")}</p>`
+    : "";
+  // One row per band rather than one line per direction, because a radio's
+  // receive and transmit spans pair up by band -- a 2 m set that listens on
+  // 136-174 MHz but transmits on 144-148 reads wrongly as two unrelated lists.
+  const bandTable = bands.length
+    ? `
+        <h3>Frequency bands</h3>
+        <table class="radio-specs radio-bands">
+          <thead>
+            <tr><th scope="col">Band</th><th scope="col">Receive</th><th scope="col">Transmit</th></tr>
+          </thead>
+          <tbody>
+${bands
+  .map(
+    (band) =>
+      `            <tr><th scope="row">${escapeHtml(band.band)}</th>`
+      + `<td>${escapeHtml(formatMHzRange(band.rxMHz))}</td>`
+      + `<td>${escapeHtml(formatMHzRange(band.txMHz))}</td></tr>`,
+  )
+  .join("\n")}
+          </tbody>
+        </table>`
+    : "";
+  const caveat = entry.caveat
+    ? `
+        <p class="radio-specs-caveat">${escapeHtml(entry.caveat)}</p>`
+    : "";
+  return `
+        <h2>${escapeHtml(radio.model)} hardware</h2>
+        <p>
+          Researched from the sources listed below — spec sheets, manuals and retailer
+          listings — rather than taken from the CHIRP driver. Anything not established is left
+          out.
+        </p>
+        <table class="radio-specs">
+          <tbody>
+${table}
+          </tbody>
+        </table>${bandTable}${caveat}${sources}`;
 }
 
 // Any label as one filename-safe token.
@@ -405,6 +671,7 @@ function renderModelPage({
   radio,
   features,
   firmware,
+  specs,
   siblings,
   index,
   baseUrl,
@@ -523,7 +790,7 @@ ${faqJsonLd(faq)}
         <ul>
 ${specBullets(radio, features).map((line) => `          <li>${escapeHtml(line)}</li>`).join("\n")}
         </ul>
-${aliasSection}${variantSection}${firmwareSection(radio, firmware)}
+${specsSection(radio, specs)}${aliasSection}${variantSection}${firmwareSection(radio, firmware)}
         <h2>How to program a ${escapeHtml(name)}</h2>
         <ol>
           <li>Plug the programming cable into the radio and the computer.</li>
@@ -705,6 +972,7 @@ async function main() {
   const catalog = await readJson(CATALOG_PATH);
   const { features, chirpRevision } = await readJson(FEATURES_PATH);
   const firmware = await readJson(FIRMWARE_PATH);
+  const specs = await readJson(SPECS_PATH);
   if (chirpRevision !== catalog.chirpRevision) {
     throw new Error(
       `radio-features.json is from CHIRP ${chirpRevision} but the catalog is from `
@@ -725,6 +993,8 @@ async function main() {
       }
     }
   }
+
+  validateSpecs(specs);
 
   const host = (await readFile(CNAME_PATH, "utf8")).trim();
   if (!host) {
@@ -801,6 +1071,7 @@ async function main() {
         radio,
         features: features[radio.key],
         firmware: firmwareFor(radio, firmware),
+        specs: specsFor(radio, specs),
         siblings,
         index,
         baseUrl,
@@ -841,12 +1112,14 @@ async function main() {
 
   const merged = radios.filter((radio) => radio.variants.length > 1);
   const answered = radios.filter((radio) => firmwareFor(radio, firmware)).length;
+  const specified = radios.filter((radio) => specsSection(radio, specsFor(radio, specs))).length;
   const written = (await readdir(PAGES_DIR)).length;
   // eslint-disable-next-line no-console
   console.log(
     `Wrote ${written} pages to ${path.relative(REPO_ROOT, PAGES_DIR)}: ${radios.length} models `
     + `across ${vendorNames.length} vendors, ${hubVendors.length} of which got a hub, `
-    + `${answered} of which answer whether their firmware can be updated`
+    + `${answered} of which answer whether their firmware can be updated, `
+    + `${specified} of which list researched hardware specs`
     + `${merged.length ? `, merging ${merged.length} model(s) whose drivers share one name: ${merged.map((radio) => radio.variants.map((variant) => variant.key).join(" + ")).join("; ")}` : ""}`
     + `${skipped.length ? `, skipping ${skipped.length} radio(s) that describe themselves too thinly: ${skipped.join(", ")}` : ""}.`,
   );
