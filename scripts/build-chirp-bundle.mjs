@@ -29,7 +29,8 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { crc32, deflateRawSync } from "node:zlib";
+
+import { zipSync } from "fflate";
 
 import {
   CHIRP_BUNDLE_DIR,
@@ -104,73 +105,21 @@ export function driverModulesFromFiles(files) {
     .sort();
 }
 
-// A DOS date/time of 1980-01-01 00:00, the earliest a zip can express. Fixed
-// so the archive bytes depend only on the files, never on when it was built.
-const ZIP_DOS_TIME = 0;
-const ZIP_DOS_DATE = (1 << 5) | 1;
+// Every entry carries this fixed timestamp instead of the build time, so the
+// archive bytes depend only on the files, never on when it was built. A local
+// Date on purpose: fflate reads the local calendar fields when it writes the
+// DOS time, so this yields the same fields in every timezone.
+const ZIP_FIXED_MTIME = new Date(1980, 0, 1, 0, 0, 0);
 
-// Pack entries into a zip with deflate compression. Written here rather than
-// taken from a dependency because the format is small (three record types)
-// and Node ships both halves of it: deflateRawSync and crc32. No data
-// descriptors or zip64, since the archive is a few thousand files at most.
+// Pack entries into a zip with deflate compression through fflate, in the
+// order given. Level 9 because the archive is built once per pin and fetched
+// by every visitor; the fixed mtime is what keeps the output reproducible.
 export function createZipArchive(entries) {
-  const localParts = [];
-  const centralParts = [];
-  let offset = 0;
+  const files = {};
   for (const { archivePath, bytes } of entries) {
-    const name = Buffer.from(archivePath, "utf8");
-    const data = Buffer.from(bytes);
-    const compressed = deflateRawSync(data, { level: 9 });
-    const checksum = crc32(data);
-
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4); // version needed: 2.0 (deflate)
-    local.writeUInt16LE(0x0800, 6); // flags: UTF-8 names
-    local.writeUInt16LE(8, 8); // method: deflate
-    local.writeUInt16LE(ZIP_DOS_TIME, 10);
-    local.writeUInt16LE(ZIP_DOS_DATE, 12);
-    local.writeUInt32LE(checksum, 14);
-    local.writeUInt32LE(compressed.length, 18);
-    local.writeUInt32LE(data.length, 22);
-    local.writeUInt16LE(name.length, 26);
-    local.writeUInt16LE(0, 28); // extra length
-    localParts.push(local, name, compressed);
-
-    const central = Buffer.alloc(46);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(20, 4); // version made by
-    central.writeUInt16LE(20, 6); // version needed
-    central.writeUInt16LE(0x0800, 8);
-    central.writeUInt16LE(8, 10);
-    central.writeUInt16LE(ZIP_DOS_TIME, 12);
-    central.writeUInt16LE(ZIP_DOS_DATE, 14);
-    central.writeUInt32LE(checksum, 16);
-    central.writeUInt32LE(compressed.length, 20);
-    central.writeUInt32LE(data.length, 24);
-    central.writeUInt16LE(name.length, 28);
-    central.writeUInt16LE(0, 30); // extra length
-    central.writeUInt16LE(0, 32); // comment length
-    central.writeUInt16LE(0, 34); // disk number
-    central.writeUInt16LE(0, 36); // internal attributes
-    central.writeUInt32LE(0, 38); // external attributes
-    central.writeUInt32LE(offset, 42);
-    centralParts.push(central, name);
-
-    offset += local.length + name.length + compressed.length;
+    files[archivePath] = [new Uint8Array(bytes), { level: 9, mtime: ZIP_FIXED_MTIME }];
   }
-
-  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(0, 4); // this disk
-  end.writeUInt16LE(0, 6); // central directory disk
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(centralSize, 12);
-  end.writeUInt32LE(offset, 16);
-  end.writeUInt16LE(0, 20); // comment length
-  return Buffer.concat([...localParts, ...centralParts, end]);
+  return Buffer.from(zipSync(files));
 }
 
 // Build the archive and its manifest from a CHIRP package directory. The

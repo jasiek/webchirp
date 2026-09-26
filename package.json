@@ -36,6 +36,7 @@
     "serialport": "^13.0.0"
   },
   "devDependencies": {
+    "fflate": "^0.8.3",
     "pyright": "1.1.413"
   }
 }
