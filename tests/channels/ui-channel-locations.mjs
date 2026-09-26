@@ -19,6 +19,7 @@ import {
   selectRadioBySearch,
   tableNames,
 } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The UV-5R test image's real shape, trimmed: two low channels, then gaps.
 // chirp/tests/images/Baofeng_UV-5R.img fills 37 of 128 slots this way.
@@ -54,7 +55,7 @@ async function bootWithRows(rows, bounds = { min: 0, max: 127 }) {
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
   const columns = { Location: { kind: "int", editable: false, ...bounds } };
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({
       radios: [
         { vendor: "Acme", model: "One", module: "one", className: "OneRadio", key: "one:OneRadio", isLiveRadio: false },
@@ -65,7 +66,7 @@ async function bootWithRows(rows, bounds = { min: 0, max: 127 }) {
     getRadioMetadata: async () => ({ headers: HEADERS, columns }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers: HEADERS, rows: rows.map((row) => ({ ...row })), errors: [] }),
-  });
+  }));
   await ui.init(true);
   // Without a selected radio the driver's column metadata is never fetched.
   selectRadioBySearch(document, "Acme One");

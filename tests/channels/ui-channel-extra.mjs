@@ -11,6 +11,7 @@ import {
   installFakeDom,
   keydownEvent,
 } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The grid's Extra column and the modal behind it (web/js/ui/channel-extra.js).
 // Driven through createUiController rather than the module alone, because the
@@ -79,7 +80,7 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
   const calls = [];
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: [RADIO] }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: HEADERS }),
@@ -102,7 +103,7 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
         ? getChannelExtra(payload)
         : { available: true, message: "", fields: EXTRA_FIELDS };
     },
-  });
+  }));
   await ui.init(true);
   closeVivifiedModals(document);
 

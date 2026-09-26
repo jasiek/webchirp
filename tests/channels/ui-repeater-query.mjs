@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The shared fake DOM lets createUiController/init run headless: every #id
 // resolves to an element, while the repeater-API-base meta tag is registered
@@ -37,7 +38,7 @@ const RUNTIME_API = {
 async function bootUi() {
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
-  ui.setRuntimeApi(RUNTIME_API);
+  ui.setRuntimeApi(withRadioSessions(RUNTIME_API));
   await ui.init(true);
   return ui;
 }
