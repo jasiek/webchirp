@@ -5,9 +5,15 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - `web/js/runtime-rpc.js`: Main-thread runtime RPC layer and Pyodide bootstrap.
 - `web/js/ui.js`: Composes the UI modules and exposes `createUiController()`.
 - `web/js/ui/`: One module per UI area — `channel-table`, `settings-panel`,
-  `radio-catalog`, `repeater-query`, `codeplug-io`, `serial-actions`, plus the
-  shared `dom`, `state`, `debug-log`, `issue-report`, `format`, `analytics` and
-  `channel-values` helpers. `repeater-query` is one modal shell for every
+  `radio-catalog`, `radio-session`, `repeater-query`, `codeplug-io`,
+  `serial-actions`, plus the shared `dom`, `state`, `debug-log`, `issue-report`,
+  `format`, `analytics` and `channel-values` helpers. `radio-session` owns the
+  runtime session handle behind the selected radio: selecting a radio opens a
+  session, changing it closes the old one and opens the next, an image load
+  hands over the session the runtime opened for the image's driver, and every
+  radio-bound runtime call carries the session's id. A load's response is
+  applied only while its handle is still `state.radioSession` -- identity, not
+  a counter, is what discards a stale load. `repeater-query` is one modal shell for every
   repeater directory: its form is assembled per source from the field
   components in `query-fields.js` (which build their own DOM), driven by the
   per-source configs in `repeater-sources.js`.
@@ -18,13 +24,17 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   is the JS side of that contract and the only place that calls it.
 - `web/python/webchirp_bridge/`: The runtime logic, one module per concern —
   `chirp_loader` (driver imports from the mounted CHIRP tree, driver enumeration), `serial_pipe`
-  (pyserial stand-in over Web Serial), `clone` (download/upload sessions),
-  `driver_cache` (cached clone image and radios built from it), `channel_rows`,
-  `power_levels`, `row_validation`, `radio_memories`, `radio_settings`,
-  `column_metadata`, `images`, plus `jsbridge` (JS-boundary helpers),
-  `runtime_errors` and `rpc` (the `RPC_METHODS` table and `rpc_dispatch`).
-  `__init__.py` only installs the shims CHIRP needs before import.
-  No embedded Python in JS files.
+  (pyserial stand-in over Web Serial), `session` (the `RadioSession` dataclass
+  and registry: the radio the user is working on, with its clone image and
+  the image's origin, the class detection resolved to and the channels that
+  would not decode; `open_session`/`close_session` are RPC methods and every
+  radio-bound method takes a `session_id`), `clone` (download/upload over the
+  serial port), `driver_cache` (radios built from a session's image or from
+  nothing, and image serialization), `channel_rows`, `power_levels`,
+  `row_validation`, `radio_memories`, `radio_settings`, `column_metadata`,
+  `images`, plus `jsbridge` (JS-boundary helpers), `runtime_errors` and `rpc`
+  (the `RPC_METHODS` table and `rpc_dispatch`). `__init__.py` only installs
+  the shims CHIRP needs before import. No embedded Python in JS files.
 - `chirp/`: Upstream CHIRP source as a git submodule. The runtime never reads it
   file by file: `scripts/build-chirp-bundle.mjs` (`npm run build:chirp`, run by `dev`
   and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,
@@ -114,8 +124,9 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   search terms or coordinates.
 - When on a worktree other than the master branch run a dev server on a port other than 8000.
 - Avoid regressions in clone workflow:
-  - Download should cache the image for the selected driver.
-  - Upload should use cached image and fail clearly if no cached image exists.
+  - Download should record the image on the selected radio's session.
+  - Upload should use the session's image and fail clearly if the session holds
+    none that came from the radio or a file (a synthetic export never counts).
   - Prepare serial session before clone operations (buffer clear, control lines, settle delay).
 
 ## Agent CLI
