@@ -12,6 +12,10 @@ import { loadImageFor, readCatalog, sharedHarness } from "../support/chirp.mjs";
 // a moment from the mounted CHIRP tree, and exposes a documented boolean
 // extra: Busy Channel Lockout, with a set_doc() explanation the modal shows
 // under the label.
+//
+// The image is built the way a download would build it and recorded on a
+// radio session, which the probes below read through the interpreter global
+// _extra_session; each SETUP opens a fresh one and closes the last.
 const SETUP = `
 import base64, json
 
@@ -27,26 +31,29 @@ for _number, _freq in ((1, 446006250), (2, 446093750)):
     _seed.mode = "FM"
     _radio.set_memory(_seed)
 
-_image = _cache_driver_image("h777", "H777Radio", _radio)
+if "_extra_session" in globals():
+    close_session(_extra_session.session_id)
+_extra_session = open_radio_session("h777", "H777Radio")
+_image = _record_session_image(_extra_session, _radio, ImageOrigin.FILE)
 _rows, _unreadable = _radio_rows_from_instance(_radio)
 json.dumps({"rows": _rows, "imageBase64": base64.b64encode(_image).decode("ascii")})
 `;
 
 const DESCRIBE = `
 import json
-json.dumps(get_channel_extra("h777", "H777Radio", _location))
+json.dumps(get_channel_extra(_extra_session.session_id, _location))
 `;
 
-// Export rows against the cached image and report what the driver actually
+// Export rows against the session's image and report what the driver actually
 // stored, which is the only proof a sidecar edit reached the radio.
 const EXPORT_AND_READ = `
 import base64, json
 
 _cls = _import_radio_class("h777", "H777Radio")
 _base = _radio_from_image_bytes(_cls, base64.b64decode(_base_b64))
-_cache_driver_image("h777", "H777Radio", _base)
+_record_session_image(_extra_session, _base, ImageOrigin.FILE)
 
-_exported = export_image_base64("h777", "H777Radio", json.loads(_rows_json), [])
+_exported = export_image_base64(_extra_session.session_id, json.loads(_rows_json), [])
 _radio = _radio_from_image_bytes(_cls, base64.b64decode(_exported["imageBase64"]))
 _memory = _radio.get_memory(int(_location))
 json.dumps({
@@ -161,7 +168,7 @@ test("a row that carries no extras is left on the driver's own values", async ()
 // never gets the chance.
 const PREFLIGHT = `
 import json
-json.dumps(validate_rows_for_upload(json.loads(_rows_json), "h777", "H777Radio"))
+json.dumps(validate_rows_for_upload(json.loads(_rows_json), _extra_session.session_id))
 `;
 
 function extraIssues(result) {
@@ -176,7 +183,7 @@ function extraIssues(result) {
 test("a value the driver refuses blocks the upload instead of vanishing", async () => {
   const harness = await sharedHarness();
   const catalog = await readCatalog();
-  const { match, loaded } = await loadImageFor(harness, catalog, "Baofeng_UV-5R.img");
+  const { loaded } = await loadImageFor(harness, catalog, "Baofeng_UV-5R.img");
   const withExtras = loaded.rows.findIndex((row) => row.__extra?.pttid !== undefined);
   assert.ok(withExtras >= 0, "the UV-5R image should carry PTT ID on its channels");
 
@@ -187,8 +194,8 @@ test("a value the driver refuses blocks the upload instead of vanishing", async 
   };
 
   const result = await harness.runPythonJson(
-    `import json\njson.dumps(validate_rows_for_upload(json.loads(_rows_json), _module, _class_name))`,
-    { _rows_json: JSON.stringify(edited), _module: match.module, _class_name: match.className },
+    `import json\njson.dumps(validate_rows_for_upload(json.loads(_rows_json), _sid))`,
+    { _rows_json: JSON.stringify(edited), _sid: loaded.sessionId },
   );
   const issues = extraIssues(result);
   assert.equal(result.valid, false, "a refused extra must fail the preflight");

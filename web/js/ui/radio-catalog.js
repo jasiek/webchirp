@@ -1,8 +1,4 @@
-import {
-  isStaleRadioLoad,
-  nextRadioLoadToken,
-  requireRuntimeApi,
-} from "./state.js";
+import { requireRuntimeApi } from "./state.js";
 import { makeModelLabel } from "./format.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
 import { DEFAULT_DRIVER_SET, QUANSHENG_UNOFFICIAL_DRIVER_SET } from "../python-sources.mjs";
@@ -27,9 +23,6 @@ export function createRadioCatalog(ctx) {
   // Overrides the readout while the catalog is loading or failed to load, so a
   // cold start does not claim the user simply has not chosen a radio yet.
   let catalogStatusText = "";
-  // Track queued selections as well as rendered state so A -> B -> A restores A.
-  let requestedRadioKey = "";
-  let radioLoadPending = false;
 
   function setCookie(name, value, maxAgeSeconds = 31536000) {
     document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
@@ -216,10 +209,13 @@ export function createRadioCatalog(ctx) {
   // points — a suggestion, the cookie, an image naming its own driver — and the
   // serial actions are gated on there being a radio at all, so a path that
   // assigned state.selectedRadio without re-gating them left Connect, Load and
-  // Save disabled behind a populated readout.
-  function commitSelectedRadio(radio) {
+  // Save disabled behind a populated readout. The runtime session moves with
+  // the selection: opened here for the radio, or adopted when an image load
+  // already opened one for the driver it named.
+  function commitSelectedRadio(radio, adoptedSessionId = "") {
     clearRadioFilter();
     state.selectedRadio = radio;
+    ctx.session.open(radio, adoptedSessionId);
     renderSelectedRadio();
     actions.updateSerialActionState();
   }
@@ -339,28 +335,29 @@ export function createRadioCatalog(ctx) {
     persistSelectedRadioCookie();
     ctx.table.clearInvalidHighlights();
     ctx.settings.clearInvalid();
-    // Every selection transition invalidates older work, including one that
-    // returns to the last fully loaded radio and needs no new runtime calls.
-    const loadToken = nextRadioLoadToken(state);
-    const radio = state.selectedRadio;
-    const previousRequestedKey = requestedRadioKey;
-    // Release selection may have queued an interpreter switch; reselecting the
-    // last rendered release must switch it back even before that load finishes.
-    if (radio && radio.key === state.lastLoadedRadioKey
-      && (!radio.releaseLabel || (previousRequestedKey === radio.key && !radioLoadPending))) {
+    // The session for the selection just committed. Reselecting the radio the
+    // current session is for keeps that session (web/js/ui/radio-session.js),
+    // so one that has already loaded needs no new runtime calls and keeps the
+    // user's edits, and one still loading will apply its result when it lands.
+    const session = ctx.session.current();
+    if (session?.loaded) {
       ctx.table.render();
       return;
     }
-    radioLoadPending = true;
+    if (session?.loading) {
+      return;
+    }
+    if (session) {
+      session.loading = true;
+    }
     Promise.all([
-      fetchRadioMetadata(radio),
-      ctx.settings.fetchForRadio(radio),
+      fetchRadioMetadata(session),
+      ctx.settings.fetchForSession(session),
     ])
       .then(([metadata, settingsState]) => {
-        if (
-          isStaleRadioLoad(state, loadToken)
-          || state.selectedRadio?.key !== radio?.key
-        ) {
+        // A response for a session the selection has since moved on from is
+        // dropped whole: the session was closed when it stopped being current.
+        if (!ctx.session.isCurrent(session)) {
           return;
         }
         // Commit the schema and settings together. If one request finishes
@@ -368,17 +365,17 @@ export function createRadioCatalog(ctx) {
         // complete state rather than a temporary mixture of both radios.
         applyRadioMetadata(metadata);
         ctx.settings.applyLoadedState(settingsState);
-        state.lastLoadedRadioKey = radio?.key || "";
+        ctx.session.markLoaded(session);
         ctx.table.render();
       })
       .catch((error) => {
-        if (!isStaleRadioLoad(state, loadToken)) {
+        if (ctx.session.isCurrent(session)) {
           log.reportActionError("Metadata load", error);
         }
       })
       .finally(() => {
-        if (!isStaleRadioLoad(state, loadToken)) {
-          radioLoadPending = false;
+        if (session) {
+          session.loading = false;
         }
       });
   }
@@ -400,21 +397,23 @@ export function createRadioCatalog(ctx) {
       : "No radio definitions available";
     if (state.selectedRadio && !state.radioCatalog.includes(state.selectedRadio)) {
       state.selectedRadio = null;
+      ctx.session.close();
     }
     renderSelectedRadio();
     actions.updateSerialActionState();
   }
 
   // Select the catalog entry for a driver without going through the search box
-  // (used when a loaded image identifies its own driver).
-  function selectRadioByDriver(moduleName, className) {
+  // (used when a loaded image identifies its own driver, in which case the
+  // session the load opened for that driver is adopted along with it).
+  function selectRadioByDriver(moduleName, className, adoptedSessionId = "") {
     const target = state.radioCatalog.find(
       (r) => r.module === moduleName && r.className === className,
     );
     if (!target) {
       return false;
     }
-    commitSelectedRadio(target);
+    commitSelectedRadio(target, adoptedSessionId);
     persistSelectedRadioCookie();
     return true;
   }
@@ -445,8 +444,11 @@ export function createRadioCatalog(ctx) {
     return true;
   }
 
+  // Select the radio a loaded image identified, adopting the session the load
+  // opened for it so the image it holds is the one the editor works on.
   function selectRadioByDetectedImage(loaded) {
-    if (selectRadioByDriver(loaded.module, loaded.className)) {
+    const sessionId = String(loaded.sessionId || "");
+    if (selectRadioByDriver(loaded.module, loaded.className, sessionId)) {
       trackRadioSelected(state.selectedRadio, "image");
       return true;
     }
@@ -461,21 +463,19 @@ export function createRadioCatalog(ctx) {
     if (!fallback) {
       return false;
     }
-    commitSelectedRadio(fallback);
+    commitSelectedRadio(fallback, sessionId);
     trackRadioSelected(fallback, "image");
     persistSelectedRadioCookie();
     return true;
   }
 
-  async function fetchRadioMetadata(radio) {
-    requestedRadioKey = radio?.key || "";
-    if (!radio) {
+  // The column schema for a session's radio, or the empty schema for none.
+  async function fetchRadioMetadata(session) {
+    if (!session) {
       return { headers: [], columns: {} };
     }
-    const metadata = await requireRuntimeApi(state).getRadioMetadata({
-      module: radio.module,
-      className: radio.className,
-    });
+    const sessionId = await ctx.session.idOf(session);
+    const metadata = await requireRuntimeApi(state).getRadioMetadata({ sessionId });
     return metadata || { headers: [], columns: {} };
   }
 
@@ -498,11 +498,12 @@ export function createRadioCatalog(ctx) {
     }
   }
 
-  // Load selected radio's CHIRP-derived column metadata from Python runtime.
-  async function loadSelectedRadioMetadata(loadToken = nextRadioLoadToken(state)) {
-    const radio = state.selectedRadio;
-    const metadata = await fetchRadioMetadata(radio);
-    if (isStaleRadioLoad(state, loadToken)) {
+  // Load the selected radio's CHIRP-derived column metadata from the Python
+  // runtime, applied only if the selection's session is still the current one.
+  async function loadSelectedRadioMetadata() {
+    const session = ctx.session.current();
+    const metadata = await fetchRadioMetadata(session);
+    if (!ctx.session.isCurrent(session)) {
       return;
     }
     applyRadioMetadata(metadata);

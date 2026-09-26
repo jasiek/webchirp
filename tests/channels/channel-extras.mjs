@@ -70,7 +70,7 @@ else:
             if isinstance(_value, bool):
                 _setting.value = not _value
     _radio.set_memory(_memory)
-    _seeded = _cache_driver_image(_module, _class_name, _radio)
+    _seeded = _image_bytes_from_radio(_radio)
     _reread = _radio_from_image_bytes(_cls, _seeded)
     _result = {
         "location": _target,
@@ -173,26 +173,27 @@ for _number, _freq in ((1, 146520000), (2, 147000000)):
 # the slot instead of travelling with the channel is visible as a swap.
 _radio._memobj.channels[0].bcl = 1
 _radio._memobj.channels[1].bcl = 0
-_image = _cache_driver_image("iradio_uv_5118", "IradioUV5118", _radio)
+_image = _image_bytes_from_radio(_radio)
 
 _rows, _unreadable = _radio_rows_from_instance(_radio)
 json.dumps({"rows": _rows, "imageBase64": base64.b64encode(_image).decode("ascii")})
 `;
 
 // Export rows against a known base image and report what each named channel
-// ended up holding. export_image_base64() caches the image it produces, so the
-// base is restored first: without that each export would build on the previous
-// one and the cases below would stop being independent.
+// ended up holding. export_image_base64() records the image it produces on
+// its session, so each export runs on a session of its own seeded with the
+// base: without that each export would build on the previous one and the
+// cases below would stop being independent.
 const IRADIO_EXPORT = `
 import base64, json
 
 _cls = _import_radio_class("iradio_uv_5118", "IradioUV5118")
 _base = _radio_from_image_bytes(_cls, base64.b64decode(_base_b64))
-_cache_driver_image("iradio_uv_5118", "IradioUV5118", _base)
+_session = open_radio_session("iradio_uv_5118", "IradioUV5118")
+_record_session_image(_session, _base, ImageOrigin.FILE)
 
-_exported = export_image_base64(
-    "iradio_uv_5118", "IradioUV5118", json.loads(_rows_json), []
-)
+_exported = export_image_base64(_session.session_id, json.loads(_rows_json), [])
+close_session(_session.session_id)
 _radio = _radio_from_image_bytes(_cls, base64.b64decode(_exported["imageBase64"]))
 _report = {}
 for _number in json.loads(_locations_json):

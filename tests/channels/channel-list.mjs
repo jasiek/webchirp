@@ -152,13 +152,17 @@ function parseChirpDirArg(argv = process.argv.slice(2)) {
 test("channel list rows are parseable and codeplug-applicable", async (t) => {
   const harness = await sharedHarness({ chirpDir: parseChirpDirArg() });
   await ensureModule(harness, TEST_RADIO.module);
+  // The session the radio-bound calls below run against, as the browser has
+  // one for the selected radio. Probes that need an image of their own open a
+  // session of their own inside the snippet.
+  const sessionId = await harness.session(TEST_RADIO.module, TEST_RADIO.className);
 
   await t.test("blank Offset values normalize into parseable rows", async () => {
     const rows = makeChannelRows({ offset: "" });
     const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
-_csv = normalize_rows(_rows, _sel_module, _sel_class)
+_csv = normalize_rows(_rows, _sid)
 _parsed = parse_csv(_csv)
 _failures = []
 for _idx, _row in enumerate(_parsed["rows"]):
@@ -179,6 +183,7 @@ json.dumps({
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
@@ -193,7 +198,7 @@ json.dumps({
     const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
-_csv = normalize_rows(_rows, _sel_module, _sel_class)
+_csv = normalize_rows(_rows, _sid)
 _parsed = parse_csv(_csv)
 json.dumps({
     "rowCount": len(_parsed["rows"]),
@@ -204,6 +209,7 @@ json.dumps({
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
@@ -238,6 +244,7 @@ json.dumps({
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
@@ -279,6 +286,7 @@ json.dumps({
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
@@ -297,12 +305,13 @@ json.dumps({
     const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
-json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
+json.dumps(validate_rows_for_upload(_rows, _sid))
       `,
       {
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
@@ -324,12 +333,13 @@ json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
     const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
-json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
+json.dumps(validate_rows_for_upload(_rows, _sid))
       `,
       {
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
@@ -353,12 +363,13 @@ json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
     const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
-json.dumps(validate_rows_for_upload(_rows, _sel_module, _sel_class))
+json.dumps(validate_rows_for_upload(_rows, _sid))
       `,
       {
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
@@ -385,7 +396,8 @@ _existing.offset = 0
 _existing.mode = "NFM"
 _radio.set_memory(_existing)
 _image = _radio.get_mmap().get_byte_compatible().get_packed()
-LAST_IMAGE_BY_DRIVER[_driver_cache_key(_module, _class_name)] = bytes(_image)
+_session = open_radio_session(_module, _class_name)
+_session.record_image(bytes(_image), _radio_cls, ImageOrigin.FILE)
 _readable_rows, _ = _radio_rows_from_instance(_radio)
 _row = next(
     _row for _row in _readable_rows
@@ -394,13 +406,14 @@ _row = next(
 _rows = [_row]
 _row["Duplex"] = "+"
 _row["Offset"] = "5.000000"
-_preflight = validate_rows_for_upload(_rows, _module, _class_name)
+_preflight = validate_rows_for_upload(_rows, _session.session_id)
 try:
     _write_radio = _radio_cls(memmap.MemoryMapBytes(bytes(_image)))
-    _apply_rows_to_radio_instance(_write_radio, _rows, _module, _class_name)
+    _apply_rows_to_radio_instance(_write_radio, _rows, _session)
     _write_error = ""
 except Exception as _exc:
     _write_error = str(_exc)
+close_session(_session.session_id)
 json.dumps({"preflight": _preflight, "writeError": _write_error})
       `,
     );
@@ -433,13 +446,14 @@ _rows = json.loads(_rows_json)
 _radio_cls = _import_radio_class(_sel_module, _sel_class)
 _radio = _radio_cls(memmap.MemoryMapBytes(bytes(_radio_cls._memsize)))
 _expected = _radio.filter_name(_rows[0]["Name"])
-_apply_rows_to_radio_instance(_radio, _rows, _sel_module, _sel_class)
+_apply_rows_to_radio_instance(_radio, _rows)
 json.dumps({"expected": _expected, "stored": _radio.get_memory(1).name})
       `,
       {
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
@@ -454,13 +468,15 @@ json.dumps({"expected": _expected, "stored": _radio.get_memory(1).name})
 _rows = json.loads(_rows_json)
 _radio_cls = _import_radio_class(_sel_module, _sel_class)
 _radio = _radio_cls(memmap.MemoryMapBytes(bytes(_radio_cls._memsize)))
-_apply_rows_to_radio_instance(_radio, _rows, _sel_module, _sel_class)
+_apply_rows_to_radio_instance(_radio, _rows)
 _image = _radio.get_mmap().get_byte_compatible().get_packed()
-LAST_IMAGE_BY_DRIVER[_driver_cache_key(_sel_module, _sel_class)] = bytes(_image)
+_session = open_radio_session(_sel_module, _sel_class)
+_session.record_image(bytes(_image), _radio_cls, ImageOrigin.FILE)
 _rows[0]["Frequency"] = ""
-_preflight = validate_rows_for_upload(_rows, _sel_module, _sel_class)
+_preflight = validate_rows_for_upload(_rows, _session.session_id)
 _write_radio = _radio_cls(memmap.MemoryMapBytes(bytes(_image)))
-_apply_rows_to_radio_instance(_write_radio, _rows, _sel_module, _sel_class)
+_apply_rows_to_radio_instance(_write_radio, _rows, _session)
+close_session(_session.session_id)
 json.dumps({
     "preflight": _preflight,
     "isEmpty": bool(_write_radio.get_memory(1).empty),
@@ -470,6 +486,7 @@ json.dumps({
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
@@ -483,7 +500,7 @@ json.dumps({
     const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
-_exported = export_image_base64(_sel_module, _sel_class, _rows)
+_exported = export_image_base64(_sid, _rows)
 _loaded = load_image_base64(_exported["imageBase64"])
 json.dumps({
     "module": _loaded["module"],
@@ -498,6 +515,7 @@ json.dumps({
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
@@ -514,19 +532,22 @@ json.dumps({
     const result = await harness.runPythonJson(
       `
 _rows = json.loads(_rows_json)
-_key = _driver_cache_key(_sel_module, _sel_class)
-LAST_IMAGE_BY_DRIVER.pop(_key, None)
-IMAGE_CLASS_BY_DRIVER.pop(_key, None)
-_exported = export_image_base64(_sel_module, _sel_class, _rows)
-_settings = get_radio_settings(_sel_module, _sel_class)
+# A session of its own, so nothing an earlier probe recorded can stand in
+# for the download this export never had.
+_session = open_radio_session(_sel_module, _sel_class)
+_exported = export_image_base64(_session.session_id, _rows)
+_settings = get_radio_settings(_session.session_id)
 try:
-    _upload_selected_radio_sync(_sel_module, _sel_class, _rows)
+    _upload_selected_radio_sync(_session, _rows)
     _upload_error = ""
 except Exception as _exc:
     _upload_error = str(_exc)
+_state = _session.describe()
+close_session(_session.session_id)
 json.dumps({
     "exportSize": int(_exported.get("size", 0)),
-    "hasCachedImage": _has_cached_image(_sel_module, _sel_class),
+    "hasCachedImage": _state["hasBackingImage"],
+    "imageOrigin": _state["imageOrigin"],
     "settingsRequiresImage": bool(_settings.get("requiresImage")),
     "uploadError": _upload_error,
 })
@@ -535,10 +556,14 @@ json.dumps({
         _rows_json: JSON.stringify(rows),
         _sel_module: TEST_RADIO.module,
         _sel_class: TEST_RADIO.className,
+        _sid: sessionId,
       },
     );
 
     assert.ok(result.exportSize > 0);
+    // The export is remembered for what it is, and what it is does not open
+    // the upload or settings gates.
+    assert.equal(result.imageOrigin, "synthetic");
     assert.equal(result.hasCachedImage, false);
     assert.equal(result.settingsRequiresImage, true);
     assert.match(result.uploadError, /No cached radio image/);

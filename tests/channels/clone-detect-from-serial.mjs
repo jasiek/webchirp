@@ -183,14 +183,14 @@ test("download clones as the detected class and upload reuses it", async () => {
     harness,
     `
 _events.clear()
-_module_name = "webchirp_detect_fake"
-_class_name = "_FakeBase"
-_download_selected_radio_sync(_module_name, _class_name)
-_key = _driver_cache_key(_module_name, _class_name)
-_cached = LAST_IMAGE_BY_DRIVER[_key]
-_upload_selected_radio_sync(_module_name, _class_name, [])
+_session = open_radio_session("webchirp_detect_fake", "_FakeBase")
+_download_selected_radio_sync(_session)
+_cached = _session.image
+_upload_selected_radio_sync(_session, [])
+close_session(_session.session_id)
 json.dumps({
-  "imageClass": _cached_image_class(_module_name, _class_name, _FakeBase).__name__,
+  "imageClass": _session.image_cls.__name__,
+  "imageOrigin": _session.image_origin.value,
   "cachedFill": list(_cached[:1]),
   "events": [list(map(str, e))[:2] for e in _events],
 })
@@ -200,6 +200,7 @@ json.dumps({
   // The variant's own fill byte proves the download ran on the detected class.
   assert.deepEqual(result.cachedFill, [0xb2]);
   assert.equal(result.imageClass, "_FakeVariant");
+  assert.equal(result.imageOrigin, "radio");
   // Upload does not re-detect -- CHIRP writes back with the class that read the
   // image, and drivers like ga510 send their own handshake from do_upload().
   assert.deepEqual(result.events, [
@@ -214,31 +215,31 @@ test("a download that cannot be serialized leaves the cached pair alone", async 
   const result = await withFakeDriver(
     harness,
     `
-_module_name = "webchirp_detect_fake"
-_class_name = "_FakeBase"
+_session = open_radio_session("webchirp_detect_fake", "_FakeBase")
 _detect_target[0] = None
-_download_selected_radio_sync(_module_name, _class_name)
+_download_selected_radio_sync(_session)
 
-# Same driver key, a different detected class, and this one cannot save.
+# Same session, a different detected class, and this one cannot save.
 _detect_target[0] = _FakeSaveFails
 try:
-    _download_selected_radio_sync(_module_name, _class_name)
+    _download_selected_radio_sync(_session)
     _outcome = "returned"
 except RuntimeError:
     _outcome = "raised"
 finally:
     _detect_target[0] = None
 
+close_session(_session.session_id)
 json.dumps({
   "outcome": _outcome,
-  "imageClass": _cached_image_class(_module_name, _class_name, _FakeBase).__name__,
-  "cachedFill": list(LAST_IMAGE_BY_DRIVER[_driver_cache_key(_module_name, _class_name)][:1]),
+  "imageClass": _session.image_cls.__name__,
+  "cachedFill": list(_session.image[:1]),
 })
     `,
   );
 
   assert.equal(result.outcome, "raised");
-  // The bytes and the class that parses them are one fact in two dicts. A
+  // The bytes and the class that parses them are one fact on the session. A
   // half-applied write would tag the first download's codeplug with the second
   // download's class, and every later upload/export would decode it wrong.
   assert.equal(result.imageClass, "_FakeVariant");

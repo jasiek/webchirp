@@ -17,6 +17,7 @@ import {
   installFakeDom,
   selectRadioBySearch,
 } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 const SAMPLE_ROWS = [
   { Location: "0", Name: "Alpha", Frequency: "146.520000" },
@@ -38,7 +39,7 @@ async function gridWithTwoChannels() {
   const { document } = installFakeDom();
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({
       radios: [
         { vendor: "Acme", model: "One", module: "one", className: "OneRadio", key: "one:OneRadio", isLiveRadio: false },
@@ -49,7 +50,7 @@ async function gridWithTwoChannels() {
     getRadioMetadata: async () => SCHEMA,
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers: SCHEMA.headers, rows: SAMPLE_ROWS, errors: [] }),
-  });
+  }));
   await ui.init(true);
   await selectRadioBySearch(document, "Acme One");
   await importSampleCsv(document);

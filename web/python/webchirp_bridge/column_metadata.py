@@ -17,9 +17,9 @@ from webchirp_bridge.channel_rows import CSV_HEADERS, _blank_csv_radio, _row_fro
 from webchirp_bridge.driver_cache import (
     _blank_radio_instance,
     _cached_or_blank_radio_instance,
-    _import_radio_class,
 )
 from webchirp_bridge.power_levels import _power_level_watts
+from webchirp_bridge.session import resolve_session
 
 if TYPE_CHECKING:
     from typing import Any, Callable, Iterable, Optional
@@ -196,10 +196,10 @@ def _column_metadata_for_radio(radio: chirp_common.Radio) -> dict[str, Any]:
     }
 
 
-def get_radio_column_metadata(module_name: str, class_name: str) -> dict[str, Any]:
-    """Build CHIRP-derived column editability/options metadata for the UI.
+def get_radio_column_metadata(session_id: str) -> dict[str, Any]:
+    """RPC: build CHIRP-derived column editability/options metadata for the UI.
 
-    Read from the cached image once the session has one, for the same reason
+    Read from the session's image once it has one, for the same reason
     ``_driver_features`` does (web/python/webchirp_bridge/driver_cache.py): a
     driver whose capabilities live in the codeplug describes itself differently
     blank. The grid was the one consumer that disagreed -- it offered a blank
@@ -211,12 +211,13 @@ def get_radio_column_metadata(module_name: str, class_name: str) -> dict[str, An
     not list, and re-selecting the radio silently blanked it
     (dropUnsupportedPowerValues in web/js/ui/channel-table.js).
     """
-    radio = _cached_or_blank_radio_instance(module_name, class_name)
+    session = resolve_session(session_id)
+    radio = _cached_or_blank_radio_instance(session)
     if radio is None:
         # Nothing instantiable: go through the blank builder so the driver's
-        # own import or constructor error reaches the debug panel, rather than
-        # reporting a schema the grid would treat as this radio's real one.
-        radio = _blank_radio_instance(_import_radio_class(module_name, class_name))
+        # own constructor error reaches the debug panel, rather than reporting
+        # a schema the grid would treat as this radio's real one.
+        radio = _blank_radio_instance(session.radio_cls)
     return _column_metadata_for_radio(radio)
 
 

@@ -29,6 +29,7 @@ import {
   installFakeDom,
   selectRadioBySearch,
 } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The grid with the driver metadata a caller passes in. `columns` undefined is
 // the state before the startup schema has been fetched.
@@ -102,8 +103,8 @@ test("an infinite-number driver's Location column carries no upper bound", async
   // A real driver still gets its memory_bounds.
   await ensureModule(harness, "uv5r");
   const uv5r = await harness.runPythonJson(
-    "json.dumps(get_radio_column_metadata(_m, _c))",
-    { _m: "uv5r", _c: "BaofengUV5RGeneric" },
+    "json.dumps(get_radio_column_metadata(_sid))",
+    { _sid: await harness.session("uv5r", "BaofengUV5RGeneric") },
   );
   assert.equal(uv5r.columns.Location.max, 127);
 });
@@ -176,8 +177,8 @@ test("no schema seeds a power level onto a channel that never chose one", async 
   // chosen, exactly as chirp_common.Memory() does.
   await ensureModule(harness, "uv5r");
   const uv5r = await harness.runPythonJson(
-    "json.dumps(get_radio_column_metadata(_m, _c))",
-    { _m: "uv5r", _c: "BaofengUV5RGeneric" },
+    "json.dumps(get_radio_column_metadata(_sid))",
+    { _sid: await harness.session("uv5r", "BaofengUV5RGeneric") },
   );
   assert.deepEqual(uv5r.columns.Power.options, ["High", "Low"]);
   assert.equal(uv5r.columns.Power.default, "");
@@ -210,12 +211,12 @@ test("a repeater imported before a radio was picked passes that radio's prefligh
 
   await ensureModule(harness, "uv5r");
   const uv5r = await harness.runPythonJson(
-    "json.dumps(get_radio_column_metadata(_m, _c))",
-    { _m: "uv5r", _c: "BaofengUV5RGeneric" },
+    "json.dumps(get_radio_column_metadata(_sid))",
+    { _sid: await harness.session("uv5r", "BaofengUV5RGeneric") },
   );
   const rejected = await harness.runPythonJson(
-    "json.dumps(validate_rows_for_upload(json.loads(_rows), _m, _c))",
-    { _rows: JSON.stringify(rows), _m: "uv5r", _c: "BaofengUV5RGeneric" },
+    "json.dumps(validate_rows_for_upload(json.loads(_rows), _sid))",
+    { _rows: JSON.stringify(rows), _sid: await harness.session("uv5r", "BaofengUV5RGeneric") },
   );
   assert.equal(rejected.valid, false, "the level is a word this radio does not speak");
   assert.match(rejected.issues[0].message, /Power '50W' is not supported/);
@@ -227,8 +228,8 @@ test("a repeater imported before a radio was picked passes that radio's prefligh
   assert.equal(rows[0].Frequency, "145.687500", "nothing else is touched");
 
   const accepted = await harness.runPythonJson(
-    "json.dumps(validate_rows_for_upload(json.loads(_rows), _m, _c))",
-    { _rows: JSON.stringify(rows), _m: "uv5r", _c: "BaofengUV5RGeneric" },
+    "json.dumps(validate_rows_for_upload(json.loads(_rows), _sid))",
+    { _rows: JSON.stringify(rows), _sid: await harness.session("uv5r", "BaofengUV5RGeneric") },
   );
   assert.deepEqual(accepted.issues, []);
   assert.equal(accepted.valid, true);
@@ -285,7 +286,7 @@ test("loadEmptySchema installs the whole schema, not just its headers", async ()
     },
   };
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: [] }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => schema,
@@ -293,7 +294,7 @@ test("loadEmptySchema installs the whole schema, not just its headers", async ()
     getRadioSettings: async () => ({
       supported: false, available: false, requiresImage: false, message: "", groups: [],
     }),
-  });
+  }));
   await ui.init(true);
 
   // Inserting a channel with no radio selected is the observable proof that
@@ -315,7 +316,7 @@ test("selecting a radio is what clears a power level it cannot hold", async () =
   const ui = createUiController();
   const headers = ["Location", "Name", "Frequency", "Power"];
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({
       radios: [
         { vendor: "Acme", model: "One", module: "one", className: "OneRadio", key: "one:OneRadio", isLiveRadio: false },
@@ -342,7 +343,7 @@ test("selecting a radio is what clears a power level it cannot hold", async () =
     getRadioSettings: async () => ({
       supported: false, available: false, requiresImage: false, message: "", groups: [],
     }),
-  });
+  }));
   await ui.init(true);
 
   document.querySelector("#channel-insert").dispatchEvent({ type: "click" });

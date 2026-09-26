@@ -166,7 +166,7 @@ test("power label resolution returns the driver's own PowerLevel objects", async
   const result = await harness.runPythonJson(
     `
 ensure_radio_module("anytone")
-_levels = _valid_power_levels_for_driver("anytone", "AnyTone5888UVRadio")
+_levels = _valid_power_levels_for_driver(RadioSession.for_driver("anytone", "AnyTone5888UVRadio"))
 _map = _power_levels_by_label(_levels)
 _out = []
 for _level in _levels:
@@ -176,7 +176,7 @@ for _level in _levels:
         "isSameObject": _resolved is _level,
         "watts": round(chirp_common.dBm_to_watts(float(_level)), 1),
     })
-_labels, _default = _power_label_map_for_radio("anytone", "AnyTone5888UVRadio")
+_labels, _default = _power_label_map_for_radio(RadioSession.for_driver("anytone", "AnyTone5888UVRadio"))
 json.dumps({"levels": _out, "csvLabels": _labels})
     `,
   );
@@ -198,7 +198,7 @@ test("a channel with no power level stays unset instead of getting a default", a
   const result = await harness.runPythonJson(
     `
 ensure_radio_module("anytone")
-_map = _power_levels_by_label(_valid_power_levels_for_driver("anytone", "AnyTone5888UVRadio"))
+_map = _power_levels_by_label(_valid_power_levels_for_driver(RadioSession.for_driver("anytone", "AnyTone5888UVRadio")))
 _mem = chirp_common.Memory()
 _mem.power = None
 json.dumps({
@@ -245,7 +245,7 @@ test("unsupported power text fails with the radio's valid values, not an index e
       harness.runPythonJson(
         `
 ensure_radio_module("anytone")
-_map = _power_levels_by_label(_valid_power_levels_for_driver("anytone", "AnyTone5888UVRadio"))
+_map = _power_levels_by_label(_valid_power_levels_for_driver(RadioSession.for_driver("anytone", "AnyTone5888UVRadio")))
 json.dumps({"level": str(_resolve_power_level("7.5W", _map))})
         `,
       ),

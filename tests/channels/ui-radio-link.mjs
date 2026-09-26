@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { installFakeDom } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // A ?radio= link is how a per-model page (web/radios/, built by
 // scripts/build-model-pages.mjs) hands its visitor an app already pointed at
@@ -15,14 +16,14 @@ const CATALOG = {
 };
 
 function stubRuntimeApi(ui) {
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => CATALOG,
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
 }
 
 async function bootWith(search) {

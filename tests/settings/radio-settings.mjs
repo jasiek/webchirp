@@ -61,8 +61,10 @@ test("all registered radios finish initial runtime loading", async (t) => {
       const result = await harness.runPythonJson(
         `
 ensure_radio_module(_sel_module)
-_meta = get_radio_column_metadata(_sel_module, _sel_class)
-_settings = get_radio_settings(_sel_module, _sel_class)
+_sid = open_session(_sel_module, _sel_class)["sessionId"]
+_meta = get_radio_column_metadata(_sid)
+_settings = get_radio_settings(_sid)
+close_session(_sid)
 json.dumps({
     "headerCount": len(_meta.get("headers") or []),
     "columnCount": len(_meta.get("columns") or {}),

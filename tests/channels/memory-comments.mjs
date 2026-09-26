@@ -30,10 +30,12 @@ _seeded_b64 = base64.b64encode(_seeded_image).decode("ascii")
 _loaded = load_image_base64(_seeded_b64)
 _loaded_row = next(_row for _row in _loaded["rows"] if int(_row["Location"]) == _target)
 _loaded_comment = _loaded_row["Comment"]
-_column_metadata = get_radio_column_metadata(_module, _class_name)
+_column_metadata = get_radio_column_metadata(_loaded["sessionId"])
 
+# Each export runs on the session its source image was loaded into, the way
+# Export Binary runs on the session of the image the editor holds.
 _loaded_row["Comment"] = "edited in webchirp"
-_edited = export_image_base64(_module, _class_name, _loaded["rows"], _loaded["settings"])
+_edited = export_image_base64(_loaded["sessionId"], _loaded["rows"], _loaded["settings"])
 _edited_loaded = load_image_base64(_edited["imageBase64"])
 _edited_row = next(_row for _row in _edited_loaded["rows"] if int(_row["Location"]) == _target)
 _edited_comment = _edited_row["Comment"]
@@ -43,7 +45,7 @@ _, _edited_metadata = chirp_common.CloneModeRadio._strip_metadata(
 
 _edited_row["Comment"] = ""
 _cleared = export_image_base64(
-    _module, _class_name, _edited_loaded["rows"], _edited_loaded["settings"]
+    _edited_loaded["sessionId"], _edited_loaded["rows"], _edited_loaded["settings"]
 )
 _cleared_loaded = load_image_base64(_cleared["imageBase64"])
 _cleared_row = next(_row for _row in _cleared_loaded["rows"] if int(_row["Location"]) == _target)
@@ -59,7 +61,7 @@ _remaining_rows = [
     if int(_row["Location"]) != _target
 ]
 _erased = export_image_base64(
-    _module, _class_name, _remaining_rows, _erase_source["settings"]
+    _erase_source["sessionId"], _remaining_rows, _erase_source["settings"]
 )
 _erased_loaded = load_image_base64(_erased["imageBase64"])
 _, _erased_metadata = chirp_common.CloneModeRadio._strip_metadata(

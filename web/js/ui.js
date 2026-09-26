@@ -18,6 +18,7 @@ import { createChannelExtra } from "./ui/channel-extra.js";
 import { createChannelBulkEdit } from "./ui/channel-bulk-edit.js";
 import { createChannelTable } from "./ui/channel-table.js";
 import { createRadioCatalog } from "./ui/radio-catalog.js";
+import { createRadioSession } from "./ui/radio-session.js";
 import { createRepeaterQuery } from "./ui/repeater-query.js";
 import { createRepeaterMap } from "./ui/repeater-map.js";
 import { createCodeplugIo } from "./ui/codeplug-io.js";
@@ -77,6 +78,7 @@ export function createUiController() {
   // through it. The forward references above and below are only dereferenced
   // after every module has been constructed.
   const ctx = { dom, state, log, progress, notice, actions };
+  const session = createRadioSession(ctx);
   const settings = createSettingsPanel(ctx);
   const table = createChannelTable(ctx);
   const channelExtra = createChannelExtra(ctx);
@@ -89,8 +91,8 @@ export function createUiController() {
   const installButton = createInstallButton(ctx);
   const connectivity = createConnectivity(ctx);
   Object.assign(ctx, {
-    settings, table, channelExtra, bulkEdit, catalog, repeaterQuery, repeaterMap, codeplugIo,
-    serial, installButton, connectivity,
+    session, settings, table, channelExtra, bulkEdit, catalog, repeaterQuery, repeaterMap,
+    codeplugIo, serial, installButton, connectivity,
   });
 
   exposeCurrentRowsForDebugging(state);
@@ -277,6 +279,10 @@ export function createUiController() {
       if (!catalog.selectRadioByLinkParam()) {
         catalog.restoreSelectedRadioCookie();
       }
+      // Captured before the loads: a user who picks another radio while these
+      // run has moved the current session on, and the marker below must then
+      // not claim the new one is loaded.
+      const startupSession = session.current();
       await catalog.loadSelectedRadioMetadata();
       await settings.load();
       // Schema only: the grid starts empty and shows its own "load something"
@@ -284,7 +290,7 @@ export function createUiController() {
       await codeplugIo.loadEmptySchema();
       // Restored/link-selected radios have completed the same metadata/settings
       // load as a picker selection; reselecting them must preserve current edits.
-      state.lastLoadedRadioKey = state.selectedRadio?.key || "";
+      session.markLoaded(startupSession);
       log.setStatus(
         state.selectedRadio
           ? `Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources.`

@@ -27,9 +27,11 @@ from webchirp_bridge.power_levels import (
     _resolve_power_level,
 )
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
+from webchirp_bridge.session import resolve_optional_session
 
 if TYPE_CHECKING:
     from typing import Any, Optional, Sequence
+    from webchirp_bridge.session import RadioSession
 
     # A channel as it crosses the JS/Python boundary: one JSON object per channel,
     # keyed by CSV header name (``CSV_HEADERS`` below, from
@@ -282,11 +284,20 @@ def _memories_from_rows(rows: Rows, power_map: dict[str, Any]) -> list[Any]:
     return memories
 
 
-def normalize_rows(rows: Rows, module_name: str = "", class_name: str = "") -> str:
-    """Render rows as CSV the way CHIRP's CSV export renders the same channels."""
+def normalize_rows(rows: Rows, session_id: str = "") -> str:
+    """RPC: render rows as CSV the way CHIRP's CSV export renders the same channels.
+
+    An empty ``session_id`` means no radio is selected, in which case the rows
+    are treated as CHIRP's generic CSV driver's own.
+    """
+    return _csv_text_for_rows(rows, resolve_optional_session(session_id))
+
+
+def _csv_text_for_rows(rows: Rows, session: Optional[RadioSession]) -> str:
+    """Render rows as CSV against a session's driver, or the CSV driver without one."""
     # import_mem() needs the *source* radio's features to decide which columns it
     # has to fill in, so resolve them once and reuse them for the power labels.
-    src_features = _driver_features(module_name, class_name)
+    src_features = _driver_features(session)
     power_map, _default_power = _power_label_map_from_features(src_features)
     memories = _memories_from_rows(rows, power_map)
     if src_features is None:
