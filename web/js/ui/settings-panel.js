@@ -404,10 +404,16 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     applyValidationIssues,
     invalidCount: () => invalidKeys.size,
     getGroups: () => settingsState.groups,
-    // Replace the settings tree, falling back to the current groups when the
-    // runtime returns nothing (upload/export echo the settings back).
+    // Take the settings tree an upload, export or preflight echoed back, and
+    // report whether it was taken. An empty echo means the runtime could not
+    // read the settings (web/python/webchirp_bridge/radio_settings.py) rather
+    // than a radio without any, so the edits being uploaded stay put.
     setGroups(groups) {
-      settingsState.groups = cloneGroups(groups || settingsState.groups);
+      if (!Array.isArray(groups) || groups.length === 0) {
+        return false;
+      }
+      settingsState.groups = cloneGroups(groups);
+      return true;
     },
     // Wholesale replacement after a download or image load, where the settings
     // come from the image rather than a driver probe.
