@@ -1,12 +1,13 @@
 import { errorSummary } from "./format.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
 import { normalizeSettingValue } from "./setting-values.js";
-import { isStaleRadioLoad, nextRadioLoadToken, requireRuntimeApi } from "./state.js";
+import { requireRuntimeApi } from "./state.js";
 
 // Radio-wide settings: the tabbed editor, its per-value validation, and the
 // load/merge path from the Python runtime. Owns the settings tree and the
 // invalid-value bookkeeping; other modules reach it through the returned API.
-export function createSettingsPanel({ dom, state, log, actions }) {
+export function createSettingsPanel(ctx) {
+  const { dom, state, log, actions } = ctx;
   let settingsState = {
     supported: false,
     available: false,
@@ -302,8 +303,11 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     }
   }
 
-  async function fetchForRadio(radio) {
-    if (!radio) {
+  // The settings state for a session's radio, or the empty state for none. A
+  // runtime failure becomes an "unavailable" state rather than a throw, so a
+  // driver whose settings cannot be built still loads its channel schema.
+  async function fetchForSession(session) {
+    if (!session) {
       return {
         supported: false,
         available: false,
@@ -320,10 +324,8 @@ export function createSettingsPanel({ dom, state, log, actions }) {
       groups: [],
     };
     try {
-      const result = await requireRuntimeApi(state).getRadioSettings({
-        module: radio.module,
-        className: radio.className,
-      });
+      const sessionId = await ctx.session.idOf(session);
+      const result = await requireRuntimeApi(state).getRadioSettings({ sessionId });
       nextState = {
         supported: Boolean(result?.supported),
         available: Boolean(result?.available),
@@ -363,11 +365,12 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     render();
   }
 
+  // Load the selected radio's settings, applied only if its session is still
+  // the current one when the runtime answers.
   async function load(options = {}) {
-    const loadToken = options.loadToken ?? nextRadioLoadToken(state);
-    const radio = state.selectedRadio;
-    const nextState = await fetchForRadio(radio);
-    if (isStaleRadioLoad(state, loadToken)) {
+    const session = ctx.session.current();
+    const nextState = await fetchForSession(session);
+    if (!ctx.session.isCurrent(session)) {
       return;
     }
     applyLoadedState(nextState, options);
@@ -392,7 +395,7 @@ export function createSettingsPanel({ dom, state, log, actions }) {
     cloneGroups,
     render,
     load,
-    fetchForRadio,
+    fetchForSession,
     applyLoadedState,
     updateViewButtons,
     updateSummary,

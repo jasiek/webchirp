@@ -335,8 +335,7 @@ export function createChannelBulkEdit(ctx) {
     let payload = null;
     try {
       payload = await requireRuntimeApi(state).getChannelExtra({
-        module: radio.module,
-        className: radio.className,
+        sessionId: await ctx.session.currentId(),
         location,
       });
     } catch (error) {

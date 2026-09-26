@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { classifyLoadableFile } from "../../web/js/ui/codeplug-io.js";
 import { flushMicrotasks, installFakeDom, selectRadioBySearch } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // Drag-and-drop file loading is wired to window-level drag events, so these
 // tests lean on the shared FakeWindow, which records window listeners and
@@ -103,7 +104,7 @@ async function bootUi(options) {
   const { calls, api } = createRuntimeApi(options);
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
-  ui.setRuntimeApi(api);
+  ui.setRuntimeApi(withRadioSessions(api));
   // init() leaves the editor empty, so every recorded parseCsv call below is
   // one a drop caused.
   await ui.init(true);

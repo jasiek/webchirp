@@ -15,6 +15,7 @@ import {
   selectRadioBySearch,
   tableNames,
 } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The bulk channel editor (web/js/ui/channel-bulk-edit.js): the toolbar control
 // that follows the grid selection, and the modal behind it.
@@ -130,7 +131,7 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra, radios = [RADIO], uplo
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
   const extraCalls = [];
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: HEADERS }),
@@ -161,7 +162,7 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra, radios = [RADIO], uplo
         ? getChannelExtra(payload)
         : { available: true, message: "", fields: EXTRA_FIELDS };
     },
-  });
+  }));
   await ui.init(true);
   closeVivifiedModals(document);
 
