@@ -34,10 +34,12 @@ ui.setSerialController({
   capability: serialCapability,
   setPreferredTransport: (transport) => serialBridge.setPreferredTransport(transport),
 });
-// Pyodide's run_sync — how CHIRP driver imports wait on their CDN fetches —
-// needs WebAssembly JSPI (stack switching). Detect it up front so old browsers
-// (Firefox before it shipped JSPI, Safari) get an explanation instead of a
-// bare traceback when the first driver import dies.
+// Pyodide's run_sync — how CHIRP's blocking clone loops wait on the serial
+// bridge — needs WebAssembly JSPI (stack switching). Nothing else does: the
+// drivers import from the mounted CHIRP archive, so a browser without JSPI
+// (Firefox before 152, Safari, Chrome before 137) still boots, edits files and
+// exports images; only the download/upload path is refused, at the point the
+// user starts it, with an explanation instead of a bare traceback.
 const jspiSupported =
   typeof WebAssembly.Suspending === "function" && typeof WebAssembly.promising === "function";
 ui.init(serialCapability.supported, jspiSupported);

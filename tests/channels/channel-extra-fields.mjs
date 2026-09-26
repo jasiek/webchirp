@@ -8,11 +8,10 @@ import { loadImageFor, readCatalog, sharedHarness } from "../support/chirp.mjs";
 // and what else it would accept. get_channel_extra answers that by reading the
 // memory the row occupies and serializing the driver's own setting objects.
 //
-// h777 is the driver these tests run against because it ships seeded into the
-// runtime (CORE_CHIRP_RELATIVE_FILES in web/js/python-sources.mjs), so no
-// driver import is needed, and it exposes a documented boolean extra: Busy
-// Channel Lockout, with a set_doc() explanation the modal shows under the
-// label.
+// h777 is the driver these tests run against because it is small, imports in
+// a moment from the mounted CHIRP tree, and exposes a documented boolean
+// extra: Busy Channel Lockout, with a set_doc() explanation the modal shows
+// under the label.
 const SETUP = `
 import base64, json
 

@@ -18,6 +18,9 @@ import path from "node:path";
 import { repoRoot, webDir } from "../support/repo-paths.mjs";
 import { withTempDir } from "../support/temp-dir.mjs";
 import {
+  CHIRP_BUNDLE_DIR,
+  chirpBundleFileNames,
+  DEFAULT_CHIRP_REVISION,
   EXTRA_DRIVER_RELATIVE_FILES,
   RUNTIME_PYTHON_FILES,
 } from "../../web/js/python-sources.mjs";
@@ -25,6 +28,11 @@ import {
 const SCRIPT = path.join(repoRoot, "scripts", "build-dist.mjs");
 // Matches build-dist.mjs: name.<10 hex>.ext.
 const HASHED_NAME_RE = /\.([0-9a-f]{10})\.[a-z]+$/;
+
+// The CHIRP archive and manifest for the pinned revision, as dist-relative
+// paths. build-dist.mjs requires them and lists them in the asset manifest.
+const CHIRP_BUNDLE_FILES = Object.values(chirpBundleFileNames(DEFAULT_CHIRP_REVISION))
+  .map((name) => `${CHIRP_BUNDLE_DIR}/${name}`);
 
 // The files build-dist.mjs refuses to build without; their contents are never
 // read, only their presence.
@@ -37,6 +45,7 @@ const REQUIRED_FILES = {
   "images/apple-touch-icon.png": "",
   "images/screenshot-narrow.png": "",
   "images/screenshot-wide.png": "",
+  ...Object.fromEntries(CHIRP_BUNDLE_FILES.map((rel) => [rel, "not a real archive\n"])),
 };
 
 // The same digest build-dist.mjs names assets with, so a name can be checked
@@ -175,6 +184,38 @@ test("every hashed name is the digest of the bytes served under it", async () =>
     assert.equal(digest(bytes), match[1], `${rel} is not named after its own content`);
   }
   assert.ok(checked >= 4, "expected the fixture to emit hashed js, css and py assets");
+});
+
+// The archive is immutable by pin, not by digest: it must reach dist/ under
+// its own name, unhashed, and be listed in the asset manifest so retention
+// (scripts/retain-deployed-assets.mjs) carries the previous pin forward.
+test("the CHIRP archive and manifest ship unhashed and are listed for retention", async () => {
+  await withTempDir("build-dist-", async (dir) => {
+    await writeTree(path.join(dir, "web"), { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n") });
+    await runBuild(dir);
+    const dist = path.join(dir, "dist");
+    for (const rel of CHIRP_BUNDLE_FILES) {
+      assert.equal(
+        (await readFile(path.join(dist, rel), "utf8")),
+        REQUIRED_FILES[rel],
+        `${rel} should be copied verbatim`,
+      );
+    }
+    const manifest = JSON.parse(await readFile(path.join(dist, "asset-manifest.json"), "utf8"));
+    for (const rel of CHIRP_BUNDLE_FILES) {
+      assert.equal(manifest.assets[`./${rel}`], `./${rel}`);
+      assert.equal(manifest.assets[`/${rel}`], `/${rel}`);
+    }
+  });
+});
+
+test("a missing CHIRP archive fails the build", async () => {
+  await withTempDir("build-dist-", async (dir) => {
+    const files = { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n") };
+    delete files[CHIRP_BUNDLE_FILES[0]];
+    await writeTree(path.join(dir, "web"), files);
+    await assert.rejects(runBuild(dir), new RegExp(`Missing required dist asset: ${CHIRP_BUNDLE_FILES[0]}`));
+  });
 });
 
 test("an unchanged tree builds to byte-identical assets", async () => {

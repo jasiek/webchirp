@@ -180,16 +180,17 @@ wrong one still echoes perfectly. The same cases run against fake hardware in
 - Python source providers: `web/js/python-sources.mjs`.
 - Versioned Python runtime code: the `web/python/webchirp_bridge/` package, executed
   into Pyodide's globals by the `web/python/runtime_bridge.py` entry point.
-- Browser runtime loads CHIRP source files into Pyodide from jsDelivr (revision-pinned).
-- Command-line runtime can load CHIRP source files from a local directory:
+- The browser runtime mounts the pinned CHIRP package into Pyodide as one archive
+  served from the app's own origin: `scripts/build-chirp-bundle.mjs` (`npm run
+  build:chirp`, run by `npm run dev` and `npm run build:dist`) zips `chirp/chirp` from
+  the submodule -- without `wxui`, `cli`, `sources`, `locale`, `share` and
+  `stock_configs`, which the runtime never imports -- into `web/chirp/chirp-<pin>.zip`
+  (about 1.5 MB) next to a `chirp-<pin>.json` manifest listing the driver modules.
+  `seedPyodideRuntime()` unpacks it with `pyodide.unpackArchive`, so a driver import is
+  an ordinary file import and needs no network and no WebAssembly stack switching.
+- Command-line runtime and tests build the same archive in-process from a local CHIRP
+  checkout:
   - `WEBCHIRP_CHIRP_DIR=/path/to/chirp npm run test:channels`
-- Core CHIRP files preloaded into Pyodide (see `CORE_CHIRP_RELATIVE_FILES` in
-  `web/js/python-sources.mjs`):
-  - `chirp/__init__.py`, `chirp/errors.py`, `chirp/util.py`, `chirp/memmap.py`
-  - `chirp/chirp_common.py`, `chirp/directory.py`, `chirp/settings.py`
-  - `chirp/pyPEG.py`, `chirp/bitwise_grammar.py`, `chirp/bitwise.py`
-  - `chirp/drivers/generic_csv.py`, `chirp/drivers/h777.py`
-  - Any other driver module is fetched on demand when its radio is selected.
 
 ## Important scope note
 

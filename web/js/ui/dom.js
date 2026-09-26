@@ -40,7 +40,6 @@ export const REQUIRED_ELEMENTS = {
   unsupportedBrowserOverlayEl: "#unsupported-browser-overlay",
   unsupportedBrowserIosInfoEl: "#unsupported-browser-ios-info",
   unsupportedBrowserSerialInfoEl: "#unsupported-browser-serial-info",
-  unsupportedBrowserJspiInfoEl: "#unsupported-browser-jspi-info",
   unsupportedBrowserContinueEl: "#unsupported-browser-continue",
   liveRadioSupportWarningEl: "#live-radio-support-warning",
   radioSearchEl: "#radio-search",

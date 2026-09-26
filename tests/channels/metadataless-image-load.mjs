@@ -108,14 +108,11 @@ test("import_all_driver_modules reports unimportable drivers instead of hiding t
   const harness = await sharedHarness();
   const result = await importAllDriverModules(harness, ["uv5r", "definitely_not_a_driver"]);
   assert.equal(result.imported, 1);
-  // Issue #100: the reported reason has to be the one that actually stopped the
-  // import (here: no such source file), not the ModuleNotFoundError that
-  // PathFinder produces once the finder gives up on it.
-  assert.match(result.failed.definitely_not_a_driver, /ImportError/);
-  assert.match(
-    result.failed.definitely_not_a_driver,
-    /\/chirp\/drivers\/definitely_not_a_driver\.py/,
-  );
+  // The reported reason names the module Python could not find on the mounted
+  // tree. Since the whole package is on disk, "no such module" is now the
+  // truth rather than a mask over a failed fetch (issue #100).
+  assert.match(result.failed.definitely_not_a_driver, /ModuleNotFoundError/);
+  assert.match(result.failed.definitely_not_a_driver, /chirp\.drivers\.definitely_not_a_driver/);
 });
 
 // Quansheng_UV-K5_egzumer.img is the case where a resolved-but-WRONG match was

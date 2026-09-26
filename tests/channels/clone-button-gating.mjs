@@ -128,3 +128,39 @@ test("losing the port mid-session takes the clone buttons away again", async () 
   await pressConnectToggle(ctx);
   assert.equal(ctx.dom.radioDownloadEl.disabled, false);
 });
+
+// A browser without WebAssembly stack switching can boot the runtime and edit
+// files -- drivers import from the mounted CHIRP archive -- but CHIRP's clone
+// loops block on the serial bridge through Pyodide's run_sync, which needs
+// JSPI. The refusal belongs where the user starts a clone, not on an overlay
+// at init, and it must name the cause rather than fail inside Python.
+test("a browser without JSPI is refused at connect time with the reason", async () => {
+  const createSerialActions = await loadSerialActions();
+  const ctx = makeContext();
+  const statuses = [];
+  const serialLog = [];
+  ctx.log.setStatus = (message) => statuses.push(message);
+  ctx.log.logSerial = (message) => serialLog.push(message);
+  let connectCalls = 0;
+  ctx.state.runtimeApi.serialConnect = async () => {
+    connectCalls += 1;
+    return { connected: true, transport: "webserial", message: "ok" };
+  };
+  const serial = createSerialActions(ctx);
+  serial.setCloneSupported(false);
+  serial.setSidebarControlsEnabled(true);
+  serial.bindEvents();
+
+  await pressConnectToggle(ctx);
+  assert.equal(connectCalls, 0, "no port must be opened without JSPI");
+  assert.match(statuses.at(-1), /WebAssembly stack switching \(JSPI\)/);
+  assert.match(statuses.at(-1), /Editing CSV and image files still works/);
+  assert.deepEqual(serialLog, [statuses.at(-1)]);
+  assert.equal(ctx.dom.radioDownloadEl.disabled, true, "still no port, so still no clone");
+
+  // The same browser with JSPI connects as before.
+  serial.setCloneSupported(true);
+  await pressConnectToggle(ctx);
+  assert.equal(connectCalls, 1);
+  assert.equal(ctx.dom.radioDownloadEl.disabled, false);
+});

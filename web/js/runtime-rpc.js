@@ -16,10 +16,10 @@ import {
 import { createSelectedDriverRuntime } from "./selected-driver-runtime.mjs";
 import { rpcDispatcherFor } from "./rpc-dispatch.mjs";
 import {
-  createBrowserCdnPythonSource,
+  CHIRP_BUNDLE_DIR,
+  createBrowserPythonSource,
   DEFAULT_CHIRP_REVISION,
   driverSetFromSearch,
-  installFetchChirpSourceGlobal,
   listDriverModules,
   QUANSHENG_UNOFFICIAL_DRIVER_SET,
   seedPyodideRuntime,
@@ -58,10 +58,15 @@ const RUNTIME_PYTHON_URLS = Object.freeze({
   "extra_drivers/quansheng/f4hwn_v6.py": "./python/extra_drivers/quansheng/f4hwn_v6.py",
 });
 
-const pythonSource = createBrowserCdnPythonSource({
+// The CHIRP archive and its manifest live beside the app under web/chirp/
+// (scripts/build-chirp-bundle.mjs), named by the pin rather than hashed, so
+// the directory is resolved from this module's own URL the way the static
+// catalog is below and needs no entry in the URL table above.
+const pythonSource = createBrowserPythonSource({
   chirpRevision: CHIRP_REVISION,
   driverSet: DRIVER_SET,
   runtimeFileUrls: RUNTIME_PYTHON_URLS,
+  chirpBundleBaseUrl: new URL(`../${CHIRP_BUNDLE_DIR}/`, import.meta.url),
 });
 
 let pyodide;
@@ -161,10 +166,9 @@ function installSerialBridgeGlobals() {
     return serialRpc("reconfigure", { options });
   };
   globalThis.serial_reset_buffers = () => serialRpc("resetBuffers", {});
-  installFetchChirpSourceGlobal(pythonSource);
 }
 
-// Trigger runtime import of the selected driver; Python import hook fetches missing files.
+// Import the selected driver from the mounted CHIRP tree before any radio-bound call.
 async function ensureSelectedRadioModules(moduleShortName) {
   if (!moduleShortName) {
     await ensurePyodide();
@@ -176,8 +180,8 @@ async function ensureSelectedRadioModules(moduleShortName) {
 
 // Import every driver module once per session. Only the metadata-less image
 // path needs this: it is the one case where nothing identifies the driver up
-// front, so detection has to try them all. Each module is fetched individually
-// by the Python import hook, so this is deliberately not done eagerly.
+// front, so detection has to try them all. Importing ~190 modules takes seconds
+// of main-thread time, so this is deliberately not done eagerly.
 async function ensureAllDriverModules() {
   if (DRIVER_SET === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
     throw new Error("Select the matching firmware release before opening an image.");
@@ -187,7 +191,7 @@ async function ensureAllDriverModules() {
       const modules = await listDriverModules(pythonSource);
       await ensurePyodide();
 
-      // In the browser each module is a separate CDN fetch, so this is by far
+      // Every driver module is executed on the main thread, so this is by far
       // the longest operation the app runs. Report it: an unannounced multi-
       // second freeze is indistinguishable from a hang.
       const progress = beginProgress
@@ -322,7 +326,7 @@ async function loadRadioCatalog() {
   return loadRadioCatalogFromSources();
 }
 
-// Lazily initialize Pyodide, preload core CHIRP files, and load runtime bridge.
+// Lazily initialize Pyodide, mount the CHIRP archive, and load the runtime bridge.
 // The handle is returned rather than assigned mid-sequence so that nothing can
 // observe a runtime that loaded but failed to seed.
 const runtimeBootstrap = createSelectedDriverRuntime({

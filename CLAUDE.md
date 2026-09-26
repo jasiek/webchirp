@@ -17,7 +17,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   name, one JSON object of named parameters and an optional callback. `web/js/rpc-dispatch.mjs`
   is the JS side of that contract and the only place that calls it.
 - `web/python/webchirp_bridge/`: The runtime logic, one module per concern —
-  `chirp_loader` (lazy CHIRP import hook, driver enumeration), `serial_pipe`
+  `chirp_loader` (driver imports from the mounted CHIRP tree, driver enumeration), `serial_pipe`
   (pyserial stand-in over Web Serial), `clone` (download/upload sessions),
   `driver_cache` (cached clone image and radios built from it), `channel_rows`,
   `power_levels`, `row_validation`, `radio_memories`, `radio_settings`,
@@ -25,7 +25,16 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `runtime_errors` and `rpc` (the `RPC_METHODS` table and `rpc_dispatch`).
   `__init__.py` only installs the shims CHIRP needs before import.
   No embedded Python in JS files.
-- `chirp/`: Upstream CHIRP source as a git submodule.
+- `chirp/`: Upstream CHIRP source as a git submodule. The runtime never reads it
+  file by file: `scripts/build-chirp-bundle.mjs` (`npm run build:chirp`, run by `dev`
+  and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,
+  `sources`, `locale`, `share` and `stock_configs`, which nothing imports -- into the
+  ignored `web/chirp/chirp-<pin>.zip` with a `chirp-<pin>.json` manifest (pin, driver
+  module list, sizes). `seedPyodideRuntime()` (`web/js/python-sources.mjs`) mounts it
+  with `pyodide.unpackArchive` under `/webchirp_runtime`, so every `chirp.*` import is
+  a plain file import that never suspends the interpreter; the driver list everywhere
+  comes from the manifest. The Node harness (`tests/support/chirp-bundle-source.mjs`)
+  builds the same archive in-process from the submodule.
 - `tests/`: The node:test suite, one directory per suite — `channels` and
   `settings` boot Pyodide and need `--experimental-wasm-stack-switching`,
   `webusb` and `build` do not. `manual` holds the two tests npm test never

@@ -13,9 +13,6 @@ for the async ones), and ``_js_to_py()`` is what converts them.
 
 from typing import Any
 
-# Fetches a CHIRP source file into the Pyodide filesystem during boot.
-def fetch_chirp_source(path: str) -> Any: ...
-
 # Serial transport. The async ones resolve to a JsProxy result object.
 def serial_open(baudrate: int) -> Any: ...
 def serial_close() -> Any: ...
