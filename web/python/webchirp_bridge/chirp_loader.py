@@ -53,7 +53,10 @@ async def _import_driver_modules(
     catalog build would lock the UI for the whole sweep. The
     ``asyncio.sleep(0)`` after each import hands control back to Pyodide's
     webloop -- a ``setTimeout`` hop on the JS event loop -- which is what lets
-    a DOM update reach the screen between imports.
+    a DOM update reach the screen between imports. The same yield is also
+    what makes the sweep fast: without it the whole loop runs on the JSPI
+    stack the dispatched call entered on, and there it takes about seven
+    times longer (FINDINGS.md, *the-first-yield-moves-python-off-the-jspi-stack*).
 
     ``callback(done, total, module_short)`` is optional and reports after each
     module; it must never abort the sweep. Returns the modules that imported
