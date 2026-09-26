@@ -180,8 +180,8 @@ test("every F4HWN release registers with its native identity in an isolated runt
     assert.equal(radio.isLiveRadio, false);
     assert.equal(radio.variant ?? "", "");
     const metadata = await harness.runPythonJson(
-      "json.dumps(get_radio_column_metadata(_module, _class_name))",
-      { _module: driver.module, _class_name: CLASS_NAME },
+      "json.dumps(get_radio_column_metadata(_sid))",
+      { _sid: await harness.session(driver.module, CLASS_NAME) },
     );
     const columns = metadata.columns;
     assert.equal(columns.Location.min, 1);
@@ -231,12 +231,15 @@ memory.mode = "FM"
 memory.tuning_step = 12.5
 memory.power = driver.UVK5_POWER_LEVELS[-1]
 row = _row_from_memory(memory)
-_apply_rows_to_radio_instance(radio, [row], _module, _class_name)
+_apply_rows_to_radio_instance(radio, [row])
 loaded = radio.get_memory(1)
 
-payload = _read_radio_payload(_module, _class_name, radio)
-settings = get_radio_settings(_module, _class_name)
-validation = validate_radio_settings(_module, _class_name, settings["groups"])
+# Recorded as a download would record it: the session's image comes from the
+# radio, which is what opens the settings and upload gates.
+session = open_radio_session(_module, _class_name)
+payload = _read_radio_payload(session, radio, ImageOrigin.RADIO)
+settings = get_radio_settings(session.session_id)
+validation = validate_radio_settings(session.session_id, settings["groups"])
 
 def setting_value(nodes, setting_id, replacement=None):
     for node in nodes:
@@ -252,8 +255,8 @@ def setting_value(nodes, setting_id, replacement=None):
 risky_settings = copy.deepcopy(settings["groups"])
 setting_value(risky_settings, "upload_advanced", True)
 setting_value(risky_settings, "upload_calibration", True)
-safe_validation = validate_radio_settings(_module, _class_name, risky_settings)
-image = get_cached_image_base64(_module, _class_name)
+safe_validation = validate_radio_settings(session.session_id, risky_settings)
+image = get_cached_image_base64(session.session_id)
 reloaded = load_image_base64(image["imageBase64"])
 raw_image = base64.b64decode(image["imageBase64"])
 image_body, native_metadata = chirp_common.CloneModeRadio._strip_metadata(raw_image)

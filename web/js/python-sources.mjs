@@ -71,6 +71,7 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
   "webchirp_bridge/rpc.py",
   "webchirp_bridge/runtime_errors.py",
   "webchirp_bridge/serial_pipe.py",
+  "webchirp_bridge/session.py",
 ]);
 
 // Where the CHIRP archive lives under web/ (and so under dist/), and the two

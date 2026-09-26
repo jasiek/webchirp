@@ -30,6 +30,7 @@ import {
   installFakeDom,
   selectRadioBySearch,
 } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // A dropped file, in the shape the drop handler reads it.
 function fakeFile(name, bytes = [1, 2, 3]) {
@@ -53,10 +54,11 @@ const RT98 = {
   isLiveRadio: false,
 };
 
-function columnMetadata(harness) {
-  return harness.runPythonJson("json.dumps(get_radio_column_metadata(_m, _c))", {
-    _m: RT98.module,
-    _c: RT98.className,
+// The schema for the harness's RT98 session: a blank one until an image is
+// loaded, after which the harness adopts the session the load opened.
+async function columnMetadata(harness) {
+  return harness.runPythonJson("json.dumps(get_radio_column_metadata(_sid))", {
+    _sid: await harness.session(RT98.module, RT98.className),
   });
 }
 
@@ -116,7 +118,7 @@ test("a download re-reads the schema, so the levels it just read survive", async
   };
   let downloaded = false;
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: [RT98] }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers, columns: {} }),
@@ -143,7 +145,7 @@ test("a download re-reads the schema, so the levels it just read survive", async
         settings: [],
       };
     },
-  });
+  }));
 
   await ui.init(true);
   selectRadioBySearch(document, "rt98");
@@ -175,7 +177,7 @@ test("an import whose schema refresh fails leaves the previous channels alone", 
   const headers = ["Location", "Name", "Frequency", "Power"];
   let imageLoaded = false;
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: [RT98] }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers, columns: {} }),
@@ -211,7 +213,7 @@ test("an import whose schema refresh fails leaves the previous channels alone", 
         settings: [],
       };
     },
-  });
+  }));
 
   await ui.init(true);
   await window.emit("drop", dropEvent(fakeFile("before.csv")));

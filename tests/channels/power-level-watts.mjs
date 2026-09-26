@@ -7,8 +7,8 @@ import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
 async function powerColumnFor(harness, module, className) {
   await ensureModule(harness, module);
   const metadata = await harness.runPythonJson(
-    "json.dumps(get_radio_column_metadata(_m, _c))",
-    { _m: module, _c: className },
+    "json.dumps(get_radio_column_metadata(_sid))",
+    { _sid: await harness.session(module, className) },
   );
   return metadata.columns.Power;
 }
