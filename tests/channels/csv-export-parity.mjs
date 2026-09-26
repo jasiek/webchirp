@@ -201,13 +201,12 @@ test("CSV export is identical to CHIRP's own CSV export", async () => {
     try {
       result = await harness.runPythonJson(
         `json.dumps({
-             "ours": normalize_rows(json.loads(_rows_json), _m, _c),
+             "ours": normalize_rows(json.loads(_rows_json), _sid),
              "theirs": _reference_csv_export(_b),
          })`,
         {
           _rows_json: JSON.stringify(loaded.rows || []),
-          _m: loaded.module,
-          _c: loaded.className,
+          _sid: loaded.sessionId,
           _b: raw.toString("base64"),
         },
       );

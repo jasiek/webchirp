@@ -29,7 +29,7 @@ const UPLOAD_TRACEBACK = [
   '  File "/lib/python312.zip/_pyodide/_base.py", line 597, in eval_code_async',
   "    await CodeRunner(",
   '  File "/webchirp_runtime/webchirp_bridge/clone.py", line 216, in upload_selected_radio',
-  "    return _upload_selected_radio_sync(module_name, class_name, rows, settings_groups)",
+  "    return _upload_selected_radio_sync(resolve_session(session_id), rows, settings_groups)",
   "webchirp_bridge.runtime_errors.RuntimePreconditionError: No cached radio image for this"
   + " model. Download from radio first, then upload.",
 ].join("\n");
@@ -44,16 +44,16 @@ function isIgnored(message) {
 }
 
 test("an upload with nothing downloaded raises the precondition error, and Sentry drops it", async () => {
-  // A fresh runtime: the shared one may have cached an image for this driver in
-  // an earlier test, which is exactly the state the guard is checking for.
-  const harness = await sharedHarness({ isolated: true });
+  // A session of its own, freshly opened: nothing has been downloaded into
+  // it, which is exactly the state the guard is checking for.
+  const harness = await sharedHarness();
   await ensureModule(harness, DRIVER_MODULE);
 
   const error = await harness
-    .runPython("await upload_selected_radio(_m, _c, [])", {
-      _m: DRIVER_MODULE,
-      _c: DRIVER_CLASS,
-    })
+    .runPython(
+      "await upload_selected_radio(open_session(_m, _c)[\"sessionId\"], [])",
+      { _m: DRIVER_MODULE, _c: DRIVER_CLASS },
+    )
     .then(
       () => null,
       (thrown) => thrown,

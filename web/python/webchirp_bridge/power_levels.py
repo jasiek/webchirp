@@ -21,6 +21,7 @@ from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
 if TYPE_CHECKING:
     from typing import Any, Iterable, Optional
+    from webchirp_bridge.session import RadioSession
 
 DEFAULT_EXPORT_POWER = "50W"
 
@@ -56,9 +57,11 @@ def _power_label_map_from_features(
     return mapped, default_power
 
 
-def _valid_power_levels_for_driver(module_name: str, class_name: str) -> list[chirp_common.PowerLevel]:
-    """Return a driver's own PowerLevel objects, or an empty list if unavailable."""
-    rf = _driver_features(module_name, class_name)
+def _valid_power_levels_for_driver(
+    session: Optional[RadioSession],
+) -> list[chirp_common.PowerLevel]:
+    """Return the session driver's own PowerLevel objects, or an empty list if unavailable."""
+    rf = _driver_features(session)
     return list(getattr(rf, "valid_power_levels", None) or []) if rf else []
 
 
@@ -85,18 +88,16 @@ def _power_levels_by_label(levels: Iterable[chirp_common.PowerLevel]) -> dict[st
 
 
 def _level_map_for_radio(
-    radio: Optional[chirp_common.Radio], module_name: str, class_name: str
+    radio: Optional[chirp_common.Radio], session: Optional[RadioSession]
 ) -> dict[str, chirp_common.PowerLevel]:
-    """Index the power levels a radio instance advertises, or its driver's if none.
+    """Index the power levels a radio instance advertises, or its session's driver's if none.
 
     A parsed image can advertise levels a blank instance does not (Rt98Radio),
-    so the instance wins; the driver lookup only fills in for a radio that
+    so the instance wins; the session lookup only fills in for a radio that
     reports nothing, or for a preflight that runs before any instance exists.
     """
     levels = list(radio.get_features().valid_power_levels or []) if radio else []
-    return _power_levels_by_label(
-        levels or _valid_power_levels_for_driver(module_name, class_name)
-    )
+    return _power_levels_by_label(levels or _valid_power_levels_for_driver(session))
 
 
 def _resolve_power_level(
@@ -125,9 +126,9 @@ def _resolve_power_level(
     )
 
 
-def _power_label_map_for_radio(module_name: str, class_name: str) -> tuple[dict[str, str], str]:
-    """Map a selected driver's power labels to CSV power specs."""
-    return _power_label_map_from_features(_driver_features(module_name, class_name))
+def _power_label_map_for_radio(session: Optional[RadioSession]) -> tuple[dict[str, str], str]:
+    """Map a session driver's power labels to CSV power specs."""
+    return _power_label_map_from_features(_driver_features(session))
 
 
 def _csv_export_power_text(value: Any, power_map: dict[str, str]) -> str:

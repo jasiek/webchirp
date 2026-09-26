@@ -19,12 +19,9 @@ from chirp import (
     settings as chirp_settings,
 )
 
-from webchirp_bridge.driver_cache import (
-    _best_effort_radio_instance,
-    _has_cached_image,
-    _import_radio_class,
-)
+from webchirp_bridge.driver_cache import _best_effort_radio_instance
 from webchirp_bridge.jsbridge import _log_debug
+from webchirp_bridge.session import resolve_session
 
 if TYPE_CHECKING:
     from typing import Any, Iterable, Optional, Sequence, TypeAlias
@@ -442,15 +439,21 @@ def _validate_and_apply_radio_settings(
     return {"valid": True, "issues": [], "settings": _serialize_radio_settings(settings_tree)}
 
 
-def get_radio_settings(module_name: str, class_name: str) -> dict[str, Any]:
-    """Build CHIRP settings-group metadata for the UI when supported."""
-    radio_cls = _import_radio_class(module_name, class_name)
-    if issubclass(radio_cls, chirp_common.CloneModeRadio) and not _has_cached_image(
-        module_name, class_name
+def get_radio_settings(session_id: str) -> dict[str, Any]:
+    """RPC: build CHIRP settings-group metadata for the UI when supported.
+
+    A clone-mode radio's settings are read from its image, so until the
+    session holds one that came from the radio or a file the panel reports
+    that an image is required rather than values parsed from nothing.
+    """
+    session = resolve_session(session_id)
+    if (
+        issubclass(session.radio_cls, chirp_common.CloneModeRadio)
+        and not session.has_backing_image
     ):
         return _settings_unavailable_payload(SETTINGS_NEED_IMAGE_MESSAGE, requires_image=True)
 
-    radio = _best_effort_radio_instance(module_name, class_name)
+    radio = _best_effort_radio_instance(session)
     rf = radio.get_features()
     if not bool(getattr(rf, "has_settings", False)):
         return _settings_unavailable_payload(
@@ -471,17 +474,18 @@ def get_radio_settings(module_name: str, class_name: str) -> dict[str, Any]:
 
 
 def validate_radio_settings(
-    module_name: str, class_name: str, settings_groups: Sequence[dict[str, Any]]
+    session_id: str, settings_groups: Sequence[dict[str, Any]]
 ) -> dict[str, Any]:
-    """Validate serialized radio settings using CHIRP's typed value objects."""
-    radio_cls = _import_radio_class(module_name, class_name)
-    if issubclass(radio_cls, chirp_common.CloneModeRadio) and not _has_cached_image(
-        module_name, class_name
+    """RPC: validate serialized radio settings using CHIRP's typed value objects."""
+    session = resolve_session(session_id)
+    if (
+        issubclass(session.radio_cls, chirp_common.CloneModeRadio)
+        and not session.has_backing_image
     ):
         return _settings_validation_payload(
             requires_image=True, message=SETTINGS_NEED_IMAGE_MESSAGE
         )
-    radio = _best_effort_radio_instance(module_name, class_name, require_cached=False)
+    radio = _best_effort_radio_instance(session)
     try:
         result = _validate_and_apply_radio_settings(radio, settings_groups or [], apply_changes=False)
     except Exception as exc:

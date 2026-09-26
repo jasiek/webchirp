@@ -3,10 +3,12 @@
 The download side reads every memory the driver exposes into rows, the
 upload side writes rows back and erases what the grid no longer has. The two
 loops are coupled through absence -- a memory missing from the rows is a
-deletion -- which is why the read side records what it could not decode and
-the write side protects those slots (see ``UNREADABLE_BY_DRIVER``). Both
-report per-channel failures to the debug panel grouped by reason, since a
-driver that fails on hundreds of channels would otherwise bury it.
+deletion -- which is why the read side records what it could not decode on
+the session (``RadioSession.unreadable_channels`` in
+web/python/webchirp_bridge/session.py) and the write side protects those
+slots. Both report per-channel failures to the debug panel grouped by
+reason, since a driver that fails on hundreds of channels would otherwise
+bury it.
 """
 
 from __future__ import annotations
@@ -28,11 +30,7 @@ from webchirp_bridge.channel_rows import (
     _memory_from_row_values,
     _row_from_memory,
 )
-from webchirp_bridge.driver_cache import (
-    _cache_driver_image,
-    _protected_channels,
-    _record_unreadable_channels,
-)
+from webchirp_bridge.driver_cache import _record_session_image
 from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.power_levels import _level_map_for_radio
 from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
@@ -42,6 +40,7 @@ from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 if TYPE_CHECKING:
     from typing import Any, Optional, Sequence
     from webchirp_bridge.channel_rows import Rows
+    from webchirp_bridge.session import ImageOrigin, RadioSession
 
 def _iter_memory_numbers(radio: chirp_common.Radio) -> range:
     """Return numeric memory range for the active radio model."""
@@ -160,18 +159,19 @@ def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int
 
 
 def _read_radio_payload(
-    module_name: str, class_name: str, radio: chirp_common.Radio
+    session: RadioSession, radio: chirp_common.Radio, origin: ImageOrigin
 ) -> dict[str, Any]:
     """Everything a freshly read radio hands the grid, plus the state it leaves.
 
     The serial download and the image load differ only in how they obtained the
-    radio; from here on both cache its image under the driver key, extract the
-    rows, record the slots that would not decode so a later upload leaves them
-    alone, and serialize the radio-wide settings read-only.
+    radio -- ``origin`` says which; from here on both record its image on the
+    session, extract the rows, record the slots that would not decode so a
+    later upload leaves them alone, and serialize the radio-wide settings
+    read-only.
     """
-    _cache_driver_image(module_name, class_name, radio)
+    _record_session_image(session, radio, origin)
     rows, unreadable = _radio_rows_from_instance(radio)
-    _record_unreadable_channels(module_name, class_name, unreadable)
+    session.record_unreadable_channels(unreadable)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
         "rows": rows,
@@ -182,14 +182,16 @@ def _read_radio_payload(
 
 
 def _apply_rows_to_radio_instance(
-    radio: chirp_common.Radio, rows: Rows, module_name: str = "", class_name: str = ""
+    radio: chirp_common.Radio, rows: Rows, session: Optional[RadioSession] = None
 ) -> None:
-    """Validate editable rows, then apply them to a radio instance."""
-    if radio and (not module_name or not class_name):
-        radio_cls = radio.__class__
-        module_name = module_name or str(getattr(radio_cls, "__module__", "")).split(".")[-1]
-        class_name = class_name or str(getattr(radio_cls, "__name__", ""))
-    level_map = _level_map_for_radio(radio, module_name, class_name)
+    """Validate editable rows, then apply them to a radio instance.
+
+    ``session`` is the one the radio was rebuilt from, when there is one: it
+    supplies the memory numbers that must not be erased and the driver's
+    power levels for a radio that reports none. Without it the instance's own
+    features are all there is, which is what an offline test radio gets.
+    """
+    level_map = _level_map_for_radio(radio, session)
     valid_numbers = set(_iter_memory_numbers(radio))
     seen_numbers = set()
     unreadable_erase_slots: dict[str, list[int]] = {}
@@ -247,7 +249,7 @@ def _apply_rows_to_radio_instance(
     # its absence from the rows is not a deletion and must not be treated as one.
     # A row the user did supply for that number still writes normally: explicit
     # intent is in seen_numbers and never reaches this loop.
-    protected = _protected_channels(module_name, class_name) - seen_numbers
+    protected = (session.unreadable_channels if session else set()) - seen_numbers
     for number in sorted(valid_numbers - seen_numbers - protected):
         # Omitted rows mean erase. Read first so immutable special channels are
         # protected and already-empty slots do not trigger needless writes.

@@ -53,6 +53,7 @@ const RUNTIME_PYTHON_URLS = Object.freeze({
   "webchirp_bridge/rpc.py": "./python/webchirp_bridge/rpc.py",
   "webchirp_bridge/runtime_errors.py": "./python/webchirp_bridge/runtime_errors.py",
   "webchirp_bridge/serial_pipe.py": "./python/webchirp_bridge/serial_pipe.py",
+  "webchirp_bridge/session.py": "./python/webchirp_bridge/session.py",
   "extra_drivers/quansheng/f4hwn_v4_3.py": "./python/extra_drivers/quansheng/f4hwn_v4_3.py",
   "extra_drivers/quansheng/f4hwn_v5_9_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_9_0.py",
   "extra_drivers/quansheng/f4hwn_v6.py": "./python/extra_drivers/quansheng/f4hwn_v6.py",
@@ -348,21 +349,64 @@ async function requirePyodide() {
   await ensurePyodide();
 }
 
-// Call one Python runtime method on the current interpreter. Resolved per
-// call rather than held, because ensureSelectedRadioModules() can swap the
-// interpreter under the isolated driver set; the dispatcher is memoized per
-// interpreter in web/js/rpc-dispatch.mjs.
-function rpc(name, params = {}) {
-  return rpcDispatcherFor(pyodide).call(name, params);
+// Call one Python runtime method on a given interpreter; the dispatcher is
+// memoized per interpreter in web/js/rpc-dispatch.mjs.
+function rpcOn(interpreter, name, params = {}) {
+  return rpcDispatcherFor(interpreter).call(name, params);
 }
 
-// The selected driver as every radio-bound method names it, under the Python
-// parameter names, so the UI's {module, className} payload maps in one place.
-function selectedRadioParams(payload = {}) {
-  return {
-    module_name: payload.module || "",
-    class_name: payload.className || "",
-  };
+// Call one Python runtime method on the current interpreter. Resolved per
+// call rather than held, because ensureSelectedRadioModules() can swap the
+// interpreter under the isolated driver set.
+function rpc(name, params = {}) {
+  return rpcOn(pyodide, name, params);
+}
+
+// Which interpreter owns each open radio session. A session lives inside the
+// interpreter that opened it (web/python/webchirp_bridge/session.py keeps the
+// registry per interpreter), and the isolated Quansheng driver set boots a
+// fresh interpreter per release, so a call for a session has to reach the
+// interpreter that holds it rather than whichever is current. This map is
+// that routing; ordinary CHIRP mode has one interpreter and every entry
+// points at it.
+const sessionRuntimes = new Map();
+
+// Record which interpreter a freshly opened session lives in.
+function registerSession(sessionId, interpreter) {
+  if (sessionId) {
+    sessionRuntimes.set(String(sessionId), interpreter);
+  }
+}
+
+// The interpreter holding a session, or a clear error for one that is not
+// open. Raised here, on the JS side, so a closed session fails the same way
+// whether or not its interpreter still exists.
+function runtimeForSession(sessionId) {
+  const owner = sessionRuntimes.get(String(sessionId || ""));
+  if (!owner) {
+    throw new Error(
+      `Radio session ${sessionId || "(none)"} is not open: it was closed or never opened. `
+      + "Select a radio first.",
+    );
+  }
+  return owner;
+}
+
+// Run one radio-bound method against the interpreter that owns its session.
+function sessionRpc(sessionId, name, params = {}) {
+  return rpcOn(runtimeForSession(sessionId), name, { session_id: String(sessionId), ...params });
+}
+
+// The two methods that work without a radio (CSV export and the row
+// preflight): with a session they route to its interpreter, without one they
+// run on the current interpreter with an empty id, which the Python side
+// reads as "no radio selected".
+async function optionalSessionRpc(sessionId, name, params = {}) {
+  if (sessionId) {
+    return sessionRpc(sessionId, name, params);
+  }
+  await requirePyodide();
+  return rpc(name, { session_id: "", ...params });
 }
 
 async function handleGetRuntimeInfo() {
@@ -387,30 +431,61 @@ async function handleParseCsv(payload = {}) {
   return rpc("parse_csv", { csv_text: String(payload.csvText ?? "") });
 }
 
-async function handleNormalizeRows(payload = {}) {
+// Open a radio session for a catalog entry: import its driver (which, under
+// the isolated driver set, may boot the interpreter for that release), then
+// register the session with the interpreter that holds it.
+async function handleOpenRadioSession(payload = {}) {
+  await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
-  return rpc("normalize_rows", {
+  const owner = pyodide;
+  const result = await rpcOn(owner, "open_session", {
+    module_name: payload.module || "",
+    class_name: payload.className || "",
+  });
+  registerSession(result.sessionId, owner);
+  return result;
+}
+
+// Close a radio session in the interpreter that holds it. Quiet for an id
+// this side never saw: the UI closes the previous selection's session without
+// waiting to learn whether it ever finished opening.
+async function handleCloseRadioSession(payload = {}) {
+  const sessionId = String(payload.sessionId || "");
+  const owner = sessionRuntimes.get(sessionId);
+  if (!owner) {
+    return { closed: false, sessionId };
+  }
+  sessionRuntimes.delete(sessionId);
+  return rpcOn(owner, "close_session", { session_id: sessionId });
+}
+
+async function handleNormalizeRows(payload = {}) {
+  return optionalSessionRpc(payload.sessionId, "normalize_rows", {
     rows: payload.rows || [],
-    ...selectedRadioParams(payload),
   });
 }
 
 async function handleValidateRowsForUpload(payload = {}) {
-  await ensureSelectedRadioModules(payload.module || "");
-  return rpc("validate_rows_for_upload", {
+  return optionalSessionRpc(payload.sessionId, "validate_rows_for_upload", {
     rows: payload.rows || [],
-    ...selectedRadioParams(payload),
   });
 }
 
 async function handleExportImage(payload = {}) {
-  await requirePyodide();
-  await ensureSelectedRadioModules(payload.module || "");
-  return rpc("export_image_base64", {
-    ...selectedRadioParams(payload),
+  return sessionRpc(payload.sessionId, "export_image_base64", {
     rows: payload.rows || [],
     settings_groups: payload.settings || [],
   });
+}
+
+// An image load opens a session of its own in Python for the driver the
+// image names (load_image_base64 in web/python/webchirp_bridge/images.py);
+// record which interpreter it lives in before the UI adopts it.
+async function loadImageIntoSession(image_b64) {
+  const owner = pyodide;
+  const result = await rpcOn(owner, "load_image_base64", { image_b64 });
+  registerSession(result?.sessionId, owner);
+  return result;
 }
 
 async function handleLoadImage(payload = {}) {
@@ -422,7 +497,7 @@ async function handleLoadImage(payload = {}) {
     }
     await ensureSelectedRadioModules(selected.module);
     // Native CHIRP metadata detection now sees only the selected release.
-    return rpc("load_image_base64", { image_b64: payload.imageBase64 || "" });
+    return loadImageIntoSession(payload.imageBase64 || "");
   }
   await requirePyodide();
   const image_b64 = payload.imageBase64 || "";
@@ -466,7 +541,7 @@ async function handleLoadImage(payload = {}) {
   }
   return loadImageWithDriverFallback({
     resolvedDriver,
-    loadImage: () => rpc("load_image_base64", { image_b64 }),
+    loadImage: () => loadImageIntoSession(image_b64),
     importAllDrivers: () => ensureAllDriverModules(),
     log: debugLog,
   });
@@ -492,50 +567,35 @@ async function handleSerialTxRx(payload = {}) {
 }
 
 async function handleDownloadSelectedRadio(payload = {}) {
-  await requirePyodide();
-  await ensureSelectedRadioModules(payload.module || "");
-  return rpc("download_selected_radio", selectedRadioParams(payload));
+  return sessionRpc(payload.sessionId, "download_selected_radio");
 }
 
 async function handleUploadSelectedRadio(payload = {}) {
-  await requirePyodide();
-  await ensureSelectedRadioModules(payload.module || "");
-  return rpc("upload_selected_radio", {
-    ...selectedRadioParams(payload),
+  return sessionRpc(payload.sessionId, "upload_selected_radio", {
     rows: payload.rows || [],
     settings_groups: payload.settings || [],
   });
 }
 
 async function handleGetRadioMetadata(payload = {}) {
-  await requirePyodide();
-  await ensureSelectedRadioModules(payload.module || "");
-  return rpc("get_radio_column_metadata", selectedRadioParams(payload));
+  return sessionRpc(payload.sessionId, "get_radio_column_metadata");
 }
 
 // The driver's own per-channel extra settings for one memory slot, typed the
 // way the radio-wide settings are, so the extras modal can render real controls
 // instead of guessing from the bare values a row carries.
 async function handleGetChannelExtra(payload = {}) {
-  await requirePyodide();
-  await ensureSelectedRadioModules(payload.module || "");
-  return rpc("get_channel_extra", {
-    ...selectedRadioParams(payload),
+  return sessionRpc(payload.sessionId, "get_channel_extra", {
     location: String(payload.location ?? ""),
   });
 }
 
 async function handleGetRadioSettings(payload = {}) {
-  await requirePyodide();
-  await ensureSelectedRadioModules(payload.module || "");
-  return rpc("get_radio_settings", selectedRadioParams(payload));
+  return sessionRpc(payload.sessionId, "get_radio_settings");
 }
 
 async function handleValidateRadioSettings(payload = {}) {
-  await requirePyodide();
-  await ensureSelectedRadioModules(payload.module || "");
-  return rpc("validate_radio_settings", {
-    ...selectedRadioParams(payload),
+  return sessionRpc(payload.sessionId, "validate_radio_settings", {
     settings_groups: payload.settings || [],
   });
 }
@@ -543,12 +603,15 @@ async function handleValidateRadioSettings(payload = {}) {
 // The runtime API the app calls, by the names web/app.js and the UI modules
 // use. Most map onto one RPC method; listRadios, loadImage and getRuntimeInfo
 // compose several or none. The Python-facing names are in RPC_METHODS
-// (web/js/rpc-dispatch.mjs).
+// (web/js/rpc-dispatch.mjs). Radio-bound methods take the sessionId that
+// openRadioSession handed out for the selected radio.
 export const RUNTIME_METHODS = Object.freeze({
   getRuntimeInfo: handleGetRuntimeInfo,
   listRadios: handleListRadios,
   getDefaultSchema: handleGetDefaultSchema,
   parseCsv: handleParseCsv,
+  openRadioSession: handleOpenRadioSession,
+  closeRadioSession: handleCloseRadioSession,
   normalizeRows: handleNormalizeRows,
   validateRowsForUpload: handleValidateRowsForUpload,
   exportImage: handleExportImage,

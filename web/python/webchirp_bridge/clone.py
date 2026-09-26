@@ -4,8 +4,9 @@ A clone runs a driver's blocking ``sync_in``/``sync_out`` over a
 ``WebSerialPipe``, after the serial session has been prepared (buffers
 cleared, control lines asserted, settle delay) and, where the driver
 supports it, after detecting which model is actually on the wire. Download
-caches the image it read; upload refuses to run without one, so a codeplug
-is never written from a blank instance.
+records the image it read on the radio session; upload refuses to run
+without one that came from the radio or a file, so a codeplug is never
+written from a blank instance or a synthetic export.
 """
 
 from __future__ import annotations
@@ -16,14 +17,10 @@ from typing import TYPE_CHECKING
 from chirp import chirp_common
 from js import serial_prepare_clone
 
-from webchirp_bridge.channel_rows import normalize_rows
+from webchirp_bridge.channel_rows import _csv_text_for_rows
 from webchirp_bridge.driver_cache import (
-    LAST_IMAGE_BY_DRIVER,
-    _cache_driver_image,
-    _cached_image_class,
-    _driver_cache_key,
-    _import_radio_class,
     _radio_from_image_bytes,
+    _record_session_image,
 )
 from webchirp_bridge.jsbridge import _await_js, _log_debug, _make_status_logger
 from webchirp_bridge.radio_memories import (
@@ -33,10 +30,12 @@ from webchirp_bridge.radio_memories import (
 from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.runtime_errors import RuntimePreconditionError, RuntimeUnsupportedError
 from webchirp_bridge.serial_pipe import WebSerialPipe, _serial_pipe_timeout_seconds
+from webchirp_bridge.session import ImageOrigin, resolve_session
 
 if TYPE_CHECKING:
     from typing import Any, Optional, Sequence
     from webchirp_bridge.channel_rows import Rows
+    from webchirp_bridge.session import RadioSession
 
 def _ensure_clone_mode_radio(radio_cls: type[chirp_common.Radio]) -> None:
     """Enforce clone-mode driver requirement for live serial workflows."""
@@ -152,32 +151,33 @@ def _prepare_clone_session(radio_cls: type[chirp_common.Radio]) -> None:
     )
 
 
-def _download_selected_radio_sync(module_name: str, class_name: str) -> dict[str, Any]:
-    """Run selected driver's sync_in and return rows + cached image state."""
-    radio_cls = _import_radio_class(module_name, class_name)
+def _download_selected_radio_sync(session: RadioSession) -> dict[str, Any]:
+    """Run the session driver's sync_in and return rows plus the state it recorded."""
+    radio_cls = session.radio_cls
     _ensure_clone_mode_radio(radio_cls)
 
     _prepare_clone_session(radio_cls)
     radio = _create_radio_for_serial(radio_cls)
     radio.sync_in()
     # The image belongs to whatever detection settled on, not to the selection
-    # the user made in the UI, and upload/export have to re-parse it as such.
-    payload = _read_radio_payload(module_name, class_name, radio)
-    payload["csvText"] = normalize_rows(payload["rows"], module_name, class_name)
+    # the user made in the UI, and upload/export have to re-parse it as such;
+    # _read_radio_payload records the instance's class with the bytes.
+    payload = _read_radio_payload(session, radio, ImageOrigin.RADIO)
+    payload["csvText"] = _csv_text_for_rows(payload["rows"], session)
     return payload
 
 
 def _upload_selected_radio_sync(
-    module_name: str,
-    class_name: str,
+    session: RadioSession,
     rows: Rows,
     settings_groups: Optional[Sequence[Any]] = None,
 ) -> dict[str, Any]:
-    """Apply rows onto cached image and run selected driver's sync_out."""
-    radio_cls = _import_radio_class(module_name, class_name)
-    _ensure_clone_mode_radio(radio_cls)
-    driver_key = _driver_cache_key(module_name, class_name)
-    base_image = LAST_IMAGE_BY_DRIVER.get(driver_key)
+    """Apply rows onto the session's image and run its driver's sync_out."""
+    _ensure_clone_mode_radio(session.radio_cls)
+    # Only bytes read from the radio or a file may be written back: a synthetic
+    # offline export is stored on the session but is not a backing image
+    # (FINDINGS: offline-export-is-not-a-radio-image).
+    base_image = session.backing_image
     if not base_image:
         raise RuntimePreconditionError(
             "No cached radio image for this model. Download from radio first, then upload."
@@ -185,11 +185,11 @@ def _upload_selected_radio_sync(
     # CHIRP does not re-detect on upload -- the class that downloaded the image
     # is the one that writes it back, and drivers like ga510 send their own
     # program handshake from do_upload().
-    image_cls = _cached_image_class(module_name, class_name, radio_cls)
+    image_cls = session.image_cls
     radio = _radio_from_image_bytes(image_cls, base_image)
     radio.status_fn = _make_status_logger()
     radio.set_pipe(_new_serial_pipe(image_cls))
-    _apply_rows_to_radio_instance(radio, rows, module_name, class_name)
+    _apply_rows_to_radio_instance(radio, rows, session)
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
     )
@@ -197,20 +197,19 @@ def _upload_selected_radio_sync(
         raise RuntimeUnsupportedError("Radio settings validation failed before upload")
     _prepare_clone_session(image_cls)
     radio.sync_out()
-    _cache_driver_image(module_name, class_name, radio)
+    _record_session_image(session, radio, session.image_origin)
     return {"uploaded": True, "settings": settings_result["settings"]}
 
 
-async def download_selected_radio(module_name: str, class_name: str) -> dict[str, Any]:
-    """Async wrapper for selected-radio download operation."""
-    return _download_selected_radio_sync(module_name, class_name)
+async def download_selected_radio(session_id: str) -> dict[str, Any]:
+    """RPC: download the session's radio over the connected serial port."""
+    return _download_selected_radio_sync(resolve_session(session_id))
 
 
 async def upload_selected_radio(
-    module_name: str,
-    class_name: str,
+    session_id: str,
     rows: Rows,
     settings_groups: Optional[Sequence[Any]] = None,
 ) -> dict[str, Any]:
-    """Async wrapper for selected-radio upload operation."""
-    return _upload_selected_radio_sync(module_name, class_name, rows, settings_groups)
+    """RPC: write rows and settings onto the session's image and upload it."""
+    return _upload_selected_radio_sync(resolve_session(session_id), rows, settings_groups)
