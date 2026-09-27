@@ -293,6 +293,57 @@ json.dumps({
   assert.deepEqual(result.state.other.unreadableChannels, []);
 });
 
+test("an image load whose driver fails to read the payload leaves no session behind", async () => {
+  const harness = await sharedHarness();
+  await ensureModule(harness, "h777");
+  // The session is opened before the driver reads the image, and its id only
+  // reaches the browser with a successful reply -- so a read that raises
+  // must close what it opened, or nothing ever can.
+  const result = await harness.runPythonJson(`
+import webchirp_bridge.radio_memories as _radio_memories
+
+_cls = _import_radio_class("h777", "H777Radio")
+_radio = _cls(None)
+_radio._mmap = memmap.MemoryMapBytes(bytes(_radio._memsize))
+_radio.process_mmap()
+_source = open_radio_session("h777", "H777Radio")
+_record_session_image(_source, _radio, ImageOrigin.RADIO)
+_image_b64 = export_image_base64(_source.session_id, [], [])["imageBase64"]
+close_session(_source.session_id)
+
+_before = open_session_ids()
+_original = _radio_memories._radio_rows_from_instance
+
+def _failing_read(radio):
+    raise RuntimeError("driver could not read this image")
+
+_radio_memories._radio_rows_from_instance = _failing_read
+try:
+    load_image_base64(_image_b64)
+    _error = ""
+except Exception as _exc:
+    _error = str(_exc)
+finally:
+    _radio_memories._radio_rows_from_instance = _original
+_after = open_session_ids()
+
+# The same image loads once the driver cooperates, and that session is closed.
+_loaded = load_image_base64(_image_b64)
+_opened_after_success = _loaded["sessionId"] in open_session_ids()
+close_session(_loaded["sessionId"])
+json.dumps({
+    "error": _error,
+    "before": _before,
+    "after": _after,
+    "openedAfterSuccess": _opened_after_success,
+})
+  `);
+
+  assert.match(result.error, /driver could not read this image/, "the driver's failure propagates");
+  assert.deepEqual(result.after, result.before, "a failed load leaves the registry as it found it");
+  assert.equal(result.openedAfterSuccess, true);
+});
+
 const CATALOG = [
   { vendor: "SlowCo", model: "Slow", module: "slow", className: "SlowRadio", key: "slow:SlowRadio", isLiveRadio: false },
   { vendor: "FastCo", model: "Fast", module: "fast", className: "FastRadio", key: "fast:FastRadio", isLiveRadio: false },

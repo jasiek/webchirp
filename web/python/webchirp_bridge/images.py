@@ -30,7 +30,12 @@ from webchirp_bridge.radio_memories import (
 )
 from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.runtime_errors import ImageDetectionError, RuntimeUnsupportedError
-from webchirp_bridge.session import ImageOrigin, open_radio_session, resolve_session
+from webchirp_bridge.session import (
+    ImageOrigin,
+    close_session,
+    open_radio_session,
+    resolve_session,
+)
 
 if TYPE_CHECKING:
     from typing import Any, Optional, Sequence
@@ -158,6 +163,15 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     module_short = str(base_cls.__module__).rsplit(".", 1)[-1]
     class_name = str(base_cls.__name__)
     session = open_radio_session(module_short, class_name)
+    try:
+        payload = _read_radio_payload(session, radio, ImageOrigin.FILE)
+    except Exception:
+        # The session is registered before the driver reads the image, but its
+        # id only reaches the browser with a successful reply: a session left
+        # behind by a failed read could never be closed, and every retry of
+        # the same image would keep another copy of it in the interpreter.
+        close_session(session.session_id)
+        raise
     return {
         "sessionId": session.session_id,
         "module": module_short,
@@ -165,5 +179,5 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
         "vendor": str(getattr(radio.__class__, "VENDOR", "")),
         "model": str(getattr(radio.__class__, "MODEL", "")),
         "variant": str(getattr(radio.__class__, "VARIANT", "")),
-        **_read_radio_payload(session, radio, ImageOrigin.FILE),
+        **payload,
     }
