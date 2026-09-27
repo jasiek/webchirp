@@ -19,11 +19,7 @@ from chirp import (
 )
 
 from webchirp_bridge.clone import _ensure_clone_mode_radio
-from webchirp_bridge.driver_cache import (
-    _radio_from_image_bytes,
-    _record_session_image,
-    _temp_image_path,
-)
+from webchirp_bridge.radio_files import _temp_image_path
 from webchirp_bridge.radio_memories import (
     _apply_rows_to_radio_instance,
     _read_radio_payload,
@@ -84,25 +80,24 @@ def export_image_base64(
     session = resolve_session(session_id)
     radio_cls = session.radio_cls
     _ensure_clone_mode_radio(radio_cls)
-    base_image = session.backing_image
     origin = session.image_origin
-    if not base_image:
-        memsize = int(getattr(radio_cls, "_memsize", 0) or 0)
-        if memsize <= 0:
+    if not session.has_backing_image:
+        if session.memory_size <= 0:
             raise RuntimeUnsupportedError(
                 "Driver does not expose memory size for offline image export"
             )
-        base_image = bytes(memsize)
         origin = ImageOrigin.SYNTHETIC
 
-    radio = _radio_from_image_bytes(session.image_cls, base_image)
+    # With a backing image this is that image; without one, radio_instance()
+    # is the zeroed map of the driver's declared size the export starts from.
+    radio = session.radio_instance()
     _apply_rows_to_radio_instance(radio, rows or [], session)
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
     )
     if not settings_result["valid"]:
         raise RuntimeUnsupportedError("Radio settings validation failed before export")
-    image_data = _record_session_image(session, radio, origin)
+    image_data = session.record_radio(radio, origin)
     return {
         **_image_payload(image_data),
         "vendor": str(getattr(radio_cls, "VENDOR", "")),

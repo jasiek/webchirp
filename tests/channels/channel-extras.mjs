@@ -190,7 +190,7 @@ import base64, json
 _cls = _import_radio_class("iradio_uv_5118", "IradioUV5118")
 _base = _radio_from_image_bytes(_cls, base64.b64decode(_base_b64))
 _session = open_radio_session("iradio_uv_5118", "IradioUV5118")
-_record_session_image(_session, _base, ImageOrigin.FILE)
+_session.record_radio(_base, ImageOrigin.FILE)
 
 _exported = export_image_base64(_session.session_id, json.loads(_rows_json), [])
 close_session(_session.session_id)

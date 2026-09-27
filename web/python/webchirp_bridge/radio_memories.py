@@ -30,7 +30,6 @@ from webchirp_bridge.channel_rows import (
     _memory_from_row_values,
     _row_from_memory,
 )
-from webchirp_bridge.driver_cache import _record_session_image
 from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.power_levels import _level_map_for_radio
 from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
@@ -169,7 +168,7 @@ def _read_radio_payload(
     later upload leaves them alone, and serialize the radio-wide settings
     read-only.
     """
-    _record_session_image(session, radio, origin)
+    session.record_radio(radio, origin)
     rows, unreadable = _radio_rows_from_instance(radio)
     session.record_unreadable_channels(unreadable)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)

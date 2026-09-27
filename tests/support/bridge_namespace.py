@@ -21,10 +21,13 @@ Deliberately not under web/python/: nothing here ships to the browser.
 
 from __future__ import annotations
 
-# The RPC snippets serialize their results with json.dumps(), so the module
-# has to be a global even though no bridge module needs it.
+# The RPC snippets serialize their results with json.dumps(), and the
+# codeplug snippets seed radios with memmap.MemoryMapBytes(), so both have to
+# be globals even though no bridge module needs them by those names.
 import json  # noqa: F401
 from typing import TYPE_CHECKING
+
+from chirp import memmap  # noqa: F401
 
 import webchirp_bridge
 from webchirp_bridge import (
@@ -33,7 +36,7 @@ from webchirp_bridge import (
     chirp_loader,
     clone,
     column_metadata,
-    driver_cache,
+    radio_files,
     images,
     jsbridge,
     power_levels,
@@ -59,7 +62,7 @@ _BRIDGE_MODULES: tuple[types.ModuleType, ...] = (
     runtime_errors,
     session,
     chirp_loader,
-    driver_cache,
+    radio_files,
     power_levels,
     channel_rows,
     channel_extra,

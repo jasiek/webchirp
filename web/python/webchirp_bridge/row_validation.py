@@ -23,7 +23,6 @@ from webchirp_bridge.channel_rows import (
     _row_from_memory,
     _row_text_values,
 )
-from webchirp_bridge.driver_cache import _best_effort_radio_instance, _driver_features
 from webchirp_bridge.power_levels import _level_map_for_radio
 from webchirp_bridge.session import resolve_optional_session
 
@@ -116,7 +115,7 @@ def _memory_bounds_for_driver(
     session: Optional[RadioSession],
 ) -> Optional[tuple[int, int]]:
     """Return the session driver's (lo, hi) memory bounds, or None if unavailable."""
-    rf = _driver_features(session)
+    rf = session.features() if session else None
     bounds = getattr(rf, "memory_bounds", None) if rf else None
     if not bounds:
         return None
@@ -125,11 +124,6 @@ def _memory_bounds_for_driver(
         return int(lo), int(hi)
     except Exception:
         return None
-
-
-def _radio_instance_for_row_validation(session: RadioSession) -> chirp_common.Radio:
-    """Build the same image-backed radio that a later upload/export will use."""
-    return _best_effort_radio_instance(session)
 
 
 def _immutable_field_errors(
@@ -337,7 +331,8 @@ def validate_rows_for_upload(rows: Rows, session_id: str = "") -> dict[str, Any]
     is known yet.
     """
     session = resolve_optional_session(session_id)
-    radio = _radio_instance_for_row_validation(session) if session else None
+    # The same image-backed radio a later upload or export will write to.
+    radio = session.radio_instance() if session else None
     level_map = _level_map_for_radio(radio, session)
     # Location is checked here as well as in _apply_rows_to_radio_instance,
     # because that one raises partway through a clone: the radio is already

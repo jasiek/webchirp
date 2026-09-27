@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 
 from chirp import chirp_common
 
-from webchirp_bridge.driver_cache import _driver_features
 from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 
 if TYPE_CHECKING:
@@ -61,7 +60,7 @@ def _valid_power_levels_for_driver(
     session: Optional[RadioSession],
 ) -> list[chirp_common.PowerLevel]:
     """Return the session driver's own PowerLevel objects, or an empty list if unavailable."""
-    rf = _driver_features(session)
+    rf = session.features() if session else None
     return list(getattr(rf, "valid_power_levels", None) or []) if rf else []
 
 
@@ -128,7 +127,7 @@ def _resolve_power_level(
 
 def _power_label_map_for_radio(session: Optional[RadioSession]) -> tuple[dict[str, str], str]:
     """Map a session driver's power labels to CSV power specs."""
-    return _power_label_map_from_features(_driver_features(session))
+    return _power_label_map_from_features(session.features() if session else None)
 
 
 def _csv_export_power_text(value: Any, power_map: dict[str, str]) -> str:

@@ -19,7 +19,6 @@ from chirp import (
 )
 from chirp.drivers.generic_csv import CSVRadio
 
-from webchirp_bridge.driver_cache import _driver_features
 from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.power_levels import (
     _csv_export_power_text,
@@ -297,7 +296,7 @@ def _csv_text_for_rows(rows: Rows, session: Optional[RadioSession]) -> str:
     """Render rows as CSV against a session's driver, or the CSV driver without one."""
     # import_mem() needs the *source* radio's features to decide which columns it
     # has to fill in, so resolve them once and reuse them for the power labels.
-    src_features = _driver_features(session)
+    src_features = session.features() if session else None
     power_map, _default_power = _power_label_map_from_features(src_features)
     memories = _memories_from_rows(rows, power_map)
     if src_features is None:

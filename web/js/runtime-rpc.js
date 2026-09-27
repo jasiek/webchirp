@@ -43,7 +43,7 @@ const RUNTIME_PYTHON_URLS = Object.freeze({
   "webchirp_bridge/chirp_loader.py": "./python/webchirp_bridge/chirp_loader.py",
   "webchirp_bridge/clone.py": "./python/webchirp_bridge/clone.py",
   "webchirp_bridge/column_metadata.py": "./python/webchirp_bridge/column_metadata.py",
-  "webchirp_bridge/driver_cache.py": "./python/webchirp_bridge/driver_cache.py",
+  "webchirp_bridge/radio_files.py": "./python/webchirp_bridge/radio_files.py",
   "webchirp_bridge/images.py": "./python/webchirp_bridge/images.py",
   "webchirp_bridge/jsbridge.py": "./python/webchirp_bridge/jsbridge.py",
   "webchirp_bridge/power_levels.py": "./python/webchirp_bridge/power_levels.py",

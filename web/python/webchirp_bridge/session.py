@@ -14,9 +14,17 @@ The registry maps ids to open sessions. ``open_session`` and
 ``close_session`` are the only RPC methods here; JS opens one when a radio is
 selected and closes it when the selection moves on, so a response for a
 session that is no longer open can be told from a current one by identity.
-This module imports nothing from the modules that use it, which keeps the
-package graph acyclic: the instance builders that turn a session into a
-radio live in web/python/webchirp_bridge/driver_cache.py.
+
+The id is the only thing that crosses the JS boundary: a radio-bound RPC
+method resolves it once, at its entry point, and everything below takes the
+``RadioSession`` itself. The session is also the only place a driver is
+instantiated from its state -- ``radio_instance()``, ``describing_instance()``
+and ``features()`` -- and the only place a radio's bytes are recorded back
+onto it (``record_radio()``), so no helper builds a radio from module and
+class names or from bytes it fetched itself. The file plumbing those methods
+use (CHIRP reads and writes images only through paths) is in
+web/python/webchirp_bridge/radio_files.py, which imports nothing from here,
+so the package graph stays acyclic.
 """
 
 from __future__ import annotations
@@ -29,10 +37,16 @@ from typing import TYPE_CHECKING
 
 from chirp import chirp_common
 
+from webchirp_bridge.radio_files import (
+    _blank_radio_instance,
+    _image_bytes_from_radio,
+    _radio_from_image_bytes,
+)
+from webchirp_bridge.jsbridge import _make_status_logger
 from webchirp_bridge.runtime_errors import RuntimePreconditionError
 
 if TYPE_CHECKING:
-    from typing import Any, Iterable, Optional
+    from typing import Any, Callable, Iterable, Optional
 
 
 class ImageOrigin(str, Enum):
@@ -139,6 +153,88 @@ class RadioSession:
         self.image = bytes(image)
         self.image_origin = origin
         self.detected_cls = parsed_by if parsed_by is not self.radio_cls else None
+
+    def record_radio(self, radio: chirp_common.Radio, origin: ImageOrigin) -> bytes:
+        """Serialize a radio and make its bytes this session's image.
+
+        Every writer goes through here so serialization happens before the
+        session changes: if ``save_mmap()`` raises, the session keeps the
+        previous image and the class that parsed it, rather than the old bytes
+        tagged with this radio's class -- which a later upload or export would
+        decode against the wrong layout. The origin says what the bytes are
+        evidence of; see ``ImageOrigin``.
+        """
+        image = _image_bytes_from_radio(radio)
+        self.record_image(image, radio.__class__, origin)
+        return image
+
+    def radio_instance(self) -> chirp_common.Radio:
+        """The radio every read and write of this session's state goes through.
+
+        Built from the backing image when there is one, by the class that
+        parsed it, so a detected variant's layout is honoured. Without one, the
+        best blank state the driver has: a clone-mode driver's declared memory
+        size as zeroes, loaded through CHIRP's own file path so the driver
+        picks its map type and parses where ``radio_cls(None)`` would leave the
+        map unset; drivers without a size take the plain blank constructor. A
+        synthetic export is never the base -- it is not a codeplug anyone read.
+        An image that will not parse raises rather than falling back: this is
+        the instance rows and settings are read from and written to, and blank
+        state here would silently be a different radio (see
+        ``describing_instance`` for the tolerant builder).
+        """
+        radio_cls = self.radio_cls
+        base_image = self.backing_image
+        if base_image is not None:
+            radio = _radio_from_image_bytes(self.image_cls, base_image)
+        elif issubclass(radio_cls, chirp_common.CloneModeRadio) and self.memory_size > 0:
+            radio = _radio_from_image_bytes(radio_cls, bytes(self.memory_size))
+        else:
+            radio = _blank_radio_instance(radio_cls)
+        radio.status_fn = _make_status_logger()
+        return radio
+
+    def describing_instance(self) -> Optional[chirp_common.Radio]:
+        """The first instantiation of this driver that can describe itself, or None.
+
+        For everything derived from ``get_features()``: the image comes first
+        because some drivers read their capabilities out of the codeplug --
+        ``Rt98Radio`` advertises the PMR power levels (Low = 0.5W) blank and
+        the full Low/Mid/High set once an image is parsed, and CHIRP always
+        takes features from the open image. An instance only counts once
+        ``get_features()`` works on it, since that is the one thing every
+        caller wants; one that parses the image but cannot report features from
+        it falls through to the two blank constructors like a failed parse
+        (FINDINGS: blank-instances-misreport-state). None when nothing works --
+        callers decide whether that is an error.
+        """
+        radio_cls = self.radio_cls
+        factories: list[Callable[[], chirp_common.Radio]] = [
+            lambda: radio_cls(None),
+            lambda: radio_cls(""),
+        ]
+        image = self.backing_image
+        if image:
+            image_cls = self.image_cls
+            factories.insert(0, lambda: _radio_from_image_bytes(image_cls, image))
+        for factory in factories:
+            try:
+                radio = factory()
+                radio.get_features()
+                return radio
+            except Exception:
+                continue
+        return None
+
+    def features(self) -> Optional[chirp_common.RadioFeatures]:
+        """This driver's RadioFeatures, read from its image when it has one, else None."""
+        radio = self.describing_instance()
+        return radio.get_features() if radio is not None else None
+
+    @property
+    def memory_size(self) -> int:
+        """The clone image size the driver declares, or 0 for one that declares none."""
+        return int(getattr(self.radio_cls, "_memsize", 0) or 0)
 
     def record_unreadable_channels(self, numbers: Iterable[int]) -> None:
         """Record which memories failed to decode when the image was read.

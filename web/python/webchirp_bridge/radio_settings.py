@@ -19,7 +19,6 @@ from chirp import (
     settings as chirp_settings,
 )
 
-from webchirp_bridge.driver_cache import _best_effort_radio_instance
 from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.session import resolve_session
 
@@ -453,7 +452,7 @@ def get_radio_settings(session_id: str) -> dict[str, Any]:
     ):
         return _settings_unavailable_payload(SETTINGS_NEED_IMAGE_MESSAGE, requires_image=True)
 
-    radio = _best_effort_radio_instance(session)
+    radio = session.radio_instance()
     rf = radio.get_features()
     if not bool(getattr(rf, "has_settings", False)):
         return _settings_unavailable_payload(
@@ -485,7 +484,7 @@ def validate_radio_settings(
         return _settings_validation_payload(
             requires_image=True, message=SETTINGS_NEED_IMAGE_MESSAGE
         )
-    radio = _best_effort_radio_instance(session)
+    radio = session.radio_instance()
     try:
         result = _validate_and_apply_radio_settings(radio, settings_groups or [], apply_changes=False)
     except Exception as exc:

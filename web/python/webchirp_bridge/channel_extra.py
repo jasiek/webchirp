@@ -26,7 +26,6 @@ from chirp import (
     settings as chirp_settings,
 )
 
-from webchirp_bridge.driver_cache import _best_effort_radio_instance
 from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.radio_settings import _serialize_setting_value
 from webchirp_bridge.session import resolve_session
@@ -208,7 +207,7 @@ def get_channel_extra(session_id: str, location: Any) -> dict[str, Any]:
         )
     session = resolve_session(session_id)
     try:
-        radio = _best_effort_radio_instance(session)
+        radio = session.radio_instance()
         memory = radio.get_memory(number)
     except Exception as exc:
         _log_debug(f"Channel {number} extra settings unavailable: {exc}")

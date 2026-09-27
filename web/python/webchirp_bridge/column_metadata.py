@@ -14,10 +14,7 @@ from typing import TYPE_CHECKING
 from chirp import chirp_common
 
 from webchirp_bridge.channel_rows import CSV_HEADERS, _blank_csv_radio, _row_from_memory
-from webchirp_bridge.driver_cache import (
-    _blank_radio_instance,
-    _cached_or_blank_radio_instance,
-)
+from webchirp_bridge.radio_files import _blank_radio_instance
 from webchirp_bridge.power_levels import _power_level_watts
 from webchirp_bridge.session import resolve_session
 
@@ -200,7 +197,7 @@ def get_radio_column_metadata(session_id: str) -> dict[str, Any]:
     """RPC: build CHIRP-derived column editability/options metadata for the UI.
 
     Read from the session's image once it has one, for the same reason
-    ``_driver_features`` does (web/python/webchirp_bridge/driver_cache.py): a
+    ``RadioSession.features()`` does (web/python/webchirp_bridge/session.py): a
     driver whose capabilities live in the codeplug describes itself differently
     blank. The grid was the one consumer that disagreed -- it offered a blank
     ``Rt98Radio``'s PMR power levels while the upload preflight
@@ -212,7 +209,7 @@ def get_radio_column_metadata(session_id: str) -> dict[str, Any]:
     (dropUnsupportedPowerValues in web/js/ui/channel-table.js).
     """
     session = resolve_session(session_id)
-    radio = _cached_or_blank_radio_instance(session)
+    radio = session.describing_instance()
     if radio is None:
         # Nothing instantiable: go through the blank builder so the driver's
         # own constructor error reaches the debug panel, rather than reporting

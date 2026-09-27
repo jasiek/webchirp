@@ -34,7 +34,7 @@ for _number, _freq in ((1, 446006250), (2, 446093750)):
 if "_extra_session" in globals():
     close_session(_extra_session.session_id)
 _extra_session = open_radio_session("h777", "H777Radio")
-_image = _record_session_image(_extra_session, _radio, ImageOrigin.FILE)
+_image = _extra_session.record_radio(_radio, ImageOrigin.FILE)
 _rows, _unreadable = _radio_rows_from_instance(_radio)
 json.dumps({"rows": _rows, "imageBase64": base64.b64encode(_image).decode("ascii")})
 `;
@@ -51,7 +51,7 @@ import base64, json
 
 _cls = _import_radio_class("h777", "H777Radio")
 _base = _radio_from_image_bytes(_cls, base64.b64decode(_base_b64))
-_record_session_image(_extra_session, _base, ImageOrigin.FILE)
+_extra_session.record_radio(_base, ImageOrigin.FILE)
 
 _exported = export_image_base64(_extra_session.session_id, json.loads(_rows_json), [])
 _radio = _radio_from_image_bytes(_cls, base64.b64decode(_exported["imageBase64"]))

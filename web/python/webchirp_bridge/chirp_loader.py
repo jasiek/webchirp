@@ -21,7 +21,6 @@ from chirp import (
     directory,
 )
 
-from webchirp_bridge.driver_cache import _driver_features
 from webchirp_bridge.power_levels import _power_level_watts
 from webchirp_bridge.session import RadioSession
 
@@ -279,9 +278,7 @@ async def list_radio_features(
             # No user is working on these radios, so each is described through
             # an unopened session: the same builder the selected radio uses,
             # with no image and no registry entry to clean up.
-            features = _driver_features(
-                RadioSession.for_driver(entry["module"], entry["className"])
-            )
+            features = RadioSession.for_driver(entry["module"], entry["className"]).features()
         except Exception as exc:
             failed[key] = f"{type(exc).__name__}: {exc}"
             continue

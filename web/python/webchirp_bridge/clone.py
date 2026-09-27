@@ -18,10 +18,6 @@ from chirp import chirp_common
 from js import serial_prepare_clone
 
 from webchirp_bridge.channel_rows import _csv_text_for_rows
-from webchirp_bridge.driver_cache import (
-    _radio_from_image_bytes,
-    _record_session_image,
-)
 from webchirp_bridge.jsbridge import _await_js, _log_debug, _make_status_logger
 from webchirp_bridge.radio_memories import (
     _apply_rows_to_radio_instance,
@@ -177,17 +173,16 @@ def _upload_selected_radio_sync(
     # Only bytes read from the radio or a file may be written back: a synthetic
     # offline export is stored on the session but is not a backing image
     # (FINDINGS: offline-export-is-not-a-radio-image).
-    base_image = session.backing_image
-    if not base_image:
+    if not session.has_backing_image:
         raise RuntimePreconditionError(
             "No cached radio image for this model. Download from radio first, then upload."
         )
     # CHIRP does not re-detect on upload -- the class that downloaded the image
     # is the one that writes it back, and drivers like ga510 send their own
-    # program handshake from do_upload().
+    # program handshake from do_upload(); radio_instance() parses the session's
+    # image with that class.
     image_cls = session.image_cls
-    radio = _radio_from_image_bytes(image_cls, base_image)
-    radio.status_fn = _make_status_logger()
+    radio = session.radio_instance()
     radio.set_pipe(_new_serial_pipe(image_cls))
     _apply_rows_to_radio_instance(radio, rows, session)
     settings_result = _validate_and_apply_radio_settings(
@@ -197,7 +192,7 @@ def _upload_selected_radio_sync(
         raise RuntimeUnsupportedError("Radio settings validation failed before upload")
     _prepare_clone_session(image_cls)
     radio.sync_out()
-    _record_session_image(session, radio, session.image_origin)
+    session.record_radio(radio, session.image_origin)
     return {"uploaded": True, "settings": settings_result["settings"]}
 
 

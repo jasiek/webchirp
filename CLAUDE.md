@@ -27,10 +27,14 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   (pyserial stand-in over Web Serial), `session` (the `RadioSession` dataclass
   and registry: the radio the user is working on, with its clone image and
   the image's origin, the class detection resolved to and the channels that
-  would not decode; `open_session`/`close_session` are RPC methods and every
-  radio-bound method takes a `session_id`), `clone` (download/upload over the
-  serial port), `driver_cache` (radios built from a session's image or from
-  nothing, and image serialization), `channel_rows`, `power_levels`,
+  would not decode; `open_session`/`close_session` are RPC methods, every
+  radio-bound RPC method takes a `session_id` and resolves it once at its
+  entry point, and every helper below takes the `RadioSession`, which is
+  also the only thing that builds a radio instance from its state --
+  `radio_instance()`, `describing_instance()`, `features()` -- and records
+  one back with `record_radio()`), `clone` (download/upload over the serial
+  port), `radio_files` (the file detour CHIRP needs to parse or serialize an
+  image, and the blank constructor), `channel_rows`, `power_levels`,
   `row_validation`, `radio_memories`, `radio_settings`, `column_metadata`,
   `images`, plus `jsbridge` (JS-boundary helpers), `runtime_errors` and `rpc`
   (the `RPC_METHODS` table and `rpc_dispatch`). `__init__.py` only installs

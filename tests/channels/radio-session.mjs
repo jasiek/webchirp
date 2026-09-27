@@ -254,7 +254,7 @@ _rows_without_2 = [_row for _row in _rows if _row["Location"] != "2"]
 # The session whose read could not decode channel 2: its absence from the
 # rows is not a deletion.
 _protected = open_radio_session("h777", "H777Radio")
-_record_session_image(_protected, _seeded(), ImageOrigin.RADIO)
+_protected.record_radio(_seeded(), ImageOrigin.RADIO)
 _protected.record_unreadable_channels([2])
 _kept = load_image_base64(
     export_image_base64(_protected.session_id, _rows_without_2, [])["imageBase64"]
@@ -263,7 +263,7 @@ _kept = load_image_base64(
 # Another session for the same driver and the same image, which read it
 # cleanly: there the same rows mean channel 2 was deleted.
 _other = open_radio_session("h777", "H777Radio")
-_record_session_image(_other, _seeded(), ImageOrigin.RADIO)
+_other.record_radio(_seeded(), ImageOrigin.RADIO)
 _lost = load_image_base64(
     export_image_base64(_other.session_id, _rows_without_2, [])["imageBase64"]
 )
@@ -307,7 +307,7 @@ _radio = _cls(None)
 _radio._mmap = memmap.MemoryMapBytes(bytes(_radio._memsize))
 _radio.process_mmap()
 _source = open_radio_session("h777", "H777Radio")
-_record_session_image(_source, _radio, ImageOrigin.RADIO)
+_source.record_radio(_radio, ImageOrigin.RADIO)
 _image_b64 = export_image_base64(_source.session_id, [], [])["imageBase64"]
 close_session(_source.session_id)
 
