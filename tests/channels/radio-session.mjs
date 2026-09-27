@@ -421,6 +421,61 @@ test("the UI drops a response for a session it has since closed, and reuses a lo
   assert.deepEqual(closes, [slowSession]);
 });
 
+test("reselecting a radio whose session failed to open opens a fresh one", async () => {
+  const { document } = installFakeDom();
+  const { createUiController } = await import("../../web/js/ui.js");
+  const ui = createUiController();
+  const opens = [];
+  const closes = [];
+  let refuseOpens = 1;
+
+  const api = withRadioSessions({
+    listRadios: async () => ({ radios: CATALOG }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getRadioMetadata: async () => ({ headers: ["Location", "FastHeader"], columns: {} }),
+    getRadioSettings: async () => EMPTY_SETTINGS,
+    parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
+  });
+  // The first open fails the way a driver import or an isolated-runtime boot
+  // does; the next succeeds, as the runtime's own bootstrap retry would.
+  const open = api.openRadioSession;
+  api.openRadioSession = async (payload) => {
+    opens.push(payload.module);
+    if (refuseOpens > 0) {
+      refuseOpens -= 1;
+      throw new Error("runtime boot failed");
+    }
+    return open(payload);
+  };
+  const close = api.closeRadioSession;
+  api.closeRadioSession = async (payload) => {
+    closes.push(payload.sessionId);
+    return close(payload);
+  };
+  ui.setRuntimeApi(api);
+  await ui.init(true);
+
+  selectRadioBySearch(document, "FastCo Fast");
+  await flushMicrotasks();
+  assert.deepEqual(opens, ["fast"]);
+  assert.ok(!tableHeaderTexts(document).includes("FastHeader"), "the failed load applied nothing");
+
+  // Reselecting the same radio does not reuse the handle whose open was
+  // refused: a new session is opened and its load lands. The failed handle
+  // had no session in the runtime, so nothing is closed for it.
+  selectRadioBySearch(document, "FastCo Fast");
+  await flushMicrotasks();
+  assert.deepEqual(opens, ["fast", "fast"]);
+  assert.deepEqual(closes, []);
+  assert.ok(tableHeaderTexts(document).includes("FastHeader"));
+
+  // And once open, reselecting again is the usual no-op.
+  selectRadioBySearch(document, "FastCo Fast");
+  await flushMicrotasks();
+  assert.deepEqual(opens, ["fast", "fast"]);
+});
+
 test("an image load hands its session to the selection it makes", async () => {
   const { document, window } = installFakeDom();
   const { createUiController } = await import("../../web/js/ui.js");

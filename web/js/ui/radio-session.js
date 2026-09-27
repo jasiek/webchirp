@@ -21,30 +21,38 @@ export function createRadioSession(ctx) {
   // Close a handle's session in the runtime once its id is known. The id may
   // still be in flight when the selection moves on, so the close is chained on
   // it rather than on the handle; a session that never opened has nothing to
-  // close and the rejection is swallowed with the open's own.
+  // close, and its open's rejection was already reported by the load that
+  // awaited the id.
   function release(handle) {
     if (!handle || handle.closed) {
       return;
     }
     handle.closed = true;
-    handle.ready
-      .then((sessionId) => requireRuntimeApi(state).closeRadioSession({ sessionId }))
-      .catch((error) => {
-        log.logDebug(`RADIO SESSION close failed: ${error?.message || error}`);
-      });
+    handle.ready.then(
+      (sessionId) => requireRuntimeApi(state).closeRadioSession({ sessionId })
+        .catch((error) => {
+          log.logDebug(`RADIO SESSION close failed: ${error?.message || error}`);
+        }),
+      () => {},
+    );
   }
 
   // Open a session for a radio, or adopt one the runtime already opened for it
   // (an image load). Reselecting the radio the current session is for keeps
   // that session -- and with it the image a download put there -- rather than
   // opening another; anything else closes the current session first, so a
-  // response still in flight for it can be told from a current one.
+  // response still in flight for it can be told from a current one. A handle
+  // whose open failed is never kept: its ready promise is rejected for good,
+  // so reselecting the radio must open a fresh one for the retry to reach the
+  // runtime at all (a transient driver import or isolated-runtime boot
+  // failure is otherwise stuck until another radio is picked).
   function open(radio, adoptedSessionId = "") {
     const current = state.radioSession;
     if (
       !adoptedSessionId
       && current
       && !current.closed
+      && !current.failed
       && current.radio?.key === radio?.key
     ) {
       return current;
@@ -61,6 +69,9 @@ export function createRadioSession(ctx) {
       // reselection meanwhile does not start a second one.
       loading: false,
       closed: false,
+      // Set when the runtime refused to open the session; open() then treats
+      // the handle as spent rather than reusing it for the same radio.
+      failed: false,
       ready: null,
     };
     if (adoptedSessionId) {
@@ -80,7 +91,9 @@ export function createRadioSession(ctx) {
         });
       // Only the callers that await the id should see a failed open; without
       // this the same rejection would also surface as an unhandled one.
-      handle.ready.catch(() => {});
+      handle.ready.catch(() => {
+        handle.failed = true;
+      });
     }
     state.radioSession = handle;
     return handle;
