@@ -15,6 +15,7 @@ import {
 } from "./runtime-bootstrap.mjs";
 import { createSelectedDriverRuntime } from "./selected-driver-runtime.mjs";
 import { rpcDispatcherFor } from "./rpc-dispatch.mjs";
+import { runtimeErrorDetail } from "./runtime-errors.mjs";
 import {
   CHIRP_BUNDLE_DIR,
   createBrowserPythonSource,
@@ -655,10 +656,7 @@ export function createRuntimeRpcClient({
         }
         return await enqueueRuntimeCall(() => handler(payload));
       } catch (error) {
-        const detailedError =
-          (typeof error?.stack === "string" && error.stack) ||
-          error?.message ||
-          String(error);
+        const detailedError = runtimeErrorDetail(error);
 
         // A dismissed port chooser reaches here as a Python traceback like any
         // other failure, but it is not one: the user closed a dialog. Report it

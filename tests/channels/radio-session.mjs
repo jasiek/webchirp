@@ -15,6 +15,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { isPythonError } from "../../web/js/runtime-errors.mjs";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
 import {
   createDeferred,
@@ -144,10 +145,9 @@ test("a call on a closed session fails as a precondition that names the session"
     await assert.rejects(
       harness.rpc(method, { session_id: sessionId, ...params }),
       (error) => {
-        const message = String(error?.message || error);
-        assert.match(message, /RuntimePreconditionError/, `${method}: not a precondition error`);
-        assert.ok(message.includes(sessionId), `${method}: the message should name the session`);
-        assert.match(message, /is not open/, method);
+        assert.ok(isPythonError(error, "RuntimePreconditionError"), `${method}: not a precondition error`);
+        assert.ok(error.message.includes(sessionId), `${method}: the message should name the session`);
+        assert.match(error.message, /is not open/, method);
         return true;
       },
     );
@@ -156,7 +156,8 @@ test("a call on a closed session fails as a precondition that names the session"
   // An id that was never handed out fails the same way.
   await assert.rejects(
     harness.rpc("get_radio_settings", { session_id: "never-opened" }),
-    /RuntimePreconditionError.*never-opened.*is not open/s,
+    (error) => isPythonError(error, "RuntimePreconditionError")
+      && /never-opened.*is not open/s.test(error.message),
   );
 
   // The two methods that work without a radio read an empty id as "none
@@ -169,7 +170,7 @@ test("a call on a closed session fails as a precondition that names the session"
   // A driver that does not exist fails at open time, not on the first call.
   await assert.rejects(
     harness.rpc("open_session", { module_name: "no_such_driver", class_name: "Nope" }),
-    /ModuleNotFoundError/,
+    (error) => isPythonError(error, "ModuleNotFoundError"),
   );
 });
 
