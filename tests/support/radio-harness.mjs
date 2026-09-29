@@ -450,6 +450,10 @@ export class TestRadioHarness {
     this.pythonSource = null;
     this.pyodide = null;
     this.serialBridge = serialBridge;
+    // Open radio sessions by "module:class", so the codeplug methods below
+    // open one session per driver and reuse it -- a download's image has to
+    // be there for the upload that follows, the way it is in the browser.
+    this.sessionIds = new Map();
   }
 
   async init() {
@@ -510,6 +514,45 @@ export class TestRadioHarness {
     return JSON.parse(await this.runPython(python, vars));
   }
 
+  // The open session for a driver, opened on first use and reused after --
+  // the browser does the same for the selected radio. Returns the session id
+  // every radio-bound RPC method takes.
+  async session(moduleName, className) {
+    const key = `${moduleName}:${className}`;
+    if (!this.sessionIds.has(key)) {
+      await this.rpc("ensure_radio_module", { module_short_name: moduleName });
+      const opened = await this.rpc("open_session", {
+        module_name: moduleName,
+        class_name: className,
+      });
+      this.sessionIds.set(key, opened.sessionId);
+    }
+    return this.sessionIds.get(key);
+  }
+
+  // Make a session the one the codeplug methods use for its driver, closing
+  // the one they used before. An image load opens a session of its own for
+  // the driver the image names, and the write that follows has to see that
+  // image rather than whatever the driver's earlier session held.
+  async adoptSession(moduleName, className, sessionId) {
+    const key = `${moduleName}:${className}`;
+    const previous = this.sessionIds.get(key);
+    if (previous && previous !== sessionId) {
+      await this.rpc("close_session", { session_id: previous });
+    }
+    this.sessionIds.set(key, sessionId);
+  }
+
+  // Close a driver's session, so a later call opens a fresh one with no image.
+  async closeSession(moduleName, className) {
+    const key = `${moduleName}:${className}`;
+    const sessionId = this.sessionIds.get(key);
+    this.sessionIds.delete(key);
+    if (sessionId) {
+      await this.rpc("close_session", { session_id: sessionId });
+    }
+  }
+
   // The identity and line rate of one driver class, read off the class the
   // way the CLI needs them before it opens the port. No RPC method exposes
   // this -- the browser reads the same fields from the catalog -- so it stays
@@ -518,7 +561,7 @@ export class TestRadioHarness {
     await this.rpc("ensure_radio_module", { module_short_name: moduleName });
     return this.runPythonJson(
       `
-from webchirp_bridge.driver_cache import _import_radio_class
+from webchirp_bridge.session import _import_radio_class
 _cls = _import_radio_class(_sel_module, _sel_class)
 _baud = int(getattr(_cls, "BAUD_RATE", 0) or 9600)
 json.dumps({
@@ -555,8 +598,7 @@ json.dumps({
 
   async readCodeplug(moduleName, className) {
     return this.rpc("download_selected_radio", {
-      module_name: moduleName,
-      class_name: className,
+      session_id: await this.session(moduleName, className),
     });
   }
 
@@ -566,8 +608,7 @@ json.dumps({
     const normalizedRows = codeplug ? codeplug.rows || [] : rows || [];
     const normalizedSettings = codeplug ? codeplug.settings || [] : settingsGroups || [];
     return this.rpc("upload_selected_radio", {
-      module_name: moduleName,
-      class_name: className,
+      session_id: await this.session(moduleName, className),
       rows: normalizedRows,
       settings_groups: normalizedSettings,
     });
@@ -575,8 +616,7 @@ json.dumps({
 
   async readCodeplugBinary(moduleName, className) {
     const result = await this.rpc("get_cached_image_base64", {
-      module_name: moduleName,
-      class_name: className,
+      session_id: await this.session(moduleName, className),
     });
     return {
       ...result,
@@ -590,8 +630,7 @@ json.dumps({
     const normalizedRows = codeplug ? codeplug.rows || [] : rows || [];
     const normalizedSettings = codeplug ? codeplug.settings || [] : settingsGroups || [];
     const result = await this.rpc("export_image_base64", {
-      module_name: moduleName,
-      class_name: className,
+      session_id: await this.session(moduleName, className),
       rows: normalizedRows,
       settings_groups: normalizedSettings,
     });
@@ -601,10 +640,14 @@ json.dumps({
     };
   }
 
+  // Load an image the way the browser does: the runtime opens a session for
+  // the driver the image names, and that session becomes the one the other
+  // codeplug methods use for that driver.
   async loadCodeplugBinary(imageBytes) {
     const result = await this.rpc("load_image_base64", {
       image_b64: encodeBytesToBase64(imageBytes),
     });
+    await this.adoptSession(result.module, result.className, result.sessionId);
     return {
       ...result,
       image: Uint8Array.from(imageBytes || []),

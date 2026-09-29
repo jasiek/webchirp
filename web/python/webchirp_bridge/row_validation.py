@@ -23,12 +23,13 @@ from webchirp_bridge.channel_rows import (
     _row_from_memory,
     _row_text_values,
 )
-from webchirp_bridge.driver_cache import _best_effort_radio_instance, _driver_features
 from webchirp_bridge.power_levels import _level_map_for_radio
+from webchirp_bridge.session import resolve_optional_session
 
 if TYPE_CHECKING:
     from typing import Any, Literal, Optional
     from webchirp_bridge.channel_rows import Row, Rows
+    from webchirp_bridge.session import RadioSession
 
     # One invalid cell reported by the upload preflight: which row, which column,
     # and CHIRP's own message for it.
@@ -111,10 +112,10 @@ def _infer_csv_error_column(error_text: str) -> str:
 
 
 def _memory_bounds_for_driver(
-    module_name: str, class_name: str
+    session: Optional[RadioSession],
 ) -> Optional[tuple[int, int]]:
-    """Return a driver's (lo, hi) memory bounds, or None if unavailable."""
-    rf = _driver_features(module_name, class_name)
+    """Return the session driver's (lo, hi) memory bounds, or None if unavailable."""
+    rf = session.features() if session else None
     bounds = getattr(rf, "memory_bounds", None) if rf else None
     if not bounds:
         return None
@@ -123,15 +124,6 @@ def _memory_bounds_for_driver(
         return int(lo), int(hi)
     except Exception:
         return None
-
-
-def _radio_instance_for_row_validation(
-    module_name: str, class_name: str
-) -> chirp_common.Radio:
-    """Build the same image-backed radio that a later upload/export will use."""
-    return _best_effort_radio_instance(
-        module_name, class_name, require_cached=False
-    )
 
 
 def _immutable_field_errors(
@@ -331,21 +323,22 @@ def _issue(row_index: int, column: str, message: ValidationMessage) -> Validatio
     return {"rowIndex": int(row_index), "column": column, "message": str(message)}
 
 
-def validate_rows_for_upload(
-    rows: Rows, module_name: str = "", class_name: str = ""
-) -> dict[str, Any]:
-    """Validate rows with the selected driver and return errors and warnings."""
-    radio = (
-        _radio_instance_for_row_validation(module_name, class_name)
-        if module_name and class_name
-        else None
-    )
-    level_map = _level_map_for_radio(radio, module_name, class_name)
+def validate_rows_for_upload(rows: Rows, session_id: str = "") -> dict[str, Any]:
+    """RPC: validate rows with the session's driver and return errors and warnings.
+
+    An empty ``session_id`` means no radio is selected; the rows are then
+    checked against CHIRP's generic limits only, since nothing more specific
+    is known yet.
+    """
+    session = resolve_optional_session(session_id)
+    # The same image-backed radio a later upload or export will write to.
+    radio = session.radio_instance() if session else None
+    level_map = _level_map_for_radio(radio, session)
     # Location is checked here as well as in _apply_rows_to_radio_instance,
     # because that one raises partway through a clone: the radio is already
     # open and some memories written. Preflight is the only place a bad
     # Location can be reported while it is still just a highlighted cell.
-    bounds = _memory_bounds_for_driver(module_name, class_name)
+    bounds = _memory_bounds_for_driver(session)
     seen_locations: dict[int, int] = {}
     issues: list[ValidationIssue] = []
     warnings: list[ValidationIssue] = []

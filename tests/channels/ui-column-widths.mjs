@@ -26,13 +26,14 @@ import {
   selectRadioBySearch,
 } from "../support/fake-dom.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 const HEADERS = ["Location", "Name", "Frequency", "Duplex", "Comment"];
 
 async function renderGrid(rows, columns = {}) {
   const { document } = installFakeDom();
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({
       radios: [
         { vendor: "Acme", model: "One", module: "one", className: "OneRadio", key: "one:OneRadio", isLiveRadio: false },
@@ -43,7 +44,7 @@ async function renderGrid(rows, columns = {}) {
     getRadioMetadata: async () => ({ headers: HEADERS, columns }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers: HEADERS, rows, errors: [] }),
-  });
+  }));
 
   await ui.init(true);
   // Without a selected radio the driver's column metadata is never fetched.

@@ -29,31 +29,35 @@ export const RPC_METHODS = Object.freeze({
   import_all_driver_modules: Object.freeze(["module_short_names", RPC_CALLBACK_PARAM]),
   list_registered_radios: Object.freeze(["module_short_names"]),
   list_radio_features: Object.freeze(["module_short_names"]),
+  // web/python/webchirp_bridge/session.py -- every radio-bound method below
+  // takes the session_id these two hand out and take back.
+  open_session: Object.freeze(["module_name", "class_name"]),
+  close_session: Object.freeze(["session_id"]),
   // web/python/webchirp_bridge/column_metadata.py
   get_default_schema: Object.freeze([]),
-  get_radio_column_metadata: Object.freeze(["module_name", "class_name"]),
+  get_radio_column_metadata: Object.freeze(["session_id"]),
   // web/python/webchirp_bridge/channel_rows.py
   parse_csv: Object.freeze(["csv_text"]),
-  normalize_rows: Object.freeze(["rows", "module_name", "class_name"]),
+  normalize_rows: Object.freeze(["rows", "session_id"]),
   // web/python/webchirp_bridge/row_validation.py
-  validate_rows_for_upload: Object.freeze(["rows", "module_name", "class_name"]),
+  validate_rows_for_upload: Object.freeze(["rows", "session_id"]),
   // web/python/webchirp_bridge/channel_extra.py
-  get_channel_extra: Object.freeze(["module_name", "class_name", "location"]),
+  get_channel_extra: Object.freeze(["session_id", "location"]),
   // web/python/webchirp_bridge/radio_settings.py
-  get_radio_settings: Object.freeze(["module_name", "class_name"]),
-  validate_radio_settings: Object.freeze(["module_name", "class_name", "settings_groups"]),
+  get_radio_settings: Object.freeze(["session_id"]),
+  validate_radio_settings: Object.freeze(["session_id", "settings_groups"]),
   // web/python/webchirp_bridge/images.py
   read_image_metadata_base64: Object.freeze(["image_b64"]),
   load_image_base64: Object.freeze(["image_b64"]),
-  export_image_base64: Object.freeze(["module_name", "class_name", "rows", "settings_groups"]),
-  get_cached_image_base64: Object.freeze(["module_name", "class_name"]),
+  export_image_base64: Object.freeze(["session_id", "rows", "settings_groups"]),
+  get_cached_image_base64: Object.freeze(["session_id"]),
   // web/python/webchirp_bridge/serial_pipe.py
   webserial_connect: Object.freeze(["baudrate"]),
   webserial_disconnect: Object.freeze([]),
   webserial_txrx_hex: Object.freeze(["tx_hex", "rx_bytes", "timeout_ms"]),
   // web/python/webchirp_bridge/clone.py
-  download_selected_radio: Object.freeze(["module_name", "class_name"]),
-  upload_selected_radio: Object.freeze(["module_name", "class_name", "rows", "settings_groups"]),
+  download_selected_radio: Object.freeze(["session_id"]),
+  upload_selected_radio: Object.freeze(["session_id", "rows", "settings_groups"]),
 });
 
 // Check one call against RPC_METHODS and split it into what crosses the

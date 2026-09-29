@@ -124,8 +124,8 @@ json.dumps({"imageBase64": base64.b64encode(_img).decode("ascii")})
     assert.equal(loaded.className, "UVK5Radio");
 
     const settings = await harness.runPythonJson(
-      "json.dumps(get_radio_settings(_sel_module, _sel_class))",
-      { _sel_module: "uvk5", _sel_class: "UVK5Radio" },
+      "json.dumps(get_radio_settings(_sid))",
+      { _sid: loaded.sessionId },
     );
     assert.equal(settings.error, "", "uvk5 settings failed to build");
     assert.equal(settings.available, true);

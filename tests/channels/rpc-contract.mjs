@@ -80,6 +80,45 @@ test("the JS and Python RPC tables name the same methods with the same parameter
   }
 });
 
+// Each call of a session resolver in the package, with the top-level function
+// it sits in: a textual scan, since the rule is about where the call appears.
+function sessionResolverCalls() {
+  const dir = path.join(repoRoot, "web", "python", "webchirp_bridge");
+  const calls = [];
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith(".py") || name === "session.py") {
+      continue;
+    }
+    let enclosing = "";
+    for (const line of fs.readFileSync(path.join(dir, name), "utf8").split("\n")) {
+      const def = /^(?:async )?def (\w+)\(/.exec(line);
+      if (def) {
+        enclosing = def[1];
+      }
+      if (/\bresolve(?:_optional)?_session\(/.test(line) && !/^\s*(?:from|import)\b/.test(line)) {
+        calls.push({ file: name, function: enclosing });
+      }
+    }
+  }
+  return calls;
+}
+
+test("a session id is resolved once, at an RPC entry point, and nowhere below it", async () => {
+  // The id is what crosses from JS; the RadioSession is what the package
+  // passes around. A helper that resolved an id itself would be a second
+  // registry lookup per call and a second place a closed session could fail.
+  const harness = await sharedHarness();
+  const python = await pythonContract(harness);
+  const calls = sessionResolverCalls();
+  assert.ok(calls.length > 0, "the scan found no resolver calls; has the resolver been renamed?");
+  const outsideEntryPoints = calls.filter(({ function: name }) => !(name in python.methods));
+  assert.deepEqual(
+    outsideEntryPoints,
+    [],
+    "resolve_session is called outside an RPC method; take the RadioSession as a parameter instead",
+  );
+});
+
 test("every RPC method has a JS caller outside the table that declares it", () => {
   const files = sourceFiles([
     path.join(repoRoot, "web", "js"),

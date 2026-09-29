@@ -10,6 +10,7 @@ import {
   selectRadioBySearch,
   typeRadioSearch,
 } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // Installs the shared fake DOM and picks out the radio-search elements these
 // tests read and drive.
@@ -38,7 +39,7 @@ test("the selected-radio readout shows Loading... while CHIRP drivers are loadin
   const radioListDeferred = createDeferred();
   const ui = createUiController();
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: () => radioListDeferred.promise,
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
@@ -58,7 +59,7 @@ test("the selected-radio readout shows Loading... while CHIRP drivers are loadin
       rows: [],
       errors: [],
     }),
-  });
+  }));
 
   const initPromise = ui.init(true);
 
@@ -98,7 +99,7 @@ test("search box shows narrowing make+model suggestions", async () => {
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({
       radios: [
         { vendor: "Acme", model: "Alpha", module: "alpha", className: "AlphaRadio", key: "alpha:AlphaRadio", isLiveRadio: false },
@@ -111,7 +112,7 @@ test("search box shows narrowing make+model suggestions", async () => {
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
 
   await ui.init(true);
 
@@ -174,14 +175,14 @@ test("search suggestions disambiguate duplicates, cap results, and close on Esca
     });
   }
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
 
   await ui.init(true);
 
@@ -256,7 +257,7 @@ test("release labels are searchable and displayed without changing native varian
   const ui = createUiController();
   const metadataCalls = [];
   const settingsCalls = [];
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: RELEASE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: ["Location", "Name"] }),
@@ -269,7 +270,7 @@ test("release labels are searchable and displayed without changing native varian
       return releaseSettings(module);
     },
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
   await ui.init(true);
   typeRadioSearch(document, "v5.9.0");
   assert.deepEqual(suggestionLines(radioSearchResultsEl), [["Quansheng F4HWN — v5.9.0"]]);
@@ -295,7 +296,7 @@ test("returning to a loaded release while another release is pending requests th
   const pending = createDeferred();
   const metadataCalls = [];
   const settingsCalls = [];
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: RELEASE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: ["Location", "Name"] }),
@@ -310,7 +311,7 @@ test("returning to a loaded release while another release is pending requests th
       return releaseSettings(module);
     },
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
   await ui.init(true);
   selectRadioBySearch(document, "v5.9.0");
   await flushMicrotasks();
@@ -340,7 +341,7 @@ test("reselecting a release restored from a cookie or link preserves edits witho
     const ui = createUiController();
     const metadataCalls = [];
     const settingsCalls = [];
-    ui.setRuntimeApi({
+    ui.setRuntimeApi(withRadioSessions({
       listRadios: async () => ({ radios: RELEASE_TEST_CATALOG }),
       getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
       getDefaultSchema: async () => ({ headers: ["Location", "Name"] }),
@@ -353,7 +354,7 @@ test("reselecting a release restored from a cookie or link preserves edits witho
         return releaseSettings(module);
       },
       parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-    });
+    }));
     await ui.init(true);
     const control = document.querySelector("#settings-content").querySelector("input");
     assert.ok(control, `${source} should restore release settings`);
@@ -375,7 +376,7 @@ test("reselecting a returning release while its reload is pending still applies 
   let returning = false;
   const metadataCalls = [];
   const settingsCalls = [];
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: RELEASE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: ["Location", "Name"] }),
@@ -392,7 +393,7 @@ test("reselecting a returning release while its reload is pending still applies 
       return releaseSettings(isReload ? `${module}Reloaded` : module);
     },
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
   await ui.init(true);
   selectRadioBySearch(document, "v5.9.0");
   await flushMicrotasks();
@@ -402,8 +403,13 @@ test("reselecting a returning release while its reload is pending still applies 
   selectRadioBySearch(document, "v5.9.0");
   pending.resolve();
   await flushMicrotasks();
-  assert.deepEqual(metadataCalls, ["release0", "release1", "release0", "release0"]);
-  assert.deepEqual(settingsCalls, ["release0", "release1", "release0", "release0"]);
+  // v6.0.0 was abandoned before its session had even opened, so it is never
+  // asked for anything. Returning to v5.9.0 opens a fresh session (the first
+  // was closed when v6.0.0 was selected), which loads once; selecting it again
+  // while that load is pending keeps the same session and starts no second
+  // load.
+  assert.deepEqual(metadataCalls, ["release0", "release0"]);
+  assert.deepEqual(settingsCalls, ["release0", "release0"]);
   assert.ok(tableHeaderTexts(document).includes("release0Reloaded"));
   assert.ok(!tableHeaderTexts(document).includes("InitialHeader"));
   assert.equal(document.querySelector("#settings-tabs").textContent, "release0Reloaded settings");
@@ -415,7 +421,7 @@ test("stale metadata response does not overwrite a newer radio selection", async
   const ui = createUiController();
   const slowMetadata = createDeferred();
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
@@ -428,7 +434,7 @@ test("stale metadata response does not overwrite a newer radio selection", async
     },
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
 
   await ui.init(true);
 
@@ -470,7 +476,7 @@ test("reselecting the loaded radio rejects partial loads in either completion or
       columns: {},
     });
 
-    ui.setRuntimeApi({
+    ui.setRuntimeApi(withRadioSessions({
       listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
       getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
       getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
@@ -487,11 +493,11 @@ test("reselecting the loaded radio rejects partial loads in either completion or
           : settingsFor(module);
       },
       parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-    });
+    }));
 
     await ui.init(true);
-    // Complete Fast -> Alpha first so the final return to Alpha below must
-    // take reloadForSelectedRadio()'s no-new-request path from issue #111.
+    // Complete Fast -> Alpha first so Alpha is a fully loaded radio before
+    // the round trip through Slow below.
     selectRadioBySearch(document, "FastCo Fast");
     await flushMicrotasks();
     selectRadioBySearch(document, "Acme Alpha");
@@ -502,9 +508,10 @@ test("reselecting the loaded radio rejects partial loads in either completion or
     const alphaMetadataCalls = metadataCalls.filter((module) => module === "alpha").length;
     const alphaSettingsCalls = settingsCalls.filter((module) => module === "alpha").length;
 
-    // One half of Slow's load resolves before the other. Returning to Alpha
-    // must invalidate that work even though Alpha is already the last fully
-    // loaded radio, regardless of which half arrived first.
+    // One half of Slow's load resolves before the other. Selecting Slow closed
+    // Alpha's session, so returning to Alpha opens a new one and loads it
+    // again; Slow's late half belongs to a closed session and must be dropped
+    // whichever half it is.
     selectRadioBySearch(document, "SlowCo Slow");
     await flushMicrotasks();
     selectRadioBySearch(document, "Acme Alpha");
@@ -517,8 +524,8 @@ test("reselecting the loaded radio rejects partial loads in either completion or
 
     const headers = tableHeaderTexts(globalThis.document);
     assert.equal(radioSelectionNameEl.textContent, "Acme Alpha");
-    assert.equal(metadataCalls.filter((module) => module === "alpha").length, alphaMetadataCalls);
-    assert.equal(settingsCalls.filter((module) => module === "alpha").length, alphaSettingsCalls);
+    assert.equal(metadataCalls.filter((module) => module === "alpha").length, alphaMetadataCalls + 1);
+    assert.equal(settingsCalls.filter((module) => module === "alpha").length, alphaSettingsCalls + 1);
     assert.ok(headers.includes("alphaHeader"));
     assert.ok(!headers.includes("slowHeader"));
     assert.equal(globalThis.document.querySelector("#settings-tabs").textContent, "alpha settings");
@@ -531,7 +538,7 @@ test("picking a search suggestion names the radio in the readout and loads it on
   const ui = createUiController();
   const metadataCalls = [];
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
@@ -541,7 +548,7 @@ test("picking a search suggestion names the radio in the readout and loads it on
     },
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
 
   await ui.init(true);
   const callsAfterInit = metadataCalls.length;
@@ -588,7 +595,7 @@ test("search finds radios by their alias identities and names the matching alias
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({
       radios: [
         {
@@ -618,7 +625,7 @@ test("search finds radios by their alias identities and names the matching alias
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
 
   await ui.init(true);
 
@@ -652,7 +659,7 @@ test("live-mode radios are omitted from radio selection", async () => {
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({
       radios: [
         { vendor: "Acme", model: "Live", module: "live", className: "LiveRadio", key: "live:LiveRadio", isLiveRadio: true },
@@ -664,7 +671,7 @@ test("live-mode radios are omitted from radio selection", async () => {
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
 
   await ui.init(true);
 
@@ -684,7 +691,7 @@ test("the readout names the driver only when two entries share a name", async ()
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({
       radios: [
         { vendor: "Acme", model: "Twin", module: "twin_a", className: "TwinARadio", key: "twin_a:TwinARadio", isLiveRadio: false },
@@ -697,7 +704,7 @@ test("the readout names the driver only when two entries share a name", async ()
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
 
   await ui.init(true);
 
@@ -719,14 +726,14 @@ test("serial and clone actions stay disabled until a radio is selected", async (
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
 
-  ui.setRuntimeApi({
+  ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: STALE_TEST_CATALOG }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers: ["Location", "Name"], columns: {} }),
     getRadioSettings: async () => EMPTY_SETTINGS,
     parseCsv: async () => ({ headers: ["Location", "Name"], rows: [], errors: [] }),
-  });
+  }));
 
   await ui.init(true);
 

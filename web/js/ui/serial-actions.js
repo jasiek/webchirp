@@ -415,16 +415,15 @@ export function createSerialActions(ctx) {
     if (!state.selectedRadio) {
       return { valid: false, issues: [{ rowIndex: -1, column: "", message: "No radio selected." }] };
     }
+    const sessionId = await ctx.session.currentId();
     const [rowResult, settingsResult] = await Promise.all([
       requireRuntimeApi(state).validateRowsForUpload({
         rows: state.currentRows,
-        module: state.selectedRadio.module,
-        className: state.selectedRadio.className,
+        sessionId,
       }),
       requireRuntimeApi(state).validateRadioSettings({
         settings: ctx.settings.getGroups(),
-        module: state.selectedRadio.module,
-        className: state.selectedRadio.className,
+        sessionId,
       }),
     ]);
     const result = rowResult;
@@ -458,14 +457,15 @@ export function createSerialActions(ctx) {
     };
   }
 
-  // Re-read the selected radio's column metadata now that a clone image is
-  // cached for it. Guarded twice over, because a clone runs long enough for
-  // the user to move on: a selection that has changed belongs to a different
-  // radio's schema, and a metadata call that fails leaves the grid on the
-  // schema it already had -- neither is a reason to report the transfer that
-  // just succeeded as a failure, so both only reach the debug panel.
-  async function refreshMetadataForDownloadedRadio(radio) {
-    if (state.selectedRadio?.key !== radio.key) {
+  // Re-read the selected radio's column metadata now that its session holds
+  // a clone image. Guarded twice over, because a clone runs long enough for
+  // the user to move on: a session that is no longer current belongs to a
+  // different radio's schema, and a metadata call that fails leaves the grid
+  // on the schema it already had -- neither is a reason to report the
+  // transfer that just succeeded as a failure, so both only reach the debug
+  // panel.
+  async function refreshMetadataForDownloadedRadio(session) {
+    if (!ctx.session.isCurrent(session)) {
       return;
     }
     try {
@@ -482,21 +482,21 @@ export function createSerialActions(ctx) {
     }
     // Captured up front: a clone runs long enough for the user to pick a
     // different radio while it is in flight, and the outcome belongs to the
-    // radio the transfer actually ran against.
+    // radio -- and the session -- the transfer actually ran against.
     const radio = state.selectedRadio;
+    const session = ctx.session.current();
     const startedAt = Date.now();
     try {
       trackRadioEvent("radio_download", radio);
       log.setStatus(`Downloading from ${makeModelLabel(radio)}...`);
       beginCloneProgress(`Downloading from ${makeModelLabel(radio)}...`);
       const result = await requireRuntimeApi(state).downloadSelectedRadio({
-        module: radio.module,
-        className: radio.className,
+        sessionId: await ctx.session.idOf(session),
       });
       state.currentRows = result.rows;
-      // The schema comes after the rows, and only now: the download just
-      // cached this radio's image, and the runtime builds column metadata from
-      // that image (get_radio_column_metadata in
+      // The schema comes after the rows, and only now: the download just put
+      // this radio's image on its session, and the runtime builds column
+      // metadata from that image (get_radio_column_metadata in
       // web/python/webchirp_bridge/column_metadata.py). A driver whose
       // capabilities live in the codeplug -- Retevis RT98 publishes Low/Mid/High
       // loaded and only the PMR levels blank -- would otherwise leave the grid
@@ -504,7 +504,7 @@ export function createSerialActions(ctx) {
       // rows carry nor the ones the upload preflight would accept, and which
       // blanks them outright the next time the radio is re-selected
       // (dropUnsupportedPowerValues in web/js/ui/channel-table.js).
-      await refreshMetadataForDownloadedRadio(radio);
+      await refreshMetadataForDownloadedRadio(session);
       state.currentHeaders = state.radioMetadata.headers?.length
         ? state.radioMetadata.headers
         : (result.headers || []);
@@ -549,6 +549,7 @@ export function createSerialActions(ctx) {
     // change while the write is in flight, and every label, payload and event
     // below has to keep meaning the radio the upload started against.
     const radio = state.selectedRadio;
+    const session = ctx.session.current();
     const startedAt = Date.now();
     // Distinguishes a codeplug CHIRP itself rejected from a transfer that
     // reached the radio and failed there.
@@ -581,8 +582,7 @@ export function createSerialActions(ctx) {
       log.setStatus(`Uploading to ${makeModelLabel(radio)}...`);
       beginCloneProgress(`Uploading to ${makeModelLabel(radio)}...`);
       const uploadResult = await requireRuntimeApi(state).uploadSelectedRadio({
-        module: radio.module,
-        className: radio.className,
+        sessionId: await ctx.session.idOf(session),
         rows: state.currentRows,
         settings: ctx.settings.getGroups(),
       });

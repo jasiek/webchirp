@@ -26,9 +26,9 @@ from chirp import (
     settings as chirp_settings,
 )
 
-from webchirp_bridge.driver_cache import _best_effort_radio_instance
 from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.radio_settings import _serialize_setting_value
+from webchirp_bridge.session import resolve_session
 
 if TYPE_CHECKING:
     from typing import Any, Optional
@@ -186,10 +186,8 @@ def _channel_extra_payload(
     }
 
 
-def get_channel_extra(
-    module_name: str, class_name: str, location: Any
-) -> dict[str, Any]:
-    """Describe the extra settings the selected driver gives one memory slot.
+def get_channel_extra(session_id: str, location: Any) -> dict[str, Any]:
+    """RPC: describe the extra settings the session's driver gives one memory slot.
 
     Read from the driver rather than from the row, because only the driver
     knows each setting's type, option list and bounds -- the row carries bare
@@ -207,8 +205,9 @@ def get_channel_extra(
         return _channel_extra_payload(
             False, "This channel has no memory slot to read extra settings from."
         )
+    session = resolve_session(session_id)
     try:
-        radio = _best_effort_radio_instance(module_name, class_name)
+        radio = session.radio_instance()
         memory = radio.get_memory(number)
     except Exception as exc:
         _log_debug(f"Channel {number} extra settings unavailable: {exc}")

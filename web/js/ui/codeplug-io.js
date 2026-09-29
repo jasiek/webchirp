@@ -208,8 +208,9 @@ export function createCodeplugIo(ctx) {
     log.setStatus("Normalizing rows with CHIRP Python...");
     const csvText = await requireRuntimeApi(state).normalizeRows({
       rows: state.currentRows,
-      module: state.selectedRadio?.module || "",
-      className: state.selectedRadio?.className || "",
+      // Empty when no radio is selected: the rows are then rendered as CHIRP's
+      // generic CSV driver's own.
+      sessionId: await ctx.session.currentId(),
     });
     const fileName = buildExportFileName(
       state.selectedRadio?.vendor || "webchirp",
@@ -232,8 +233,7 @@ export function createCodeplugIo(ctx) {
     }
     log.setStatus("Preparing CHIRP binary codeplug...");
     const result = await requireRuntimeApi(state).exportImage({
-      module: state.selectedRadio.module,
-      className: state.selectedRadio.className,
+      sessionId: await ctx.session.currentId(),
       rows: state.currentRows,
       settings: ctx.settings.getGroups(),
     });
@@ -269,10 +269,13 @@ export function createCodeplugIo(ctx) {
         `Loaded image radio ${loaded.module}.${loaded.className} is not available in current radio catalog`,
       );
     }
-    // Rows first, then the schema built from them: the load cached this image,
-    // so the metadata call below reports the detected driver as the image
-    // configures it, and the row check it runs (dropUnsupportedPowerValues in
-    // web/js/ui/channel-table.js) has to measure this file's channels rather
+    // The session the selection just adopted: the one the load opened, which
+    // holds this image.
+    const imageSession = ctx.session.current();
+    // Rows first, then the schema built from them: the session holds this
+    // image, so the metadata call below reports the detected driver as the
+    // image configures it, and the row check it runs (dropUnsupportedPowerValues
+    // in web/js/ui/channel-table.js) has to measure this file's channels rather
     // than whatever the grid still held from before the import.
     //
     // Undone if that call fails, because everything that agrees with these rows
@@ -307,9 +310,9 @@ export function createCodeplugIo(ctx) {
     ctx.settings.updateViewButtons();
     ctx.settings.render();
     // The image has now supplied both the detected driver's schema and its
-    // settings. Keep the reload short-circuit aligned with that applied state,
-    // rather than whichever radio was last loaded through the dropdowns.
-    state.lastLoadedRadioKey = state.selectedRadio.key;
+    // settings, so its session counts as loaded: reselecting the radio must
+    // keep this state rather than reload a blank one.
+    ctx.session.markLoaded(imageSession);
     // Reported after the image has selected its radio, so the event names the
     // driver the file turned out to need rather than whatever was selected
     // before the load.

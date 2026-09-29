@@ -44,6 +44,7 @@ from webchirp_bridge.serial_pipe import (
     webserial_disconnect,
     webserial_txrx_hex,
 )
+from webchirp_bridge.session import close_session, open_session
 
 if TYPE_CHECKING:
     from typing import Any, Callable
@@ -63,6 +64,9 @@ RPC_METHODS: dict[str, Callable[..., Any]] = {
     "import_all_driver_modules": import_all_driver_modules,
     "list_registered_radios": list_registered_radios,
     "list_radio_features": list_radio_features,
+    # web/python/webchirp_bridge/session.py
+    "open_session": open_session,
+    "close_session": close_session,
     # web/python/webchirp_bridge/column_metadata.py
     "get_default_schema": get_default_schema,
     "get_radio_column_metadata": get_radio_column_metadata,

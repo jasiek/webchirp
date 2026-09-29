@@ -52,7 +52,9 @@ try:
         _loaded = load_image_base64(_image_b64)
     finally:
         _cls.get_memory = _real_get_memory
-    _exported = export_image_base64(_module, _class_name, _loaded["rows"], [])
+    # The session the failing load opened is the one that recorded the slot;
+    # exporting through it is what the browser's Export Binary does.
+    _exported = export_image_base64(_loaded["sessionId"], _loaded["rows"], [])
 finally:
     jsbridge.serial_log = _real_serial_log
 

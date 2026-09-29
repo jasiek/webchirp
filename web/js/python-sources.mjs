@@ -61,7 +61,7 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
   "webchirp_bridge/chirp_loader.py",
   "webchirp_bridge/clone.py",
   "webchirp_bridge/column_metadata.py",
-  "webchirp_bridge/driver_cache.py",
+  "webchirp_bridge/radio_files.py",
   "webchirp_bridge/images.py",
   "webchirp_bridge/jsbridge.py",
   "webchirp_bridge/power_levels.py",
@@ -71,6 +71,7 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
   "webchirp_bridge/rpc.py",
   "webchirp_bridge/runtime_errors.py",
   "webchirp_bridge/serial_pipe.py",
+  "webchirp_bridge/session.py",
 ]);
 
 // Where the CHIRP archive lives under web/ (and so under dist/), and the two

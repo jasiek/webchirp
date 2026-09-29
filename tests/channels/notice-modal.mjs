@@ -8,6 +8,7 @@ import test from "node:test";
 
 import { createNoticeModal } from "../../web/js/ui/notice-modal.js";
 import { closeVivifiedModals, installFakeDom, keydownEvent } from "../support/fake-dom.mjs";
+import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The four elements dom.js resolves for this modal, in the state index.html
 // ships them in.
@@ -103,11 +104,11 @@ test("Escape closes the notice first, leaving the modal underneath it open", asy
   try {
     const { createUiController } = await import("../../web/js/ui.js");
     const ui = createUiController();
-    ui.setRuntimeApi({
+    ui.setRuntimeApi(withRadioSessions({
       listRadios: async () => ({ radios: [] }),
       getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
       getDefaultSchema: async () => ({ headers: ["Location", "Name"] }),
-    });
+    }));
     await ui.init(true);
     closeVivifiedModals(document);
 

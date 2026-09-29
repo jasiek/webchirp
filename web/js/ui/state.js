@@ -17,12 +17,14 @@ export function createUiState() {
     // Radio catalog and the entry the user has selected.
     radioCatalog: [],
     selectedRadio: null,
+    // The runtime session for the selected radio, opened and replaced by
+    // web/js/ui/radio-session.js. selectedRadio and radioSession move
+    // together: a selection opens a session, and every radio-bound runtime
+    // call carries its id. A response is applied only while the handle it was
+    // made for is still this one, which is how a stale load is told from a
+    // current one -- by identity, not by counting.
+    radioSession: null,
     radioMetadata: { headers: [], columns: {} },
-    // Only the newest metadata/settings load may apply its results; older
-    // in-flight responses would otherwise overwrite state for a radio the user
-    // has already navigated away from.
-    radioLoadSequence: 0,
-    lastLoadedRadioKey: "",
     runtimeInfo: { chirpRevision: "" },
     currentEditorView: "channels",
     // Recorded on serial connect, reported back in pre-filled issue forms.
@@ -36,17 +38,6 @@ export function requireRuntimeApi(state) {
     throw new Error("Runtime API client is not initialized");
   }
   return state.runtimeApi;
-}
-
-// Metadata and settings loads are tagged with a token so results arriving after
-// the user has moved to another radio can be discarded.
-export function nextRadioLoadToken(state) {
-  state.radioLoadSequence += 1;
-  return state.radioLoadSequence;
-}
-
-export function isStaleRadioLoad(state, loadToken) {
-  return loadToken !== state.radioLoadSequence;
 }
 
 // Expose the live channel rows for debugging from the browser console. Defined
