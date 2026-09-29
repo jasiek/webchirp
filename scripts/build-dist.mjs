@@ -11,8 +11,11 @@ import {
 const ROOT = process.cwd();
 const DIST_DIR = path.join(ROOT, "dist");
 const WEB_DIR = path.join(ROOT, "web");
-const HASHED_EXTS = new Set([".js", ".css", ".py"]);
-const REWRITE_EXTS = new Set([".html", ".js", ".css"]);
+// .mjs is hashed and rewritten like .js: a hashed importer served next to a
+// stale, unhashed .mjs from the previous deploy links against exports that
+// module does not have yet, which fails the whole module graph.
+const HASHED_EXTS = new Set([".js", ".mjs", ".css", ".py"]);
+const REWRITE_EXTS = new Set([".html", ".js", ".mjs", ".css"]);
 // The CHIRP archive and manifest for the pinned revision
 // (scripts/build-chirp-bundle.mjs). Immutable by name like the hashed assets,
 // but named after the pin rather than their content, so they are neither
