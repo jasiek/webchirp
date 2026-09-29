@@ -180,6 +180,33 @@ json.dumps(_envelope)
   assert.equal(envelope.module, "chirp.errors");
   assert.equal(envelope.message, "Failed to communicate with radio");
   assert.deepEqual(envelope.js, { name: "NetworkError", message: "gone" });
+  assert.deepEqual(envelope.causes.map((cause) => cause.type), ["JsException"]);
+});
+
+test("a failure a driver re-raised under a generic message still classifies by its cause", async () => {
+  // iradio_uv_5118plus catches "Block failed checksum!" and raises "Failed to
+  // read block" while handling it; the envelope names the inner failure, so
+  // error_kind is checksum rather than other.
+  const harness = await sharedHarness();
+  const envelope = await harness.runPythonJson(`
+from chirp import errors as _chirp_errors
+from webchirp_bridge.rpc import rpc_error_envelope as _rpc_error_envelope
+try:
+    try:
+        raise _chirp_errors.RadioError("Block failed checksum!")
+    except _chirp_errors.RadioError:
+        raise _chirp_errors.RadioError("Failed to read block at 0x0040")
+except _chirp_errors.RadioError as _outer:
+    _envelope = _rpc_error_envelope(_outer)
+json.dumps(_envelope)
+  `);
+  assert.equal(envelope.message, "Failed to read block at 0x0040");
+  assert.deepEqual(envelope.causes, [{ type: "RadioError", message: "Block failed checksum!" }]);
+
+  const { unwrapRpcEnvelope } = await import("../../web/js/rpc-dispatch.mjs");
+  const error = await failure(Promise.resolve().then(() => unwrapRpcEnvelope("download", { ok: false, error: envelope })));
+  assert.deepEqual(error.pythonCauses, [{ type: "RadioError", message: "Block failed checksum!" }]);
+  assert.equal(classifyErrorKind(error), "checksum");
 });
 
 test("a dismissed port chooser is still classified port_not_selected after crossing Python", async () => {

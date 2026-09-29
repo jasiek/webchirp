@@ -64,7 +64,7 @@ export function pythonTraceback(type, message, module = defaultModule(type), fil
 }
 
 // The error envelope rpc_error_envelope would build for one exception.
-export function errorEnvelope(type, message, { module, bases, traceback, js = null } = {}) {
+export function errorEnvelope(type, message, { module, bases, traceback, causes = [], js = null } = {}) {
   const resolvedModule = module ?? defaultModule(type);
   return {
     type,
@@ -72,6 +72,7 @@ export function errorEnvelope(type, message, { module, bases, traceback, js = nu
     module: resolvedModule,
     message,
     traceback: traceback ?? pythonTraceback(type, message, resolvedModule),
+    causes,
     js,
   };
 }

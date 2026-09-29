@@ -121,6 +121,23 @@ def rpc_method_parameters(method: str) -> list[str]:
     return list(inspect.signature(RPC_METHODS[method]).parameters)
 
 
+def _exception_chain(exc: BaseException) -> list[BaseException]:
+    """List ``exc`` and every exception below it, outermost first.
+
+    Follows ``__cause__``, then ``__context__``, as the traceback does, so a
+    driver's ``RadioError`` raised while handling a serial or checksum failure
+    leads to that failure. Guarded against a cycle, which Python allows.
+    """
+    chain: list[BaseException] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    return chain
+
+
 def _js_cause(exc: BaseException) -> dict[str, str] | None:
     """Name the JS error behind ``exc``, if a rejected JS call raised it.
 
@@ -129,21 +146,33 @@ def _js_cause(exc: BaseException) -> dict[str, str] | None:
     ``message`` as attributes. Those are what the browser branches on (a
     dismissed chooser is recognised by its name), so they are lifted out here
     rather than left for JS to parse back out of the traceback. Walks the
-    ``__cause__``/``__context__`` chain because a driver may re-raise a serial
-    failure as a ``RadioError`` of its own, and that is the exception that
-    reaches the dispatcher; the first ``JsException`` found is the answer.
+    exception chain because a driver may re-raise a serial failure as a
+    ``RadioError`` of its own, and that is the exception that reaches the
+    dispatcher; the first ``JsException`` found is the answer.
     """
-    seen: set[int] = set()
-    current: BaseException | None = exc
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
+    for current in _exception_chain(exc):
         if JsException is not None and isinstance(current, JsException):
             return {
                 "name": str(getattr(current, "name", "") or ""),
                 "message": str(getattr(current, "message", "") or ""),
             }
-        current = current.__cause__ or current.__context__
     return None
+
+
+def _python_causes(exc: BaseException) -> list[dict[str, str]]:
+    """Name each exception ``exc`` was raised from or while handling.
+
+    A driver often catches a specific failure and re-raises a generic one --
+    ``iradio_uv_5118plus`` turns "Block failed checksum!" into "Failed to read
+    block" -- so the outer message alone can hide what went wrong. JS
+    classifies a failure by what it said (``classifyErrorKind``,
+    ``web/js/ui/analytics.js``), and these messages are part of what it said;
+    the traceback's frames, which are not, stay out.
+    """
+    return [
+        {"type": type(current).__name__, "message": str(current)}
+        for current in _exception_chain(exc)[1:]
+    ]
 
 
 def rpc_error_envelope(exc: Exception) -> dict[str, Any]:
@@ -157,8 +186,9 @@ def rpc_error_envelope(exc: Exception) -> dict[str, Any]:
     ``BaseException`` (``object`` excluded) so JS can match a subclass by the
     base it tests for, ``message`` is ``str(exc)`` alone -- the sentence a user
     can be shown -- and ``traceback`` is the full formatted text the debug panel
-    prints. ``js`` is the JS error under a ``JsException`` (``_js_cause``), or
-    ``None``.
+    prints. ``causes`` names the exceptions it was chained from, nearest first
+    (``_python_causes``), and ``js`` is the JS error under a ``JsException``
+    (``_js_cause``), or ``None``.
     """
     cls = type(exc)
     return {
@@ -167,6 +197,7 @@ def rpc_error_envelope(exc: Exception) -> dict[str, Any]:
         "module": cls.__module__,
         "message": str(exc),
         "traceback": "".join(traceback.format_exception(exc)),
+        "causes": _python_causes(exc),
         "js": _js_cause(exc),
     }
 
