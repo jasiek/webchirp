@@ -31,11 +31,10 @@ const CHIRP_REVISION = DEFAULT_CHIRP_REVISION;
 const DRIVER_SET = driverSetFromSearch(globalThis.location?.search);
 
 // Where the browser fetches each runtime Python file from, keyed the way
-// RUNTIME_PYTHON_FILES (web/js/python-sources.mjs) names them. The literals
-// live in this .js file because scripts/build-dist.mjs rewrites references to
-// their hashed names in .js files and copies .mjs files verbatim; the provider
-// refuses to construct if a listed file has no URL here, and
-// tests/build/build-dist.mjs checks the pairing statically.
+// RUNTIME_PYTHON_FILES (web/js/python-sources.mjs) names them. Each literal is
+// what scripts/build-dist.mjs rewrites to the file's hashed name, so every file
+// needs one; the provider refuses to construct if a listed file has no URL
+// here, and tests/build/build-dist.mjs checks the pairing statically.
 const RUNTIME_PYTHON_URLS = Object.freeze({
   "runtime_bridge.py": "./python/runtime_bridge.py",
   "webchirp_bridge/__init__.py": "./python/webchirp_bridge/__init__.py",

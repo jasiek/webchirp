@@ -172,6 +172,42 @@ test("a dependency-only change moves the importer to a new URL", async () => {
   );
 });
 
+// The shared logic modules are .mjs, imported by the hashed .js modules. Left
+// unhashed, a new importer can be served beside the previous deploy's cached
+// copy of the module and fail to link against an export it does not have yet,
+// which blanks the whole app. So an .mjs is renamed after its bytes, an .mjs
+// that imports another is rewritten, and a change to either moves the .js
+// importer to a new URL.
+test("an .mjs module is hashed and its importers follow its new name", async () => {
+  // A .js importer of an .mjs module that itself imports another .mjs.
+  function mjsTree(errorsBody) {
+    return {
+      ...appTree("export const leaf = 1;\n"),
+      "js/app.js":
+        'import { dispatch } from "./dispatch.mjs";\n' +
+        'import { leaf } from "./ui/leaf.js";\n' +
+        "export const value = [dispatch, leaf];\n",
+      "js/dispatch.mjs": 'import { describe } from "./errors.mjs";\nexport const dispatch = describe;\n',
+      "js/errors.mjs": errorsBody,
+    };
+  }
+  const before = await build(mjsTree("export const describe = 1;\n"));
+  const after = await build(mjsTree("export const describe = 1;\nexport const added = 2;\n"));
+
+  assertNoUrlNamesTwoContents(before, after);
+  for (const emitted of [before, after]) {
+    assert.ok(!emitted.has("js/errors.mjs") && !emitted.has("js/dispatch.mjs"), "no .mjs ships unhashed");
+  }
+  for (const stem of ["js/errors", "js/dispatch", "js/app"]) {
+    assert.notEqual(hashedNameOf(after, stem), hashedNameOf(before, stem), `${stem} should move`);
+  }
+  assert.ok(
+    after.get(hashedNameOf(after, "js/dispatch")).toString("utf8")
+      .includes(path.basename(hashedNameOf(after, "js/errors"))),
+    "an .mjs importer should import the dependency's hashed name",
+  );
+});
+
 test("every hashed name is the digest of the bytes served under it", async () => {
   const emitted = await build(appTree("export const leaf = 1;\n"));
   let checked = 0;
@@ -399,14 +435,13 @@ test("module paths named in comments are canonical and resolve", () => {
 });
 
 // The Python runtime is fetched file by file, and each file is hashed, so every
-// one needs a URL literal somewhere the build rewrites -- a .js, .html or .css
-// source under web/. A literal in an .mjs file is copied verbatim and 404s in a
-// deploy; a file with no literal at all is fetched under its unhashed name and
-// 404s the same way. Both looked fine locally, where the dev server serves the
+// one needs a URL literal somewhere the build rewrites -- a .js, .mjs, .html or
+// .css source under web/. A file with no literal at all is fetched under its
+// unhashed name and 404s in a deploy. Both looked fine locally, where the dev server serves the
 // unhashed tree, which is why this is checked against the source tree here.
 test("every runtime Python file has a URL the build can rewrite", () => {
   const rewritten = sourceFiles(webDir)
-    .filter((file) => [".js", ".html", ".css"].includes(path.extname(file)))
+    .filter((file) => [".js", ".mjs", ".html", ".css"].includes(path.extname(file)))
     .map((file) => readFileSync(file, "utf8"))
     .join("\n");
   const deployedPythonFiles = [
