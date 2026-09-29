@@ -77,6 +77,15 @@ test("classifyErrorKind reads a runtime failure's sentence, not its traceback fr
   assert.equal(classifyErrorKind(pythonError("RadioError", "Something unexpected", { traceback })), "other");
 });
 
+test("classifyErrorKind reads the Python exceptions a runtime failure was chained from", () => {
+  // A driver that re-raises a checksum failure as a generic RadioError has
+  // still said checksum; the envelope carries the inner message as a cause.
+  const rewrapped = pythonError("RadioError", "Failed to read block at 0x0040", {
+    causes: [{ type: "RadioError", message: "Block failed checksum!" }],
+  });
+  assert.equal(classifyErrorKind(rewrapped), "checksum");
+});
+
 test("classifyErrorKind reads the JS error name under a runtime failure", () => {
   // The serial transport reports through DOMException names; through Python
   // they arrive as the jsCause of a JsException.

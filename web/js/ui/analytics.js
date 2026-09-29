@@ -107,12 +107,17 @@ const TEXT_ERROR_KINDS = [
   ["runtime_unavailable", /runtime api client is not initialized|loadpyodide|\bwasm\b/i],
 ];
 
-// What a failure said, for TEXT_ERROR_KINDS: a runtime failure's message plus
-// the JS error it wraps, or any other error's full detail.
+// What a failure said, for TEXT_ERROR_KINDS: a runtime failure's message, the
+// messages of the Python exceptions it was chained from -- a driver that
+// re-raises "Block failed checksum!" as "Failed to read block" has said
+// checksum -- and the JS error it wraps; or any other error's full detail.
 function classifiableText(error) {
   if (isRuntimeCallError(error)) {
-    const cause = error.jsCause ? `\n${error.jsCause.name}: ${error.jsCause.message}` : "";
-    return `${error.message}${cause}`;
+    const causes = (error.pythonCauses || []).map((cause) => `${cause.type}: ${cause.message}`);
+    if (error.jsCause) {
+      causes.push(`${error.jsCause.name}: ${error.jsCause.message}`);
+    }
+    return [error.message, ...causes].join("\n");
   }
   return errorDetails(error);
 }

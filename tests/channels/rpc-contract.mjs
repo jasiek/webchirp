@@ -226,7 +226,7 @@ test("a raised RuntimePreconditionError answers with an error envelope, not a re
   assert.equal(reply.ok, false);
   assert.deepEqual(
     Object.keys(reply.error).sort(),
-    ["bases", "js", "message", "module", "traceback", "type"],
+    ["bases", "causes", "js", "message", "module", "traceback", "type"],
   );
   assert.equal(reply.error.type, "RuntimePreconditionError");
   assert.equal(reply.error.module, "webchirp_bridge.runtime_errors");
