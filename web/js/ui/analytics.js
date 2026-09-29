@@ -18,6 +18,8 @@
 //     nowhere; tests/channels/ga-dimensions.mjs fails the build if it is not.
 
 import { errorDetails } from "./format.js";
+import { isRuntimeCallError, jsErrorName } from "../runtime-errors.mjs";
+import { isPortSelectionCancelled } from "../serial-errors.js";
 
 export { trackEvent } from "../analytics.js";
 
@@ -73,15 +75,30 @@ export function codeplugParams(state) {
   };
 }
 
-// Failure causes worth telling apart in reporting, matched against the whole
-// error detail rather than its first line: a Pyodide failure arrives as a
-// Python traceback whose first line is always "Traceback (most recent call
-// last):" and whose cause is on the last. First match wins, so the specific
-// patterns come before the general ones.
-const ERROR_KINDS = [
-  ["port_not_selected", /no port selected|no device selected|notfounderror/i],
-  ["permission_denied", /notallowederror|securityerror|permission (?:was )?denied|access denied/i],
-  ["serial_disconnect", /device has been lost|device lost|port is (?:closed|already open)|networkerror/i],
+// Failure causes the browser names with a JS error name. The port chooser and
+// the serial transport report through DOMException names, so these are read
+// off the error -- or, for a failure that came back through Python, off the JS
+// error the JsException carried (jsErrorName, web/js/runtime-errors.mjs) --
+// rather than searched for in text. A dismissed chooser is the bridge's named
+// cancellation once translated and a raw NotFoundError before it is.
+const JS_ERROR_KINDS = new Map([
+  ["NotFoundError", "port_not_selected"],
+  ["NotAllowedError", "permission_denied"],
+  ["SecurityError", "permission_denied"],
+  ["NetworkError", "serial_disconnect"],
+]);
+
+// Failure causes that exist only as wording: a CHIRP driver says "Radio did
+// not respond" with a bare RadioError, and a checksum or ident failure has no
+// class of its own either, so for these the sentence is all there is. They are
+// matched against what the failure said -- a runtime failure's message and the
+// JS error under it, never its traceback, whose file and function names
+// ("timeout.py", "_do_ident") would otherwise match patterns meant for the
+// sentence. First match wins, so the specific patterns come before the general
+// ones.
+const TEXT_ERROR_KINDS = [
+  ["permission_denied", /permission (?:was )?denied|access denied/i],
+  ["serial_disconnect", /device has been lost|device lost|port is (?:closed|already open)/i],
   ["no_response", /did not respond|not responding|no response|no data received/i],
   ["timeout", /timed out|timeout/i],
   ["ident_mismatch", /\bident\b|magic|incorrect model|wrong radio|model mismatch/i],
@@ -90,10 +107,29 @@ const ERROR_KINDS = [
   ["runtime_unavailable", /runtime api client is not initialized|loadpyodide|\bwasm\b/i],
 ];
 
+// What a failure said, for TEXT_ERROR_KINDS: a runtime failure's message plus
+// the JS error it wraps, or any other error's full detail.
+function classifiableText(error) {
+  if (isRuntimeCallError(error)) {
+    const cause = error.jsCause ? `\n${error.jsCause.name}: ${error.jsCause.message}` : "";
+    return `${error.message}${cause}`;
+  }
+  return errorDetails(error);
+}
+
+// Map a failure onto the fixed error_kind vocabulary: by type first, then, for
+// the causes that have no type, by what the failure said.
 export function classifyErrorKind(error) {
-  const detail = errorDetails(error);
-  for (const [kind, pattern] of ERROR_KINDS) {
-    if (pattern.test(detail)) {
+  if (isPortSelectionCancelled(error)) {
+    return "port_not_selected";
+  }
+  const byName = JS_ERROR_KINDS.get(jsErrorName(error));
+  if (byName) {
+    return byName;
+  }
+  const text = classifiableText(error);
+  for (const [kind, pattern] of TEXT_ERROR_KINDS) {
+    if (pattern.test(text)) {
       return kind;
     }
   }
@@ -105,21 +141,28 @@ export function classifyErrorKind(error) {
 // throws away — an unrecognized failure still reports as, say, RadioError
 // rather than collapsing into "other" with nothing to go on.
 //
-// Scans from the end because a Python traceback names its exception on the last
-// line, while a JS error names it on the first and is followed by stack frames.
+// A runtime failure names its Python class and a JS error its own name. The
+// one text fallback is for a Python failure that never crossed rpc_dispatch: a
+// PythonError raised while seeding the runtime, before the dispatcher exists,
+// reaches here flattened into a fresh Error (web/js/runtime-rpc.js) whose text
+// names the exception on the traceback's last line.
 export function errorTypeName(error) {
-  const lines = errorDetails(error)
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    // "chirp.errors.RadioError: Radio did not respond" -> RadioError.
-    const name = lines[i].match(/^([\w.]+)\s*:/)?.[1]?.split(".").pop();
-    if (name && /(?:Error|Exception)$/.test(name)) {
-      return name;
+  if (isRuntimeCallError(error)) {
+    return error.pythonType;
+  }
+  const detail = errorDetails(error);
+  if (detail.includes("Traceback (most recent call last):")) {
+    const lines = detail.split("\n").map((line) => line.trim()).filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      // "ModuleNotFoundError: No module named 'chirp'" -> ModuleNotFoundError.
+      const name = lines[i].match(/^([\w.]+)\s*:/)?.[1]?.split(".").pop();
+      if (name && /(?:Error|Exception)$/.test(name)) {
+        return name;
+      }
     }
   }
-  return "";
+  const name = typeof error?.name === "string" ? error.name : "";
+  return /(?:Error|Exception)$/.test(name) ? name : "";
 }
 
 // The column of the first preflight issue, for reporting which fields block

@@ -110,11 +110,13 @@ export function createDebugLog({ dom, notice } = {}) {
   // so it gets the modal (web/js/ui/notice-modal.js) rather than the treatment
   // a defect gets, for the same reasons a cancellation does: it does not open
   // the debug panel in the user's face, it does not become the title of their
-  // next bug report, and it is not reported to Sentry (IGNORE_ERRORS,
+  // next bug report, and it is not reported to Sentry (isIgnoredError,
   // web/js/sentry.js drops it by exception class).
   //
   // The full traceback still goes to the panel, unconditionally: whatever the
-  // UI makes of a failure, the panel is where all of it lands.
+  // UI makes of a failure, the panel is where all of it lands. details is
+  // errorDetails() (web/js/ui/format.js), which for a runtime failure is its
+  // Python traceback rather than the one-line message the error carries.
   function reportActionBlocked(action, error, details) {
     const sentence = runtimeErrorSentence(error);
     logDebug(`${action.toUpperCase()} BLOCKED\n${details}`);

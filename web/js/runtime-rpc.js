@@ -15,7 +15,7 @@ import {
 } from "./runtime-bootstrap.mjs";
 import { createSelectedDriverRuntime } from "./selected-driver-runtime.mjs";
 import { rpcDispatcherFor } from "./rpc-dispatch.mjs";
-import { runtimeErrorDetail } from "./runtime-errors.mjs";
+import { isRuntimeCallError, runtimeErrorDetail } from "./runtime-errors.mjs";
 import {
   CHIRP_BUNDLE_DIR,
   createBrowserPythonSource,
@@ -656,14 +656,16 @@ export function createRuntimeRpcClient({
         }
         return await enqueueRuntimeCall(() => handler(payload));
       } catch (error) {
+        // For a runtime failure, its Python traceback followed by the JS
+        // frames of the call; for anything else, its own stack.
         const detailedError = runtimeErrorDetail(error);
 
-        // A dismissed port chooser reaches here as a Python traceback like any
-        // other failure, but it is not one: the user closed a dialog. Report it
-        // as one quiet line and hand the caller the sentence rather than the
-        // traceback, so the UI can say what happened instead of showing a stack
-        // nobody can act on. The name is restored because `new Error` below
-        // would otherwise drop it on the way out of the runtime.
+        // A dismissed port chooser reaches here as a RuntimeCallError like any
+        // other failure through Python, but it is not one: the user closed a
+        // dialog. Report it as one quiet line and hand the caller the plain
+        // named cancellation rather than the Python wrapper around it, so the
+        // UI can say what happened instead of showing a stack nobody can act
+        // on.
         if (isPortSelectionCancelled(error)) {
           if (logDebug) {
             logDebug(`RUNTIME ${PORT_SELECTION_CANCELLED_MESSAGE}`);
@@ -686,10 +688,16 @@ export function createRuntimeRpcClient({
           logDebug(`RUNTIME ERROR ${detailedError}`, { isError: true });
         }
 
-        // Carry the classification onto the error leaving the runtime. Without
-        // it the action-level funnel sees an ordinary failure and files a
-        // second Sentry event for the crash just reported above.
-        const outgoing = new Error(detailedError);
+        // A Python failure leaves as the RuntimeCallError it arrived as: its
+        // type, bases and traceback are what every caller classifies it by.
+        // Anything else -- a native JS failure, or a bootstrap PythonError
+        // raised while seeding, before rpc_dispatch exists -- is flattened into
+        // a fresh Error carrying the whole detail, as it always was.
+        //
+        // Either way the classification is carried onto the error leaving the
+        // runtime. Without it the action-level funnel sees an ordinary failure
+        // and files a second Sentry event for the crash just reported above.
+        const outgoing = isRuntimeCallError(error) ? error : new Error(detailedError);
         throw reportedAsCrash ? markBootstrapFailure(outgoing) : outgoing;
       }
     };
