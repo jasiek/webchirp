@@ -90,7 +90,7 @@ export function findCatalogRadioForImageMetadata(radioCatalog, metadata) {
 // surfacing the same error. Pyodide surfaces the Python traceback as the error
 // message, so the class name is the contract; see the Python docstring.
 export function isImageDetectionFailure(error) {
-  return /\bImageDetectionError\b/.test(String(error?.message || error || ""));
+  return /\bImageDetectionError\b/.test(String(error?.pythonTraceback || error?.message || error || ""));
 }
 
 // Detection after a fast-path resolve, with the all-drivers sweep as a

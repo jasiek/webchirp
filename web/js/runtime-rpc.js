@@ -1,5 +1,4 @@
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs";
-import { errorDetails } from "./error-details.mjs";
 import { createCallQueue } from "./call-queue.mjs";
 import {
   PORT_SELECTION_CANCELLED_MESSAGE,
@@ -16,6 +15,7 @@ import {
 } from "./runtime-bootstrap.mjs";
 import { createSelectedDriverRuntime } from "./selected-driver-runtime.mjs";
 import { rpcDispatcherFor } from "./rpc-dispatch.mjs";
+import { runtimeErrorDetail } from "./runtime-errors.mjs";
 import {
   CHIRP_BUNDLE_DIR,
   createBrowserPythonSource,
@@ -656,7 +656,7 @@ export function createRuntimeRpcClient({
         }
         return await enqueueRuntimeCall(() => handler(payload));
       } catch (error) {
-        const detailedError = errorDetails(error);
+        const detailedError = runtimeErrorDetail(error);
 
         // A dismissed port chooser reaches here as a Python traceback like any
         // other failure, but it is not one: the user closed a dialog. Report it
