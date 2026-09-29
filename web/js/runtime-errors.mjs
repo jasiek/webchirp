@@ -8,6 +8,8 @@
 // Python class names are the contract and they are stated once, in this module,
 // rather than at each call site.
 
+import { errorDetails } from "./error-details.mjs";
+
 // A Python exception that crossed rpc_dispatch, as a JS Error. name is the
 // Python class name, so Sentry titles and groups the event by it and a stack
 // trace reads "RadioError: Radio did not respond"; message is str(exc) alone,
@@ -62,63 +64,47 @@ export function jsErrorName(error) {
   return typeof error?.name === "string" ? error.name : "";
 }
 
-// Text the old regex classifiers read: the traceback for a runtime failure,
-// the message for anything else. Transitional -- the classifiers below move to
-// type checks in the next change and this goes with them.
-function legacyErrorText(error) {
-  if (isRuntimeCallError(error)) {
-    return error.pythonTraceback;
-  }
-  return String(error?.message || error || "");
-}
-
 // A step the user has not taken yet, rather than something that went wrong:
 // pressing Upload before anything has been downloaded is the case this exists
 // for. The message is already the instruction that fixes it, which is why the
 // UI answers with a modal (web/js/ui/notice-modal.js) instead of a traceback in
-// the debug panel, and why the event never reaches Sentry (IGNORE_ERRORS,
-// web/js/sentry.js).
+// the debug panel, and why the event never reaches Sentry (isIgnoredError,
+// web/js/sentry.js). A subclass of RuntimePreconditionError is one too.
 export function isUserPreconditionFailure(error) {
-  return /\bRuntimePreconditionError\b/.test(legacyErrorText(error));
+  return isPythonError(error, "RuntimePreconditionError");
 }
 
-// The sentence a Python failure ends on, without the exception class in front
-// of it -- "No cached radio image for this model. Download from radio first,
-// then upload." rather than the twenty lines of traceback that carry it.
-//
-// Scans from the end for the same reason errorTypeName (web/js/ui/analytics.js)
-// does: a Python traceback names its exception on the last line, under the
-// stack frames rather than above them. Anything that is not a Python traceback
-// -- a JS Error, a bare string -- falls through to its own text, so a caller
-// never has to ask which kind of failure it is holding.
+// The sentence to show a user for a failure -- "No cached radio image for this
+// model. Download from radio first, then upload." rather than the twenty lines
+// of traceback that carry it. For a runtime failure that is the Python
+// message, which the envelope sends on its own (the class name is not in it);
+// an exception raised with no message falls back to its class name. Anything
+// else -- a JS Error, a bare string -- is its own first line, so a caller never
+// has to ask which kind of failure it is holding.
 export function runtimeErrorSentence(error) {
-  const text = legacyErrorText(error).trim();
-  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    // "webchirp_bridge.runtime_errors.RuntimePreconditionError: Download ..."
-    const match = lines[i].match(/^([\w.]+(?:Error|Exception)):\s*(.+)$/);
-    if (match?.[2]) {
-      return match[2].trim();
-    }
+  if (isRuntimeCallError(error)) {
+    return error.message.trim() || error.pythonType;
   }
-  return lines[0] || "Unknown error";
+  const text = String(error?.message || error || "").trim();
+  return text.split("\n").map((line) => line.trim()).find(Boolean) || "Unknown error";
 }
 
-// Full detail of a failure for the debug panel. A runtime failure prints its
-// Python traceback -- the frames that say where CHIRP broke -- followed by the
-// JS frames of the call that asked for it; anything else prints its own stack
-// or message. This is what the panel showed before the envelope, minus the
-// Pyodide wrapper line, and CLAUDE.md requires the whole of it to reach the
-// panel.
+// Full detail of a failure for the debug panel. A runtime failure prints one
+// "RadioError: Radio did not respond" line, then its Python traceback -- the
+// frames that say where CHIRP broke -- then the JS frames of the call that
+// asked for it; anything else prints its own stack or message. The first line
+// is shaped like a JS stack's so that everything reading a detail's first line
+// (errorSummary in web/js/ui/format.js, the Report Bug prefill in
+// web/js/ui/debug-log.js) gets the cause rather than "Traceback (most recent
+// call last):", which is what they got while the traceback was the message.
+// CLAUDE.md requires the whole of it to reach the panel.
 export function runtimeErrorDetail(error) {
   if (isRuntimeCallError(error)) {
     const jsFrames = String(error.stack || "")
       .split("\n")
       .filter((line) => /^\s+at\s/.test(line));
-    return [error.pythonTraceback.trimEnd(), ...jsFrames].join("\n");
+    const headline = `${error.name}: ${runtimeErrorSentence(error).split("\n")[0]}`;
+    return [headline, error.pythonTraceback.trimEnd(), ...jsFrames].join("\n");
   }
-  if (typeof error?.stack === "string" && error.stack) {
-    return error.stack;
-  }
-  return error?.message || String(error);
+  return errorDetails(error);
 }

@@ -10,6 +10,7 @@ import {
   firstIssueColumn,
   radioEventParams,
 } from "../../web/js/ui/analytics.js";
+import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
 // The parameters the UI attaches to its events. What these produce is what GA
 // stores forever, so the tests here are as much about what must never be sent —
@@ -17,23 +18,20 @@ import {
 // web/js/analytics.js owns the gtag side of it and is covered in
 // tests/channels/analytics.mjs.
 
-// A Pyodide failure reaches the UI as the Python traceback string wrapped in a
-// JS Error, so the interesting content sits in the middle of error.stack: the
-// first line is the generic "Traceback" banner and the last lines are JS stack
-// frames. These fixtures keep that shape.
-function pythonError(exceptionLine) {
-  const error = new Error(`Traceback (most recent call last):\n  File "<exec>", line 1, in <module>\n${exceptionLine}`);
-  error.stack = `Error: ${error.message}\n    at invokeRuntimeMethod (runtime-rpc.js:1:1)`;
-  return error;
+// A runtime failure reaches the UI as the RuntimeCallError the dispatcher
+// throws: the Python class as its type, str(exc) as its message and the
+// traceback alongside.
+function pythonError(type, message, options) {
+  return runtimeCallError(type, message, options);
 }
 
 test("classifyErrorKind maps radio failures onto the fixed vocabulary", () => {
   assert.equal(
-    classifyErrorKind(pythonError("chirp.errors.RadioError: Radio did not respond")),
+    classifyErrorKind(pythonError("RadioError", "Radio did not respond")),
     "no_response",
   );
   assert.equal(
-    classifyErrorKind(pythonError("chirp.errors.RadioError: Incorrect model ID, got 0x1234")),
+    classifyErrorKind(pythonError("RadioError", "Incorrect model ID, got 0x1234")),
     "ident_mismatch",
   );
   assert.equal(
@@ -50,14 +48,14 @@ test("classifyErrorKind maps radio failures onto the fixed vocabulary", () => {
 test("Python traceback wrappers do not masquerade as the exception type", () => {
   for (const name of ["StopIteration", "StopAsyncIteration", "KeyboardInterrupt", "SystemExit", "GeneratorExit"]) {
     for (const suffix of ["", ": stopped"]) {
-      const error = pythonError(`${name}${suffix}`);
+      const error = new Error("PythonError: Traceback (most recent call last):\n" + name + suffix);
       assert.equal(errorTypeName(error), name);
       error.name = "PythonError";
       error.stack = "new_error@pyodide.asm.js:10:10028\n307@wasm-function[307]";
       assert.equal(errorTypeName(error), name);
     }
   }
-  const unknown = pythonError("CustomFailure: stopped");
+  const unknown = new Error("PythonError: Traceback (most recent call last):\nCustomFailure: stopped");
   assert.equal(errorTypeName(unknown), "");
   unknown.name = "PythonError";
   unknown.stack = "new_error@pyodide.asm.js:10:10028";
@@ -83,18 +81,60 @@ test("classifyErrorKind falls back to other rather than leaking the message", ()
   assert.equal(classifyErrorKind(null), "other");
 });
 
+test("classifyErrorKind reads a runtime failure's sentence, not its traceback frames", () => {
+  // A frame in a file or function whose name matches a pattern -- timeout.py,
+  // a checksum helper -- says nothing about why the call failed. The old
+  // text match over the whole traceback read these as the cause.
+  const traceback = [
+    "Traceback (most recent call last):",
+    '  File "/webchirp_runtime/chirp/drivers/timeout.py", line 3, in _checksum',
+    "chirp.errors.RadioError: Something unexpected",
+    "",
+  ].join("\n");
+  assert.equal(classifyErrorKind(pythonError("RadioError", "Something unexpected", { traceback })), "other");
+});
+
+test("classifyErrorKind reads the JS error name under a runtime failure", () => {
+  // The serial transport reports through DOMException names; through Python
+  // they arrive as the jsCause of a JsException.
+  const lost = pythonError("JsException", "NetworkError: The device has been lost.", {
+    js: { name: "NetworkError", message: "The device has been lost." },
+  });
+  assert.equal(classifyErrorKind(lost), "serial_disconnect");
+  const refused = pythonError("JsException", "NotAllowedError: Access denied.", {
+    js: { name: "NotAllowedError", message: "Access denied." },
+  });
+  assert.equal(classifyErrorKind(refused), "permission_denied");
+  // And the same names on an error that never crossed the runtime.
+  const security = new Error("Permissions policy blocks serial");
+  security.name = "SecurityError";
+  assert.equal(classifyErrorKind(security), "permission_denied");
+  const dismissed = new Error("No device selected.");
+  dismissed.name = "NotFoundError";
+  assert.equal(classifyErrorKind(dismissed), "port_not_selected");
+});
+
 test("errorTypeName reads the exception type from either error shape", () => {
-  // Python names its exception on the last line, below the JS frames that the
-  // wrapping Error appends.
-  assert.equal(
-    errorTypeName(pythonError("chirp.errors.RadioError: Radio did not respond")),
-    "RadioError",
-  );
+  assert.equal(errorTypeName(pythonError("RadioError", "Radio did not respond")), "RadioError");
+  assert.equal(errorTypeName(pythonError("ImageDetectionError", "No driver claims it")), "ImageDetectionError");
   assert.equal(errorTypeName(new TypeError("x is not a function")), "TypeError");
   assert.equal(errorTypeName(new Error("plain")), "Error");
-  // The traceback banner ends in a colon too, and must not be read as a type.
+  // A string is not an error with a type.
   assert.equal(errorTypeName("Traceback (most recent call last):"), "");
   assert.equal(errorTypeName("no colon here at all"), "");
+});
+
+test("errorTypeName still reads a bootstrap failure that never crossed the dispatcher", () => {
+  // A PythonError raised while seeding the runtime, before rpc_dispatch
+  // exists, is flattened into a fresh Error by web/js/runtime-rpc.js; the
+  // class is only in its text.
+  const error = new Error([
+    "PythonError: Traceback (most recent call last):",
+    '  File "/webchirp_runtime/runtime_bridge.py", line 25, in <module>',
+    "ModuleNotFoundError: No module named 'webchirp_bridge'",
+  ].join("\n"));
+  error.stack = `Error: ${error.message}\n    at invokeRuntimeMethod (runtime-rpc.js:1:1)`;
+  assert.equal(errorTypeName(error), "ModuleNotFoundError");
 });
 
 test("radioEventParams sends driver identity and nothing else", () => {

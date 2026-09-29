@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { BrowserSerialBridge } from "../../web/js/serial.js";
-import { initOptions } from "../../web/js/sentry.js";
+import { initOptions, isIgnoredError } from "../../web/js/sentry.js";
+import { isSerialUnsupported } from "../../web/js/serial-errors.js";
 import { withNavigator } from "../support/globals.mjs";
 import { createTestRadioHarness } from "../support/radio-harness.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
@@ -25,9 +26,13 @@ test("unsupported serial transports remain filtered after crossing the Pyodide R
       await assert.rejects(
         () => harness.rpc("webserial_connect", { baudrate: 9600 }),
         (error) => {
-          // Inspect Pyodide's actual flattened traceback, so changes to JS
-          // error naming cannot silently break the Sentry filtering contract.
-          const message = String(error.message || error);
+          // Inspect the real envelope and traceback so transport naming stays
+          // recognizable after crossing the Python-to-JS runtime boundary.
+          assert.equal(error.pythonType, "JsException");
+          assert.equal(error.jsCause.name, "SerialUnsupportedError");
+          assert.ok(isSerialUnsupported(error));
+          assert.ok(isIgnoredError(error));
+          const message = error.pythonTraceback;
           assert.match(message, /pyodide\.ffi\.JsException/);
           assert.match(message, /SerialUnsupportedError/);
           assert.ok(message.includes(sentence), message);

@@ -656,13 +656,16 @@ export function createRuntimeRpcClient({
         }
         return await enqueueRuntimeCall(() => handler(payload));
       } catch (error) {
+        // For a runtime failure, its Python traceback followed by the JS
+        // frames of the call; for anything else, its own stack.
         const detailedError = runtimeErrorDetail(error);
 
-        // A dismissed port chooser reaches here as a Python traceback like any
-        // other failure, but it is not one: the user closed a dialog. Report it
-        // as one quiet line and hand the caller the sentence rather than the
-        // traceback, so the UI can say what happened instead of showing a stack
-        // nobody can act on. Normalize the Python wrapper to a JS cancellation.
+        // A dismissed port chooser reaches here as a RuntimeCallError like any
+        // other failure through Python, but it is not one: the user closed a
+        // dialog. Report it as one quiet line and hand the caller the plain
+        // named cancellation rather than the Python wrapper around it, so the
+        // UI can say what happened instead of showing a stack nobody can act
+        // on.
         if (isPortSelectionCancelled(error)) {
           if (logDebug) {
             logDebug(`RUNTIME ${PORT_SELECTION_CANCELLED_MESSAGE}`);

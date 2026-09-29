@@ -7,6 +7,7 @@ import {
   loadImageWithDriverFallback,
 } from "../../web/js/image-metadata.mjs";
 import { ensureModule, imageMetadata, sharedHarness } from "../support/chirp.mjs";
+import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
 // The registered driver class for a Baofeng UV-5R image; the BaofengUV5R base
 // class itself is not directory-registered, so this is what CHIRP detection
@@ -354,14 +355,11 @@ test("several drivers claiming one identity resolve to nothing", () => {
   );
 });
 
-// Pyodide surfaces a Python exception as its formatted traceback, so the class
-// name is what the retry gate reads. tests/channels/metadataless-image-load.mjs
-// pins this shape against the real runtime.
+// The dispatcher throws a Python exception as a RuntimeCallError carrying its
+// class, so the class is what the retry gate reads.
+// tests/channels/metadataless-image-load.mjs pins this against the real runtime.
 function pythonError(className, message) {
-  return new Error(
-    'Traceback (most recent call last):\n  File "<exec>", line 1443, in load_image_base64\n'
-    + `${className}: ${message}\n`,
-  );
+  return runtimeCallError(className, message, {}, "load_image_base64");
 }
 
 test("only a detection failure counts as one", () => {
@@ -375,6 +373,11 @@ test("only a detection failure counts as one", () => {
     isImageDetectionFailure(
       pythonError("RuntimeUnsupportedError", "Loaded image is not a clone-mode CHIRP image"),
     ),
+    false,
+  );
+  // Text that names the class is not the class: only the type counts.
+  assert.equal(
+    isImageDetectionFailure(new Error("ImageDetectionError: Unable to detect radio from image")),
     false,
   );
   assert.equal(isImageDetectionFailure(null), false);
