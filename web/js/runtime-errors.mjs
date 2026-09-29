@@ -15,8 +15,10 @@ import { errorDetails } from "./error-details.mjs";
 // trace reads "RadioError: Radio did not respond"; message is str(exc) alone,
 // the sentence a user can be shown. The rest is what the envelope carried:
 // pythonBases (every class above it, up to BaseException), pythonModule, the
-// full pythonTraceback the debug panel prints, jsCause ({name, message} of the
-// JS error behind a JsException, or null) and the rpcMethod that failed.
+// full pythonTraceback the debug panel prints, pythonCauses ({type, message}
+// of each exception it was chained from, nearest first), jsCause ({name,
+// message} of the JS error behind a JsException, or null) and the rpcMethod
+// that failed.
 export class RuntimeCallError extends Error {
   constructor(envelope = {}, { method = "" } = {}) {
     super(String(envelope.message ?? ""));
@@ -25,6 +27,10 @@ export class RuntimeCallError extends Error {
     this.pythonBases = Object.freeze((envelope.bases || []).map(String));
     this.pythonModule = String(envelope.module || "");
     this.pythonTraceback = String(envelope.traceback || "");
+    this.pythonCauses = Object.freeze((envelope.causes || []).map((cause) => Object.freeze({
+      type: String(cause?.type || ""),
+      message: String(cause?.message || ""),
+    })));
     this.jsCause = envelope.js
       ? Object.freeze({ name: String(envelope.js.name || ""), message: String(envelope.js.message || "") })
       : null;
@@ -89,6 +95,14 @@ export function runtimeErrorSentence(error) {
   return text.split("\n").map((line) => line.trim()).find(Boolean) || "Unknown error";
 }
 
+// A line of Error.stack that names a frame, in either syntax browsers write:
+// V8's "    at fn (url:line:col)", or SpiderMonkey's and JavaScriptCore's
+// "fn@url:line:col" (with "fn@[native code]" for a builtin). Only V8 opens the
+// stack with an "Error: message" headline, and that matches neither, so
+// filtering on this drops the headline in Chrome and keeps every frame in
+// Firefox and Safari, whose stacks are nothing but frames.
+const JS_STACK_FRAME = /^\s+at\s|@(?:\S+:\d+:\d+|\[native code\])$/;
+
 // Full detail of a failure for the debug panel. A runtime failure prints one
 // "RadioError: Radio did not respond" line, then its Python traceback -- the
 // frames that say where CHIRP broke -- then the JS frames of the call that
@@ -102,7 +116,7 @@ export function runtimeErrorDetail(error) {
   if (isRuntimeCallError(error)) {
     const jsFrames = String(error.stack || "")
       .split("\n")
-      .filter((line) => /^\s+at\s/.test(line));
+      .filter((line) => JS_STACK_FRAME.test(line));
     const headline = `${error.name}: ${runtimeErrorSentence(error).split("\n")[0]}`;
     return [headline, error.pythonTraceback.trimEnd(), ...jsFrames].join("\n");
   }
