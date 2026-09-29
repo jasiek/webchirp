@@ -580,6 +580,36 @@ body {
   gap: 0.6rem;
 }
 
+/* Anchor the export choices below their button even when the toolbar wraps. */
+.toolbar-export {
+  position: relative;
+}
+
+.toolbar-export-menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: max-content;
+  padding: 0.25rem;
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+  background: var(--control-bottom);
+  box-shadow: 0 0.35rem 0.8rem rgba(0, 0, 0, 0.2);
+}
+
+.toolbar-export-menu[hidden] {
+  display: none;
+}
+
+.toolbar-export-menu button {
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+}
+
 button {
   border: 1px solid var(--control-border);
   background: linear-gradient(180deg, var(--control-top) 0%, var(--control-bottom) 100%);
