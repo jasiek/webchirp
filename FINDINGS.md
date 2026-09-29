@@ -379,3 +379,34 @@ delegating element with `target` set (see `editField` in
 the modal still open, so a debounced preview they scheduled fires on a real
 timer into whichever fetch stub is installed by then — preview assertions
 identify their own request by a position no other test uses.
+
+## Country licensing guides (September 2026)
+
+- The analytics country export has 81 named countries and territories plus a
+  `(not set)` row. The latter cannot have a licensing page. The export is an
+  input list, not a source of legal or editorial instructions.
+- Poland's UKE changed its amateur exam rules on 1 May 2026: the adult exam is
+  now 150 zł, the under-18 exam is 75 zł, and the separate permit costs 82 zł.
+  Older UKE certificate pages still show pre-change prices and should not be
+  used for a new applicant. Sources: UKE's current amateur exam and permit
+  pages.
+- Mexico's former IFT site now identifies itself as an archive and points to
+  CRT for current telecommunications transactions. Do not send applicants to
+  an IFT brochure as if it were current CRT guidance.
+- The IARU member-society directory says Myanmar's BARTS no longer exists.
+  Several countries in the export have no verifiable national society website;
+  the landing page must say so and link the directory rather than invent one.
+- France's ANFR annual report says the amateur certificate exam has been free
+  since 2021, while its 2019 notice removed the annual licence tax. Older
+  downloadable forms still mention the former €46 tax; current guides should
+  not reuse it.
+- Japan's 4th-class national exam fee rises on 1 October 2026 from ¥5,100 to
+  ¥5,700. The guide names both dates instead of baking in a soon-stale price.
+- China's 2012 amateur-station rule has been repealed. The 2024 MIIT rule gives
+  30 working days after acceptance for a licence decision, excluding technical
+  testing and coordination, and makes competency testing and amateur spectrum
+  use free.
+- Vietnam's current application goes through a provincial public service
+  centre, with an 11-day decision period after a valid application. Older RFD
+  pages describe a different regional process and should not supply the
+  current fee or deadline.
