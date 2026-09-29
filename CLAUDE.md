@@ -20,8 +20,15 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - `web/python/runtime_bridge.py`: Entry point of the Python runtime. It is executed (not
   imported) into Pyodide's globals and binds exactly one name there, `rpc_dispatch`
   (`web/python/webchirp_bridge/rpc.py`): the single callable JS uses, taking a method
-  name, one JSON object of named parameters and an optional callback. `web/js/rpc-dispatch.mjs`
-  is the JS side of that contract and the only place that calls it.
+  name, one JSON object of named parameters and an optional callback. It never raises
+  an `Exception` back: it returns a JSON envelope, `{"ok": true, "result": ...}` or
+  `{"ok": false, "error": {type, bases, module, message, traceback, js}}` built by
+  `rpc_error_envelope`. `web/js/rpc-dispatch.mjs` is the JS side of that contract and
+  the only place that calls it; it throws a failed envelope as a `RuntimeCallError`
+  (`web/js/runtime-errors.mjs`) named after the Python class, with the message alone as
+  its message. Classify runtime failures by type with `isPythonError(error, "ClassName")`
+  (which also matches subclasses), never by searching error text; print
+  `errorDetails()` (`web/js/ui/format.js`) to the debug panel, which carries the traceback.
 - `web/python/webchirp_bridge/`: The runtime logic, one module per concern —
   `chirp_loader` (driver imports from the mounted CHIRP tree, driver enumeration), `serial_pipe`
   (pyserial stand-in over Web Serial), `session` (the `RadioSession` dataclass
