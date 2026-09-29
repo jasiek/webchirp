@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { classifyLoadableFile } from "../../web/js/ui/codeplug-io.js";
-import { flushMicrotasks, installFakeDom, selectRadioBySearch } from "../support/fake-dom.mjs";
+import { closeVivifiedModals, flushMicrotasks, installFakeDom, selectRadioBySearch } from "../support/fake-dom.mjs";
 
 // Drag-and-drop file loading is wired to window-level drag events, so these
 // tests lean on the shared FakeWindow, which records window listeners and
@@ -42,7 +42,7 @@ const BETA_RADIO = {
 
 // Records which loader a drop reached and with what payload.
 function createRuntimeApi({ catalog = CATALOG, imageRadio = CATALOG[0] } = {}) {
-  const calls = { parseCsv: [], loadImage: [], metadata: [], settings: [] };
+  const calls = { parseCsv: [], loadImage: [], metadata: [], settings: [], normalizeRows: [], exportImage: [] };
   return {
     calls,
     api: {
@@ -70,6 +70,14 @@ function createRuntimeApi({ catalog = CATALOG, imageRadio = CATALOG[0] } = {}) {
           rows: [{ Location: "0", Name: "Dropped", Frequency: "145.500000" }],
           errors: [],
         };
+      },
+      normalizeRows: async (payload) => {
+        calls.normalizeRows.push(payload);
+        return "Location,Name\n0,Exported\n";
+      },
+      exportImage: async (payload) => {
+        calls.exportImage.push(payload);
+        return { imageBase64: "AQID", settings: [] };
       },
       loadImage: async (payload) => {
         calls.loadImage.push(payload);
@@ -109,6 +117,63 @@ async function bootUi(options) {
   await ui.init(true);
   return { ui, calls };
 }
+
+test("Load picks CSV and IMG files through their existing loaders", async () => {
+  installUiDom();
+  const { calls } = await bootUi();
+  const loadEl = globalThis.document.querySelector("#load-codeplug");
+  const fileInput = globalThis.document.querySelector("#codeplug-file");
+  let pickerOpens = 0;
+  fileInput.click = () => { pickerOpens += 1; };
+
+  loadEl.click();
+  assert.equal(pickerOpens, 1);
+  fileInput.files = [fakeFile("channels.CSV", { text: "Location,Name\n0,A\n" })];
+  await fileInput.dispatch("change");
+  assert.equal(calls.parseCsv.length, 1);
+  assert.equal(fileInput.value, "");
+
+  loadEl.click();
+  assert.equal(pickerOpens, 2);
+  fileInput.files = [fakeFile("codeplug.IMG")];
+  await fileInput.dispatch("change");
+  assert.equal(calls.loadImage.length, 1);
+  assert.equal(fileInput.value, "");
+});
+
+test("Export opens downward choices and runs the selected format", async () => {
+  installUiDom();
+  const { calls } = await bootUi();
+  const document = globalThis.document;
+  closeVivifiedModals(document);
+  const toggle = document.querySelector("#export-menu-toggle");
+  const menu = document.querySelector("#export-menu");
+  assert.equal(menu.hidden, true);
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+
+  toggle.click();
+  assert.equal(menu.hidden, false);
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  await document.querySelector("#export-csv").dispatch("click");
+  assert.equal(calls.normalizeRows.length, 1);
+  assert.equal(menu.hidden, true);
+
+  selectRadioBySearch(document, "Acme Alpha");
+  await flushMicrotasks();
+  toggle.click();
+  await document.querySelector("#export-binary").dispatch("click");
+  assert.equal(calls.exportImage.length, 1);
+  assert.equal(menu.hidden, true);
+
+  toggle.click();
+  document.dispatchEvent({ type: "keydown", key: "Escape" });
+  assert.equal(menu.hidden, true);
+  assert.equal(toggle.focused, true);
+
+  toggle.click();
+  document.dispatchEvent({ type: "click", target: document.querySelector("#radio-search") });
+  assert.equal(menu.hidden, true);
+});
 
 test("dropping a CSV file loads its channels through the CSV parser", async () => {
   const { window, debugOutputEl } = installUiDom();
@@ -203,7 +268,7 @@ test("reselecting a radio after an .img load refreshes its schema and settings",
   assert.equal(calls.settings.at(-1), CATALOG[0].module);
 });
 
-test("a dropped CSV goes through the same replace-or-merge prompt as Import CSV", async () => {
+test("a dropped CSV goes through the same replace-or-merge prompt as Load", async () => {
   const { window, debugOutputEl, importChoiceModalEl, importChoiceMergeEl } = installUiDom();
   await bootUi();
   importChoiceModalEl.classList.add("hidden");

@@ -178,7 +178,7 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra, radios = [RADIO], uplo
   // through. Reusable: loading a second image is how the editor's rows get
   // replaced wholesale, which a modal left open has to survive.
   async function loadImage() {
-    const imgInput = document.querySelector("#img-file");
+    const imgInput = document.querySelector("#codeplug-file");
     imgInput.files = [{
       name: "codeplug.img",
       arrayBuffer: async () => Uint8Array.from([1, 2, 3, 4]).buffer,

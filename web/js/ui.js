@@ -159,7 +159,7 @@ export function createUiController() {
 
     // Escape closes the topmost open surface: a notice, which is shown over
     // whatever else is open, then the import prompt, then the channel extras
-    // editor, then the bulk editor, then the repeater modals.
+    // editor, then the bulk editor, then the repeater modals and export menu.
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         if (notice.isModalOpen()) {
@@ -184,6 +184,11 @@ export function createUiController() {
         }
         if (repeaterQuery.isModalOpen()) {
           repeaterQuery.setModalOpen(false);
+          return;
+        }
+        if (codeplugIo.isExportMenuOpen()) {
+          codeplugIo.closeExportMenu();
+          dom.exportMenuToggleEl.focus();
         }
         return;
       }

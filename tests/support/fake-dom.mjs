@@ -398,8 +398,7 @@ export const UI_STUBBED_SELECTORS = new Map([
   ["#settings-summary", "div"],
   ["#settings-empty", "div"],
   ["#settings-content", "div"],
-  ["#csv-file", "input"],
-  ["#img-file", "input"],
+  ["#codeplug-file", "input"],
   ["#debug-output", "textarea"],
   ["#report-issue", "button"],
   ["#live-radio-support-warning", "p"],
@@ -432,10 +431,11 @@ export const UI_STUBBED_SELECTORS = new Map([
   ["#channel-bulk-edit-apply", "button"],
   ["#repeater-query-form", "form"],
   ["#repeater-query-cancel", "button"],
-  ["#import-csv", "button"],
+  ["#load-codeplug", "button"],
+  ["#export-menu-toggle", "button"],
+  ["#export-menu", "div"],
   ["#export-csv", "button"],
   ["#export-binary", "button"],
-  ["#import-binary", "button"],
   ["#debug-clear", "button"],
 ]);
 
@@ -695,11 +695,11 @@ export function selectRadioBySearch(document, query) {
   typeRadioSearch(document, query).dispatchEvent(keydownEvent("Enter"));
 }
 
-// Drives the Import CSV path the way the file picker does: hand the hidden
+// Drives the Load CSV path the way the file picker does: hand the hidden
 // input a file and fire the change event it listens for. The stubbed parser
 // decides what rows come back, so the file's text is irrelevant.
 export async function importSampleCsv(document, name = "sample.csv") {
-  const fileInput = document.querySelector("#csv-file");
+  const fileInput = document.querySelector("#codeplug-file");
   fileInput.files = [{ name, text: async () => "" }];
   fileInput.dispatchEvent({ type: "change" });
   await flushMicrotasks();

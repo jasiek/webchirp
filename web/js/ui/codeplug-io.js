@@ -161,7 +161,7 @@ export function createCodeplugIo(ctx) {
   }
 
   // Load a CSV file into the editor, asking first when doing so would discard
-  // channels the user already has. Shared by the Import CSV button and drops.
+  // channels the user already has. Shared by the Load button and drops.
   async function importCsvFile(file, source = "button") {
     const parsed = await parseCsvViaRuntime(await file.text());
     let mode = "replace";
@@ -358,19 +358,35 @@ export function createCodeplugIo(ctx) {
     }
   }
 
-  // Route a file to the CSV or binary loader by its extension.
-  async function loadCodeplugFile(file) {
+  // Route a picked or dropped file to the CSV or binary loader by extension.
+  async function loadCodeplugFile(file, source = "button") {
     const kind = classifyLoadableFile(file.name);
     if (!kind) {
-      log.setStatus(`Cannot load ${file.name}: drop ${DROPPABLE_FILE_DESCRIPTION}.`);
-      log.logDebug(`DROP REJECTED ${file.name} (unsupported file type)`);
+      log.setStatus(`Cannot load ${file.name}: choose ${DROPPABLE_FILE_DESCRIPTION}.`);
+      log.logDebug(`LOAD REJECTED ${file.name} (unsupported file type)`);
       return;
     }
     if (kind === "csv") {
-      await importCsvFile(file, "drag_drop");
+      await importCsvFile(file, source);
       return;
     }
-    await importBinaryCodeplug(file, "drag_drop");
+    await importBinaryCodeplug(file, source);
+  }
+
+  // Keep the export menu's visible state and expanded label in sync.
+  function setExportMenuOpen(open) {
+    dom.exportMenuEl.hidden = !open;
+    dom.exportMenuToggleEl.setAttribute("aria-expanded", String(open));
+  }
+
+  // Close the export choices after a selection or outside click.
+  function closeExportMenu() {
+    setExportMenuOpen(false);
+  }
+
+  // Report whether Escape should dismiss the export choices.
+  function isExportMenuOpen() {
+    return !dom.exportMenuEl.hidden;
   }
 
   // Only file drags are ours to handle; text dragged within the page (between
@@ -402,7 +418,7 @@ export function createCodeplugIo(ctx) {
     const [file] = files;
     const ignored = files.length > 1 ? `; ignoring ${files.length - 1} other file(s)` : "";
     log.logDebug(`DROP ${file.name}${ignored}`);
-    await runFileLoad("File drop", () => loadCodeplugFile(file), {
+    await runFileLoad("File drop", () => loadCodeplugFile(file, "drag_drop"), {
       format: classifyLoadableFile(file.name) || "unknown",
       source: "drag_drop",
     });
@@ -450,6 +466,7 @@ export function createCodeplugIo(ctx) {
 
   function bindEvents() {
     bindDragAndDrop();
+    setExportMenuOpen(false);
 
     dom.importChoiceReplaceEl.addEventListener("click", () => {
       resolveImportChoice("replace");
@@ -466,7 +483,7 @@ export function createCodeplugIo(ctx) {
       }
     });
 
-    dom.importCsvEl.addEventListener("click", () => {
+    dom.loadCodeplugEl.addEventListener("click", () => {
       dom.fileInput.click();
     });
 
@@ -477,13 +494,28 @@ export function createCodeplugIo(ctx) {
       }
 
       try {
-        await runFileLoad("CSV import", () => importCsvFile(file), { format: "csv" });
+        await runFileLoad("File load", () => loadCodeplugFile(file), {
+          format: classifyLoadableFile(file.name) || "unknown",
+        });
       } finally {
         dom.fileInput.value = "";
       }
     });
 
+    dom.exportMenuToggleEl.addEventListener("click", () => {
+      setExportMenuOpen(!isExportMenuOpen());
+    });
+
+    document.addEventListener("click", (event) => {
+      if (isExportMenuOpen()
+        && !dom.exportMenuToggleEl.contains(event.target)
+        && !dom.exportMenuEl.contains(event.target)) {
+        closeExportMenu();
+      }
+    });
+
     dom.exportCsvEl.addEventListener("click", async () => {
+      closeExportMenu();
       try {
         await exportCsv();
       } catch (error) {
@@ -492,26 +524,11 @@ export function createCodeplugIo(ctx) {
     });
 
     dom.exportBinaryEl.addEventListener("click", async () => {
+      closeExportMenu();
       try {
         await exportBinaryCodeplug();
       } catch (error) {
         log.reportActionError("Binary export", error);
-      }
-    });
-
-    dom.importBinaryEl.addEventListener("click", () => {
-      dom.imgFileInput.click();
-    });
-
-    dom.imgFileInput.addEventListener("change", async () => {
-      const file = dom.imgFileInput.files?.[0];
-      if (!file) {
-        return;
-      }
-      try {
-        await runFileLoad("Binary import", () => importBinaryCodeplug(file), { format: "img" });
-      } finally {
-        dom.imgFileInput.value = "";
       }
     });
   }
@@ -521,5 +538,7 @@ export function createCodeplugIo(ctx) {
     loadEmptySchema,
     isImportChoiceModalOpen,
     resolveImportChoice,
+    isExportMenuOpen,
+    closeExportMenu,
   };
 }
