@@ -428,3 +428,8 @@ identify their own request by a position no other test uses.
 - Moldova's May 2026 ARCOM amateur-radio regulation replaces the older
   ANRCETI procedure. It separates the free exam and certificate from a later
   frequency licence, each with a distinct administrative timeline.
+- Enabling a repository wiki does not initialize its Git repository. GitHub
+  requires the first wiki page to be saved in the signed-in web editor before
+  the separate .wiki.git repository can be cloned and updated with Git. Keep
+  the generated wiki Markdown in the main repository until that first page
+  exists. Source: https://docs.github.com/en/communities/documenting-your-project-with-wikis/adding-or-editing-wiki-pages
