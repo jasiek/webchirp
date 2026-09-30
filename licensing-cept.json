@@ -1,0 +1,20 @@
+{
+  "reviewedAt": "2026-09-30",
+  "membershipSource": "https://docdb.cept.org/implementation/overview",
+  "recommendationSource": "https://docdb.cept.org/document/925",
+  "implementationSource": "https://docdb.cept.org/implementation/925",
+  "suspensionSource": "https://bip.uke.gov.pl/sprawy-miedzynarodowe/wspolpraca-regionalna/",
+  "members": [
+    "albania", "austria", "belgium", "bosnia-and-herzegovina", "bulgaria", "croatia",
+    "cyprus", "czechia", "denmark", "estonia", "finland", "france", "germany", "greece",
+    "hungary", "ireland", "italy", "latvia", "lithuania", "moldova", "netherlands",
+    "norway", "poland", "portugal", "romania", "serbia", "slovakia", "slovenia",
+    "spain", "sweden", "switzerland", "turkiye", "ukraine", "united-kingdom"
+  ],
+  "nonMemberImplementers": [
+    "australia", "canada", "israel", "new-zealand", "peru",
+    "south-africa", "united-states"
+  ],
+  "territoriesUsingUs": ["puerto-rico"],
+  "suspended": ["russia"]
+}

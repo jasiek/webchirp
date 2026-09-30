@@ -8,7 +8,7 @@
     "build:chirp": "node scripts/build-chirp-bundle.mjs",
     "build:version": "node scripts/build-version.mjs",
     "build:icons": "node scripts/build-icons.mjs",
-    "build:pages": "node scripts/build-model-pages.mjs",
+    "build:pages": "node scripts/build-model-pages.mjs && node scripts/build-licensing-pages.mjs",
     "build:dist": "npm run build:version && npm run build:chirp && npm run build:catalog && npm run build:pages && node scripts/build-dist.mjs",
     "screenshots": "npm run build:version && npm run build:chirp && node scripts/update-screenshots.mjs",
     "coverage": "node scripts/coverage.mjs",

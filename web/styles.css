@@ -317,6 +317,119 @@ body {
   font-size: 0.9rem;
 }
 
+/* Country licensing guides share the static page shell and use one compact
+   facts layout so every translated page has the same reading order. */
+.licensing-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.licensing-header h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  line-height: 1.25;
+}
+
+.licensing-header nav {
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.licensing-flag {
+  flex: none;
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.licensing-page h2 {
+  font-size: 1.08rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.licensing-steps {
+  padding-inline-start: 1.4rem;
+  overflow-wrap: anywhere;
+}
+
+.licensing-steps li {
+  padding-inline-start: 0.25rem;
+  margin: 0.65rem 0;
+}
+
+.licensing-facts {
+  margin: 1.2rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.licensing-facts > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) 1fr;
+  gap: 1rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.licensing-facts dt {
+  font-weight: 600;
+}
+
+.licensing-facts dd {
+  margin: 0;
+}
+
+.licensing-facts dd p {
+  margin: 0 0 0.6rem;
+}
+
+.licensing-facts dd p:last-child {
+  margin-bottom: 0;
+}
+
+.licensing-facts dd ul {
+  margin: 0;
+  padding-inline-start: 1.2rem;
+}
+
+.licensing-facts dd li + li {
+  margin-top: 0.4rem;
+}
+
+.licensing-sources {
+  padding-inline-start: 1.2rem;
+  overflow-wrap: anywhere;
+}
+
+.licensing-directory {
+  columns: 2;
+  list-style: none;
+  padding: 0;
+}
+
+.licensing-directory li {
+  break-inside: avoid;
+  margin: 0.3rem 0;
+}
+
+.licensing-directory .licensing-flag {
+  font-size: 1.25rem;
+}
+
+.licensing-directory-local {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+@media (max-width: 600px) {
+  .licensing-facts > div {
+    display: block;
+  }
+
+  .licensing-directory {
+    columns: 1;
+  }
+}
+
 /* Adapter loopback diagnostics (serial-test.html), which reuses the about-page
    shell above for its card and layout. */
 
