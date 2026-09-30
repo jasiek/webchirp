@@ -74,7 +74,8 @@ function sourceLinks(record, guide, cept) {
     { name: "CEPT T/R 61-01", url: cept.implementationSource }];
   for (const claim of [...(guide?.steps || []), ...(guide?.requirements || []),
     guide?.cost, guide?.time?.official, guide?.time?.forum].filter(Boolean)) {
-    links.push({ name: claim.linkLabelLocal || new URL(claim.url).host, url: claim.url });
+    links.push({ name: new URL(claim.url).host,
+      localName: claim.linkLabelLocal, enName: claim.linkLabelEn, url: claim.url });
     for (const url of claim.additionalUrls || []) {
       links.push({ name: new URL(url).host, url });
     }
@@ -94,49 +95,76 @@ function ceptStatus(record, cept, copy) {
   return copy.ceptOutside;
 }
 
-// Render visible local copy and a complete English source comment from the same facts.
-function renderCountry(record, guide, local, english, cept, baseUrl) {
-  const title = `${local.how}: ${countryName(record)}`;
+// Render one complete language view, with citation targets private to that view.
+function renderLanguagePanel(record, guide, copy, language, cept, sources) {
+  const english = language === "en";
+  const key = english ? "en" : "local";
+  const title = `${copy.how}: ${english ? record.name : countryName(record)}`;
   const translated = {
-    process: local.unverifiedSteps,
-    cost: guide.cost?.local || local.unknownCost,
-    time: guide.time?.official?.local || guide.time?.forum?.local || local.unknownTime,
-    requirements: local.unverifiedRequirements,
+    cost: guide.cost?.[key] || copy.unknownCost,
+    time: guide.time?.official?.[key] || guide.time?.forum?.[key] || copy.unknownTime,
   };
-  const en = {
-    process: english.unverifiedSteps,
-    cost: guide.cost?.en || english.unknownCost,
-    time: guide.time?.official?.en || guide.time?.forum?.en || english.unknownTime,
-    requirements: english.unverifiedRequirements,
-  };
-  const description = `${title}. ${guide?.steps?.[0]?.local || translated.process}`;
-  const sources = sourceLinks(record, guide, cept);
-  // Number citations from the same URL list used by the source section.
+  const citationPrefix = english ? "source-en" : "source-native";
+  // Number citations from the same URL list used by this view's source section.
   function citation(url) {
     const number = sources.findIndex((source) => source.url === url) + 1;
-    return number ? ` <a class="licensing-cite" href="#source-${number}">[${number}]</a>` : "";
+    return number ? ` <a class="licensing-cite" href="#${citationPrefix}-${number}">[${number}]</a>` : "";
   }
   // A claim may need separate citations for its fee or application components.
   function citations(claim) {
     return claim ? [claim.url, ...(claim.additionalUrls || [])].map(citation).join("") : "";
   }
   // Keep each fact beside the specific source that supports it.
-  function citedFact(key) {
-    const claim = key === "time" ? guide.time?.official || guide.time?.forum : guide[key];
-    return `${escapeHtml(translated[key])}${citations(claim)}`;
+  function citedFact(fact) {
+    const claim = fact === "time" ? guide.time?.official || guide.time?.forum : guide[fact];
+    return `${escapeHtml(translated[fact])}${citations(claim)}`;
   }
   const stepsHtml = guide.steps?.length
-    ? `<ol class="licensing-steps">${guide.steps.map((step) => `<li>${escapeHtml(step.local)} <a href="${escapeHtml(step.url)}" rel="nofollow noopener">${escapeHtml(step.linkLabelLocal || local.officialInstructions)}</a>${citations(step)}</li>`).join("")}</ol>${guide.procedureStatus === "partial" ? `<p class="licensing-gap">${escapeHtml(local.unverifiedSteps)}</p>` : ""}`
-    : `<p>${escapeHtml(local.unverifiedSteps)} <a href="${escapeHtml(record.authority.url)}" rel="nofollow noopener">${escapeHtml(local.officialInstructions)}</a>.</p>`;
+    ? `<ol class="licensing-steps">${guide.steps.map((step) => `<li>${escapeHtml(step[key])} <a href="${escapeHtml(step.url)}" rel="nofollow noopener">${escapeHtml((english ? step.linkLabelEn : step.linkLabelLocal) || copy.officialInstructions)}</a>${citations(step)}</li>`).join("")}</ol>${guide.procedureStatus === "partial" ? `<p class="licensing-gap">${escapeHtml(copy.unverifiedSteps)}</p>` : ""}`
+    : `<p>${escapeHtml(copy.unverifiedSteps)} <a href="${escapeHtml(record.authority.url)}" rel="nofollow noopener">${escapeHtml(copy.officialInstructions)}</a>.</p>`;
   const requirementsHtml = guide.requirements?.length
-    ? `<ul>${guide.requirements.map((item) => `<li>${escapeHtml(item.local)}${citations(item)}</li>`).join("")}</ul>`
-    : escapeHtml(local.unverifiedRequirements);
+    ? `<ul>${guide.requirements.map((item) => `<li>${escapeHtml(item[key])}${citations(item)}</li>`).join("")}</ul>`
+    : escapeHtml(copy.unverifiedRequirements);
   const timeHtml = guide.time?.official || guide.time?.forum
-    ? [guide.time?.official && `<p><strong>${escapeHtml(local.officialTime)}:</strong> ${escapeHtml(guide.time.official.local)}${citations(guide.time.official)}</p>`,
-      guide.time?.forum && `<p><strong>${escapeHtml(local.reportedTime)}:</strong> ${escapeHtml(guide.time.forum.local)}${citations(guide.time.forum)}</p>`,
-      !guide.time?.forum && `<p class="licensing-gap">${escapeHtml(local.noRecentReport)}</p>`].filter(Boolean).join("")
-    : `${citedFact("time")} <p class="licensing-gap">${escapeHtml(local.noRecentReport)}</p>`;
-  const ceptText = ceptStatus(record, cept, local);
+    ? [guide.time?.official && `<p><strong>${escapeHtml(copy.officialTime)}:</strong> ${escapeHtml(guide.time.official[key])}${citations(guide.time.official)}</p>`,
+      guide.time?.forum && `<p><strong>${escapeHtml(copy.reportedTime)}:</strong> ${escapeHtml(guide.time.forum[key])}${citations(guide.time.forum)}</p>`,
+      !guide.time?.forum && `<p class="licensing-gap">${escapeHtml(copy.noRecentReport)}</p>`].filter(Boolean).join("")
+    : `${citedFact("time")} <p class="licensing-gap">${escapeHtml(copy.noRecentReport)}</p>`;
+  const authorityName = english ? record.authority.enName || record.authority.name : record.authority.name;
+  const societyName = english ? record.society.enName || record.society.name :
+    record.society.localName || record.society.name;
+  const languageCode = english ? "en" : record.locale;
+  return `<div class="licensing-language-panel" data-licensing-panel="${english ? "en" : "native"}" data-page-title="${escapeHtml(title)} | WebCHIRP" lang="${escapeHtml(languageCode)}" dir="${["ar", "fa", "he"].includes(languageCode) ? "rtl" : "ltr"}"${english ? " hidden" : ""}>
+        <div class="licensing-header">
+          <span class="licensing-flag" role="img" aria-label="${escapeHtml(record.name)} flag">${flagEmoji(record.code)}</span>
+          <div><h1>${escapeHtml(title)}</h1>
+          <nav><a href="./index.html">${escapeHtml(copy.directory)}</a> · <a href="../index.html">${escapeHtml(copy.app)}</a></nav></div>
+        </div>
+        <section><h2>${escapeHtml(copy.officialInstructions)}</h2>${stepsHtml}</section>
+        <dl class="licensing-facts">
+          <div><dt>${escapeHtml(copy.authority)}</dt><dd><a href="${escapeHtml(record.authority.url)}" rel="nofollow noopener">${escapeHtml(authorityName)}</a></dd></div>
+          <div><dt>${escapeHtml(copy.cost)}</dt><dd>${citedFact("cost")}</dd></div>
+          <div><dt>${escapeHtml(copy.time)}</dt><dd>${timeHtml}</dd></div>
+          <div><dt>${escapeHtml(copy.requirements)}</dt><dd>${requirementsHtml}</dd></div>
+          <div><dt>${escapeHtml(copy.society)}</dt><dd><a href="${escapeHtml(record.society.url)}" rel="nofollow noopener">${escapeHtml(societyName)}</a></dd></div>
+        </dl>
+        <section><h2>${escapeHtml(copy.cept)}</h2><p>${escapeHtml(ceptStatus(record, cept, copy))}${citation(cept.members.includes(record.slug) ? cept.membershipSource : cept.implementationSource)}${citation(cept.recommendationSource)}${cept.suspended.includes(record.slug) ? citation(cept.suspensionSource) : ""}</p></section>
+        <section><h2>${escapeHtml(copy.sources)}</h2><ol class="licensing-sources">${sources.map((source, index) =>
+          `<li id="${citationPrefix}-${index + 1}"><a href="${escapeHtml(source.url)}" rel="nofollow noopener">${escapeHtml((english ? source.enName : source.localName) || source.name)}</a></li>`).join("")}</ol></section>
+      </div>`;
+}
+
+// Render both language views while keeping the native one as the static default.
+function renderCountry(record, guide, local, english, cept, baseUrl) {
+  const title = `${local.how}: ${countryName(record)}`;
+  const description = `${title}. ${guide?.steps?.[0]?.local || local.unverifiedSteps}`;
+  const nativeLanguage = new Intl.DisplayNames([record.locale], { type: "language" }).of(record.locale);
+  const sources = sourceLinks(record, guide, cept);
+  const en = {
+    process: english.unverifiedSteps,
+    cost: guide.cost?.en || english.unknownCost,
+    requirements: english.unverifiedRequirements,
+  };
   const ceptEnglish = ceptStatus(record, cept, english);
   const englishComment = [
     "English translation of visible guide:",
@@ -170,27 +198,18 @@ function renderCountry(record, guide, local, english, cept, baseUrl) {
     <link rel="icon" href="../favicon.ico" sizes="any" />
     <link rel="stylesheet" href="../styles.css" />
     <script type="module" src="../js/analytics.js"></script>
+    <script type="module" src="../js/licensing-language.js"></script>
   </head>
   <body class="about-page licensing-page">
     <!-- ${englishComment} -->
     <main class="about-shell">
       <article class="about-card">
-        <div class="licensing-header">
-          <span class="licensing-flag" role="img" aria-label="${escapeHtml(record.name)} flag">${flagEmoji(record.code)}</span>
-          <div><h1>${escapeHtml(title)}</h1>
-          <nav><a href="./index.html">${escapeHtml(local.directory)}</a> · <a href="../index.html">${escapeHtml(local.app)}</a></nav></div>
+        <div class="licensing-language-switch" role="group" aria-label="Language">
+          <button type="button" data-licensing-language="native" aria-pressed="true" aria-label="${escapeHtml(nativeLanguage)}" title="${escapeHtml(nativeLanguage)}">${flagEmoji(record.code)}</button>
+          <button type="button" data-licensing-language="en" aria-pressed="false" aria-label="English" title="English">🇬🇧</button>
         </div>
-        <section><h2>${escapeHtml(local.officialInstructions)}</h2>${stepsHtml}</section>
-        <dl class="licensing-facts">
-          <div><dt>${escapeHtml(local.authority)}</dt><dd><a href="${escapeHtml(record.authority.url)}" rel="nofollow noopener">${escapeHtml(record.authority.name)}</a></dd></div>
-          <div><dt>${escapeHtml(local.cost)}</dt><dd>${citedFact("cost")}</dd></div>
-          <div><dt>${escapeHtml(local.time)}</dt><dd>${timeHtml}</dd></div>
-          <div><dt>${escapeHtml(local.requirements)}</dt><dd>${requirementsHtml}</dd></div>
-          <div><dt>${escapeHtml(local.society)}</dt><dd><a href="${escapeHtml(record.society.url)}" rel="nofollow noopener">${escapeHtml(record.society.localName || record.society.name)}</a></dd></div>
-        </dl>
-        <section><h2>${escapeHtml(local.cept)}</h2><p>${escapeHtml(ceptText)}${citation(cept.members.includes(record.slug) ? cept.membershipSource : cept.implementationSource)}${citation(cept.recommendationSource)}${cept.suspended.includes(record.slug) ? citation(cept.suspensionSource) : ""}</p></section>
-        <section><h2>${escapeHtml(local.sources)}</h2><ol class="licensing-sources">${sources.map((source, index) =>
-          `<li id="source-${index + 1}"><a href="${escapeHtml(source.url)}" rel="nofollow noopener">${escapeHtml(source.localName || source.name)}</a></li>`).join("")}</ol></section>
+        ${renderLanguagePanel(record, guide, local, "native", cept, sources)}
+        ${renderLanguagePanel(record, guide, english, "en", cept, sources)}
       </article>
     </main>
   </body>
