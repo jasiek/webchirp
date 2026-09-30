@@ -198,18 +198,18 @@ function renderCountry(record, guide, local, english, cept, baseUrl) {
     <link rel="icon" href="../favicon.ico" sizes="any" />
     <link rel="stylesheet" href="../styles.css" />
     <script type="module" src="../js/analytics.js"></script>
-    <script type="module" src="../js/licensing-language.js"></script>
+    ${record.locale === "en" ? "" : '<script type="module" src="../js/licensing-language.js"></script>'}
   </head>
   <body class="about-page licensing-page">
     <!-- ${englishComment} -->
     <main class="about-shell">
       <article class="about-card">
-        <div class="licensing-language-switch" role="group" aria-label="Language">
+        ${record.locale === "en" ? "" : `<div class="licensing-language-switch" role="group" aria-label="Language">
           <button type="button" data-licensing-language="native" aria-pressed="true" aria-label="${escapeHtml(nativeLanguage)}" title="${escapeHtml(nativeLanguage)}">${flagEmoji(record.code)}</button>
           <button type="button" data-licensing-language="en" aria-pressed="false" aria-label="English" title="English">🇬🇧</button>
-        </div>
+        </div>`}
         ${renderLanguagePanel(record, guide, local, "native", cept, sources)}
-        ${renderLanguagePanel(record, guide, english, "en", cept, sources)}
+        ${record.locale === "en" ? "" : renderLanguagePanel(record, guide, english, "en", cept, sources)}
       </article>
     </main>
   </body>

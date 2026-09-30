@@ -41,11 +41,16 @@ test("one localized, cited guide is built for each named CSV location", async ()
       assert.match(html, new RegExp(`<html lang="${record.locale}"`), filename);
       assert.ok(html.includes("English translation of visible guide:"), filename);
       assert.ok(html.includes("class=\"licensing-flag\""), filename);
-      assert.ok(html.includes('data-licensing-language="native" aria-pressed="true"'), filename);
-      assert.ok(html.includes('data-licensing-language="en" aria-pressed="false"'), filename);
       assert.ok(html.includes('data-licensing-panel="native"'), filename);
-      assert.ok(html.includes('data-licensing-panel="en"'), filename);
-      assert.ok(html.includes('src="../js/licensing-language.js"'), filename);
+      if (record.locale === "en") {
+        assert.ok(!html.includes('data-licensing-language="en"'), filename);
+        assert.ok(!html.includes('data-licensing-panel="en"'), filename);
+      } else {
+        assert.ok(html.includes('data-licensing-language="native" aria-pressed="true"'), filename);
+        assert.ok(html.includes('data-licensing-language="en" aria-pressed="false"'), filename);
+        assert.ok(html.includes('data-licensing-panel="en"'), filename);
+        assert.ok(html.includes('src="../js/licensing-language.js"'), filename);
+      }
       const sourceIds = [...html.matchAll(/<li id="(source-(?:native|en)-\d+)">/g)]
         .map((match) => match[1]);
       assert.equal(new Set(sourceIds).size, sourceIds.length, filename);
