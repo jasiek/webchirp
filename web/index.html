@@ -90,11 +90,6 @@
         <div class="toolbar-title">
           <div class="toolbar-heading">
             <h1>WebCHIRP</h1>
-            <!--
-              Browser connectivity only: web/js/ui/connectivity.js reveals
-              this when navigator.onLine or the offline event says there is no
-              network, without treating an individual request failure as proof.
-            -->
             <span
               id="offline-indicator"
               class="offline-indicator"
@@ -121,10 +116,6 @@
           </p>
         </div>
         <div class="toolbar-actions">
-          <!--
-            Shown only while the browser has an install to offer; hidden is
-            toggled from web/js/ui/install-button.js.
-          -->
           <button id="install-app" class="toolbar-install" title="Install WebCHIRP as an app on this device" hidden>
             Install app
           </button>
@@ -311,7 +302,6 @@
                 aria-label="Edit selected channels in bulk"
                 disabled
               >
-                <!-- Three list rows with a pencil across the last of them. -->
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M4 6h13M4 11h8M4 16h6" />
                   <path d="M18.6 11.4 20.6 13.4 15 19h-2v-2z" />
@@ -320,7 +310,6 @@
               </button>
               <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
               <button id="channel-cut" type="button" class="channel-toolbar-icon" title="Cut the selected channels to the clipboard" aria-label="Cut selected channels">
-                <!-- Scissors: two handles bottom-left, blades crossing to the upper right. -->
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" />
                   <path d="M7.8 7.8 19.5 19.5M7.8 16.2 19.5 4.5" />
@@ -617,7 +606,7 @@
     <!--
       Static OSM context map for repeater channels that carry coordinates
       (issue #57). The tooltip is the desktop hover surface; the modal is the
-      touch-device tap surface. Both are populated by ui/repeater-map.js.
+      touch-device tap surface. Both are populated by web/js/ui/repeater-map.js.
     -->
     <div id="repeater-map-tooltip" class="repeater-map-tooltip hidden" aria-hidden="true">
       <div id="repeater-map-tooltip-coords" class="repeater-map-coords"></div>
