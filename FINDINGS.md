@@ -410,3 +410,21 @@ identify their own request by a position no other test uses.
   centre, with an 11-day decision period after a valid application. Older RFD
   pages describe a different regional process and should not supply the
   current fee or deadline.
+- CEPT membership and the T/R 61-01 visitor arrangement are different facts.
+  Australia, Canada, Israel, New Zealand, Peru, South Africa and the United
+  States appear in CEPT's non-member implementation list; Russia's membership
+  is suspended. Visitor operation still depends on the specific licence class
+  and the destination's rules, and does not confer a resident licence.
+  Sources: CEPT's current membership, T/R 61-01 and implementation pages.
+- The 2026 Mexico CRT amateur-radio lineamientos found during research were a
+  consultation draft; no promulgated application form, fee or deadline was
+  verified. The 2025 law changed the category to a registration certificate,
+  so the old IFT process must not be presented as the current route.
+- Kazakhstan's current initial third-category path uses a free notification
+  through eLicense rather than the entry exam described in older guides.
+  Singapore's SARTS says its local amateur exam is suspended, so the old
+  quarterly-session advice is stale; its visitor-licence fee/time must not be
+  substituted for a resident application.
+- Moldova's May 2026 ARCOM amateur-radio regulation replaces the older
+  ANRCETI procedure. It separates the free exam and certificate from a later
+  frequency licence, each with a distinct administrative timeline.

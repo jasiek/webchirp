@@ -347,6 +347,16 @@ body {
   margin: 1.5rem 0 0.5rem;
 }
 
+.licensing-steps {
+  padding-inline-start: 1.4rem;
+  overflow-wrap: anywhere;
+}
+
+.licensing-steps li {
+  padding-inline-start: 0.25rem;
+  margin: 0.65rem 0;
+}
+
 .licensing-facts {
   margin: 1.2rem 0;
   border-top: 1px solid var(--border);
@@ -366,6 +376,23 @@ body {
 
 .licensing-facts dd {
   margin: 0;
+}
+
+.licensing-facts dd p {
+  margin: 0 0 0.6rem;
+}
+
+.licensing-facts dd p:last-child {
+  margin-bottom: 0;
+}
+
+.licensing-facts dd ul {
+  margin: 0;
+  padding-inline-start: 1.2rem;
+}
+
+.licensing-facts dd li + li {
+  margin-top: 0.4rem;
 }
 
 .licensing-sources {

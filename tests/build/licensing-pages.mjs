@@ -13,7 +13,8 @@ const SCRIPT = path.join(repoRoot, "scripts", "build-licensing-pages.mjs");
 async function withGuides(callback) {
   return withTempDir("webchirp-licensing-", async (root) => {
     await mkdir(path.join(root, "web"), { recursive: true });
-    for (const file of ["CNAME", "licensing-countries.json", "licensing-locales.json"]) {
+    for (const file of ["CNAME", "licensing-countries.json", "licensing-locales.json",
+      "licensing-guide-copy.json", "licensing-guide-details.json", "licensing-cept.json"]) {
       await copyFile(path.join(repoRoot, file), path.join(root, file));
     }
     await writeFile(path.join(root, "web", "sitemap.xml"),
@@ -57,12 +58,16 @@ test("the English comment matches the translated claims on a country guide", asy
   await withGuides(async (root) => {
     const html = await readFile(path.join(root, "web", "licensing", "poland.html"), "utf8");
     assert.match(html, /<html lang="pl">/);
-    assert.match(html, /150 zł za egzamin i 82 zł za pozwolenie/);
-    assert.match(html, /PLN 150 for the exam and PLN 82 for the permit/);
-    assert.match(html, /Do 6 tygodni/);
-    assert.match(html, /Up to 6 weeks/);
+    assert.match(html, /<ol class="licensing-steps">/);
+    assert.match(html, /Procedure: 1\./);
+    assert.match(html, /CEPT status:/);
     assert.match(html, /href="#source-\d+">\[\d+\]<\/a>/);
     assert.match(html, /<li id="source-\d+"><a href=/);
+    const summary = await readFile(path.join(root, "LICENSING_RESEARCH_SUMMARY.md"), "utf8");
+    assert.match(summary, /\| Poland \| 3 steps \|/);
+    assert.ok(!html.includes("LICENSING_RESEARCH_SUMMARY"));
+    assert.ok(!(await readFile(path.join(root, "web", "sitemap.xml"), "utf8"))
+      .includes("LICENSING_RESEARCH_SUMMARY"));
   });
 });
 
