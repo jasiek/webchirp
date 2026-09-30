@@ -151,10 +151,15 @@ function renderCountry(record, local, english, baseUrl) {
 `;
 }
 
-// Give visitors one stable directory entry for every generated country guide.
+// Sort the English directory by its visible English country labels.
 function renderIndex(records, baseUrl) {
-  const links = records.map((record) =>
-    `<li><span class="licensing-flag" aria-hidden="true">${flagEmoji(record.code)}</span> <a href="./${record.slug}.html" lang="${escapeHtml(record.locale)}">${escapeHtml(countryName(record))}</a></li>`).join("\n");
+  const links = records.toSorted((left, right) => left.name.localeCompare(right.name, "en"))
+    .map((record) => {
+      const nativeName = countryName(record);
+      const localLabel = nativeName === record.name ? "" :
+        ` <span class="licensing-directory-local" lang="${escapeHtml(record.locale)}" dir="auto">${escapeHtml(nativeName)}</span>`;
+      return `<li><span class="licensing-flag" aria-hidden="true">${flagEmoji(record.code)}</span> <a href="./${record.slug}.html"><span lang="en">${escapeHtml(record.name)}</span>${localLabel}</a></li>`;
+    }).join("\n");
   return `<!doctype html>
 <html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Amateur radio licences by country | WebCHIRP</title>

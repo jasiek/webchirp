@@ -388,6 +388,11 @@ body {
   font-size: 1.25rem;
 }
 
+.licensing-directory-local {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
 @media (max-width: 600px) {
   .licensing-facts > div {
     display: block;

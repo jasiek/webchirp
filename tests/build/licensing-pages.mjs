@@ -65,3 +65,16 @@ test("the English comment matches the translated claims on a country guide", asy
     assert.match(html, /<li id="source-\d+"><a href=/);
   });
 });
+
+test("the directory is alphabetical by its visible English country names", async () => {
+  await withGuides(async (root) => {
+    const records = JSON.parse(await readFile(path.join(root, "licensing-countries.json"), "utf8"));
+    const html = await readFile(path.join(root, "web", "licensing", "index.html"), "utf8");
+    const slugs = [...html.matchAll(/<a href="\.\/([a-z-]+)\.html"><span lang="en">/g)]
+      .map((match) => match[1]);
+    const expected = records.toSorted((left, right) => left.name.localeCompare(right.name, "en"))
+      .map((record) => record.slug);
+    assert.deepEqual(slugs, expected);
+    assert.match(html, /<span lang="en">Poland<\/span> <span class="licensing-directory-local" lang="pl" dir="auto">Polska<\/span>/);
+  });
+});
