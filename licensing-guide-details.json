@@ -28,7 +28,11 @@
       ]
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "After a session, ARRL VEC says passing results go to the FCC the same day for weekday sessions and within 1-2 business days for weekend ones. Once the FCC issues the application number, you have 10 calendar days to pay the fee.",
+        "en": "After a session, ARRL VEC says passing results go to the FCC the same day for weekday sessions and within 1-2 business days for weekend ones. Once the FCC issues the application number, you have 10 calendar days to pay the fee.",
+        "url": "https://www.arrl.org/files/file/VEs/VE%20Manual%209th%20Edition%20%E2%80%93%20Supplemental%20Information%202025.pdf"
+      },
       "forum": {
         "en": "A first Technician applicant reported passing on Saturday, finding the FCC fee request on Monday, paying on Thursday, and receiving the call-sign confirmation early Friday: about six calendar days from exam to call sign.",
         "local": "A first Technician applicant reported passing on Saturday, finding the FCC fee request on Monday, paying on Thursday, and receiving the call-sign confirmation early Friday: about six calendar days from exam to call sign.",
@@ -43,7 +47,10 @@
         "url": "https://www.arrl.org/find-an-amateur-radio-license-exam-session"
       }
     ],
-    "notes": "ARRL VEC fee is a choice of exam coordinator, not a universal FCC exam fee."
+    "notes": [
+      "ARRL VEC fee is a choice of exam coordinator, not a universal FCC exam fee.",
+      "Research 2026-10-01: time.official: ARRL VEC VE Manual Supplement (Oct 2025, Chapter 7) gives the submission timing; ARRL fcc-application-fee page gives the 10-day payment window. 47 CFR 97.509/97.519 (Cornell, eCFR) set no numeric deadline; the FCC publishes no statutory grant deadline that I found. Note: the VEC manual is a VEC target, not an FCC guarantee."
+    ]
   },
   "united-kingdom": {
     "steps": [
@@ -132,7 +139,10 @@
         "url": "https://bip.uke.gov.pl/jak-uzyskac-rezerwacje--pozwolenie--zezwolenie-tresc/egzaminy-amatorskie,20,38.html"
       }
     ],
-    "notes": "UKE page retains some older exam prose beneath its explicit May 2026 changes; rely on new-rule section."
+    "notes": [
+      "UKE page retains some older exam prose beneath its explicit May 2026 changes; rely on new-rule section.",
+      "Research 2026-10-01: time.forum: searched Polish (dostałem pozwolenie, znak wywoławczy, ile czekałem) and read sp7pki.iq24.pl thread 'Dobry wieczór' (17-18 Mar 2026): posters mention a call sign appearing in the UKE database on 18 Mar 2026 and a permit delayed three further weeks by a wrong address on the envelope, but none gives a start date, so no exam/application-to-permit duration can be derived; SP9BEB's replacement-certificate story dates from June 2024 (pre-2025). radiowplecaku.pl (6 May 2026) and radioszynka.pl (3 Jan 2024) are instructional, not first-hand. Reddit blocked; elektroda hits were unrelated ELE.05 vocational exams. Nothing in existing found wrong."
+    ]
   },
   "canada": {
     "steps": [
@@ -153,11 +163,16 @@
       }
     ],
     "cost": {
-      "en": "ISED charges no exam/certificate fee; an accredited examiner may charge a variable cost-recovery fee.",
-      "local": "ISED charges no exam/certificate fee; an accredited examiner may charge a variable cost-recovery fee.",
-      "url": "https://ised-isde.canada.ca/site/spectrum-management-telecommunications/en/licences-and-certificates/radiocom-information-circulars-ric/ric-1-guide-examiners-accredited-conduct-examinations-amateur-radio-operator-certificates",
+      "local": "ISDE ne facture rien pour le certificat ni l'indicatif initial, et il n'y a pas de frais annuels. L'examinateur accrédité peut demander des frais pour couvrir ses coûts (variables); les cours de clubs incluant l'examen vont d'environ 25 $ à 120 $.",
+      "en": "ISED charges nothing for the certificate or the initial call sign, and there is no annual fee. An accredited examiner may charge a cost-recovery fee (variable); club courses that include the exam run roughly CAD 25 to 120.",
+      "url": "https://ised-isde.canada.ca/site/spectrum-management-telecommunications/en/licences-and-certificates/radiocom-information-circulars-ric/ric-9-call-sign-policy-and-special-event-prefixes",
+      "additionalUrls": [
+        "https://ised-isde.canada.ca/site/spectrum-management-telecommunications/en/licences-and-certificates/radiocom-information-circulars-ric/ric-1-guide-examiners-accredited-conduct-examinations-amateur-radio-operator-certificates",
+        "https://www.rac.ca/requirements/",
+        "https://www.rac.ca/amateur-radio-courses/"
+      ],
       "sourceType": "regulator",
-      "date": "2026-09-30 verified; see costs evidence list for component sources"
+      "date": "2026-10-01 verified"
     },
     "time": {
       "official": {
@@ -184,7 +199,10 @@
         "url": "https://ised-isde.canada.ca/site/spectrum-management-telecommunications/en/licences-and-certificates/radiocom-information-circulars-ric/ric-1-guide-examiners-accredited-conduct-examinations-amateur-radio-operator-certificates"
       }
     ],
-    "notes": "French translations are agent translations of official English guidance, not verified wording from an ISED French page.",
+    "notes": [
+      "French translations are agent translations of official English guidance, not verified wording from an ISED French page.",
+      "Research 2026-10-01: cost: RIC-9 (no fee for initial call sign with Basic certificate; CAD 60 only for call sign changes, club/additional/special-event calls), RIC-1 (no ISED exam fee since 2020-12-16; examiners may charge cost recovery, no cap), RIC-3, RAC requirements page (no annual renewal) and RAC courses page (course fees CAD 25-120 incl. exam). Kept partial because the examiner fee has no fixed amount; I found no dated per-examiner price. Nothing in existing found wrong."
+    ],
     "costStatus": "partial"
   },
   "france": {
@@ -221,7 +239,12 @@
         "local": "L’ANFR indique que le certificat arrive à domicile sous trois semaines après la réussite; délai d’attribution de l’indicatif non vérifié.",
         "url": "https://www.anfr.fr/gerer/radioamateurs/les-certificats"
       },
-      "forum": null
+      "forum": {
+        "local": "F4MBY raconte qu'après son examen le certificat d'opérateur est arrivé par la poste deux semaines plus tard ; sa demande d'indicatif sur le téléservice l'a fait apparaître dans l'annuaire ANFR en 2 jours, et le courrier avec l'indicatif est arrivé 10 jours environ après la demande.",
+        "en": "F4MBY says that after the exam the operator certificate arrived by post two weeks later; the call-sign request on the teleservice got them into the ANFR directory within 2 days, and the letter with the call sign arrived about 10 days after the request.",
+        "url": "https://f4mby.fr/obtenir-son-indicatif-radio-amateur-mon-parcours/",
+        "date": "2025-03-06"
+      }
     },
     "requirements": [
       {
@@ -229,6 +252,9 @@
         "en": "Two 20-question multiple-choice parts (rules and technical), at least 10/20 on each; bring appointment notice and ID. Wait two months before a retake after failure.",
         "url": "https://www.anfr.fr/gerer/radioamateurs/les-certificats"
       }
+    ],
+    "notes": [
+      "Research 2026-10-01: Only time.forum was a gap. Found the dated first-hand blog post above (published 6 March 2025, last modified 22 June 2025) via French search and read it directly. Existing entry looks consistent: certificate within about three weeks per ANFR; this report shows 2 weeks. Existing time.official could additionally cite ANFR's indicatif page (https://www.anfr.fr/gerer/radioamateurs/les-indicatifs) which per search snippets says the call sign notice follows about 15 days after the file is received, but I did not independently verify that page text."
     ]
   },
   "italy": {
@@ -271,7 +297,10 @@
         "url": "https://www.mimit.gov.it/images/stories/trasparenza/2025/Allegato_DM_Ricognizione_dei_servizi_direttamente_erogati_all_utenza_2025_DEF_Protocollato.pdf"
       }
     ],
-    "notes": "Some inspectorate pages still advertise the old Invitalia portal; a regional MIMIT notice says applications since 2026-05-11 go to ispcmi.mimit.gov.it/suite/sites/radioamatori: https://ispettorati.mise.gov.it/index.php/ispettorato-emilia-romagna. Do not claim a nationwide processing deadline without verifying current law."
+    "notes": [
+      "Some inspectorate pages still advertise the old Invitalia portal; a regional MIMIT notice says applications since 2026-05-11 go to ispcmi.mimit.gov.it/suite/sites/radioamatori: https://ispettorati.mise.gov.it/index.php/ispettorato-emilia-romagna. Do not claim a nationwide processing deadline without verifying current law.",
+      "Research 2026-10-01: time.forum: searched Italian (nominativo/patente/tempi, 'ho ricevuto il nominativo') and read rogerk.net Sezione Amministrativa threads: 'RICHIESTA NOMINATIVO. QUANTO TEMPO?' (Jan 2014, too old), 'portale radioamatori invitalia' (one poster, applied 18 Jun 2023 and received the call sign 28 Jul 2023 = 40 days, pre-2025), 'Patente appena arrivata' (28 Mar 2026, poster gives no durations), 'Richiesta/consultazione stato patente' (no timing). Reddit blocked from this environment; no 2025+ first-hand duration found. Search budget was exhausted before more Italian forums (radioamatori.it, ARI forum) could be tried. Nothing in existing found wrong; note that the 40-day 2023 report conflicts with the 30-day official target, but is pre-2025 so not usable."
+    ]
   },
   "puerto-rico": {
     "steps": [
@@ -302,7 +331,11 @@
       ]
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "Cuando el VEC envía tu resultado, la FCC te manda un correo con el número de expediente y tienes 10 días naturales para pagar la tasa; si no, la solicitud se desestima, pero tu CSCE vale 365 días para volver a presentarla.",
+        "en": "Once the VEC sends your result, the FCC emails an application file number and you have 10 calendar days to pay the fee; otherwise it is dismissed, but your CSCE stays valid for 365 days so the VEC can refile. No grant deadline is stated.",
+        "url": "https://www.arrl.org/fcc-application-fee"
+      },
       "forum": null
     },
     "requirements": [
@@ -312,7 +345,10 @@
         "url": "https://www.arrl.org/find-an-amateur-radio-license-exam-session"
       }
     ],
-    "notes": "Spanish wording is an agent translation of the federal process. An ARRl local session is directly documented, not a separate Puerto Rican licence."
+    "notes": [
+      "Spanish wording is an agent translation of the federal process. An ARRl local session is directly documented, not a separate Puerto Rican licence.",
+      "Research 2026-10-01: time.forum: WebSearch (English and Spanish: KP4/Puerto Rico technician exam, indicativo, 'cuanto tardo') returned only generic guides; reddit.com and old.reddit.com are blocked to fetch; radioreference thread found was 2018 only; kp4.org and kp4boricua.org have no first-hand dated reports (kp4boricua fetch returned HTTP 500). A course site (ondaterrestre.com) says 5 to 7 business days but it is not the regulator or exam society, so not used for official time. No FCC rule found setting a grant deadline (47 CFR 97.519 has none). Existing looks correct (10-day payment confirmed on ARRL page; exam fee USD 15 confirmed on kp4.org/documentos-para-examen)."
+    ]
   },
   "russia": {
     "steps": [
@@ -332,9 +368,22 @@
         "url": "https://government.ru/docs/all/50162/"
       }
     ],
-    "cost": null,
+    "cost": {
+      "local": "Экзамен в среднем стоит около 2000 ₽ (в СРР по Санкт-Петербургу и области — 1700 ₽ для впервые получающих позывной); само свидетельство об образовании позывного в ГРЧЦ бесплатное. Пошлина за регистрацию РЭС не проверена.",
+      "en": "The exam costs about 2,000 RUB on average (1,700 RUB at the SRR St Petersburg/Leningrad branch for first-timers); the GRFC call-sign certificate itself is free. The equipment-registration fee was not verified.",
+      "url": "https://blog.voron.me/amateur_radio",
+      "additionalUrls": [
+        "https://srr.ru/radiooperatoram/"
+      ],
+      "sourceType": "forum",
+      "date": "2026-09-30"
+    },
     "time": {
-      "official": null,
+      "official": {
+        "local": "По данным СРР, свидетельство об образовании позывного формируется в электронном виде в течение двух–пяти дней после подачи заявления в Кабинете заявителя ГРЧЦ; результат экзамена в СРР появляется в списке не позднее чем через три дня.",
+        "en": "Per SRR, the call-sign certificate is generated electronically within two to five days of applying in the GRFC applicant account; exam results appear in the SRR list within three days at most.",
+        "url": "https://srr.ru/radiooperatoram/"
+      },
       "forum": null
     },
     "requirements": [
@@ -344,7 +393,11 @@
         "url": "https://government.ru/docs/all/50162/"
       }
     ],
-    "notes": "GRFC site was inaccessible to web research; SRR is the primary accessible process source. No current exam/registration fee or statutory duration verified; call-sign certificate alone does not complete the station process. SRR says the GRFC call-sign certificate is free, but no accessible GRFC regulator tariff verified this; omit a definitive cost claim."
+    "notes": [
+      "GRFC site was inaccessible to web research; SRR is the primary accessible process source. No current exam/registration fee or statutory duration verified; call-sign certificate alone does not complete the station process. SRR says the GRFC call-sign certificate is free, but no accessible GRFC regulator tariff verified this; omit a definitive cost claim.",
+      "Research 2026-10-01: time.forum: searched Russian queries and fetched habr.com/articles/843404 (first-hand, Sep 2024: call sign about 35 days), drive2 posts (2021, May 2024: certificate about one month after exam), eax.me (2019), forum.qrz.ru (2017), chaik-dmr.ru (Oct 2025 but a generic guide, not first-hand), baofeng.ru (Dec 2025 guide, no durations); none are first-hand AND dated 2025+. GRFC site (grfc.ru) was unreachable, so no official GRFC tariff was verified; cost rests on a blog (voron.me, states '2025' figure, page dated 2023 with 2026 update) plus SRR. Possibly wrong in existing notes: none found; the existing note that the certificate is free matches srr.ru/radiooperatoram."
+    ],
+    "costStatus": "partial"
   },
   "spain": {
     "steps": [
@@ -377,7 +430,12 @@
         "local": "El plazo legal para resolver y notificar la autorización es de seis semanas desde la entrada de la solicitud; no incluye la preparación ni la programación del examen.",
         "url": "https://boe.es/buscar/act.php?id=BOE-A-2013-7624"
       },
-      "forum": null
+      "forum": {
+        "local": "Un nuevo radioaficionado escribió en el foro de URE que hizo el examen la semana anterior y que ya tenía su indicativo (EA2FNF): de examen a indicativo en unos pocos días.",
+        "en": "A new ham posted on the URE forum that they had taken the exam the previous week and already had their call sign (EA2FNF): exam to call sign in a matter of days.",
+        "url": "https://www.ure.es/foros/secciones-ure/examen-superado/",
+        "date": "2026-09-02"
+      }
     },
     "requirements": [
       {
@@ -385,6 +443,9 @@
         "en": "Individual 90-minute computer exam; at least 50% correct in each part. Electronic identity is needed for the online application.",
         "url": "https://digital.gob.es/telecomunicaciones-infraestructuras-digitales/areas-interes/espectro-radioelectrico/radioaficionados-cb27/examenes-radioaficionado"
       }
+    ],
+    "notes": [
+      "Research 2026-10-01: Filled time.forum from the URE forum thread 'Examen superado' (post dated 2 Sep 2026, user EA2FNF; it measures exam to call sign, single report, he does not state when he filed the second application). Other threads checked had no usable timing: forocoches threads (Jan 2024, pre-2025), URE 'Ya tengo indicativo' (June 2026, no timing), 'Informacion obtencion indicativo' (Mar 2026, only about exam booking), jesuspavonabian.es (Sep 2024, prospective). Existing guide: no errors found."
     ]
   },
   "germany": {
@@ -401,11 +462,15 @@
       }
     ],
     "cost": {
-      "en": "First examination: N €68, E €73.50, A €81; first admission/call sign €20. Initial totals: N €88, E €93.50, A €101. An annual spectrum-protection contribution is additional and variable.",
-      "local": "Erstprüfung: Klasse N 68 €, E 73,50 €, A 81 €; erstmalige Zulassung und Rufzeichen 20 €. Anfangskosten: N 88 €, E 93,50 €, A 101 €. Hinzu kommt ein variabler jährlicher Frequenzschutzbeitrag.",
-      "url": "https://www.bundesnetzagentur.de/DE/Beschlusskammern/BK02/BK2_01_Aktuell/Downloads/BK2_3_BMDVTKBGebV_download.pdf?__blob=publicationFile&v=2",
-      "sourceType": "official_fee_schedule",
-      "date": "2026"
+      "local": "Erstprüfung: N 68 €, E 73,50 €, A 81 €, dazu 20 € für Zulassung und Rufzeichen (88–101 € zu Beginn). Jährlich kommt der Frequenzschutzbeitrag dazu: zuletzt festgesetzt für 2023 mit 2,88 € (TKG) + 20,64 € (EMVG) = 23,52 €; der Betrag ändert sich jedes Jahr.",
+      "en": "First exam: N EUR 68, E EUR 73.50, A EUR 81, plus EUR 20 for admission and call sign (EUR 88-101 up front). The annual frequency-protection contribution is extra: last set for 2023 at EUR 2.88 (TKG) + EUR 20.64 (EMVG) = EUR 23.52; it changes every year.",
+      "url": "https://www.recht.bund.de/bgbl/1/2025/4/regelungstext.pdf?__blob=publicationFile&v=3",
+      "additionalUrls": [
+        "https://www.bundesnetzagentur.de/DE/Beschlusskammern/BK02/BK2_01_Aktuell/Downloads/BK2_3_BMDVTKBGebV_download.pdf?__blob=publicationFile&v=2",
+        "https://www.gesetze-im-internet.de/fsbeitrv/BJNR095800004.html"
+      ],
+      "sourceType": "law",
+      "date": "2025-01-10"
     },
     "time": {
       "official": {
@@ -413,7 +478,12 @@
         "local": "Prüfungstermine werden in der Regel alle vier bis sechs Wochen angeboten; das ist kein verbindlicher Zeitraum für die gesamte Zulassung.",
         "url": "https://www.bundesnetzagentur.de/Amateurfunk"
       },
-      "forum": null
+      "forum": {
+        "local": "Ein Münchner Teilnehmer schrieb im Oktober 2025: Prüfung an einem Samstag, das Rufzeichen kam schon am Montag oder Dienstag danach per Mail, die Zulassungsurkunde folgte kurz darauf per Post.",
+        "en": "A participant from Munich wrote in October 2025: exam on a Saturday, the call sign arrived by email on the following Monday or Tuesday, and the certificate followed shortly after by post.",
+        "url": "https://www.reddit.com/r/Amateurfunk/comments/1o967az/dmrrunde_gesucht/nk4ln44/",
+        "date": "2025-10-18"
+      }
     },
     "requirements": [
       {
@@ -423,9 +493,9 @@
       }
     ],
     "notes": [
-      "No verified end-to-end processing deadline."
-    ],
-    "costStatus": "partial"
+      "No verified end-to-end processing deadline.",
+      "Research 2026-10-01: cost: found the annual FSBeitrV amounts in the 14th amendment (BGBl. 2025 I Nr. 4: 2022 = 5.96+23.26; 2023 = 2.88+20.64 EUR); 2024+ amounts not yet published, billed retroactively. time.forum: used the Reddit archive (pullpush) for r/Amateurfunk, 2025+; funkbasis.de needs login (403), forum.db3om.de is an old archive, forum.do1tsp.de unreachable. Existing data looks right; the BNetzA page notes current processing delays (https://www.bundesnetzagentur.de/DE/Fachthemen/Telekommunikation/Frequenzen/SpezielleAnwendungen/Amateurfunk/start.html)."
+    ]
   },
   "indonesia": {
     "steps": [
@@ -468,7 +538,8 @@
       }
     ],
     "notes": [
-      "Do not use older Postel yearly IAR tariff pages; current official guidance says free."
+      "Do not use older Postel yearly IAR tariff pages; current official guidance says free.",
+      "Research 2026-10-01: time.forum: searched Bing/WebSearch in Indonesian and English (pengalaman UNAR 2025, callsign YD, IAR terbit, reddit, expat.com, ORARI/Balmon pages). Found only news items quoting officials (e.g. https://rri.co.id/sabang/iptek/1797554/khaizan-aqshal-peserta-termuda-lulus-unar-aceh-2025, 28 Aug 2025; https://selokalampung.com/2026/04/09/unar-digelar-di-tanggamus-kepala-balmon-sfr-lampung-lulus-langsung-dapat-callsign-di-hari-yang-sama/) and an expat.com thread (https://www.expat.com/en/forum/asia/indonesia/1033615-amateur-radio-in-indonesia.html) whose first-hand 'took the test, licence came the same afternoon' post is about 3 years old (2023), so none qualifies as a dated 2025+ applicant report. Nothing in existing found wrong: the Balmon/ORARI pages (https://orari.or.id/cara-menjadi-anggota-orari/) agree that IAR and call sign are issued the same day as passing."
     ]
   },
   "netherlands": {
@@ -495,8 +566,17 @@
       "date": "2026"
     },
     "time": {
-      "official": null,
-      "forum": null
+      "official": {
+        "local": "Na het CBR-examen zie je de uitslag direct op het scherm; je kunt je vanaf de dag erna bij de RDI registreren. Het registratiebewijs komt volgens Stichting Radio Examens meestal binnen vijf werkdagen na de registratie per post.",
+        "en": "After the CBR exam you see the result on screen immediately and can register with the RDI from the next day. According to Stichting Radio Examens the registration card usually arrives by post within five working days of registering.",
+        "url": "https://www.cbr.nl/nl/veelgestelde-vragen/hoe-registreer-ik-me-als-radiozendamateur"
+      },
+      "forum": {
+        "local": "Een nieuwe Novice-zendamateur schreef op 19 juni 2025 dat hij op 11 juni was geslaagd, zijn registratie bij de RDI had aangevraagd en na een week nog op zijn registratiebewijs wachtte; een ander forumlid reageerde dat de RDI meestal zo’n week nodig heeft.",
+        "en": "A new Novice amateur wrote on 19 June 2025 that they had passed on 11 June, applied for RDI registration and were still waiting for the registration card a week later; another member replied that RDI usually takes about a week.",
+        "url": "https://www.zendamateur.com/viewtopic.php?t=29212",
+        "date": "2025-06-19"
+      }
     },
     "requirements": [
       {
@@ -506,7 +586,8 @@
       }
     ],
     "notes": [
-      "No verified total processing duration."
+      "No verified total processing duration.",
+      "Research 2026-10-01: Official: rdi.nl pages give no processing time; the CBR page says registration is possible from the day after passing (the '24 hours to RDI' claim is on VERON, https://veron.nl/nieuws/examen-doen-bij-het-cbr/, dated 2023). The five-working-days card claim is from radio-examen.nl (Stichting Radio Examens, undated, 2014 copyright) and may be dated; existing step says 'zenden mag na registratie' while radio-examen.nl says transmit only once the card arrives - unverified. Forum: scanned zendamateur.com topics 2025-2026."
     ]
   },
   "china": {
@@ -540,7 +621,12 @@
         "local": "无线电管理机构自受理设台申请之日起30个工作日内作出决定；设备检测和频率协调时间不计入。材料不齐全的，5个工作日内告知补正。",
         "url": "https://www.miit.gov.cn/gyhxxhb/jgsj/cyzcyfgs/bmgz/wxdl/art/2024/art_9a2dba77d86942cebd1e9cbacd2d4b20.html"
       },
-      "forum": null
+      "forum": {
+        "local": "北京一位考生2025年12月20日参加A类考试，12月30日查到证书编号并在12月31日提交设备登记，2026年2月4日才收到执照领取通知、次日现场领取（登记到执照约5周，赶上换证高峰）。",
+        "en": "A Beijing candidate sat the Class A exam on 20 Dec 2025, saw the certificate number on 30 Dec, filed equipment registration on 31 Dec, and only got the licence pickup notice on 4 Feb 2026 (about five weeks from registration, slowed by a renewal rush).",
+        "url": "https://naaran.com/blog/2025/12/21/crac-a-licence/",
+        "date": "2026-02-05"
+      }
     },
     "requirements": [
       {
@@ -555,7 +641,8 @@
       }
     ],
     "notes": [
-      "2024 rule effective 1 March 2024. Avoid asserting the station licence itself is free."
+      "2024 rule effective 1 March 2024. Avoid asserting the station licence itself is free.",
+      "Research 2026-10-01: Filled time.forum from naaran.com (first-hand, Beijing, post dated 2025-12-21, updated with Feb 2026 dates); a second 2025-12 blog (https://blog.carkree.com/posts/1630742587/) gives a similar timeline (exam result 24 Dec 2025, operator certificate in hand 6 Jan, licence in hand 6 Feb 2026). Nothing in existing found wrong."
     ]
   },
   "brazil": {
@@ -579,7 +666,11 @@
       "date": "2026"
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "Depois de pagar o PPDESS (pode levar até 5 dias úteis para constar nos sistemas da Anatel), é preciso aguardar a assinatura e a publicação do Ato de Outorga antes de pedir o licenciamento da estação.",
+        "en": "After paying the PPDESS fee (it can take up to 5 business days to show in Anatel's systems), you must wait for the Grant Act (Ato de Outorga) to be signed and published before requesting station licensing.",
+        "url": "https://www.gov.br/anatel/pt-br/regulado/outorga/radioamador-e-radio-cidadao/outorga-do-radioamador"
+      },
       "forum": null
     },
     "requirements": [
@@ -596,7 +687,8 @@
     ],
     "notes": [
       "Anatel announced MMAR as its sole route for amateur-radio requests from August 2026.",
-      "Verify whether PPDESS applies to each applicant before presenting a fixed total."
+      "Verify whether PPDESS applies to each applicant before presenting a fixed total.",
+      "Research 2026-10-01: time.forum: searched Portuguese (tirei meu COER, recebi meu indicativo, MMAR demorou dias) and read LABRE-DF, antenaativa.com.br, radioamador.com and hamprepperca pages; found no dated 2025+ first-hand report of exam-to-COER or application-to-callsign time (web search quota ran out; reddit is blocked to the fetcher). Anatel's gov.br pages give no statutory deadline for the COER or station licence; the only official figure is the PPDESS 'up to 5 business days' plus wait for the Ato de Outorga. antenaativa.com.br (not official) says COER issuance 'up to 30 days'; not used. Context: per Telesintese (https://telesintese.com.br/anatel-retoma-provas-para-radioamador-e-radiotelefonista/) exams were suspended until Ato 3.448/2026 (11 Mar 2026); the same Ato (https://telesintese.com.br/anatel-simplifica-regras-do-radioamadorismo/) allows retaking a failed subject after 8 days and review requests within 60 days. Existing guide looks consistent."
     ]
   },
   "mexico": {
@@ -621,7 +713,8 @@
     ],
     "notes": [
       "The March 2026 CRT Lineamientos PDF is a proposed regulation/consultation draft, not verified as promulgated in the Diario Oficial: https://portal.crt.gob.mx/SesionDelPlenoPublica/DescargarArchivo?nombreArchivo=fe25f15cf95f4aabba66497d38698c73_P_CRT_ORD_26032026_043.pdf&tipo=acuerdo",
-      "Do not use legacy IFT process, fees or time as current. No promulgated CRT application form, fee or deadline verified."
+      "Do not use legacy IFT process, fees or time as current. No promulgated CRT application form, fee or deadline verified.",
+      "Research 2026-10-01: I read the CRT consultation draft of the Lineamientos (Pleno agreement of 26 Mar 2026; arts. 12, 18-22 and FORMATO CRT-CR Licencia de Radioaficionado): 30 working-day resolution, 10-day prevention, technical capacity shown by courses, experience or studies (no exam described), licence valid up to 10 years, but it only says fees must be paid 'in terms of applicable provisions' with no amount. It is a proposal, so I did not write steps or cost. Could not find a promulgated version (DOF) via search; amateurradio.mx says the procedure is 'temporarily suspended' pending the new law; FMRE site only lists the proposal; foro.fmre.mx has no applicant reports; Ley Federal de Derechos 2026 amounts for amateur not found. Reddit blocked. cost, time.forum and promulgated procedure: not found. Existing is consistent with this (draft, not in force). WebSearch budget ran out during the session. Official time from the March 2026 CRT draft (30 working days) withheld: proposal only."
     ],
     "procedureStatus": "partial",
     "procedureGap": "Promulgated CRT form and filing sequence could not be verified."
@@ -667,7 +760,8 @@
       }
     ],
     "notes": [
-      "Exam schedule is regional and not the same as total processing time."
+      "Exam schedule is regional and not the same as total processing time.",
+      "Research 2026-10-01: Forum: no dated 2025+ first-hand report found. WebSearch budget ran out before Greek-language queries (ραδιοερασιτέχνης πτυχίο, άδεια σταθμού SV, RAAG forums) could be run; Reddit blocked. Existing: nothing checked or found wrong."
     ]
   },
   "philippines": {
@@ -689,11 +783,11 @@
       }
     ],
     "cost": {
-      "en": "NTC examination fee ₱50. The 2025 regional citizen charter lists a new operator certificate at ₱60 per year plus ₱30 documentary stamp; a new Class D or C station filing fee ₱60 and licence ₱144 per year. Permit and equipment charges may be additional.",
-      "local": "NTC examination fee ₱50. The 2025 regional citizen charter lists a new operator certificate at ₱60 per year plus ₱30 documentary stamp; a new Class D or C station filing fee ₱60 and licence ₱144 per year. Permit and equipment charges may be additional.",
+      "local": "NTC exam ₱50. Operator certificate (AT-ROC): ₱60 + ₱30 stamp = ₱90. With your own radio: permit to purchase/possess ₱130 per unit, and a new Class D AT-RSL ₱234 (₱60 filing + ₱144 per year + ₱30 stamp). About ₱504 in year one for one radio; club seminar fee extra.",
+      "en": "NTC exam ₱50. Operator certificate (AT-ROC): ₱60 + ₱30 stamp = ₱90. With your own radio: permit to purchase/possess ₱130 per unit, and a new Class D AT-RSL ₱234 (₱60 filing + ₱144 per year + ₱30 stamp). About ₱504 in year one for one radio; club seminar fee extra.",
       "url": "https://region7.ntc.gov.ph/wp-content/uploads/2025/04/6-11-REGIONAL-OFFICES-CCT-03312025.pdf",
-      "sourceType": "official_NTC_2025_citizen_charter_and_FAQ",
-      "date": "2025–2026"
+      "sourceType": "regulator",
+      "date": "2025-03-31"
     },
     "time": {
       "official": {
@@ -716,7 +810,8 @@
       }
     ],
     "notes": [
-      "English is an official language and is used in NTC's source material."
+      "English is an official language and is used in NTC's source material.",
+      "Research 2026-10-01: Cost computed from the fee tables in the NTC Regional Offices Citizen Charter (pp. 178 and 195): exam 50; ROC 60; DST 30; PUR 50 + POS 50 per unit; RSL filing 60, licence fee 120/132/144/144 per year for Class A/B/C/D. Not itemised anywhere official: the fee for the mandatory seminar certificate from an NTC-accredited club, and whether first-year RSL licence counts one year only. time.forum: searched Bing/WebSearch (Philippines NTC ham licence experience 2025, reddit, PARA, charl.club, medium, signalsofhope blog). Only found guides (https://signalsofhope.news.blog/2025/07/17/ - not first-hand) and PARA text saying 'a minimum of two months' (undated, copyright 2015-2023, https://www.para.org.ph/getting-a-callsign.html). No dated 2025+ first-hand report. Existing time.official (3 days) matches the charter total of 3 days; existing cost figures match the charter."
     ],
     "costStatus": "partial"
   },
@@ -761,7 +856,8 @@
       }
     ],
     "notes": [
-      "SUBTEL 2026 manual supersedes older web pages that say Aspirante starts at age 12 or lasts three years; current guide says age over 10 and licence validity five years."
+      "SUBTEL 2026 manual supersedes older web pages that say Aspirante starts at age 12 or lasts three years; current guide says age over 10 and licence validity five years.",
+      "Research 2026-10-01: time.forum: searched Spanish (me llego mi licencia, Aspirante, SUBTEL, 2025) and fetched ce3aa.cl (404 on the post), radioquintaregion.cl (official-text copy, undated, says licence delivered within 30 business days of Tesoreria payment), subtel.gob.cl (2026 exam calendar: monthly Wednesdays, e.g. 21 Jan, 25 Feb, 25 Mar 2026; register the month before). No dated 2025+ first-hand applicant report found. Existing: consistent; note SUBTEL's page lists 2026 exam dates and says the PDF licence is emailed after proof of payment to the Treasury."
     ]
   },
   "finland": {
@@ -813,7 +909,8 @@
     ],
     "notes": [
       "CEPT T/R 61-01: Traficom explicitly allows visiting CEPT licensees to operate for up to three months with OH/home call; Åland uses OH0. https://www.traficom.fi/en/node/7002",
-      "Special licence 28-day target: https://www.traficom.fi/fi/radioluvat-ja-taajuudet/radiotaajuuksien-kaytto/hae-radiolupa-radioamatooriasemalle-kasittelya-vaativa"
+      "Special licence 28-day target: https://www.traficom.fi/fi/radioluvat-ja-taajuudet/radiotaajuuksien-kaytto/hae-radiolupa-radioamatooriasemalle-kasittelya-vaativa",
+      "Research 2026-10-01: time.forum: Reddit archive and sral.fi/Finnish queries (kutsumerkki) returned no 2025+ first-hand timeline. Traficom e-service immediacy already in existing data. Existing data not contradicted."
     ]
   },
   "australia": {
@@ -869,39 +966,38 @@
     ],
     "notes": [
       "Australia is a non-CEPT administration expressly listed as implementing T/R 61-01. ACMA says advanced Australian operators may use the CEPT route abroad after checking host-country conditions; this is distinct from eligibility for a new Australian qualification. https://docdb.cept.org/document/925 ; https://www.acma.gov.au/overseas-amateurs-visiting-australia",
-      "The post-February 2024 framework is a class licence, so avoid wording that suggests a new resident must buy a personal annual station licence. https://www.acma.gov.au/amateur-radio-transition-class-licence-and-supporting-arrangements"
+      "The post-February 2024 framework is a class licence, so avoid wording that suggests a new resident must buy a personal annual station licence. https://www.acma.gov.au/amateur-radio-transition-class-licence-and-supporting-arrangements",
+      "Research 2026-10-01: time.forum: searched English queries on call sign/recognition certificate turnaround. vkhamradio.com/amateur-licence-qualification says Foundation qualification and call sign are currently done within 24-48 hours of the assessor submitting results, but the page is undated and not clearly a personal report, so not used; its Foundation page (updated 2026-09-29) says a couple of days for ACMA. Whirlpool threads return 403; Reddit blocked. No dated 2025+ first-hand report verified. Nothing in existing found wrong."
     ]
   },
   "ecuador": {
     "steps": [
       {
-        "en": "Send ARCOTEL a written request naming the applicant and identity/passport number, with the FO-DRE-09 technical form.",
-        "local": "Presente ante ARCOTEL una solicitud escrita con su nombre y número de cédula o pasaporte, junto con el formulario técnico FO-DRE-09.",
-        "url": "https://www.arcotel.gob.ec/requisitos-radioaficionados-y-banda-ciudadana/",
-        "linkLabelEn": "ARCOTEL requirements",
-        "linkLabelLocal": "Requisitos de ARCOTEL"
+        "local": "Presenta en ARCOTEL (ventanilla o correo gestion.documental@arcotel.gob.ec) una solicitud dirigida a la Dirección Ejecutiva con tu cédula o pasaporte, el formulario FO-DRE-09 y la declaración de responsable; recibes un número de trámite.",
+        "en": "File a request to ARCOTEL's Executive Director (at the counter or by email to gestion.documental@arcotel.gob.ec) with your ID or passport number, form FO-DRE-09 and the declaration of responsibility; you get a case number.",
+        "url": "https://www.gob.ec/arcotel/tramites/otorgamiento-renovacion-licencia-servicio-radioaficionados-banda-ciudadana-0"
       },
       {
-        "en": "Use ARCOTEL's radio-amateur forms and follow any category-specific qualification instructions it gives; the public requirements page does not clearly document an initial Técnico examination.",
-        "local": "Utilice los formularios de radioaficionados de ARCOTEL y siga las indicaciones de aptitud de la categoría solicitada; la página pública de requisitos no explica claramente un examen inicial de Técnico.",
-        "url": "https://www.arcotel.gob.ec/instructivos-y-formatos-radioaficionados-y-banda-ciudadana/",
-        "linkLabelEn": "Technical forms",
-        "linkLabelLocal": "Formularios técnicos"
+        "local": "Para la categoría Técnico debes aprobar un examen escrito: ARCOTEL te envía un oficio con lugar, fecha y hora. Hay un banco de preguntas público para Técnico y General.",
+        "en": "For the Técnico category you must pass a written exam: ARCOTEL sends a notice with place, date and time. A public question bank exists for Técnico and General.",
+        "url": "https://www.gob.ec/arcotel/tramites/otorgamiento-renovacion-licencia-servicio-radioaficionados-banda-ciudadana-0"
       },
       {
-        "en": "After receiving the payment notice, pay within four working days, then collect the credential with payment receipt and identity document at ARCOTEL or a zonal office.",
-        "local": "Tras recibir el oficio de pago, cancele el valor dentro de cuatro días laborables y retire la credencial con el comprobante y su cédula en ARCOTEL o una coordinación zonal.",
-        "url": "https://www.arcotel.gob.ec/preguntas-frecuentes-8-radioaficionados/",
-        "linkLabelEn": "ARCOTEL licensing FAQ",
-        "linkLabelLocal": "Preguntas frecuentes de ARCOTEL"
+        "local": "Si apruebas, ARCOTEL te notifica el pago; págalo en Banco del Pacífico en el plazo indicado (ocho días según el trámite en línea) y envía el comprobante al mismo correo para recibir tu credencial.",
+        "en": "If you pass, ARCOTEL sends a payment notice; pay at Banco del Pacífico within the stated period (eight days per the online procedure) and send the receipt to the same email to receive your credential.",
+        "url": "https://www.gob.ec/arcotel/tramites/otorgamiento-renovacion-licencia-servicio-radioaficionados-banda-ciudadana-0"
       }
     ],
     "cost": {
-      "en": "ARCOTEL lists USD 5 for the Técnico category and USD 10 for General; new entrants normally seek Técnico. Confirm the tariff when ARCOTEL issues the payment notice because the FAQ is undated.",
-      "local": "ARCOTEL indica USD 5 para la categoría Técnico y USD 10 para General. Confirme el valor al recibir el oficio de pago, pues la pregunta frecuente no tiene fecha visible.",
-      "url": "https://www.arcotel.gob.ec/preguntas-frecuentes-8-radioaficionados/",
-      "sourceType": "official-regulator-undated",
-      "date": null
+      "local": "La página de ARCOTEL (actualizada el 22/12/2025) fija 0,05 SBU de derecho de título y 1,00 SBU de uso del espectro; con SBU 2026 de USD 482 son USD 24,10 + USD 482 = USD 506,10. Las preguntas frecuentes antiguas decían USD 5 o 10; confirme en el oficio de pago.",
+      "en": "ARCOTEL's procedure page (updated 22 Dec 2025) sets 0.05 SBU for the title and 1.00 SBU for spectrum use; with the 2026 SBU of USD 482 that is USD 24.10 + USD 482 = USD 506.10. The old FAQ said USD 5 or 10; confirm on the payment notice.",
+      "url": "https://www.gob.ec/arcotel/tramites/otorgamiento-renovacion-licencia-servicio-radioaficionados-banda-ciudadana-0",
+      "additionalUrls": [
+        "https://concepto.com.ec/publicaciones/salario-basico-unificado-2026-ecuador-mdt-2025-195/",
+        "https://www.arcotel.gob.ec/preguntas-frecuentes-8-radioaficionados/"
+      ],
+      "sourceType": "regulator",
+      "date": "2026-10-01 verified (ARCOTEL page last updated 2025-12-22)"
     },
     "time": {
       "official": {
@@ -925,10 +1021,9 @@
     ],
     "notes": [
       "Official source pages are undated and contain old-style payment logistics; current online submission and initial Técnico exam procedure were not verified.",
-      "Do not apply CEPT visitor reciprocity without an Ecuador-specific official agreement; Ecuador is absent from the current CEPT T/R 61-01 participant list. https://docdb.cept.org/document/925"
+      "Do not apply CEPT visitor reciprocity without an Ecuador-specific official agreement; Ecuador is absent from the current CEPT T/R 61-01 participant list. https://docdb.cept.org/document/925",
+      "Research 2026-10-01: time.forum: WebSearch (Spanish, 'aprobe examen ARCOTEL indicativo HC') returned only official pages; no first-hand 2025+ report found; Guayaquil Radio Club page not checked beyond search results. Existing is outdated or wrong: (1) the FAQ's 'USD 5 / USD 10' fees and 'four working days to pay' are superseded by the gob.ec procedure page updated 2025-12-22 (0.05 + 1.00 SBU, eight days to pay); (2) existing says an initial Técnico exam is unclear, but both the gob.ec page and the ARCOTEL FAQ say Técnico requires a written exam (taken at ARCOTEL or radio-club premises). The 1.00 SBU spectrum fee is unusually high versus the FAQ; unclear whether per licence term (licences valid 10 years), so cost is marked partial. Page also lists 'around 7 working days' only on the old FAQ."
     ],
-    "procedureStatus": "partial",
-    "procedureGap": "The initial-category examination and current online route are unclear.",
     "costStatus": "partial"
   },
   "argentina": {
@@ -955,7 +1050,17 @@
         "linkLabelLocal": "Resolución oficial de 2024"
       }
     ],
-    "cost": null,
+    "cost": {
+      "local": "ENACOM no cobra arancel en su página del trámite. El Radio Club Argentino tramita gratis para socios con cuota al día (6+ meses) y para sus alumnos; los no socios pagan $95.000 por trámite ($25.000 jubilados). Otros radioclubes cobran lo suyo.",
+      "en": "ENACOM's procedure page lists no fee. Radio Club Argentino processes it free for members in good standing (6+ months) and its own students; non-members pay ARS 95,000 per procedure (ARS 25,000 for pensioners). Other clubs set their own charges.",
+      "url": "https://www.lu4aa.org/wp/tramites-enacom/",
+      "additionalUrls": [
+        "https://www.lu4aa.org/wp/renovaciones/",
+        "https://www.boletinoficial.gov.ar/detalleAviso/primera/317598/20241203"
+      ],
+      "sourceType": "society",
+      "date": "2026-10-01 verified (page undated; renovaciones page cites fees valid through 2026-06-30)"
+    },
     "time": {
       "official": null,
       "forum": null
@@ -975,8 +1080,10 @@
     "notes": [
       "Material conflict: the ENACOM first-licence web page says no ENACOM fee, but Resolution 1186/2024 requires fees for new licence grants and instructs clubs to pay the corresponding tariff. No current specific amount was verified. Do not publish 'free'. https://www.enacom.gob.ar/tramites/radioaficionados-otorgamiento-licencia_t100 ; https://www.boletinoficial.gov.ar/detalleAviso/primera/317598/20241203",
       "The 2024 amendment also calls for periodic criminal-record certificate updates to maintain current standing. https://www.enacom.gob.ar/institucional/enacom-simplifico-el-reglamento-de-radioaficionados_n4707",
-      "Argentina is not listed among non-CEPT implementations of T/R 61-01; do not imply CEPT short-stay privileges. https://docdb.cept.org/document/925"
-    ]
+      "Argentina is not listed among non-CEPT implementations of T/R 61-01; do not imply CEPT short-stay privileges. https://docdb.cept.org/document/925",
+      "Research 2026-10-01: time.official: ENACOM first-licence page could not be fetched (TLS certificate error); the Boletin Oficial text of Res. 1186/2024 sets no grant deadline; RCA page gives only 'minimum 3 months' for the IARP, nothing for first licences; an old qsl.net page citing 15-20 days refers to the defunct CNC, so not used. time.forum: searched Spanish (radioclub, primera licencia, 'me otorgaron', LU) with no 2025+ first-hand reports found; reddit blocked. cost: the ENACOM amount for the fee that Res. 1186/2024 art. 2.1.2 says ENACOM will collect was not found, hence partial. Existing consistent; the RCA 'sin cargo' applies to first licence only for RCA course students."
+    ],
+    "costStatus": "partial"
   },
   "belgium": {
     "steps": [
@@ -1002,7 +1109,17 @@
         "linkLabelLocal": "Na het slagen"
       }
     ],
-    "cost": null,
+    "cost": {
+      "local": "B- of C-examen: inschrijvingsgeld € 50,62 (A-examen niet bevestigd); het eerste bedieningscertificaat zit daar al in. Met eigen apparatuur ook een stationsvergunning: dossierrechten € 63,30, plus een jaarlijks recht van € 63,30 per type station.",
+      "en": "B or C exam: registration fee EUR 50.62 (A exam not confirmed); the first operator certificate is included. With your own equipment you also need a station authorization: filing fee EUR 63.30 plus an annual fee of EUR 63.30 per station type.",
+      "url": "https://www.bipt.be/consumenten/faq/hoe-vraag-ik-mijn-stationsvergunning-aan-wat-zijn-de-voorwaarden",
+      "additionalUrls": [
+        "https://vra.be/bipt-examens/",
+        "https://www.bipt.be/consumenten/faq/hoe-vraag-ik-een-bedieningscertificaat-aan-moet-ik-daarvoor-betalen"
+      ],
+      "sourceType": "regulator",
+      "date": "2026-10-01"
+    },
     "time": {
       "official": {
         "en": "BIPT schedules at least one amateur examination each month; no certificate or station-permit issuance deadline was verified.",
@@ -1025,8 +1142,10 @@
     ],
     "notes": [
       "2026 BIPT amateur application form: https://www.bipt.be/consumenten/publicatie/aanvraagformulier-voor-radioamateurs",
-      "BIPT says a resident with a CEPT-country certificate can seek a Belgian operator certificate, but this conversion is separate from the new-exam route. https://www.bipt.be/consumenten/faq/hoe-vraag-ik-een-bedieningscertificaat-aan-moet-ik-daarvoor-betalen"
-    ]
+      "BIPT says a resident with a CEPT-country certificate can seek a Belgian operator certificate, but this conversion is separate from the new-exam route. https://www.bipt.be/consumenten/faq/hoe-vraag-ik-een-bedieningscertificaat-aan-moet-ik-daarvoor-betalen",
+      "Research 2026-10-01: cost: the exam fee EUR 50.62 comes from VRA's copy of the BIPT exam FAQ (undated, https://vra.be/bipt-examens/); bipt.be itself does not list the exam fee, and the A-exam fee was not found. Conflict on BIPT: https://www.bipt.be/consumenten/faq/hoe-vraag-ik-een-nieuwe-stationsvergunning-aan-of-meld-ik-een-wijziging says a new station licence is free, while the 'voorwaarden' FAQ lists EUR 63.30 filing rights; VHF/SRC exams cost EUR 39.57 in 2026. time.forum: not found (Reddit archive and web searches yielded no 2025+ first-hand report)."
+    ],
+    "costStatus": "partial"
   },
   "colombia": {
     "steps": [
@@ -1076,7 +1195,8 @@
     ],
     "notes": [
       "MinTIC's in-person alternative requires requesting an exam appointment ten working days in advance; the written exam pass mark is 65% and exams are first and third Fridays. https://mintic.gov.co/portal/inicio/Tramites-y-servicios/RABCA/3946:Licencia-de-Segunda-Categoria-o-de-Novicio-para-Radioaficionados",
-      "The first-licence page was last updated 2025-06-27 and links the 2026 tariff. It inconsistently calls the first-licence description an 'increase' in category; rely on the page title and procedure rather than that sentence."
+      "The first-licence page was last updated 2025-06-27 and links the 2026 tariff. It inconsistently calls the first-licence description an 'increase' in category; rely on the page title and procedure rather than that sentence.",
+      "Research 2026-10-01: time.forum: Spanish searches (RABCA, 'ya tengo mi licencia', HK, 2025) returned only MinTIC pages; a MinTIC FAQ result says the licence emailed about one month after the exam (consistent with the existing 30-working-day estimate). No dated 2025+ first-hand report found; reddit blocked. Existing: no errors found."
     ]
   },
   "czechia": {
@@ -1127,7 +1247,8 @@
     ],
     "notes": [
       "Fee detail: https://ctu.gov.cz/spravni-poplatky-prukazy-zkousky ; individual authorization baseline CZK 500: https://ctu.gov.cz/amaterska-radiokomunikacni-sluzba . The electronic discount applies only to eligible authenticated ePortal submissions.",
-      "ČTÚ's international section appears to conflate T/R 61-01 short-stay licences and T/R 61-02 HAREC; use ECO primary T/R 61-01 status for the CEPT section. https://docdb.cept.org/implementation/925"
+      "ČTÚ's international section appears to conflate T/R 61-01 short-stay licences and T/R 61-02 HAREC; use ECO primary T/R 61-01 status for the CEPT section. https://docdb.cept.org/implementation/925",
+      "Research 2026-10-01: time.forum: searched Czech (radioamatérská zkouška ČTÚ oprávnění volací značka jak dlouho trvalo 2025). Results were official ČTÚ pages, exam guides (ok1kbt.fbmi.cvut.cz, adamek.cz) and an ČTÚ FAQ (amaterske_zkousky_faq_06-2025.pdf, 2025) with no first-hand dated timeline. Search budget was exhausted before forum.crk.cz, okdxf.eu or Facebook groups could be tried. Not found. Nothing in existing found wrong."
     ]
   },
   "austria": {
@@ -1155,11 +1276,16 @@
       }
     ],
     "cost": {
-      "en": "As of 2026, the exam costs EUR 71 including its filing fee and the certificate adds EUR 21. A separate 10-year station authorization costs EUR 200 under §15 TKGV 2025; separate filing/attachment charges may apply. The station fee rises to EUR 206.40 on 1 January 2027.",
-      "local": "2026 kostet die Prüfung einschließlich Eingabegebühr 71 €, das Zeugnis zusätzlich 21 €. Die gesonderte Stationsbewilligung für zehn Jahre kostet nach § 15 TKGV 2025 200 €; weitere Eingabe- oder Beilagengebühren können anfallen. Ab 1. Jänner 2027 steigt die Stationsgebühr auf 206,40 €.",
+      "local": "2026: Prüfung 71 € (50 € + 21 € Eingabegebühr), Zeugnis 21 €, Amateurfunkbewilligung für zehn Jahre 200 € (§ 15 TKGV 2025): zusammen rund 292 €. Für den Bewilligungsantrag kann noch eine Eingabegebühr von 21 € (Beilagen 6 € je Bogen) dazukommen.",
+      "en": "2026: exam EUR 71 (EUR 50 + EUR 21 filing fee), certificate EUR 21, ten-year amateur station authorization EUR 200 (TKGV 2025 s.15): about EUR 292 in total. A further EUR 21 filing fee (attachments EUR 6 per sheet) may apply to the authorization application.",
       "url": "https://ris.bka.gv.at/eli/bgbl/ii/2024/356/P15/NOR40266857",
-      "sourceType": "official-law-and-regulator",
-      "date": "valid through 2026-12-31"
+      "additionalUrls": [
+        "https://www.fb.gv.at/Pruefungen/pruefungen-af.html",
+        "https://www.fb.gv.at/formulare/allgemein.html",
+        "https://www.fb.gv.at/Funk/amateurfunkdienst.html"
+      ],
+      "sourceType": "law",
+      "date": "2026-10-01"
     },
     "time": {
       "official": {
@@ -1183,7 +1309,8 @@
     ],
     "notes": [
       "Exam EUR 71 and certificate EUR 21: https://www.fb.gv.at/Pruefungen/pruefungen-af.html ; RAT application and possible filing fees: https://www.fb.gv.at/formulare/allgemein.html ; 2027 station fee: https://www.fb.gv.at/Funk/amateurfunkdienst.html",
-      "Fernmeldebüro accepts CEPT certificates for recognition, but entry categories 3 and 4 do not automatically imply the full CEPT T/R 61-01 travel privilege. https://www.fb.gv.at/Pruefungen/pruefungen-af.html"
+      "Fernmeldebüro accepts CEPT certificates for recognition, but entry categories 3 and 4 do not automatically imply the full CEPT T/R 61-01 travel privilege. https://www.fb.gv.at/Pruefungen/pruefungen-af.html",
+      "Research 2026-10-01: time.forum: searched Reddit archive (r/Amateurfunk, 2025+) for Fernmeldebüro/ÖVSV/Bewilligung/Rufzeichen; only exam-preparation posts (e.g. https://www.reddit.com/r/Amateurfunk/comments/1ryzybx/) and no first-hand exam-to-authorization timing. Native-language forums were not reachable without a general web search (search budget exhausted). Existing data matches fb.gv.at; note the 2027 station fee of EUR 206.40 (BGBl. II Nr. 267/2026)."
     ],
     "costStatus": "partial"
   },
@@ -1240,7 +1367,8 @@
     ],
     "notes": [
       "Direct CRC form page: https://crc.bg/bg/statii/1691/zaqvlenie-za-osyshtestvqvane-na-elektronni-syobshteniq-chrez-radiosyoryzheniq-ot-ljubitelska-radiosluzhba ; 2026 schedule: https://www.crc.bg/bg/rubriki/146/grafik-na-izpitite-za-pridobivane-na-radiolyubitelska-pravosposobnost",
-      "CRC's FAQ says class 1 holders can seek a CEPT licence/HAREC document for travel. These are separate EUR 10 (or EUR 8 eligible online) documents in its 2026 fee sheet. https://www.crc.bg/bg/rubriki/147/chesto-zadavani-vyprosi ; https://crc.bg/files/_bg/Administrativni_taksi_radiolubiteli.pdf"
+      "CRC's FAQ says class 1 holders can seek a CEPT licence/HAREC document for travel. These are separate EUR 10 (or EUR 8 eligible online) documents in its 2026 fee sheet. https://www.crc.bg/bg/rubriki/147/chesto-zadavani-vyprosi ; https://crc.bg/files/_bg/Administrativni_taksi_radiolubiteli.pdf",
+      "Research 2026-10-01: Forum: no dated 2025+ first-hand report found. WebSearch budget ran out before Bulgarian-language forum queries (BFRA/radio forums, 'получих позывен', 'изпит КРС радиолюбител') could be run; Reddit blocked. Existing: nothing checked or found wrong."
     ]
   },
   "panama": {
@@ -1285,7 +1413,8 @@
     ],
     "notes": [
       "The Ministry of Government, not ASEP, issues individual amateur-radio licences; ASEP supervises spectrum: https://www.mingob.gob.pa/crece-numero-de-radioaficionados-en-panama/",
-      "A 2025 Ministry report says the examinations resumed after a gap since 2012; do not infer a regular future schedule: https://www.mingob.gob.pa/aspirantes-a-radioaficionados-realizaron-sus-pruebas-para-obtener-sus-licencias/"
+      "A 2025 Ministry report says the examinations resumed after a gap since 2012; do not infer a regular future schedule: https://www.mingob.gob.pa/aspirantes-a-radioaficionados-realizaron-sus-pruebas-para-obtener-sus-licencias/",
+      "Research 2026-10-01: time.official and time.forum: not found. mingob.gob.pa has an expired TLS certificate (connection reset even with verification off) so the Ministry's trámite page, the form and the 2025 exam news could not be re-read; qsl.net/lpr (LPRA) is a frameset with no readable content. No statutory deadline for issuing the licence was located and no dated first-hand report found (search quota exhausted before Spanish forum queries). Nothing in existing was found to be wrong."
     ]
   },
   "paraguay": {
@@ -1330,7 +1459,8 @@
     "notes": [
       "CONATEL's rule requires a one-time authorisation charge and annual spectrum fee by category, but a reliable current peso amount was not verified: https://www.conatel.gov.py/conatel/wp-content/uploads/2019/10/go-041109-097-rd1545.pdf",
       "The official guide links direct .doc requirements and application files, which the browser could not parse: https://www.conatel.gov.py/wp-content/uploads/2021/01/120717-ra-documentos-y-procedimiento-autorizacin.doc and https://www.conatel.gov.py/wp-content/uploads/2021/01/120717-ra-formulario-autorizacion.doc",
-      "Fifteen days is advance exam scheduling, not licence-issuance time."
+      "Fifteen days is advance exam scheduling, not licence-issuance time.",
+      "Research 2026-10-01: cost: CONATEL's amateur procedure document (https://www.conatel.gov.py/wp-content/uploads/2021/01/120717-ra-documentos-y-procedimiento-autorizacin.doc ) says CONATEL sends a 'Nota SG con el Presupuesto' after the application is accepted, the applicant must deposit the amount at Banco Nacional de Fomento within 30 calendar days or the authorisation is cancelled, then collects the Resolution; the annual spectrum fee is paid in February. Neither it nor Resolution 1545 (https://www.conatel.gov.py/conatel/wp-content/uploads/2019/10/go-041109-097-rd1545.pdf ) gives peso amounts (fees are fixed by CONATEL per category A/B/C under the Reglamento Arancelario, Res. 856/2000), and I did not locate the current fee table on conatel.gov.py. time.official: no issuance deadline found; the only periods are the 15-day advance notice for exam sittings and the 30-day payment window (already noted / not an issuance time). time.forum: not found (search quota exhausted). Existing note about unparseable .doc files is outdated: both .doc files can be downloaded and converted."
     ]
   },
   "switzerland": {
@@ -1380,7 +1510,8 @@
     ],
     "notes": [
       "Exam fee components are in BAKOM's examination rules: https://www.bakom.admin.ch/dam/bakom/de/dokumente/bakom/frequenzen_und_antennen/Funkerpr%C3%BCfungen/Amateurfunk%20Pr%C3%BCfungen/pruefungen_amateurfunk.pdf.download.pdf/Pr%C3%BCfungen%20Amateurfunk.pdf",
-      "The CHF 70 figure on BAKOM's general amateur page concerns special-frequency first allocation and should not be used for an ordinary personal call sign: https://www.bakom.admin.ch/de/amateurfunk"
+      "The CHF 70 figure on BAKOM's general amateur page concerns special-frequency first allocation and should not be used for an ordinary personal call sign: https://www.bakom.admin.ch/de/amateurfunk",
+      "Research 2026-10-01: time.official: BAKOM exam page only says dates are published on the eGovernment portal UVEK, no deadline or issuance time (https://www.bakom.admin.ch/de/amateurfunk-pruefungen); the egov.swiss call-sign page gives fees (CHF 110 / CHF 50 per year, matching existing) but no processing time. BAKOM PDF returned 502. time.forum: Reddit archive search for BAKOM/HB9/HB3 2025+ returned nothing relevant; no Swiss forum reachable. Existing data looks correct."
     ]
   },
   "albania": {
@@ -1403,7 +1534,16 @@
         "url": "https://akep.al/wp-content/uploads/2021/07/RREGULLORE_PER_SHERBIMET_RADIOAMATORE_2.pdf"
       }
     ],
-    "cost": null,
+    "cost": {
+      "local": "Sipas VKM nr. 599/2010 (ndryshuar 2020), çertifikata e radioamatorit kushton 500 lekë dhe leja e stacionit me shenjë thirrje 500 lekë, pra 1 000 lekë; tabela është e pagesave vjetore. Tarifa e vetë provimit nuk u gjet.",
+      "en": "Under Council of Ministers decision 599/2010 (amended 2020), the amateur certificate costs 500 lek and the station permit with call sign 500 lek, 1,000 lek in total; the table is headed annual payments. The exam fee itself was not found.",
+      "url": "https://akep.al/wp-content/uploads/2021/07/VKM-599-dt-23.07.2010-i-perditesuar-002-1.pdf",
+      "additionalUrls": [
+        "https://akep.al/vendime-akte/komunikimet-elektronike/"
+      ],
+      "sourceType": "law",
+      "date": "2020-04-22 (latest amendment, VKM 334)"
+    },
     "time": {
       "official": {
         "en": "AKEP decides a complete online licence application within seven days; incomplete submissions are returned for correction within five days. This does not include the wait for an exam date.",
@@ -1426,8 +1566,10 @@
     ],
     "notes": [
       "A 2010 AKEP consultation document mentions historical fees of 500 lek for the certificate and 200 lek per five years for domestic station permission, but this is not current evidence; keep cost null: https://akep.al/wp-content/uploads/2021/07/vendim-nr-128-date-26-01-2010.pdf",
-      "The AKEP regulation is an older amended text still linked from the authority's current legal index: https://akep.al/vendime-akte/komunikimet-elektronike/"
-    ]
+      "The AKEP regulation is an older amended text still linked from the authority's current legal index: https://akep.al/vendime-akte/komunikimet-elektronike/",
+      "Research 2026-10-01: Cost: exam fee amount not found (the AKEP regulation provides reduced exam fees for pensioners, disabled and students but gives no amount; Tarifa/Pagesa pages on akep.al not opened). The VKM 599 table 9 lists certificate and station permit at 500 lek each under 'annual payment'; whether the certificate is charged once or yearly is unclear. Forum: no dated 2025+ first-hand report found (Albanian queries not possible after search budget ran out; Reddit blocked). Existing: nothing found wrong."
+    ],
+    "costStatus": "partial"
   },
   "angola": {
     "steps": [
@@ -1460,7 +1602,8 @@
     ],
     "notes": [
       "INACOM's public service page does not disclose an amateur examination route, applicant document checklist, a fixed fee, or processing target; request clarification from INACOM rather than extrapolating from commercial radio licensing: https://inacom.gov.ao/services/",
-      "A 2019 tariff instrument includes a 0.30 social-service coefficient for amateur radio, but that does not yield an applicant fee without the other inputs: https://inacom.gov.ao/wp-content/uploads/2025/08/D.P.-312-19-de-4-de-Outubro-valor-das-taxas-referentes-a-oferta-de-redes-e-servicos-de-c.e.pdf"
+      "A 2019 tariff instrument includes a 0.30 social-service coefficient for amateur radio, but that does not yield an applicant fee without the other inputs: https://inacom.gov.ao/wp-content/uploads/2025/08/D.P.-312-19-de-4-de-Outubro-valor-das-taxas-referentes-a-oferta-de-redes-e-servicos-de-c.e.pdf",
+      "Research 2026-10-01: Fetched inacom.gov.ao/services/ and /autorizacao-radioelectrica/ and scanned INACOM's site links: no amateur-specific page, fee, exam, document checklist or prazo is published; the generic 'Pedido de Autorizacao de Montagem Radioelectrica' page lists documents for entities (catalogue, D.A.R., Diario da Republica) and is not amateur specific (it describes the service as free, but that cannot be assumed to cover amateurs). Procedure and cost remain unverified. time.official / time.forum: not found (no Portuguese forum or society source located; search quota exhausted). The existing note about the 2019 tariff decree is consistent with what I found."
     ],
     "procedureStatus": "partial",
     "procedureGap": "The amateur exam and applicant document checklist are not public."
@@ -1490,14 +1633,18 @@
       }
     ],
     "cost": {
-      "en": "BTRC's published rate list states BDT 2,500 once for a call sign and BDT 1,000 yearly for the licence for Bangladeshi applicants. Examination and station or terminal charges are additional and their amounts are set separately.",
-      "local": "বিটিআরসির প্রকাশিত হার অনুযায়ী বাংলাদেশি আবেদনকারীর কল সাইনের এককালীন ফি ২,৫০০ টাকা এবং লাইসেন্সের বার্ষিক ফি ১,০০০ টাকা। পরীক্ষা ও স্টেশন/টার্মিনালের ফি অতিরিক্ত; সেগুলোর পরিমাণ পৃথকভাবে নির্ধারিত।",
-      "url": "https://btrc.gov.bd/sites/default/files/files/btrc.portal.gov.bd/notices/ce1e1777_b941_41e5_9d1f_a07995545761/2024-02-14-05-15-52290e7930459f057ec202927c1a2772.pdf",
-      "sourceType": "official",
-      "date": "BTRC published rate list; checked 2026-09-30"
+      "local": "বিটিআরসির নির্দেশিকা অনুযায়ী কল সাইন ফি এককালীন ২,৫০০ টাকা এবং বার্ষিক লাইসেন্স ফি ১,০০০ টাকা (পুনঃইস্যু ৫০০ টাকা)। পরীক্ষার ফি প্রতিবার কমিশন নির্ধারণ করে, স্টেশন/টার্মিনাল চার্জ রেট তালিকা অনুযায়ী।",
+      "en": "Per BTRC's instructions, the call sign costs BDT 2,500 once and the licence BDT 1,000 a year (BDT 500 for re-issue). The exam fee is set by the commission for each session, and station/terminal charges follow the rate list.",
+      "url": "https://cdn2.ogrlegal.com/files/telecom/directives/Revised_Guidelines_for_Using_Amateur_Radio_in_Bangladesh.pdf",
+      "sourceType": "regulator",
+      "date": "2019-07-30"
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "বিটিআরসি ২০২৫ সালের ৯ মে পরীক্ষার (এআরএসবির তথ্য অনুযায়ী) ফলাফল ১৭ মে ২০২৫ প্রকাশ করেছে, অর্থাৎ প্রায় আট দিনে। ২০১৯ সালের নির্দেশিকায় পরীক্ষা ছয় মাস পর পর বা কমিশনের ঠিক করা বিরতিতে হওয়ার কথা।",
+        "en": "BTRC published the results of the 9 May 2025 exam (date per ARSB) on 17 May 2025, about eight days later. The 2019 instructions say exams run every six months or at an interval the commission decides.",
+        "url": "https://btrc.gov.bd/pages/notices/6922ea40dbfbab28ce0b3097"
+      },
       "forum": null
     },
     "requirements": [
@@ -1509,7 +1656,8 @@
     ],
     "notes": [
       "BTRC's 2025 exam results: https://btrc.gov.bd/site/notices/689dcbf6-56dd-4c0c-b184-005ec71b155b/%E0%A6%85%E0%A7%8D%E0%A6%AF%E0%A6%BE%E0%A6%AE%E0%A7%87%E0%A6%9A%E0%A6%BE%E0%A6%B0-%E0%A6%B0%E0%A7%87%E0%A6%A1%E0%A6%BF%E0%A6%93-%E0%A6%B2%E0%A6%BE%E0%A6%87%E0%A6%B8%E0%A7%87%E0%A6%A8%E0%A7%8D%E0%A6%B8-%E0%A6%AA%E0%A7%8D%E0%A6%B0%E0%A6%BE%E0%A6%AA%E0%A7%8D%E0%A6%A4%E0%A6%BF-%E0%A6%AA%E0%A6%B0%E0%A7%80%E0%A6%95%E0%A7%8D%E0%A6%B7%E0%A6%BE-%E0%A7%A8%E0%A7%A6%E0%A7%A8%E0%A7%AB%C2%A0%E0%A6%8F%E0%A6%B0%C2%A0%E0%A6%AB%E0%A6%B2%E0%A6%BE%E0%A6%AB%E0%A6%B2",
-      "The fee PDF was indexed by search but timed out on open; amounts come from its indexed text. BTRC page showing currently listed guidelines: https://btrc.gov.bd/site/page/419c47a0-0403-4d0f-abfb-4463d3800e49/-"
+      "The fee PDF was indexed by search but timed out on open; amounts come from its indexed text. BTRC page showing currently listed guidelines: https://btrc.gov.bd/site/page/419c47a0-0403-4d0f-abfb-4463d3800e49/-",
+      "Research 2026-10-01: time.forum: searched Bing/WebSearch in Bangla and English (S21 কলসাইন পেতে কতদিন, QRZ, ARSB, South Asia Radio Club blog). https://ham-sarc.blogspot.com/ is a first-hand blog of an S21 holder but its exam/licence is from 2023, and the 2025 posts are only notices. https://forums.qrz.com/index.php?threads/bangladesh-amateur-radio-license-quest.953068/ (3 May 2025) confirms the 9 May 2025 exam date but has no applicant timeline. A search snippet mentioned 15-20 days for a call sign to appear in ARSB's database (https://s21arsb.com/bangla-faq/, page now 404) - unverified. Exam fee: a search summary said BDT 1,500 in a past notice, but I could not open any notice (BTRC file URLs now redirect to an error page after the site migration), so not stated. Fee/procedure source: BTRC 'Amended Instructions for Amateur Radio Usages and Procedures in Bangladesh' dated 30 Jul 2019, scanned PDF read by eye (pp. 6 and 10): exam, certificate, apply to Chairman with certificate and passport/police verification, demand note for call sign and licence fee, then licence and call sign; licence term 3 years, renewal applied for 6 months before expiry. The existing cost URL (BTRC rate list PDF) now returns an HTML error page, so I could not re-verify BDT 2,500/1,000 there; the 2019 instructions confirm both figures (Bangladeshi column)."
     ],
     "costStatus": "partial"
   },
@@ -1556,7 +1704,8 @@
       }
     ],
     "notes": [
-      "NTRA regulates and issues this device licence; the service page concerns amateur wireless equipment, not a general commercial radio permit: https://digital.tra.gov.eg/Landing/service/W119"
+      "NTRA regulates and issues this device licence; the service page concerns amateur wireless equipment, not a general commercial radio permit: https://digital.tra.gov.eg/Landing/service/W119",
+      "Research 2026-10-01: time.forum: no Arabic or English first-hand 2025+ report found for NTRA amateur licence timing; WebSearch budget ran out before native-language forum queries (e.g. Egyptian ham forums, Facebook groups) could be run. Existing NTRA W119 data not re-checked beyond the earlier verification."
     ]
   },
   "estonia": {
@@ -1612,7 +1761,8 @@
     ],
     "notes": [
       "The three-working-day result deadline is in the regulation: https://www.riigiteataja.ee/akt/12887896.pdf",
-      "A/B/D class labels were verified against the TTJA page and newer regulation; avoid older C-class references from a superseded 2000 act."
+      "A/B/D class labels were verified against the TTJA page and newer regulation; avoid older C-class references from a superseded 2000 act.",
+      "Research 2026-10-01: time.forum: searched Estonian and English queries (sain raadioamatööri kutsungi 2025, TTJA tööluba); fetched dmr.ee (no applicant reports) and erau.ee how-to page (says TTJA reviews applications 'paari nädalaga', an official claim, not a first-hand report). Reddit fetch blocked. No first-hand report dated 2025+ found. Web search quota ran out partway."
     ]
   },
   "india": {
@@ -1714,7 +1864,10 @@
         "url": "https://www.ratel.rs/sr/radioamaterska-licenca"
       }
     ],
-    "notes": "RATEL's older spectrum FAQ asks for society call-sign certificate; current dedicated licence page omits it. Applicants should check the current ZRLA form and RATEL instructions. Official numeric fee is computed from the 2026 station-permit tariff and RATEL's statement that operator licence fee equals station-permit fee."
+    "notes": [
+      "RATEL's older spectrum FAQ asks for society call-sign certificate; current dedicated licence page omits it. Applicants should check the current ZRLA form and RATEL instructions. Official numeric fee is computed from the 2026 station-permit tariff and RATEL's statement that operator licence fee equals station-permit fee.",
+      "Research 2026-10-01: Official time: no processing deadline for RATEL licence/permit on ratel.rs licence/permit/amateur-service pages or in the Pravilnik (Sl. glasnik 82/2024); the SRS site (yu1srs.org.rs) failed with a TLS error so its exam rules could not be read. A club page (yu1abh.uzice.net) says exams are held when enough candidates exist, register one month ahead, and the SRS diploma usually arrives in 7-15 days; that is a club, not the regulator or society, so not used. Forum: no dated 2025+ first-hand report found (Serbian-language queries about licenca RATEL / polozio ispit; search budget then ran out; Reddit blocked). Existing cost: club page lists exam registration 1,000 RSD and SRS membership 2,000 RSD for adults (free under 18), undated, so the existing 2,778 RSD excludes those; not changed here since only time gaps were assigned."
+    ]
   },
   "slovenia": {
     "steps": [
@@ -1730,15 +1883,29 @@
       }
     ],
     "cost": {
-      "en": "For 2026 AKOS charges a one-time 60-point fee for a new amateur permit; the 2026 frequency-use point is €0.60, making the permit €36. The government SPOT page lists the exam as €12.50 for radio-club members and €25 for nonmembers, but that exam price page was last updated in 2023 and should be reconfirmed with ZRS.",
-      "local": "AKOS v letu 2026 za novo radioamatersko dovoljenje zaračuna enkratnih 60 točk; vrednost točke je 0,60 €, zato dovoljenje stane 36 €. Portal SPOT navaja 12,50 € za izpit za člane radioklubov in 25 € za nečlane, vendar je bil ta podatek nazadnje posodobljen leta 2023, zato ga preverite pri ZRS.",
-      "url": "https://www.uradni-list.si/glasilo-uradni-list-rs/vsebina/2025-01-3662/tarifa-2026-o-vrednosti-tocke-za-placilo-na-podlagi-obvestila-za-placilo-za-uporabo-radijskih-frekvenc-in-za-placilo-za-uporabo-elementov-ostevilcenja",
-      "sourceType": "official gazette plus SPOT exam fee",
-      "date": "2026"
+      "local": "Izpit stane 12,50 € za člane radioklubov in 25 € za nečlane; za novo dovoljenje AKOS zaračuna enkratnih 60 točk po 0,60 €, torej 36 €. Skupaj 48,50–61 €, letnega nadomestila ni.",
+      "en": "The exam costs 12.50 EUR for radio-club members and 25 EUR for non-members; AKOS charges a one-time 60 points at 0.60 EUR, i.e. 36 EUR, for a new permit. Total 48.50 to 61 EUR, with no annual fee.",
+      "url": "https://spot.gov.si/sl/dejavnosti-in-poklici/dovoljenja/radioamatersko-dovoljenje/",
+      "additionalUrls": [
+        "https://www.uradni-list.si/glasilo-uradni-list-rs/vsebina/2025-01-3662/tarifa-2026-o-vrednosti-tocke-za-placilo-na-podlagi-obvestila-za-placilo-za-uporabo-radijskih-frekvenc-in-za-placilo-za-uporabo-elementov-ostevilcenja",
+        "https://www.uradni-list.si/glasilo-uradni-list-rs/vsebina/2023-01-3962/splosni-akt-o-spremembah-in-dopolnitvah-splosnega-akta-o-nacinu-izracuna-placil-za-uporabo-radijskih-frekvenc",
+        "https://www.s53apr.si/projekti/radioamaterski-tecaj-2026/"
+      ],
+      "sourceType": "regulator",
+      "date": "2026-10-01 verified (SPOT exam fee page last edited 2023; Radioklub Triglav course page confirms 25 EUR exam-only; 2026 point value 0.60 EUR)"
     },
     "time": {
-      "official": null,
-      "forum": null
+      "official": {
+        "local": "ZRS ima v letu 2026 štiri izpitne roke na sedežu: 2. aprila, 4. junija, 3. septembra in 5. novembra ob 17. uri; prijava je mogoča najmanj dva tedna prej po e-pošti. Izpit je mogoče opravljati tudi v klubu po tečaju.",
+        "en": "In 2026 ZRS holds four exam sessions at its headquarters: 2 April, 4 June, 3 September and 5 November at 17:00; register by email at least two weeks ahead. The exam can also be taken at a club after a course.",
+        "url": "https://www.hamradio.si/2026/01/18/izpitni-roki-na-sedezu-zrs-v-letu-2026/"
+      },
+      "forum": {
+        "local": "Uporabnik mucek je izpit opravil 17. 11. 2025; 28. 11. je še čakal na klicni znak z AKOS, 8. 1. 2026 pa je bil S50CAT že njegov. Od izpita do znaka je torej minilo največ okoli 7 tednov.",
+        "en": "Forum user mucek passed the exam on 17 Nov 2025; on 28 Nov they were still waiting for AKOS to confirm the call sign, and by 8 Jan 2026 S50CAT was theirs. So exam to call sign took at most about 7 weeks.",
+        "url": "https://s5tech.net/viewtopic.php?t=27909",
+        "date": "2026-01-08"
+      }
     },
     "requirements": [
       {
@@ -1752,8 +1919,10 @@
         "url": "https://spot.gov.si/sl/dejavnosti-in-poklici/dovoljenja/radioamatersko-dovoljenje/"
       }
     ],
-    "notes": "The 60-point one-time rule is https://www.uradni-list.si/glasilo-uradni-list-rs/vsebina/2023-01-3962/splosni-akt-o-spremembah-in-dopolnitvah-splosnega-akta-o-nacinu-izracuna-placil-za-uporabo-radijskih-frekvenc ; AKOS forms index is https://www.akos-rs.si/e-vloge-in-obrazci/radijski-spekter/dokumenti-vloge-in-obrazci . The 14 days is registration lead time, not permit processing time.",
-    "costStatus": "partial"
+    "notes": [
+      "The 60-point one-time rule is https://www.uradni-list.si/glasilo-uradni-list-rs/vsebina/2023-01-3962/splosni-akt-o-spremembah-in-dopolnitvah-splosnega-akta-o-nacinu-izracuna-placil-za-uporabo-radijskih-frekvenc ; AKOS forms index is https://www.akos-rs.si/e-vloge-in-obrazci/radijski-spekter/dokumenti-vloge-in-obrazci . The 14 days is registration lead time, not permit processing time.",
+      "Research 2026-10-01: Official time: the regulator pages (akos-rs.si, spot.gov.si, Splošni akt) state only 15-year validity and no permit processing deadline; a 45-day AKOS deadline appears on club pages (s53apr.si) but I could not find it on a regulator page, so it is not used. Forum: found one 2025-26 thread (s5tech.net) that gives only an upper bound for exam to call sign. Existing: the SPOT page says exams are 4 per year, consistent; SPOT exam-fee wording is dated 2023 but Radioklub Triglav 2026 course page still lists 25 EUR exam-only."
+    ]
   },
   "south-korea": {
     "steps": [
@@ -1769,11 +1938,16 @@
       }
     ],
     "cost": {
-      "en": "A July 2026 KARL Gyeonggi fourth-class course charged ₩140,000, including that organizer's course arrangements. Other organizers may differ; the station-permit fee is additional and the portal points to the radio law tariff without a readable amount.",
-      "local": "2026년 7월 한국아마추어무선연맹 경기도본부의 제4급 강습비는 140,000원이었습니다. 다른 주최자의 금액은 다를 수 있으며, 무선국 허가 수수료는 별도입니다. 전자민원센터는 전파법 시행령의 수수료를 안내하지만 금액을 직접 표시하지 않습니다.",
+      "local": "한국아마추어무선연맹 경기도본부의 제4급 강습비 140,000원(2026년 7월)에 무선국 개설 허가 수수료 5,000원(50W 미만, 전파법 시행령 별표12)과 준공검사 수수료 10,000원(아마추어국 50W 미만, 별표13)을 더하면 약 155,000원입니다. 장비값은 별도입니다.",
+      "en": "A KARL Gyeonggi 4th-class course (KRW 140,000, July 2026) plus the KRW 5,000 station-permit fee (under 50 W) and the KRW 10,000 completion-inspection fee (amateur station under 50 W) comes to about KRW 155,000, excluding equipment.",
       "url": "https://www.karl.or.kr/bbs/board.php?bo_table=01_04&month=7&sc_no=&wr_id=990&year=2026",
-      "sourceType": "official exam organizer course announcement",
-      "date": "2026-06-22"
+      "additionalUrls": [
+        "https://emsit.go.kr/cp/ai/FeeGudFileDown.do?cvaOfwClfNo=1440000007902",
+        "https://law.go.kr/LSW/flDownload.do?flSeq=139222887&bylClsCd=110201",
+        "https://blog.naver.com/ssonghen/224273871010"
+      ],
+      "sourceType": "society",
+      "date": "2026-07 course fee; fee tables Enforcement Decree Annex 12 (rev. 2016) and Annex 13 (rev. 2022-12-27)"
     },
     "time": {
       "official": {
@@ -1781,7 +1955,12 @@
         "local": "정부 민원 안내상 적합성평가를 받은 장비는 개설허가 처리기간이 7일, 그렇지 않은 장비는 14일입니다. 이는 자격 취득 후 신청 단계의 기간입니다.",
         "url": "https://emsit.go.kr/cp/cv/Cp1440000_0079_02Reg.do"
       },
-      "forum": null
+      "forum": {
+        "local": "한 블로거는 2026년 4월 27일 전자민원센터에 아마추어국 개설허가를 신청해 5월 11일 처리가 끝났고, 민원신청내역에서 허가증(호출부호)을 발급받았습니다. 이후 준공검사를 따로 신청해야 합니다.",
+        "en": "A blogger applied for the amateur station permit on the e-civil-service portal on 27 April 2026 and it was processed on 11 May, after which the permit with call sign could be issued from the portal; a separate completion inspection must then be requested.",
+        "url": "https://blog.naver.com/ssonghen/224273871010",
+        "date": "2026-05-11"
+      }
     },
     "requirements": [
       {
@@ -1795,8 +1974,10 @@
         "url": "https://www.karl.or.kr/bbs/board.php?bo_table=01_04&month=7&sc_no=&wr_id=990&year=2026"
       }
     ],
-    "notes": "KCA exam pathway and fees differ by class; official KCA examination guide: https://www.cq.or.kr/qh_quagm02_007.do . Do not present the KARL course fee as universal.",
-    "costStatus": "partial"
+    "notes": [
+      "KCA exam pathway and fees differ by class; official KCA examination guide: https://www.cq.or.kr/qh_quagm02_007.do . Do not present the KARL course fee as universal.",
+      "Research 2026-10-01: Fees: permit fee from the official eMSIT fee-guide file (Enforcement Decree Annex 12: amateur/experimental under 50 W 5,000 won; blogger paid 5,070 incl. card surcharge); inspection fee from Annex 13 (10,000 won; a Nov 2025 blogger also paid 10,000 and reported the inspection took one week from application: https://blog.naver.com/nunming1107/224090390652). KCA written exam fee for 1st-3rd class amateur is 20,000 won (https://www.cq.or.kr/qh_quagm02_007.do). The KCA qualification-certificate issuing fee is only described as 'per Enforcement Decree' (a Dec 2025 blogger says physical delivery costs a few thousand won, https://aquawitch.tistory.com/entry/%EC%95%84%EB%A7%88%EC%B6%94%EC%96%B4%EB%AC%B4%EC%84%A04%EA%B8%89-%EB%AC%B4%EC%A0%84%EA%B8%B0-%EA%B5%AC%EB%A7%A4%EC%9E%90%EA%B2%A9-%EC%8B%A0%EC%B2%AD), so the total excludes that optional item. EXISTING STEPS INCOMPLETE: after the station permit, a completion inspection (준공검사) via KCA radio-station inspection (https://rsi.kca.kr) is required before operating; existing steps omit it."
+    ]
   },
   "japan": {
     "steps": [
@@ -1824,8 +2005,17 @@
       "date": "2025-10-01"
     },
     "time": {
-      "official": null,
-      "forum": null
+      "official": {
+        "local": "総務省の電波利用電子申請のFAQでは、アマチュア局専用の簡易な手続きは審査完了まで通常3〜4週間程度とされています（あくまで目安で、申請内容により変わります）。",
+        "en": "The Ministry's electronic filing FAQ says the simplified amateur-station procedure normally takes about 3 to 4 weeks to complete review; this is only a guide and varies with the application.",
+        "url": "https://www.denpa.soumu.go.jp/support/faq/app/FAQS0093/index.html"
+      },
+      "forum": {
+        "local": "2025年6月7日に電子申請でアマチュア局（移動局）を新規申請し、6月12日に審査終了、関東総合通信局で免許状を受け取りました。4営業日です（従事者免許は取得済みで、窓口受取）。",
+        "en": "A ham filed a new amateur (mobile) station application electronically on 7 June 2025, review finished on 12 June, and the licence was collected in person at the Kanto bureau: four business days (operator certificate already held).",
+        "url": "https://onair.jp/archives/5189.html",
+        "date": "2025-06-14"
+      }
     },
     "requirements": [
       {
@@ -1839,7 +2029,10 @@
         "url": "https://www.jarl.org/Japanese/6_Hajimeyo/shinsei.html"
       }
     ],
-    "notes": "JARD fourth-class course fee source https://www.jard.or.jp/course/ ; JARD station fee source https://www.jard.or.jp/licenseqa/index.html . The course is two training days, not a verified end-to-end processing time."
+    "notes": [
+      "JARD fourth-class course fee source https://www.jard.or.jp/course/ ; JARD station fee source https://www.jard.or.jp/licenseqa/index.html . The course is two training days, not a verified end-to-end processing time.",
+      "Research 2026-10-01: time.official from the electronic-application FAQ (regulator). time.forum from a personal blog (onair.jp, 2025-06-14); other blogs found report 3-5 weeks but were undated or pre-2025. Note: the report is a fast case (counter pickup); official guide says 3-4 weeks. From October 2025 Japan issues digital licences per search snippets (not verified on an official page)."
+    ]
   },
   "kazakhstan": {
     "steps": [
@@ -1862,7 +2055,11 @@
       "date": "checked 2026-09-30"
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "Қағидалар бойынша үшінші санат хабарлама жіберілген сәттен бастап беріледі; екінші, бірінші және ең жоғары санатқа хабарламадан кейін тиісінше кемінде 1, 2 және 3 жылдан соң ғана өтуге болады. Хабарламаны қарау мерзімі көрсетілмеген.",
+        "en": "Under the rules, third category applies from the moment of notification; second, first and extra categories are available no sooner than 1, 2 and 3 years after notification. No review deadline is stated for the notification.",
+        "url": "https://old.adilet.zan.kz/rus/docs/V1500012151"
+      },
       "forum": null
     },
     "requirements": [
@@ -1872,7 +2069,10 @@
         "url": "https://old.adilet.zan.kz/rus/docs/V1500012151"
       }
     ],
-    "notes": "Critical distinction: current 2020-amended amateur rule says third category is assigned upon notification, with second/first/extra no earlier than 1/2/3 years afterward. The July 2026 notice form is in https://old.adilet.zan.kz/rus/docs/V1500010194 . Local Kazakh translation is agent-authored; regulator source is Russian. Do not imply an entry exam."
+    "notes": [
+      "Critical distinction: current 2020-amended amateur rule says third category is assigned upon notification, with second/first/extra no earlier than 1/2/3 years afterward. The July 2026 notice form is in https://old.adilet.zan.kz/rus/docs/V1500010194 . Local Kazakh translation is agent-authored; regulator source is Russian. Do not imply an entry exam.",
+      "Research 2026-10-01: time.forum: could not search effectively (web search quota ran out); kfrr.kz pages fetched had no licensing procedure or dated reports. No first-hand 2025+ report found. The eLicense passport page confirms the notification is free but states no processing term. Existing data looks consistent with the sources checked."
+    ]
   },
   "peru": {
     "steps": [
@@ -1914,7 +2114,10 @@
         "url": "https://www.gob.pe/institucion/mtc/noticias/1183697-conoce-el-procedimiento-para-solicitar-autorizacion-para-ser-radioaficionado-en-el-peru"
       }
     ],
-    "notes": "Direct government forms: https://www.gob.pe/institucion/mtc/informes-publicaciones/5004061-formulario-003-28-servicio-radioaficionados and https://www.gob.pe/institucion/mtc/informes-publicaciones/5000925-003-a-28-formato-de-informacion-tecnica-para-equipos-de-radioaficionados . Digital portal: https://tupadigital.mtc.gob.pe ."
+    "notes": [
+      "Direct government forms: https://www.gob.pe/institucion/mtc/informes-publicaciones/5004061-formulario-003-28-servicio-radioaficionados and https://www.gob.pe/institucion/mtc/informes-publicaciones/5000925-003-a-28-formato-de-informacion-tecnica-para-equipos-de-radioaficionados . Digital portal: https://tupadigital.mtc.gob.pe .",
+      "Research 2026-10-01: time.forum: Spanish searches (obtuve mi licencia, Novicio, MTC, TUPA Digital, 2025) returned only gob.pe, dplnews and Scribd guides (all official or second-hand, 21 working days). No dated 2025+ first-hand applicant report found; reddit blocked. Existing: no errors found."
+    ]
   },
   "portugal": {
     "steps": [
@@ -1930,11 +2133,14 @@
       }
     ],
     "cost": {
-      "en": "The May 2026 law removes the annual spectrum-use fee for CAN holders. The current examination fee under the new rules could not be verified, so ask ANACOM before booking.",
-      "local": "A lei de maio de 2026 eliminou a taxa anual de utilização do espectro para titulares de CAN. O valor atual da taxa do exame ao abrigo das novas regras não foi confirmado; consulte a ANACOM antes de marcar.",
-      "url": "https://files.diariodarepublica.pt/1s/2026/05/10200/0000200033.pdf",
-      "sourceType": "official 2026 statute; exam amount unverified",
-      "date": "2026-05-27"
+      "local": "Exame de aptidão: 50 €; emissão do CAN: 15 € (Portaria 291-A/2011, Anexo V). A Lei 22/2026 passou a incluir a emissão do CAN na taxa do exame e eliminou a taxa anual de espectro, mas ainda não há portaria com os novos montantes; confirme na ANACOM.",
+      "en": "Aptitude exam: EUR 50; CAN issuance: EUR 15 (Portaria 291-A/2011, Annex V). Law 22/2026 folds CAN issuance into the exam fee and drops the annual spectrum fee, but no portaria with the new amounts exists yet; confirm with ANACOM.",
+      "url": "https://files.diariodarepublica.pt/1s/2011/11/21201/0000200021.pdf",
+      "additionalUrls": [
+        "https://files.diariodarepublica.pt/1s/2026/05/10200/0000200033.pdf"
+      ],
+      "sourceType": "law",
+      "date": "2026-10-01"
     },
     "time": {
       "official": null,
@@ -1952,7 +2158,10 @@
         "url": "https://files.diariodarepublica.pt/1s/2026/05/10200/0000200033.pdf"
       }
     ],
-    "notes": "Law 22/2026 took effect 90 days after 2026-05-27 and supersedes older age/annual-fee information on some ANACOM pages. Its 10-day decision deadline applies only to recognition of foreign qualifications or returning holders, NOT a first-time exam route. Current ANACOM service section: https://anacom.pt/render.jsp?categoryId=38761 . The promised ANACOM online exam form was not directly located.",
+    "notes": [
+      "Law 22/2026 took effect 90 days after 2026-05-27 and supersedes older age/annual-fee information on some ANACOM pages. Its 10-day decision deadline applies only to recognition of foreign qualifications or returning holders, NOT a first-time exam route. Current ANACOM service section: https://anacom.pt/render.jsp?categoryId=38761 . The promised ANACOM online exam form was not directly located.",
+      "Research 2026-10-01: time.official: Lei 22/2026 sets no deadline for a first-time exam/CAN (its 10-day deadline is only for foreign-qualification or former-holder recognition, already noted in existing); exam date is picked from options on ANACOM's site. ANACOM pages (anacom.pt render.jsp) return HTTP 403 to the fetcher, so the exam calendar and any service-time statement could not be read. time.forum: fetched radioescola.pt, radioamador.online, arvm.org, eco.sapo.pt (May 2025 article: 40 exam requests in one week vs 45/month average, no waiting time given), CT-Comunicacoes google group; no dated 2025+ first-hand timing report found (search quota exhausted). cost: the amounts come from the 2011 portaria text I downloaded; the ANACOM fee page was not readable, and the exact fee schedule after Lei 22/2026 (in force 2026-08-25) is unverified. Existing cost text is consistent; note art. 19 n.2 of Lei 22/2026 says the exam fee covers CAN issuance on a pass."
+    ],
     "costStatus": "partial"
   },
   "ukraine": {
@@ -2000,22 +2209,39 @@
         "url": "https://www.ucrf.gov.ua/services/amatory/ekspluataciyniy-document/harmonizovaniy-document-apc"
       }
     ],
-    "notes": "2025 tariff index: https://www.ucrf.gov.ua/services/tariffs . Form AZ-3 is linked directly from the cited UCRF guide. The UCRF page itself gives a stage-specific processing period, not an overall end-to-end time."
+    "notes": [
+      "2025 tariff index: https://www.ucrf.gov.ua/services/tariffs . Form AZ-3 is linked directly from the cited UCRF guide. The UCRF page itself gives a stage-specific processing period, not an overall end-to-end time.",
+      "Research 2026-10-01: time.forum: searched Russian/Ukrainian queries (отримав позивний 2025, УДЦР КТК), Reddit-style English query; fetched uaro.org.ua (undated how-to, mid-2024 figures, no dated personal timeline), secretsquirrel.com.ua (first-hand but Dec 2017), hamlutsk.pp.ua (undated), ur5ffr.com forum (login required), qrz.od.ua (TLS certificate expired, unfetchable). No first-hand report dated 2025+ found. Web search quota ran out partway, so coverage is limited. Possible cost update: uaro.org.ua/docs/radio_101/getting-a-call-sign/ says the permit cost about 130 UAH in mid-2024, which could replace the unverified all-in amount in existing cost (not verified against the UCRF tariff)."
+    ]
   },
   "venezuela": {
     "steps": [
       {
-        "en": "Contact a CONATEL-recognized amateur radio organization such as Radio Club Venezolano about its instruction and examination route.",
-        "local": "Consulta a una organización de radioaficionados reconocida por CONATEL, como el Radio Club Venezolano, sobre su curso y examen.",
-        "url": "https://radioclubve.org/"
+        "local": "Haz el curso de capacitación con una organización de radioaficionados reconocida por CONATEL (por ejemplo el Radio Club Venezolano o la ARV) y presenta el examen de CONATEL, que sigue siendo presencial; al aprobar recibes el certificado de operador categoría A.",
+        "en": "Take the training course with a CONATEL-recognised amateur organisation (e.g. Radio Club Venezolano or ARV) and sit CONATEL's exam, which is still in person; on passing you receive the Category A operator certificate.",
+        "url": "https://www.yv5arv.org/inicio/c%C3%B3mo-hacerse-radioaficionado"
       },
       {
-        "en": "Request CONATEL authorization before installing or operating an amateur station; CONATEL is the legal licensing authority.",
-        "local": "Solicita la habilitación de CONATEL antes de instalar u operar una estación de radioaficionado; CONATEL es la autoridad competente.",
-        "url": "https://cdn.nestjs.wipolex.wji.prd.web1.wipo.int/wipolex/es/legislation/details/10252"
+        "local": "Con el certificado aprobado, lleva la planilla de solicitud (RAER), copia de la cédula, copia del certificado y el comprobante de pago a la Oficina de Atención al Ciudadano de CONATEL (lunes a viernes).",
+        "en": "With the approved certificate, take the RAER application form, ID copy, certificate copy and proof of payment to CONATEL's Citizen Service Office (Monday to Friday).",
+        "url": "https://conatel.gob.ve/?page_id=15"
+      },
+      {
+        "local": "CONATEL no avisa al solicitante: consulta tu indicativo (YV) en la base de datos de radioaficionados de CONATEL. El permiso vale hasta cinco años y debe renovarse dentro de los tres meses anteriores al vencimiento.",
+        "en": "CONATEL does not notify applicants: check your YV call sign in CONATEL's online amateur database. The permit lasts up to five years and must be renewed within the three months before expiry.",
+        "url": "https://www.yv5arv.org/servicios/preguntas-y-respuestas"
       }
     ],
-    "cost": null,
+    "cost": {
+      "local": "La solicitud del permiso se paga con 1 unidad tributaria (Bs. 43, valor de la UT desde junio de 2025) transferida a la cuenta de CONATEL. El precio del curso y del examen no está publicado.",
+      "en": "The permit application is paid with 1 tax unit (Bs. 43, the UT value since June 2025) transferred to CONATEL's account. The course and exam price is not published.",
+      "url": "https://www.yv5adm.net.ve/2022/04/20/requisitos-para-solicitud-de-permisos-radioaficionados/",
+      "additionalUrls": [
+        "https://blog.alegra.com/venezuela/unidad-tributaria-en-venezuela/"
+      ],
+      "sourceType": "forum",
+      "date": "2025-07-31"
+    },
     "time": {
       "official": null,
       "forum": null
@@ -2027,9 +2253,11 @@
         "url": "https://cdn.nestjs.wipolex.wji.prd.web1.wipo.int/wipolex/es/legislation/details/10252"
       }
     ],
-    "notes": "Current official CONATEL amateur application guide, fee and processing deadline were not discoverable. A 2018 technical guide mirrored by a radio club, https://radioyv.club/recursos/leyes/Guia_de_tecnico_administrativo_servicio_de_Radioaficionados_27022018_VAL.pdf , gives document details but was deliberately not treated as current law. Society reports CONATEL-supported exams in May 2025. Do not fabricate a monetary amount or timeline.",
-    "procedureStatus": "partial",
-    "procedureGap": "Current CONATEL amateur application instructions were not found."
+    "notes": [
+      "Current official CONATEL amateur application guide, fee and processing deadline were not discoverable. A 2018 technical guide mirrored by a radio club, https://radioyv.club/recursos/leyes/Guia_de_tecnico_administrativo_servicio_de_Radioaficionados_27022018_VAL.pdf , gives document details but was deliberately not treated as current law. Society reports CONATEL-supported exams in May 2025. Do not fabricate a monetary amount or timeline.",
+      "Research 2026-10-01: time.forum: no dated 2025+ first-hand report found. The only timing statement is on https://www.yv5adm.net.ve/2022/04/20/requisitos-para-solicitud-de-permisos-radioaficionados/ (page header shows updated 31/07/2025): the author says a new call sign appears in CONATEL's database in an 'average of 30 working days' after submitting; this is a general average, not clearly his own case, so not used as forum evidence. time.official: conatel.gob.ve amateur page gives forms, 5-year validity and counter hours but no processing deadline. Cost: yv5arv.org and radioclubve.org do not list course/exam prices; CONATEL page lists no fee. Procedure now sourced from the CONATEL amateur page (forms: https://conatel.gob.ve/wp-content/uploads/2024/09/Planilla_de_Solicitud_de_Radioaficionado2.pdf ). The yv5adm page also says CONATEL asks for a cover letter to the director and a current RIF; not included in steps. Search quota ran out before Spanish forum queries could be completed. Radio Club Venezolano cohort timing (about 3 months of training, 2025) withheld from official time: it is a course schedule, not a CONATEL deadline."
+    ],
+    "costStatus": "partial"
   },
   "bosnia-and-herzegovina": {
     "steps": [
@@ -2052,7 +2280,11 @@
       "date": "verified 2026-09-30"
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "Ispit smiju organizirati samo radioamaterske organizacije i moraju podnijeti zahtjev RAK-u najkasnije 60 dana prije ispita. Znak se smije koristiti od dana objave u tabeli dodijeljenih znakova na stranici RAK-a; rok za obradu zahtjeva nije propisan.",
+        "en": "Only amateur-radio organisations may run the exam, and they must apply to RAK at least 60 days beforehand. You may use the call sign from the day it is published in RAK's table of assigned call signs; no processing deadline is set.",
+        "url": "https://docs.rak.ba/articles/d3e27bf7-6afd-4abd-b262-6d8d8a36353e.pdf"
+      },
       "forum": null
     },
     "requirements": [
@@ -2063,7 +2295,8 @@
       }
     ],
     "notes": [
-      "The rule's 60-day advance notice concerns the examination organizer's notification to RAK, not the applicant's processing time."
+      "The rule's 60-day advance notice concerns the examination organizer's notification to RAK, not the applicant's processing time.",
+      "Research 2026-10-01: Official time: the RAK rule (arts. 13-14) sets the 60-day exam notice and that the call sign takes effect on publication, but no processing deadline. ARAuBiH homepage has no exam dates or timelines. A retailer blog (talkpodonline.com, undated) says 'usually several weeks', not usable. Forum: no dated 2025+ first-hand report found; Bosnian queries could not be run (search budget ran out; Reddit blocked)."
     ]
   },
   "cambodia": {
@@ -2081,7 +2314,8 @@
     },
     "requirements": [],
     "notes": [
-      "No publicly accessible official route, amateur-specific fee schedule, or processing deadline was verified. The contact step is practical guidance, not a formal licensed route."
+      "No publicly accessible official route, amateur-specific fee schedule, or processing deadline was verified. The contact step is practical guidance, not a formal licensed route.",
+      "Research 2026-10-01: TRC website (trc.gov.kh) is Cloudflare-blocked for WebFetch and the old /en/offline-services/radio-frequency-licensing/ path now returns 404 via a proxy fetch, so no official fee schedule or deadline was verified. time.official and time.forum: nothing found (searched English; Khmer not productive). Procedure steps not replaced: all detailed accounts are dated 2015 (https://vk3bl.wordpress.com/2015/05/29/how-to-get-a-cambodian-ham-amateur-licence/), 2018 (ARRL) or 2023 (XU7AKU), so no verified current route. Cost and requirements come from a 2023 operator account, which does NOT meet the 2025+ rule for first-hand reports; use with caution or discard. Existing contact-TRC step remains the safest guidance. xu7aku (2023) cost and TRC eligibility and ARRL (2018) withheld: pre-2025 single accounts, not official."
     ],
     "procedureStatus": "partial",
     "procedureGap": "No public resident amateur application route was found."
@@ -2107,7 +2341,11 @@
       "date": "exam 2026; fee table 2024"
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "Οι γραπτές εξετάσεις του 2026 ορίστηκαν για τις 14 Οκτωβρίου 2026 (ανακοίνωση 24 Αυγούστου, αιτήσεις μέχρι 30 Σεπτεμβρίου). Δεν δημοσιεύεται χρόνος έκδοσης της άδειας σταθμού ούτε πόσες φορές το χρόνο γίνονται εξετάσεις.",
+        "en": "The 2026 written exam is set for 14 October 2026 (notice dated 24 August, applications by 30 September). No processing time for the station authorisation and no yearly exam frequency is published.",
+        "url": "https://www.gov.cy/dmrid-dec/mi-katigoriopoiimeno/graptes-exetaseis-radioerasitechnon-2026/"
+      },
       "forum": null
     },
     "requirements": [
@@ -2118,7 +2356,8 @@
       }
     ],
     "notes": [
-      "Exam fee source: https://www.gov.cy/dmrid-dec/mi-katigoriopoiimeno/graptes-exetaseis-radioerasitechnon-2026/ . The October 2026 examination date is an event, not a general completion timeframe."
+      "Exam fee source: https://www.gov.cy/dmrid-dec/mi-katigoriopoiimeno/graptes-exetaseis-radioerasitechnon-2026/ . The October 2026 examination date is an event, not a general completion timeframe.",
+      "Research 2026-10-01: Official time: only the 2026 exam notice found (the 2025 notice URL does not exist; DEC authorisation forms page, posted 20 June 2025, gives no processing time; gov.cy blocks plain fetches, read through the browser pane). cyhams.org has no licensing page. Forum: no dated 2025+ first-hand report found (Greek/English queries not possible after search budget ran out; Reddit blocked). Existing: fee table cited is from 2024; exam fee EUR 30 is confirmed in the 2026 notice."
     ]
   },
   "dominican-republic": {
@@ -2142,7 +2381,11 @@
       "date": "2022; 2025 form still available"
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "El reglamento (Res. 129-2023) dice que los resultados del examen se comunican en un máximo de 20 días hábiles, y que INDOTEL inscribe al solicitante y emite el certificado dentro de 30 días calendario desde la presentación de la solicitud.",
+        "en": "The regulation (Res. 129-2023) says exam results are communicated within at most 20 business days, and that INDOTEL registers the applicant and issues the certificate within 30 calendar days of the application being filed.",
+        "url": "https://indotel.gob.do/wp-content/uploads/2023/12/res._129_2023_reglamento_radioaficionados_2023.pdf"
+      },
       "forum": null
     },
     "requirements": [
@@ -2158,7 +2401,8 @@
       }
     ],
     "notes": [
-      "The 30-calendar-day statement on INDOTEL's technician-category service page was not applied to novice applicants. Fee sheet is older, so recheck before payment."
+      "The 30-calendar-day statement on INDOTEL's technician-category service page was not applied to novice applicants. Fee sheet is older, so recheck before payment.",
+      "Research 2026-10-01: time.forum: no dated 2025+ first-hand report found (search quota ran out; Spanish forum/blog queries on 'INDOTEL examen novicio indicativo HI cuanto tardo' could not be run, and general fetch of search engines is blocked). Existing note says the 30-day period was not applied to novices: Articles 8 and 19.2 of Resolution 129-2023 apply to all categories' initial registration, so that caution seems unnecessary (https://indotel.gob.do/wp-content/uploads/2023/12/res._129_2023_reglamento_radioaficionados_2023.pdf ). Art. 9.5 says silence from INDOTEL is not a decision."
     ]
   },
   "hong-kong": {
@@ -2197,7 +2441,8 @@
       }
     ],
     "notes": [
-      "Exam fee source: https://www.ofca.gov.hk/filemanager/ofca/en/content_622/A0004.pdf . Optional certificate source: https://www.ofca.gov.hk/filemanager/ofca/common/electronic_services/licenses_application/A291.pdf ."
+      "Exam fee source: https://www.ofca.gov.hk/filemanager/ofca/en/content_622/A0004.pdf . Optional certificate source: https://www.ofca.gov.hk/filemanager/ofca/common/electronic_services/licenses_application/A291.pdf .",
+      "Research 2026-10-01: No time.forum found. Searched (Bing/WebSearch, English and Traditional Chinese: VR2 licence received, HKRAE, OFCA callsign weeks) plus vr2gy.com forum (Discuz; search results only returned OFCA form threads, forum front page errored), HKARA/HARTS FAQ pages, Reddit (blocked). No dated 2025+ first-hand report located. Existing fees consistent with OFCA GN-4/2025 Annex B3 (ASL HK$150/yr, ATO HK$160 per 5 yrs): https://www.ofca.gov.hk/filemanager/ofca/en/content_623/rae_annex_b3_e.pdf . Note: exam held twice a year (usually April and October) per OFCA."
     ]
   },
   "hungary": {
@@ -2243,7 +2488,8 @@
       }
     ],
     "notes": [
-      "Electronic form: https://e-nmhh.nmhh.hu/e-nhh/4/urlapok/esf00108/index.html . Paper form: https://nmhh.hu/cikk/180726/Radioamator_szolgalat__egyeni_engedelykero_adatlap_kezzel_kitoltheto ."
+      "Electronic form: https://e-nmhh.nmhh.hu/e-nhh/4/urlapok/esf00108/index.html . Paper form: https://nmhh.hu/cikk/180726/Radioamator_szolgalat__egyeni_engedelykero_adatlap_kezzel_kitoltheto .",
+      "Research 2026-10-01: time.forum: searched Hungarian (megkaptam hívójel, NMHH engedély vizsga után mennyi idő). Read ha5kfu.hu (page updated 2020-03-24; says certificate arrives in a few weeks and he got the licence after filing via ügyfélkapu, but pre-2025 and no durations), hg9ieg.hu beginner guide (general, 2026 but not first-hand) and a talkpodonline.com blog (generic). No 2025+ first-hand report found; search budget was exhausted before hobbielektronika.hu or HA forums could be tried. Nothing in existing found wrong."
     ]
   },
   "israel": {
@@ -2283,7 +2529,8 @@
       }
     ],
     "notes": [
-      "The two-week deadline precedes a scheduled exam; it is not an end-to-end licensing estimate."
+      "The two-week deadline precedes a scheduled exam; it is not an end-to-end licensing estimate.",
+      "Research 2026-10-01: time.official: gov.il service page (Hebrew and English) returns 403/Cloudflare block to my fetchers; IARC 'become a ham' page has no timing; searches found only that exams are scheduled personally by email with the Ministry (Radioamat@moc.gov.il), no statutory issuance deadline found. time.forum: Hebrew and English queries (call sign received after exam, Reddit, Tapuz) found no first-hand 2025+ report; tapuz thread blocked. Existing entry not contradicted (could not re-verify the ILS 105 fee because gov.il was blocked)."
     ]
   },
   "kenya": {
@@ -2300,11 +2547,15 @@
       }
     ],
     "cost": {
-      "en": "The published frequency-fee schedule lists KSh 2,000 per amateur station per year. The current form calls for an application fee but does not state its amount; examination cost is also unverified.",
-      "local": "Ratiba ya ada za masafa iliyochapishwa inaonyesha KSh 2,000 kwa kila kituo cha redio ya amatur kwa mwaka. Fomu ya sasa inahitaji ada ya maombi lakini haitaji kiasi chake; gharama ya mtihani pia haijathibitishwa.",
-      "url": "https://www.ca.go.ke/sites/default/files/CA/License%20fee/Frequency%20Fee%20Schedule%20-%20Effective%201st%20July%202018%20.pdf",
-      "sourceType": "official CA fee schedule linked from current fee page",
-      "date": "schedule effective 2018; verified linked 2026-09-30"
+      "local": "Ada ya maombi ya CA ni KSh 1,000 (hairudishwi) na ada ya masafa ni KSh 2,000 kwa mwaka, kwa hiyo mwaka wa kwanza ni takriban KSh 3,000. Ada ya mtihani wa RSK haijachapishwa mtandaoni.",
+      "en": "The CA application fee is KSh 1,000 (non-refundable) and the frequency fee is KSh 2,000 per year, so about KSh 3,000 in the first year. The RSK exam fee is not published online.",
+      "url": "https://www.ca.go.ke/sites/default/files/FSM%20Forms/Application-for-Amateur-Radio-License-Form-CA-F-FSM-02-2021.pdf",
+      "additionalUrls": [
+        "https://www.ca.go.ke/sites/default/files/CA/License%20fee/Frequency%20Fee%20Schedule%20-%20Effective%201st%20July%202018%20.pdf",
+        "https://rsk.or.ke/amateur-radio-examinations/"
+      ],
+      "sourceType": "regulator",
+      "date": "2021 form (application fee) and 2018 schedule (annual fee); pages checked 2026-10-01"
     },
     "time": {
       "official": null,
@@ -2323,7 +2574,8 @@
       }
     ],
     "notes": [
-      "English is an official language in Kenya. CA guidance permits a licence term up to five years, with annual validation of contact and location details. Current CA fee hub: https://www.ca.go.ke/index.php/license-application-forms-fees ."
+      "English is an official language in Kenya. CA guidance permits a licence term up to five years, with annual validation of contact and location details. Current CA fee hub: https://www.ca.go.ke/index.php/license-application-forms-fees .",
+      "Research 2026-10-01: time.official: CA guidelines (March 2023) and CA licensing-procedure PDF give no processing deadline for amateur licences. time.forum: no first-hand 2025+ report found (limited English searches; Swahili and Kenyan ham groups not covered before search budget ran out). Exam fee: RSK's current examinations page (rsk.or.ke/amateur-radio-examinations/) lists KARE, ARRL (via PCARG) and HAREC (via SARL) but no prices; register by email secretaryrsk@gmail.com. Existing entry: it says the current form does not state the application fee, but the 2021 CA form CA/F/FSM/02 states KSh 1,000 (the Nov 2022 form defers to the website), so the amount is corroborated; also the 2018 fee schedule date is old."
     ],
     "costStatus": "partial"
   },
@@ -2368,7 +2620,8 @@
       }
     ],
     "notes": [
-      "HCA 23/2026 supersedes the old ANRCETI technical-permit process. Publication evidence: https://ftp.monitorul.md/ro/monitor/3278 . ARCOM application channel accepts online permit portal or signed electronic submission."
+      "HCA 23/2026 supersedes the old ANRCETI technical-permit process. Publication evidence: https://ftp.monitorul.md/ro/monitor/3278 . ARCOM application channel accepts online permit portal or signed electronic submission.",
+      "Research 2026-10-01: time.forum: no search attempted in Romanian beyond what was covered by Romanian-language queries for Romania (none returned Moldovan results); no first-hand Moldovan report found. Search budget was exhausted before arm.md forum or Russian-language (cqham.ru, Moldovan ham chats) queries could be run. Nothing in existing checked or found wrong."
     ]
   },
   "kyrgyzstan": {
@@ -2387,7 +2640,10 @@
       "forum": null
     },
     "requirements": [],
-    "notes": "Regulator identity: https://nas.gov.kg/dp/reestry/. A 2010 regulator report at https://nas.gov.kg/media/dynamic_pages/otchet_2010.pdf describes four amateur categories and qualification commissions, but is too old to treat as current procedure. Russian reflects the language of the cited regulator material. No verified current amateur-specific form, fee, or processing period.",
+    "notes": [
+      "Regulator identity: https://nas.gov.kg/dp/reestry/. A 2010 regulator report at https://nas.gov.kg/media/dynamic_pages/otchet_2010.pdf describes four amateur categories and qualification commissions, but is too old to treat as current procedure. Russian reflects the language of the cited regulator material. No verified current amateur-specific form, fee, or processing period.",
+      "Research 2026-10-01: Fetched nas.gov.kg (FAQ, forms, licensing, spectrum, state services, registries pages; TLS certificate is expired so pages were read with certificate checks off) and the 2010 regulator report: no current amateur-specific procedure, fee, term or exam rules found; only the 2010 report mentions amateur categories/5-year frequency assignments, which is too old. elicense.gov.kg and the IARU-R1 member page were unreachable or uninformative. kfrr.kz and cqham.ru have no Kyrgyz-specific content. No 2025+ forum report found. Procedure, cost, official time and requirements remain unfilled."
+    ],
     "procedureStatus": "partial",
     "procedureGap": "No current amateur-specific route was verified."
   },
@@ -2435,7 +2691,10 @@
         "url": "https://www.esakari.lv/lv/radioamatieru-eksamens"
       }
     ],
-    "notes": "Regulator/issuer is VAS Elektroniskie sakari. The fee PDF is dated 2023; check live tariff before payment."
+    "notes": [
+      "Regulator/issuer is VAS Elektroniskie sakari. The fee PDF is dated 2023; check live tariff before payment.",
+      "Research 2026-10-01: time.forum: searched Latvian queries (nokārtoju radioamatieru eksāmenu, radioatļauja cik ilgi) and Reddit-style English; only regulations and official pages returned (applications reviewed within one month per esakari.lv Q&A, official not first-hand). yl3alk.tumblr.com unreachable; hamradio.lv fetch failed because of session limit. No first-hand 2025+ report found."
+    ]
   },
   "lithuania": {
     "steps": [
@@ -2480,6 +2739,9 @@
         "local": "Egzaminas vyksta lietuvių kalba per „Microsoft Teams“, o kandidatas turi parodyti asmens dokumentą.",
         "url": "https://rrt.lt/veiklos-sritys/elektroniniai-rysiai/radijo-spektras/radijo-megejai"
       }
+    ],
+    "notes": [
+      "Research 2026-10-01: time.forum: searched Lithuanian queries (tapau radijo mėgėju, gavau šaukinį, RRT leidimas) and Reddit-style English; fetched hamradio.lt wiki (updated 2023-12, no durations) and the RRT permit page (no processing deadline stated). No first-hand 2025+ report found."
     ]
   },
   "malaysia": {
@@ -2507,7 +2769,11 @@
       "date": "2024 edition, indexed in 2026; checked 2026-09-30"
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "Keputusan peperiksaan dalam talian boleh disemak dalam masa 7 hari bekerja selepas tarikh peperiksaan, melalui SEMS. Sijil dan penguntukan radas (AA) dimohon kemudian; tiada tempoh pemprosesan AA diterbitkan.",
+        "en": "Online exam results can be checked in SEMS within 7 working days after the exam date. The certificate and the apparatus assignment (AA) are applied for afterwards; no AA processing time is published.",
+        "url": "https://sems.mcmc.gov.my/sems/contents/show/inline/1/content/en"
+      },
       "forum": null
     },
     "requirements": [
@@ -2522,7 +2788,10 @@
         "url": "https://sems.mcmc.gov.my/sems/contents/show/inline/3/content/en"
       }
     ],
-    "notes": "The official edition 3.1 indexed PDF endpoint may return HTTP 403 when opened directly; search indexing exposed its fee and eligibility tables."
+    "notes": [
+      "The official edition 3.1 indexed PDF endpoint may return HTTP 403 when opened directly; search indexing exposed its fee and eligibility tables.",
+      "Research 2026-10-01: time.forum: searched Bing/WebSearch in Malay and English (lulus RAE kelas C callsign berapa lama, 9W2 callsign pengalaman 2025, hamradio.my, jasra.org.my, journal.robbi.my). Only pre-2025 first-hand report found: Reddit r/malaysians 'I just passed my RAE' (https://www.reddit.com/r/malaysians/comments/1d97fme/i_just_passed_my_radio_amateur_examrae_ama/, mid-2024, fetch blocked). A Facebook group post dated Jan 2026 mentions 'just got the AA' but could not be opened. https://journal.robbi.my/posts/250624091254/ (24 Jun 2025) is first-hand but about a gateway call sign, with no durations. Extra facts for exam frequency: MCMC 2025 RAE schedule (https://www.mcmc.gov.my/en/amateur-radio-operator-certification) lists Class C sessions in January, April, July and October (Class A Feb/May/Aug/Nov, Class B Mar/Jun/Sep/Dec). Existing cost (RM50+RM60+RM12=RM122) verified against Guidelines Edition 3.1 (9 Aug 2024), https://sems.mcmc.gov.my/sems/contents/show/inline/1/content/en. Nothing wrong found in existing."
+    ]
   },
   "mauritius": {
     "steps": [
@@ -2564,7 +2833,10 @@
         "url": "https://www.icta.mu/radiocom-radio-amateur-guidelines/"
       }
     ],
-    "notes": "English used as local because it is the language of the regulator's published procedure. The 3-month advance application advice on the ICTA page applies to visitors, not new resident RA24 applicants. MARS: https://3b8mars.org/."
+    "notes": [
+      "English used as local because it is the language of the regulator's published procedure. The 3-month advance application advice on the ICTA page applies to visitors, not new resident RA24 applicants. MARS: https://3b8mars.org/.",
+      "Research 2026-10-01: time.official: ICTA guideline page states no standard approval time (only the 3-month advance advice for visitors) and ICTA Licensing regulations PDF (2026-03) has no application-decision deadline (only renewal and annual-fee dates). time.forum: web search quota ran out; no 2025+ first-hand report found. Nothing in existing found wrong."
+    ]
   },
   "myanmar": {
     "steps": [
@@ -2600,7 +2872,10 @@
         "url": "https://www.ptd.gov.mm/ServicesDetail.aspx?id=LUKdZ6dcujUriHlPirNYSQ%3D%3D"
       }
     ],
-    "notes": "Burmese translations are approximate and should be reviewed by a native speaker. The PTD page is still live but underlying service material may date to 2018; no amateur-specific fee or processing duration verified."
+    "notes": [
+      "Burmese translations are approximate and should be reviewed by a native speaker. The PTD page is still live but underlying service material may date to 2018; no amateur-specific fee or processing duration verified.",
+      "Research 2026-10-01: cost: PTD page (https://www.ptd.gov.mm/ServicesDetail.aspx?id=LUKdZ6dcujUriHlPirNYSQ%3D%3D) lists fee tables for mobile, ship, aircraft and temporary spectrum use but gives none for the amateur category (only a 5-year validity); no exam fee or call-sign fee published. time.official: none on PTD pages (page posted 2018, updated 31 May 2022). time.forum: Bing/WebSearch queries returned only generic Myanmar results; no amateur-licensing reports found in English or Burmese. Existing confirmed: 5-year validity and the documents list match the PTD page."
+    ]
   },
   "new-zealand": {
     "steps": [
@@ -2620,11 +2895,16 @@
       }
     ],
     "cost": {
-      "en": "The General User Radio Licence is free. An Approved Radio Examiner may charge an independently agreed exam/callsign fee, so a fixed total cannot be verified.",
-      "local": "The General User Radio Licence is free. An Approved Radio Examiner may charge an independently agreed exam/callsign fee, so a fixed total cannot be verified.",
-      "url": "https://www.rsm.govt.nz/licensing/frequencies-for-anyone/amateur-radio-operators",
-      "sourceType": "official RSM guidance",
-      "date": "checked 2026-09-30"
+      "local": "The General User Radio Licence is free. Exam and callsign fees are set by each Approved Radio Examiner: NZART charges NZ$80 for a new callsign, and a 2026 Manawatu HamCram course costs NZ$125 including exam fee, callsign and a year of NZART membership.",
+      "en": "The General User Radio Licence is free. Exam and callsign fees are set by each Approved Radio Examiner: NZART charges NZ$80 for a new callsign, and a 2026 Manawatu HamCram course costs NZ$125 including exam fee, callsign and a year of NZART membership.",
+      "url": "https://nzart.org.nz/learn/exam-call-sign-application-form/",
+      "additionalUrls": [
+        "https://www.zl2ko.org.nz/hamcram/",
+        "https://www.rsm.govt.nz/licensing/frequencies-for-anyone/amateur-radio-operators",
+        "https://www.rsm.govt.nz/assets/Uploads/documents/pibs/radio-operator-certificate-and-callsign-rules-pib-46.pdf"
+      ],
+      "sourceType": "society",
+      "date": "2026-10-01 verified (NZART callsign fees reduced 2022-10-01)"
     },
     "time": {
       "official": null,
@@ -2642,7 +2922,10 @@
         "url": "https://www.rsm.govt.nz/licensing/frequencies-for-anyone/amateur-radio-operators"
       }
     ],
-    "notes": "English is the regulator's local language. The separate NZ$66 licence fee introduced 2026-07-01 applies to amateur repeaters, beacons and fixed links, not routine operation; see https://www.rsm.govt.nz/about/news-and-updates/licence-fee-changes-from-1-july-2026.",
+    "notes": [
+      "English is the regulator's local language. The separate NZ$66 licence fee introduced 2026-07-01 applies to amateur repeaters, beacons and fixed links, not routine operation; see https://www.rsm.govt.nz/about/news-and-updates/licence-fee-changes-from-1-july-2026.",
+      "Research 2026-10-01: cost: RSM GURL page (no GURL fee; exam/callsign fee agreed with ARX), PIB 46 s2.10 (ARX may charge), NZART callsign form page (NZ$80 new callsign), zl2ko.org.nz/hamcram (NZ$125, 2026). A Christchurch HamCram page says NZ$50 but is undated so not used. NZART policy says student exam/callsign fees are zero (policies page, updated 2026). Partial because there is no fixed standalone exam fee. time.official: RSM, NZART exam procedure and PIB 46 give no timeline for certificate/callsign issue. time.forum: Geekzone HamCram thread (2024) has no reports; Reddit blocked; nothing 2025+ verified."
+    ],
     "costStatus": "partial"
   },
   "nigeria": {
@@ -2684,7 +2967,10 @@
         "url": "https://fmcide.gov.ng/notices/procedure-for-obtaining-applying-radio-frequency-station-licences/"
       }
     ],
-    "notes": "The ministry page is the only currently published official amateur-specific route found. NCC has a separate amateur authorization framework at https://ncc.gov.ng/sites/default/files/2024-11/Documents/draft/Spectrum-Draft_%20Authorization_Framework_%20Amateur_%20Radio_%20Services.pdf, but it is explicitly a draft, so its fees/exams/30-day processing should not be treated as active rules. The ministry's corporate general checklist may not apply to individual amateur applicants; confirm with ministry. English is the local official publication language.",
+    "notes": [
+      "The ministry page is the only currently published official amateur-specific route found. NCC has a separate amateur authorization framework at https://ncc.gov.ng/sites/default/files/2024-11/Documents/draft/Spectrum-Draft_%20Authorization_Framework_%20Amateur_%20Radio_%20Services.pdf, but it is explicitly a draft, so its fees/exams/30-day processing should not be treated as active rules. The ministry's corporate general checklist may not apply to individual amateur applicants; confirm with ministry. English is the local official publication language.",
+      "Research 2026-10-01: cost: the ministry page (fmcide.gov.ng) was re-read; it lists only the amateur extras (NARS introduction letter, NARS membership certificate copy, passport/residence permit, Form 0061) and no separate amateur fee beyond the existing form-purchase amount; no NARS membership/exam fee or NCC amateur fee found (NCC framework is a draft). procedure: the page's amateur block is an add-on to the general station checklist, so an individual route remains unconfirmed. time.forum: nothing found. WebSearch budget ran out before native-style forum searches (Nairaland, Reddit r/Nigeria) could be run."
+    ],
     "procedureStatus": "partial",
     "procedureGap": "The ministry checklist may describe corporate station filings rather than an individual amateur route.",
     "costStatus": "partial"
@@ -2724,7 +3010,10 @@
         "url": "https://nkom.no/frekvenser-og-elektronisk-utstyr/radioamator"
       }
     ],
-    "notes": "Nkom describes NRRL as the exam organizer and amateur association. It provides no fixed end-to-end issuance period on this page."
+    "notes": [
+      "Nkom describes NRRL as the exam organizer and amateur association. It provides no fixed end-to-end issuance period on this page.",
+      "Research 2026-10-01: time.official: nkom.no/frekvenser-og-elektronisk-utstyr/radioamator gives no exam frequency, result time or processing time (only the NOK 2,170 fee, confirmed for 2026; refers to NRRL for dates). NRRL exam pages were not checked further. time.forum: Reddit archive (kallesignal, radioamatør; r/norge) found no first-hand licensing-timeline report."
+    ]
   },
   "denmark": {
     "steps": [
@@ -2762,7 +3051,8 @@
       }
     ],
     "notes": [
-      "Call-sign card timing source: https://digst.dk/tele/frekvenser/radioamatoerer/ . The regulator says a requested call sign may be used as soon as its application has been submitted after certification."
+      "Call-sign card timing source: https://digst.dk/tele/frekvenser/radioamatoerer/ . The regulator says a requested call sign may be used as soon as its application has been submitted after certification.",
+      "Research 2026-10-01: time.forum: Reddit archive search (kaldesignal, radioamatør; r/Denmark, r/DKbrevkasse) 2025+ returned no first-hand licensing-timeline report; no Danish forum reachable. Existing data not checked against contradictory sources."
     ]
   },
   "singapore": {
@@ -2779,11 +3069,15 @@
       }
     ],
     "cost": {
-      "en": "IMDA's station licence costs S$50 for five years (Restricted) or S$100 for five years (General). The cost of obtaining an accepted foreign qualification is separate and was not verified.",
-      "local": "The IMDA station licence costs S$50 for five years (Restricted) or S$100 for five years (General). The cost of an accepted foreign qualification is separate and unverified.",
+      "local": "IMDA licence: S$50 for 5 years (Restricted) or S$100 for 5 years (General); exam fee S$40 (S$20 for students) when exams are held, but exams are currently suspended. Frequency and annual fees are waived. Foreign-qualification cost is extra.",
+      "en": "IMDA licence: S$50 for 5 years (Restricted) or S$100 for 5 years (General); exam fee S$40 (S$20 for students) when exams are held, but exams are currently suspended. Frequency and annual fees are waived. Foreign-qualification cost is extra.",
       "url": "https://www.imda.gov.sg/-/media/imda/files/regulations-and-licensing/licensing/telecommunication/amateur-station/amateur-handbook.pdf",
-      "sourceType": "official IMDA amateur handbook",
-      "date": "linked from IMDA 2026 service page"
+      "additionalUrls": [
+        "https://www.imda.gov.sg/-/media/imda/files/regulations-and-licensing/licensing/telecommunication/amateur-station/guideamateur.pdf",
+        "https://www.sarts.org.sg/getting-a-9v-ham-license/"
+      ],
+      "sourceType": "regulator",
+      "date": "2025-11-21"
     },
     "time": {
       "official": null,
@@ -2802,7 +3096,8 @@
       }
     ],
     "notes": [
-      "SARTS suspension/foreign FCC route: https://www.sarts.org.sg/radio-amateur-exam/ . The old IMDA registration-for-exam document remains online but does not prove exams are currently being held. English is an official language in Singapore."
+      "SARTS suspension/foreign FCC route: https://www.sarts.org.sg/radio-amateur-exam/ . The old IMDA registration-for-exam document remains online but does not prove exams are currently being held. English is an official language in Singapore.",
+      "Research 2026-10-01: time.forum: searched Bing/WebSearch (9V licence IMDA how long, reddit r/amateurradio Singapore, blogs). Checked https://rolandturner.com/Becoming_an_amateur_radio_operator_in_Singapore/ (27 May 2025; guide, no first-hand duration, only says equipment changes usually take days) and https://tecomart.co/venturing-into-amateur-radio-in-singapore/ (2023). No dated 2025+ first-hand applicant report found. time.official for a resident application: IMDA guide/handbook and GoBusiness page (403) give no service standard; the 2-12 weeks figure is SARTS's and concerns visitor licences. Existing consistent with IMDA Handbook 5th ed. (21 Nov 2025): note the handbook still lists an exam (S$40/S$20) and says candidates arrange date with IMDA/SARTS, while SARTS says the exam is suspended; existing step text follows SARTS. SARTS visitor-licence turnaround (2-12 weeks) withheld from official time: it does not apply to resident licences."
     ],
     "costStatus": "partial"
   },
@@ -2819,7 +3114,13 @@
         "url": "https://www.pts.se/tillstand-och-anmalan/radio/amatorradio/"
       }
     ],
-    "cost": null,
+    "cost": {
+      "local": "Anropssignalen kostar 390 kr i engångsavgift till SSA (540 kr inklusive tolv månaders SSA-medlemskap). Provavgiften hos provförrättaren hittades inte och ingår inte.",
+      "en": "The call sign costs a one-time SEK 390 administrative fee to SSA (SEK 540 including twelve months of SSA membership). The exam fee charged by the examiner was not found and is not included.",
+      "url": "https://www.ssa.se/international/obtaining-a-swedish-callsign/",
+      "sourceType": "society",
+      "date": "2026-10-01"
+    },
     "time": {
       "official": null,
       "forum": null
@@ -2833,8 +3134,10 @@
     ],
     "notes": [
       "The PTS 2026 SEK 380 transmitter-permit fee applies only to cases requiring a separate permit; do not present it as the normal licence price. SSA exam/certificate fee not verified. SSA 2026 delegation: https://www.ssa.se/blog/blog/kansli/ .",
-      "SSA says the new Swedish entry certificate does not confer CEPT visitor privileges: https://www.ssa.se/sverige-vi-har-ett-instegscertifikat/ ."
-    ]
+      "SSA says the new Swedish entry certificate does not confer CEPT visitor privileges: https://www.ssa.se/sverige-vi-har-ett-instegscertifikat/ .",
+      "Research 2026-10-01: cost: SSA's 'Obtaining a Swedish callsign' page gives the 390/540 SEK admin fee; no exam fee found on ssa.se, examen.ssa.se (login-gated) or the course listings. time.official: nothing on ssa.se, examen.ssa.se or pts.se about how long the certificate and call sign take. time.forum: Reddit archive (anropssignal, 2025+) found nothing relevant; no Swedish forum reachable (search budget exhausted)."
+    ],
+    "costStatus": "partial"
   },
   "thailand": {
     "steps": [
@@ -2850,11 +3153,15 @@
       }
     ],
     "cost": {
-      "en": "The NBTC public-service guide lists THB 200 plus 7% VAT for the separate radio-operator licence. The current examination organizer's charge was not verified.",
-      "local": "คู่มือประชาชนของ กสทช. ระบุค่าธรรมเนียมใบอนุญาตพนักงานวิทยุคมนาคม 200 บาท ยังไม่รวมภาษีมูลค่าเพิ่ม 7% ส่วนค่าใช้จ่ายการสอบปัจจุบันยังไม่ได้รับการยืนยัน.",
-      "url": "https://www.nbtc.go.th/getattachment/Services/%E0%B8%84%E0%B8%B9%E0%B9%88%E0%B8%A1%E0%B8%B7%E0%B8%AD%E0%B8%9B%E0%B8%A3%E0%B8%B0%E0%B8%8A%E0%B8%B2%E0%B8%8A%E0%B8%99/37481/13-%E0%B8%87%E0%B8%B2%E0%B8%99%E0%B8%AD%E0%B8%AD%E0%B8%81%E0%B9%83%E0%B8%9A%E0%B8%AD%E0%B8%99%E0%B8%B8%E0%B8%8D%E0%B8%B2%E0%B8%95%E0%B8%9E%E0%B8%99%E0%B8%B1%E0%B8%81%E0%B8%87%E0%B8%B2%E0%B8%99%E0%B8%A7%E0%B8%B4%E0%B8%97%E0%B8%A2%E0%B8%B8%E0%B8%84%E0%B8%A1%E0%B8%99%E0%B8%B2%E0%B8%84%E0%B8%A1.pdf?lang=th-TH",
-      "sourceType": "official 2025 NBTC service guide",
-      "date": "2025-04-11"
+      "local": "ค่าสอบรับประกาศนียบัตรขั้นต้น 300 บาท (สอบอย่างเดียว) ถึง 1,000 บาท (อบรมและสอบ) ตามระบบบริการของ กสทช. บวกค่าใบอนุญาตพนักงานวิทยุ 200 บาท + VAT 7% = 214 บาท รวมประมาณ 514–1,214 บาท ยังไม่รวมค่าใบอนุญาตสถานี/เครื่อง",
+      "en": "The NBTC service portal lists the initial certificate at THB 300 (exam only) to 1,000 (training plus exam), plus the operator licence at THB 200 + 7% VAT = 214: roughly THB 514 to 1,214. Station and equipment licence fees are not included and were not verified.",
+      "url": "https://serviceportal.nbtc.go.th/Home/ServiceInfo?List_id=104",
+      "additionalUrls": [
+        "https://www.nbtc.go.th/getattachment/Services/%E0%B8%84%E0%B8%B9%E0%B9%88%E0%B8%A1%E0%B8%B7%E0%B8%AD%E0%B8%9B%E0%B8%A3%E0%B8%B0%E0%B8%8A%E0%B8%B2%E0%B8%8A%E0%B8%99/37481/13-%E0%B8%87%E0%B8%B2%E0%B8%99%E0%B8%AD%E0%B8%AD%E0%B8%81%E0%B9%83%E0%B8%9A%E0%B8%AD%E0%B8%99%E0%B8%B8%E0%B8%8D%E0%B8%B2%E0%B8%95%E0%B8%9E%E0%B8%99%E0%B8%B1%E0%B8%81%E0%B8%87%E0%B8%B2%E0%B8%99%E0%B8%A7%E0%B8%B4%E0%B8%97%E0%B8%A2%E0%B8%B8%E0%B8%84%E0%B8%A1%E0%B8%99%E0%B8%B2%E0%B8%84%E0%B8%A1.pdf?lang=th-TH",
+        "https://www.hs8as.com/%E0%B8%AD%E0%B8%9A%E0%B8%A3%E0%B8%A1%E0%B9%80%E0%B8%95%E0%B8%A3%E0%B8%B5%E0%B8%A2%E0%B8%A1%E0%B8%AA%E0%B8%AD%E0%B8%9A%E0%B8%9E%E0%B8%99%E0%B8%B1%E0%B8%81%E0%B8%87%E0%B8%B2%E0%B8%99%E0%B8%A7%E0%B8%B4/"
+      ],
+      "sourceType": "regulator",
+      "date": "2026-10-01 verified (portal); licence fee per 2025-04-11 guide"
     },
     "time": {
       "official": {
@@ -2872,7 +3179,8 @@
       }
     ],
     "notes": [
-      "An older NBTC exam regulation caps initial exam organizer charges at THB 300; its current applicability to 2026 sessions was not independently verified, so the amount is omitted. Source https://oss.nbtc.go.th/OSS2/Files/Download/Doc57.pdf ."
+      "An older NBTC exam regulation caps initial exam organizer charges at THB 300; its current applicability to 2026 sessions was not independently verified, so the amount is omitted. Source https://oss.nbtc.go.th/OSS2/Files/Download/Doc57.pdf .",
+      "Research 2026-10-01: Exam-fee range from the NBTC Service Portal; the 2026 organiser page for the Chumphon exam (training + exam THB 1,000) agrees with the top of the range (hs8as.com). Station/equipment licence fee not verified (a 2014 HS3LZX page quotes THB 535 per device, too old to use). The forum report covers a station licence for an existing operator, not exam to first call sign; no first-hand report of exam to certificate to call sign dated 2025+ was found (Thai searches via Bing, hs3lzx.com, gotwodays.com, Facebook not fetchable). Existing looks fine; the NBTC 'exam' pages are Cloudflare-blocked so organiser caps in the 2569 announcement were not read directly. gotwodays.com (2026-03-24) report withheld: an existing licensee adding a vehicle station, not a first licence."
     ],
     "costStatus": "partial"
   },
@@ -2912,20 +3220,26 @@
       }
     ],
     "notes": [
-      "2026 announcement is for one Istanbul session; use current KEGM exam notices for next opening. Certificate validity ten years according to KEGM FAQ."
+      "2026 announcement is for one Istanbul session; use current KEGM exam notices for next opening. Certificate validity ten years according to KEGM FAQ.",
+      "Research 2026-10-01: time.forum: searched Turkish queries and Reddit-style English. Found a medium.com guide by ugurarici (403 on fetch; search snippet mentions a call sign assigned about 8 days after processing on 30 Nov, but I could not load the page to confirm the year or that it is first-hand, so not used), vizyontelsiz.com.tr 2025 guide (generic, not first-hand), dard81.org.tr (generic), Ekşi Sözlük (403). No verified first-hand report dated 2025+ found."
     ]
   },
   "iran": {
     "steps": [
       {
-        "en": "Use CRA's electronic services portal, under radio licensing and amateur-radio certification, to register and complete identity verification when an exam window is announced.",
-        "local": "هنگام اعلام نوبت آزمون، از بخش «میز خدمت / ارائه مجوزهای رادیویی / صدور گواهی‌نامه رادیوآماتوری» در درگاه رگولاتوری ثبت‌نام و احراز هویت را تکمیل کنید.",
-        "url": "https://www.cra.ir/"
+        "local": "در بازه‌ای که رگولاتوری اعلام می‌کند، از طریق سایت www.cra.ir ثبت‌نام کنید؛ پیش از ثبت نهایی باید احراز هویت انجام شود.",
+        "en": "During the window CRA announces, register at www.cra.ir; identity verification is required before the registration is submitted.",
+        "url": "https://www.mehrnews.com/news/6086308/%D9%81%D8%B1%D8%A7%D8%AE%D9%88%D8%A7%D9%86-%D8%AB%D8%A8%D8%AA-%D9%86%D8%A7%D9%85-%D8%B4%D8%B1%DA%A9%D8%AA-%D8%AF%D8%B1-%D8%A2%D8%B2%D9%85%D9%88%D9%86-%D8%B1%D8%A7%D8%AF%DB%8C%D9%88-%D8%A2%D9%85%D8%A7%D8%AA%D9%88%D8%B1%DB%8C-%D8%B3%D8%A7%D9%84-%DB%B1%DB%B4%DB%B0%DB%B3"
       },
       {
-        "en": "Take the beginner or general amateur-radio examination; confirm the current certificate and station-permit steps directly with CRA before transmitting.",
-        "local": "در آزمون رادیوآماتوری سطح مبتدی یا عمومی شرکت کنید و پیش از ارسال امواج، مراحل دریافت گواهی‌نامه و پروانه ایستگاه را از رگولاتوری استعلام کنید.",
-        "url": "https://www.cra.ir/"
+        "local": "در روز اعلام‌شده به‌صورت برخط در آزمون (تئوری، مورس نوشتاری و مورس شنیداری) شرکت کنید؛ در دورهٔ ۱۴۰۳ نشانی آزمون radioexam.cra.ir بود.",
+        "en": "On the announced day take the exam online (theory, written Morse and listening Morse); in the 1403 (2024) round the exam site was radioexam.cra.ir.",
+        "url": "https://www.mehrnews.com/news/6133698/%D8%A2%D8%B2%D9%85%D9%88%D9%86-%D8%B1%D8%A7%D8%AF%DB%8C%D9%88-%D8%A2%D9%85%D8%A7%D8%AA%D9%88%D8%B1%DB%8C-%D9%BE%D8%A7%DB%8C%D8%A7%D9%86-%D8%AE%D8%B1%D8%AF%D8%A7%D8%AF%D9%85%D8%A7%D9%87-%D8%A8%D8%B1%DA%AF%D8%B2%D8%A7%D8%B1-%D9%85%DB%8C-%D8%B4%D9%88%D8%AF"
+      },
+      {
+        "local": "فقط کسانی که حداقل نمرهٔ لازم را بگیرند می‌توانند درخواست صدور گواهی‌نامهٔ رادیوآماتوری بدهند؛ مراحل صدور پروانهٔ ایستگاه را مستقیم از رگولاتوری استعلام کنید.",
+        "en": "Only candidates who reach the minimum scores may request the amateur-radio certificate; confirm the station-permit steps directly with CRA.",
+        "url": "https://www.mehrnews.com/news/6133698/%D8%A2%D8%B2%D9%85%D9%88%D9%86-%D8%B1%D8%A7%D8%AF%DB%8C%D9%88-%D8%A2%D9%85%D8%A7%D8%AA%D9%88%D8%B1%DB%8C-%D9%BE%D8%A7%DB%8C%D8%A7%D9%86-%D8%AE%D8%B1%D8%AF%D8%A7%D8%AF%D9%85%D8%A7%D9%87-%D8%A8%D8%B1%DA%AF%D8%B2%D8%A7%D8%B1-%D9%85%DB%8C-%D8%B4%D9%88%D8%AF"
       }
     ],
     "cost": null,
@@ -2933,9 +3247,16 @@
       "official": null,
       "forum": null
     },
-    "requirements": [],
+    "requirements": [
+      {
+        "local": "آزمون شامل بخش تئوری (مقررات، مدارهای الکترونیکی و مخابرات، انتشار امواج، رادیو آماتوری) و آزمون مورس نوشتاری و شنیداری است؛ برای ادامه باید حداقل نمرهٔ لازم را کسب کنید.",
+        "en": "The exam has a theory part (regulations, electronic and telecom circuits, wave propagation, amateur radio) plus written and listening Morse; you must reach the minimum scores to proceed.",
+        "url": "https://www.mehrnews.com/news/6133698/%D8%A2%D8%B2%D9%85%D9%88%D9%86-%D8%B1%D8%A7%D8%AF%DB%8C%D9%88-%D8%A2%D9%85%D8%A7%D8%AA%D9%88%D8%B1%DB%8C-%D9%BE%D8%A7%DB%8C%D8%A7%D9%86-%D8%AE%D8%B1%D8%AF%D8%A7%D8%AF%D9%85%D8%A7%D9%87-%D8%A8%D8%B1%DA%AF%D8%B2%D8%A7%D8%B1-%D9%85%DB%8C-%D8%B4%D9%88%D8%AF"
+      }
+    ],
     "notes": [
-      "CRA primary amateur-specific page could not be retrieved. Dated 2026 press report quoting CRA explains portal path, identity verification and exam: https://vista.ir/2607/329/3uuts/%D9%85%D9%87%D9%84%D8%AA-%D8%AB%D8%A8%D8%AA-%D9%86%D8%A7%D9%85-%D8%A2%D8%B2%D9%85%D9%88%D9%86-%D8%B1%D8%A7%D8%AF%DB%8C%D9%88%D8%A2%D9%85%D8%A7%D8%AA%D9%88%D8%B1%DB%8C-%D8%AA%D8%A7-%DB%B1%DB%B5-%D8%B4%D9%87%D8%B1%DB%8C%D9%88%D8%B1%D8%9B-%D8%A2%D8%B2%D9%85%D9%88%D9%86-%DB%B3%DB%B1-%D8%B4%D9%87%D8%B1%DB%8C%D9%88%D8%B1-%D8%A8%D8%B1%DA%AF%D8%B2%D8%A7%D8%B1-%D9%85%DB%8C-%D8%B4%D9%88%D8%AF . Do not use the dated 2026 exam event as normal lead time or claim a verified current fee."
+      "CRA primary amateur-specific page could not be retrieved. Dated 2026 press report quoting CRA explains portal path, identity verification and exam: https://vista.ir/2607/329/3uuts/%D9%85%D9%87%D9%84%D8%AA-%D8%AB%D8%A8%D8%AA-%D9%86%D8%A7%D9%85-%D8%A2%D8%B2%D9%85%D9%88%D9%86-%D8%B1%D8%A7%D8%AF%DB%8C%D9%88%D8%A2%D9%85%D8%A7%D8%AA%D9%88%D8%B1%DB%8C-%D8%AA%D8%A7-%DB%B1%DB%B5-%D8%B4%D9%87%D8%B1%DB%8C%D9%88%D8%B1%D8%9B-%D8%A2%D8%B2%D9%85%D9%88%D9%86-%DB%B3%DB%B1-%D8%B4%D9%87%D8%B1%DB%8C%D9%88%D8%B1-%D8%A8%D8%B1%DA%AF%D8%B2%D8%A7%D8%B1-%D9%85%DB%8C-%D8%B4%D9%88%D8%AF . Do not use the dated 2026 exam event as normal lead time or claim a verified current fee.",
+      "Research 2026-10-01: Cost: CRA site (cra.ir) refused connections from my network; Mehr/ISNA/vista news pages for 1403 and 1405 exam rounds state no fee; the amateur law/regulation on solh.ir lists only 1970s-era rial amounts (500/1,000 rials), clearly obsolete, so not used. time.official: no CRA statement on certificate/permit issuance time found (news only gives exam dates: 1403 exam 30 Khordad; 1405 registration to 15 Shahrivar, exam 31 Shahrivar). time.forum: Persian queries (call sign / certificate waiting time 1404) returned nothing first-hand and 2025+. Existing steps: CRA page could not be loaded, so steps rest on Mehr news (2024) and the 2026 vista report; requirements age 16 comes from an old regulation and may be superseded. WebSearch budget ran out partway, so coverage is limited. Minimum age 16 (solh.ir, old executive regulation) withheld: may be superseded."
     ],
     "procedureStatus": "partial",
     "procedureGap": "The amateur-specific CRA document could not be retrieved."
@@ -2976,7 +3297,8 @@
       }
     ],
     "notes": [
-      "IRTS exam-fee source: https://irts.ie/dnloads/IRTS_HAREC_Exam_Application_Form.pdf . English is an official language of Ireland."
+      "IRTS exam-fee source: https://irts.ie/dnloads/IRTS_HAREC_Exam_Application_Form.pdf . English is an official language of Ireland.",
+      "Research 2026-10-01: time.forum: Reddit is blocked to fetch tools (WebFetch, curl, browser pane, WebSearch domain filter) and boards.ie returns 403; only search snippets of a 2020 boards.ie thread surfaced (callsign allocated within about a week of the July 2020 HAREC results), which is pre-2025 and unloaded, so not used. No 2025+ first-hand report verified. Search budget ran out. Nothing in existing found wrong."
     ]
   },
   "croatia": {
@@ -2992,9 +3314,23 @@
         "url": "https://app.hakom.hr/default.aspx?id=10787"
       }
     ],
-    "cost": null,
+    "cost": {
+      "local": "Ispit za P razred je besplatan, a za A razred plaća se 30 € HRS-u (popravni ispit 11 €; 30 % popusta uz dokaz o invaliditetu). Naknada za samu HAKOM-ovu dozvolu nije objavljena; amaterske postaje bile su oslobođene naknade za spektar (pravilnik za 2020.).",
+      "en": "The P-class exam is free; the A-class exam costs 30 EUR paid to HRS (retake 11 EUR; 30% discount with proof of disability). No fee for the HAKOM permit itself is published; amateur stations were exempt from the spectrum fee in HAKOM's 2020 fee rules.",
+      "url": "https://www.hamradio.hr/wp-content/uploads/2026/08/HAKOM_Rjesenje_o-iznosima-naknada_2026.pdf",
+      "additionalUrls": [
+        "https://www.hamradio.hr/hakom-odluka-o-clanovima-ispitnih-povjerenstava-za-razdoblje-2026-2028-godina/",
+        "https://www.hakom.hr/UserDocsImages/2019/propisi/Pravilnik%20o%20pla%C4%87anju%20naknada%20HAKOM-a%20za%202020-20191218-final.pdf"
+      ],
+      "sourceType": "regulator",
+      "date": "2026-08-20 (HAKOM decision confirming exam fees)"
+    },
     "time": {
-      "official": null,
+      "official": {
+        "local": "Ispite određuje HRS (klub traži odobrenje najmanje 30 dana unaprijed), a popis kandidata ide HAKOM-u najkasnije 15 dana prije ispita. Nakon neuspjeha ponovni ispit je najranije za dva mjeseca. Rok za izdavanje dozvole nije propisan.",
+        "en": "HRS sets exam dates (a club must ask for approval at least 30 days ahead) and the candidate list goes to HAKOM at least 15 days before the exam. After a failed exam the retake is at least two months later. No deadline for issuing the permit is set.",
+        "url": "https://narodne-novine.nn.hr/clanci/sluzbeni/2022_12_150_2313.html"
+      },
       "forum": null
     },
     "requirements": [
@@ -3011,8 +3347,10 @@
     ],
     "notes": [
       "HAKOM confirmed an exam fee decision in August 2026 but published search result gives no amount: https://www.hakom.hr/hr/dnevni-red-sjednice-vijeca-hakom-a-od-20-kolovoza-2026/12660 . No verified current total fee or statutory processing period.",
-      "A dated September 2026 Zagreb course notice lists EUR 20 course contribution for students over age 26 and an extra EUR 30 for A-class candidates; these are course-specific, not a national licence total: https://www.hamradio.hr/tecaj-za-radioamatere/ ."
-    ]
+      "A dated September 2026 Zagreb course notice lists EUR 20 course contribution for students over age 26 and an extra EUR 30 for A-class candidates; these are course-specific, not a national licence total: https://www.hamradio.hr/tecaj-za-radioamatere/ .",
+      "Research 2026-10-01: Cost: found the HAKOM resolution of 20 Aug 2026 (PDF hosted by HRS) with exam fees; could not confirm any fee for the HAKOM permit itself (Pravilnik NN 150/22 sets none; HAKOM's 2020 fee rules exempt amateur stations from the spectrum fee, the current 2026 fee rulebook text could not be loaded). Official time: no statutory permit deadline in NN 150/22 or on the e-Amaterska page. Forum: searched Croatian-language queries (polozio ispit, pozivna oznaka, dozvola HAKOM, moj prvi pozivni znak) and HRS/club pages; no dated 2025+ first-hand report found. The WebSearch budget ran out mid-task, and Reddit is blocked, so forum coverage is thin. Existing: nothing found wrong; the existing note that the August 2026 fee amount was unknown is now resolved (A 30 EUR, P free)."
+    ],
+    "costStatus": "partial"
   },
   "romania": {
     "steps": [
@@ -3027,11 +3365,20 @@
         "url": "https://www.ancom.ro/category/autorizare-ro/radioamatori/"
       }
     ],
-    "cost": null,
+    "cost": {
+      "local": "Examenul și certificatul de radioamator sunt fără taxă din noiembrie 2007, iar textul consolidat al Deciziei ANCOM 245/2017 nu prevede nicio taxă pentru autorizație sau indicativ; ANCOM nu a publicat însă recent o confirmare explicită că totul e gratuit.",
+      "en": "The exam and amateur certificate have carried no fee since November 2007, and the consolidated text of ANCOM Decision 245/2017 sets no fee for the authorization or call sign; ANCOM has not recently published an explicit statement that everything is free.",
+      "url": "https://www.ancom.ro/despre-noi/media/comunicate-de-presa/anrcti-elimina-tarifele-pentru-obtinerea-certificatului-de-radioamator-si-radio-profesionist/",
+      "additionalUrls": [
+        "https://www.ancom.ro/uploads/links_files/DECIZIA_ANCOM_245_2017_PRIVIND_REGLEMENTAREA_SERVICIULUI_DE_AMATOR_CONSOLIDATA_31_martie_2022.pdf"
+      ],
+      "sourceType": "regulator",
+      "date": "2026-10-01 verified (press release 2007-11-01; Decision 245/2017 consolidated 2022-03-31)"
+    },
     "time": {
       "official": {
-        "en": "The published ANCOM regulation says exam results are posted within 15 working days; the certificate is issued within 15 days after a qualifying photo is submitted. No current overall authorization time was verified.",
-        "local": "Regulamentul ANCOM prevede publicarea rezultatelor în cel mult 15 zile lucrătoare și eliberarea certificatului în 15 zile de la depunerea fotografiei. Nu a fost confirmat un termen total pentru autorizație.",
+        "en": "The ANCOM regulation sets exam results within 15 working days, the certificate within 15 days of submitting the photo, and the amateur authorisation with call sign within 30 days of a complete application (Art. 18(3)).",
+        "local": "Regulamentul ANCOM prevede afișarea rezultatelor examenului în cel mult 15 zile lucrătoare, certificatul în 15 zile de la depunerea fotografiei, iar autorizația de radioamator, cu indicativ, în cel mult 30 de zile de la depunerea dosarului complet (art. 18 alin. 3).",
         "url": "https://www.ancom.ro/uploads/links_files/DECIZIA_ANCOM_245_2017_PRIVIND_REGLEMENTAREA_SERVICIULUI_DE_AMATOR_CONSOLIDATA_31_martie_2022.pdf"
       },
       "forum": null
@@ -3049,8 +3396,10 @@
       }
     ],
     "notes": [
-      "ANCOM removed exam and call-sign allocation fees in 2007, but no current 2026 fee notice confirming continued zero cost was found; avoid an unqualified 'free' claim. Source history: https://www.ancom.ro/despre-noi/media/comunicate-de-presa/anrcti-elimina-tarifele-pentru-obtinerea-certificatului-de-radioamator-si-radio-profesionist/ ."
-    ]
+      "ANCOM removed exam and call-sign allocation fees in 2007, but no current 2026 fee notice confirming continued zero cost was found; avoid an unqualified 'free' claim. Source history: https://www.ancom.ro/despre-noi/media/comunicate-de-presa/anrcti-elimina-tarifele-pentru-obtinerea-certificatului-de-radioamator-si-radio-profesionist/ .",
+      "Research 2026-10-01: cost: ANCOM's press release (1 Nov 2007) says exam and certificate-renewal fees were abolished (Decisions 3173/3174/2007). I extracted the full consolidated Decision 245/2017 PDF and grep found no tariff/taxa/lei provision for exam, certificate, authorization or call sign. The ANCOM radioamatori pages and the EN page state no fees either way; ANCOM tarife page URLs I tried returned 404 or no amateur content. An older repealed regulation (FORMA_CONSOLIDATA_RADIOAMATOR_FINAL.pdf, Annex 4) listed 30 RON per individual call sign and 5 RON exam, which is superseded and not used. Third-party YO sites (yo8tnb.ro) say authorization is free but are second-hand. Hence partial. time.forum: searched Romanian (am primit autorizația, indicativ, după cât timp), elforum.info CQ-YO threads (found only 2019 posts, e.g. a 2019 re-issue of an old authorization), yo3hey.ro and yo8tnb.ro guides (no first-hand dated timeline). Reddit blocked. Not found. Existing issues: (1) existing time.official says no overall authorization time was verified, but Decision 245/2017 Art. 18(3) says ANCOM issues the authorization within at most 30 days of a correct and complete application (same PDF, page with Art. 18); (2) the note says the 2007 abolition covered 'call-sign allocation' fees, but the press release only names examination and certificate renewal fees."
+    ],
+    "costStatus": "partial"
   },
   "palestine": {
     "steps": [
@@ -3088,7 +3437,10 @@
         "url": "https://mjr.ogb.gov.ps/Decrees/ViewText/29250/%D8%AA%D8%B9%D9%84%D9%8A%D9%85%D8%A7%D8%AA-%D8%B1%D9%82%D9%85-1-%D9%84%D8%B3%D9%86%D8%A9-2019%D9%85-%D8%A8%D8%A7%D9%84%D8%AD%D8%B5%D9%88%D9%84-%D8%B9%D9%84%D9%89-%D8%B1%D8%AE%D8%B5%D8%A9-%D8%B1%D8%A7%D8%AF%D9%8A%D9%88-%D9%87%D9%88%D8%A7%D8%A9-%D8%A7%D9%84%D9%84%D8%A7%D8%B3%D9%84%D9%83%D9%8A-%D9%81%D9%84%D8%B3%D8%B7%D9%8A%D9%86"
       }
     ],
-    "notes": "The 2019 gazette rule does not specify an examination for Palestinian applicants. The current Ministry website is https://www.mtit.gov.ps/. No reliable present national-society website found; do not mistake Palestine, Texas clubs or the Israeli IARC historical name for a Palestinian society. Article 19 tariff interpretation should be independently checked before presenting JOD 220 as definite.",
+    "notes": [
+      "The 2019 gazette rule does not specify an examination for Palestinian applicants. The current Ministry website is https://www.mtit.gov.ps/. No reliable present national-society website found; do not mistake Palestine, Texas clubs or the Israeli IARC historical name for a Palestinian society. Article 19 tariff interpretation should be independently checked before presenting JOD 220 as definite.",
+      "Research 2026-10-01: cost, time.official, time.forum: not researched in depth because WebSearch budget ran out; no new official timeline or invoice amount found. Existing JOD 20/100/220 interpretation remains unverified against an invoice."
+    ],
     "costStatus": "partial"
   },
   "samoa": {
@@ -3116,7 +3468,10 @@
         "url": "https://www.regulator.gov.ws/images/Rules/Radio-Spectrum-Rules-2018-Eng.pdf"
       }
     ],
-    "notes": "Samoa has two official languages, Samoan and English; English is used here to avoid uncertain translation of legal terms. The 2015 fee schedule has WST 65 application plus WST 52 annual charge, but a 2018 fee amendment exists and its effect on the amateur row was not confirmed; do not publish the old amount as current. Regulator form: https://www.regulator.gov.ws/images/Application_Forms/New/form_AMA01_radiocommunication_amatuer_radio.pdf . No verified processing-time estimate or active national society website."
+    "notes": [
+      "Samoa has two official languages, Samoan and English; English is used here to avoid uncertain translation of legal terms. The 2015 fee schedule has WST 65 application plus WST 52 annual charge, but a 2018 fee amendment exists and its effect on the amateur row was not confirmed; do not publish the old amount as current. Regulator form: https://www.regulator.gov.ws/images/Application_Forms/New/form_AMA01_radiocommunication_amatuer_radio.pdf . No verified processing-time estimate or active national society website.",
+      "Research 2026-10-01: cost: Regulator application-forms page and Form AMA01 (July 2025 edition) state no fee amount and no processing time (fees must be paid before the licence is issued; licences usually one year and renewed). The Radio Spectrum Rules 2018 PDF is image-only and could not be read, so no current WST amount verified; the 2015 WST 65 + WST 52 in existing remain unconfirmed as current. time.official/forum: none found; no active society site. Contact spectech@regulator.gov.ws, +685 30282."
+    ]
   },
   "saudi-arabia": {
     "steps": [
@@ -3158,7 +3513,10 @@
         "url": "https://www.cst.gov.sa/business/services/Radio-Equipment-License-Issuing"
       }
     ],
-    "notes": "Society: Saudi Amateur Radio Society https://sars.sa/. CST describes the online service transaction as immediate, not the entire journey including test scheduling.",
+    "notes": [
+      "Society: Saudi Amateur Radio Society https://sars.sa/. CST describes the online service transaction as immediate, not the entire journey including test scheduling.",
+      "Research 2026-10-01: cost: CST pages are unreachable directly (connection refused); via the Wayback Machine (2025 snapshot) the licence-issuance page still says fees follow the CST frequency-licensing fee regulation with no amount, and the exam page confirms SAR 300 first attempt / SAR 100 retake, age 18, saudi or resident, immediate processing. I could not locate the amateur line in the frequency fee schedule (no search budget left; Wayback CDX timed out), so cost stays partial. time.forum: nothing found. Existing entry consistent with the archived pages: https://web.archive.org/web/2025/https://www.cst.gov.sa/en/services/Registration-for-Amateur-Radio-License-Examination"
+    ],
     "costStatus": "partial"
   },
   "seychelles": {
@@ -3192,7 +3550,10 @@
         "url": "https://www.gazette.sc/sites/default/files/2026-01/S.I.%20No%201%202026%20-%20Communications%20%28Licensing%29%20Regulations%202026.pdf"
       }
     ],
-    "notes": "English is an official Seychelles language and is used as local text. New 2026 law repeals 2021 licensing regulations; old SARA pages refer to DICT/SLA and are stale for current authority. Society https://www.sara.sc/."
+    "notes": [
+      "English is an official Seychelles language and is used as local text. New 2026 law repeals 2021 licensing regulations; old SARA pages refer to DICT/SLA and are stale for current authority. Society https://www.sara.sc/.",
+      "Research 2026-10-01: time.official: Communications (Licensing) Regulations 2026 reg 3 sets no decision deadline for the Authority (only a 45-day appeal window after a refusal, and a time frame the Authority specifies for extra documents); SARA training page has no timelines. time.forum: web search quota ran out; no 2025+ first-hand report found. Nothing in existing found wrong."
+    ]
   },
   "slovakia": {
     "steps": [
@@ -3218,7 +3579,11 @@
       "date": "2026-01-26"
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "Úrad vydá individuálne povolenie na používanie frekvencií najneskôr do šiestich týždňov odo dňa doručenia úplnej žiadosti (zákon č. 452/2021 Z. z., § 36 ods. 1); čakanie na termín skúšky sa do tejto lehoty nezapočítava.",
+        "en": "The regulator must issue an individual frequency-use permit within six weeks of receiving a complete application (Act 452/2021, section 36(1)); waiting for an exam date is not part of this period.",
+        "url": "https://www.slov-lex.sk/static/pdf/2021/452/ZZ_2021_452_20250101.pdf"
+      },
       "forum": null
     },
     "requirements": [
@@ -3233,7 +3598,10 @@
         "url": "https://www.teleoff.gov.sk/urad/odbory-oddelenia/odbor-spravy-frekvencneho-spektra/skusky-osobitnej-odbornej-sposobilosti/amaterska-radiokomunikacna-sluzba/formulare-ziadosti-prepojenim-externy-portal-149/"
       }
     ],
-    "notes": "2026 EUR 3 source: https://www.teleoff.gov.sk/files/urad/odbory-oddelenia/odbor-spravy-frekvencneho-spektra/sprava-frekvencii-regulacia/sadzobnik-uhrad/20260126_vlastny-material_konsolidovane-znenie.pdf . Class N vs E details should not be inferred from old forms. Society Slovenský zväz rádioamatérov https://www.hamradio.sk/."
+    "notes": [
+      "2026 EUR 3 source: https://www.teleoff.gov.sk/files/urad/odbory-oddelenia/odbor-spravy-frekvencneho-spektra/sprava-frekvencii-regulacia/sadzobnik-uhrad/20260126_vlastny-material_konsolidovane-znenie.pdf . Class N vs E details should not be inferred from old forms. Society Slovenský zväz rádioamatérov https://www.hamradio.sk/.",
+      "Research 2026-10-01: time.official: found the statutory six-week limit in section 36(1) of Act 452/2021 (text of the 2025-01-01 consolidated PDF on slov-lex; I did not check a later consolidation). It applies to individual frequency permits generally, and the Act names amateur stations in section 35, so I treat it as covering the amateur permit; the six weeks may be extended where international coordination is needed. I found no official exam-session timetable: cq.sk (a portal, not the regulator) says the commission sits 3-4 times a year once 10-15 applicants have registered, unverified. time.forum: searched Slovak (osvedčenie operátora, individuálne povolenie, lehota) and read hamradio.sk and cq.sk guides; no first-hand dated report found. Search budget was exhausted before Slovak forums could be tried. Existing notes: hamradio.sk guide (24 Oct 2024) says the permit is followed by a frequency-use charge payable within a set deadline and valid 10 years, which matches the existing EUR 3 spectrum charge claim only loosely; not verified."
+    ]
   },
   "south-africa": {
     "steps": [
@@ -3264,7 +3632,11 @@
       "date": "2026-09"
     },
     "time": {
-      "official": null,
+      "official": {
+        "local": "The SARL runs the Radio Amateur Examination twice a year, in May and October (next: 10 October 2026, then May 2027). After marking, successful candidates who have also done the HF assessment receive their SARL certificates; no delivery time is stated.",
+        "en": "The SARL runs the Radio Amateur Examination twice a year, in May and October (next: 10 October 2026, then May 2027). After marking, successful candidates who have also done the HF assessment receive their SARL certificates; no delivery time is stated.",
+        "url": "https://mysarl.org.za/rae-radio-amateur-examination/"
+      },
       "forum": null
     },
     "requirements": [
@@ -3274,7 +3646,10 @@
         "url": "https://mysarl.org.za/how-do-i-get-a-license/"
       }
     ],
-    "notes": "English is an official South African language and is used as local text. The regulator is ICASA; portal https://online.icasa.org.za/. SARL society https://mysarl.org.za/. Oct 2026 registration was closed by Sep 30; next listed exam May 2027. The separate SARL 2026 newsletter says R202/year https://cdnc.heyzine.com/files/uploaded/v3/245a059f0460995932ea78055093b763bbf80cfd.pdf ; avoid using old SARL R700 bundle page because process changes in October 2026."
+    "notes": [
+      "English is an official South African language and is used as local text. The regulator is ICASA; portal https://online.icasa.org.za/. SARL society https://mysarl.org.za/. Oct 2026 registration was closed by Sep 30; next listed exam May 2027. The separate SARL 2026 newsletter says R202/year https://cdnc.heyzine.com/files/uploaded/v3/245a059f0460995932ea78055093b763bbf80cfd.pdf ; avoid using old SARL R700 bundle page because process changes in October 2026.",
+      "Research 2026-10-01: time.official: filled from SARL RAE page (session frequency only; no stated certificate or ICASA turnaround). time.forum: web search quota ran out and I could not find a dated 2025+ first-hand report via direct fetches; nothing verified. Nothing in existing found wrong (registration for Oct 2026 closed 15 Sept per SARL page)."
+    ]
   },
   "taiwan": {
     "steps": [
@@ -3284,9 +3659,9 @@
         "url": "https://www.ncc.gov.tw/chinese/files/service_file/0_1084_201014_3.pdf"
       },
       {
-        "en": "After passing, apply to NCC for the operator licence within one year; then apply separately for approval and licensing of an amateur station before operating.",
-        "local": "測試及格後，於一年內向國家通訊傳播委員會申請業餘無線電人員執照；設置及操作電臺前，另行申請電臺許可及執照。",
-        "url": "https://ncclaw.ncc.gov.tw/FLAW/FLAWDAT0201.aspx?id=FL094239"
+        "en": "After passing, apply to NCC for the operator licence within ten years; then apply separately for approval and licensing of an amateur station before operating.",
+        "local": "測試及格後，於十年內向國家通訊傳播委員會申請業餘無線電人員執照；設置及操作電臺前，另行申請電臺許可及執照。",
+        "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=K0060145"
       }
     ],
     "cost": {
@@ -3297,8 +3672,17 @@
       "date": "2025-02-03"
     },
     "time": {
-      "official": null,
-      "forum": null
+      "official": {
+        "local": "NCC公告的資格測試每週一、三、五舉辦（假日不辦）；週一、週五現場報名、隨報隨考免預約，週三採預約並以團體優先。測試後即可申請人員執照。",
+        "en": "NCC's published qualification tests run every Monday, Wednesday and Friday (not on holidays); Monday and Friday are walk-in with no booking, Wednesday is by appointment with groups first. You can then apply for the operator licence.",
+        "url": "https://www.gov.tw/News_Content_2_530779"
+      },
+      "forum": {
+        "local": "一位網友2025年12月30日到NCC監理處現場報考三等，幾乎不用排隊，考試加手持機驗機全程約70分鐘，人員與電臺執照當天就到手。",
+        "en": "A blogger sat the Class 3 test on site at an NCC office on 30 Dec 2025 with almost no queue; test plus handheld inspection took about 70 minutes and both operator and station licences were in hand the same day.",
+        "url": "https://vocus.cc/article/69548c5cfd89780001859953",
+        "date": "2025-12-31"
+      }
     },
     "requirements": [
       {
@@ -3307,12 +3691,15 @@
         "url": "https://ncclaw.ncc.gov.tw/FLAW/FLAWDAT0201.aspx?id=FL094239"
       },
       {
-        "en": "Apply for the operator licence within one year of passing or retake the test.",
-        "local": "測試及格後須於一年內申請人員執照，逾期須重新測試。",
-        "url": "https://ncclaw.ncc.gov.tw/FLAW/FLAWDAT0201.aspx?id=FL094239"
+        "en": "Apply for the operator licence within ten years of passing or retake the test.",
+        "local": "測試及格後須於十年內申請人員執照，逾期須重新測試。",
+        "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=K0060145"
       }
     ],
-    "notes": "Traditional Chinese is local language. NCC examination notice https://www.ncc.gov.tw/chinese/files/service_file/0_1084_201014_3.pdf is older but current fee schedule corroborates amount. National society CTARL https://www.ctarl.org.tw/. No official processing-time promise verified."
+    "notes": [
+      "Traditional Chinese is local language. NCC examination notice https://www.ncc.gov.tw/chinese/files/service_file/0_1084_201014_3.pdf is older but current fee schedule corroborates amount. National society CTARL https://www.ctarl.org.tw/. No official processing-time promise verified.",
+      "Research 2026-10-01: time.official from the NCC test notice on gov.tw (notice text amended 2019-06-10, publisher NCC); no statutory processing deadline for licence issue found. time.forum from vocus.cc (first-hand). EXISTING LOOKS WRONG: existing says apply for the operator licence within one year of passing; the current regulation (Art. 9 of the Amateur Radio Personnel and Station Management Regulations, 2020-07-10) says within ten years of the test date, otherwise retest: https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=K0060145 . The same law (Art. 4) lets foreigners sit the test with a residence certificate or passport. The vocus post also lists a NT$100 station inspection fee per station, not in existing cost."
+    ]
   },
   "united-arab-emirates": {
     "steps": [
@@ -3349,7 +3736,10 @@
         "url": "https://tdra.gov.ae/ar/Services/service-card?sID=e3VXG0890DiOuDjOxQzlpYIvwI6qYj8yqPe_cK9RNQA"
       }
     ],
-    "notes": "This official TDRA service for non-UAE nationals requires an existing foreign amateur licence; no from-zero resident route for an unlicensed foreign national was found. Society https://ears.ae/en/.",
+    "notes": [
+      "This official TDRA service for non-UAE nationals requires an existing foreign amateur licence; no from-zero resident route for an unlicensed foreign national was found. Society https://ears.ae/en/.",
+      "Research 2026-10-01: cost: re-confirmed AED 200 annual amateur fee in Article 18.1 of TDRA Spectrum Fees Regulations V2.0 (issue date 30 Dec 2009), https://tdra.gov.ae/userfiles/assets/cv1RYaHEDPF.pdf; the TDRA service page (last updated 02/06/2022) says 'According to the Spectrum Fees Regulation', 12 days expected, UAE Pass login. EARS membership fee: ears.ae Arabic site has membership-form pages but they returned 404 to my fetcher, so no amount found; cost stays partial. Note the regulation is a 2009 version and a newer fee regulation may exist. time.forum: nothing found."
+    ],
     "costStatus": "partial"
   },
   "vietnam": {
@@ -3371,11 +3761,15 @@
       }
     ],
     "cost": {
-      "en": "The consolidated government tariff sets a one-time amateur station licensing fee of VND 240,000 plus a spectrum-use charge of VND 240,000 per authorized amateur band per 12 months. Certificate/examination fees are separate and unverified.",
-      "local": "Biểu phí hợp nhất quy định lệ phí cấp phép một lần là 240.000 đồng cho thiết bị vô tuyến điện nghiệp dư, cộng phí sử dụng tần số 240.000 đồng cho mỗi băng tần được cấp phép trong 12 tháng. Chưa xác minh được phí thi và cấp chứng chỉ.",
+      "local": "Lệ phí cấp giấy phép là 240.000 đồng một lần và phí sử dụng tần số 240.000 đồng mỗi băng tần mỗi 12 tháng (biểu phí hợp nhất). Thông tư 37/2026/TT-BKHCN không quy định mức thu cho kỳ thi, tổ chức thi tự đặt phí và chưa thấy bảng giá công khai.",
+      "en": "The licence fee is VND 240,000 once, plus a spectrum fee of VND 240,000 per band per 12 months (consolidated tariff). Circular 37/2026/TT-BKHCN sets no exam fee; exam organisers set their own and no public price list was found.",
       "url": "https://datafiles.chinhphu.vn/cpp/files/vbpq/2025/8/23-vbhn-btc.pdf",
-      "sourceType": "official_consolidated_finance_regulation",
-      "date": "2025-08"
+      "additionalUrls": [
+        "https://vilawist.com/van-ban/37-2026-tt-bkhcn",
+        "https://dost.hochiminhcity.gov.vn/thu-tuc-hanh-chinh/cap-giay-phep-su-dung-tan-so-va-thiet-bi-vo-tuyen-dien-doi-voi-dai-vo-tuyen-dien-nghiep-du/"
+      ],
+      "sourceType": "law",
+      "date": "2025-08 tariff; circular dated 2026-06-30"
     },
     "time": {
       "official": {
@@ -3392,7 +3786,10 @@
         "url": "https://dichvucong.gov.vn/p/home/dvc-chi-tiet-thu-tuc-hanh-chinh.html?ma_thu_tuc=2.002781"
       }
     ],
-    "notes": "New 2025/2026 decentralization assigns amateur-station licensing to provincial People's Committees; older pages listing the national Radio Frequency Department and 10 working days are obsolete. National club https://hamvn.com/vi. The cited certificate-issuer authorization procedure is for organizations, not an individual's exam-registration form; a current direct individual registration form was not verified.",
+    "notes": [
+      "New 2025/2026 decentralization assigns amateur-station licensing to provincial People's Committees; older pages listing the national Radio Frequency Department and 10 working days are obsolete. National club https://hamvn.com/vi. The cited certificate-issuer authorization procedure is for organizations, not an individual's exam-registration form; a current direct individual registration form was not verified.",
+      "Research 2026-10-01: No time.forum found: searched Vietnamese and English (blogs, forums, hamvn.com) for first-hand 2025+ reports of exam to licence; only legal texts surfaced. Exam fee still unknown. EXISTING NEEDS UPDATE: Circular 37/2026/TT-BKHCN (issued 2026-06-30, effective 2026-07-01; text at https://vilawist.com/van-ban/37-2026-tt-bkhcn ) replaces the 'recognised issuer' approval with a notice to the Radio Frequency Department; three classes (I 1000 W, II 200 W, III 50 W; class III limited to listed HF bands plus VHF/UHF); multiple-choice exam of 50/40/30 questions, pass at 70% or more; class I needs class II held 6+ months; certificates are valid until revoked. A 2026-08-06 VARC page (https://hamvn.com/vi/news/dang-ky-va-thi-thu-bai-thi-vo-tuyen-dien-nghiep-du) says the Ho Chi Minh City amateur radio club currently runs the exams. The 11-day licence deadline and 240,000 VND fees were re-confirmed on the HCMC DOST procedure page."
+    ],
     "costStatus": "partial"
   }
 }
