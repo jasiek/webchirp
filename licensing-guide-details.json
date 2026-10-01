@@ -1827,23 +1827,23 @@
     "steps": [
       {
         "en": "Pass the amateur radio professional exam organized by the Serbian amateur radio association or its provincial associations and obtain proof for your class.",
-        "local": "Položite stručni ispit za radio-amatera u organizaciji Saveza radio-amatera Srbije ili pokrajinskog saveza i pribavite dokaz za odgovarajuću klasu.",
+        "local": "Положите стручни испит за радио-аматера у организацији Савеза радио-аматера Србије или покрајинског савеза и прибавите доказ за одговарајућу класу.",
         "url": "https://www.ratel.rs/uploads/documents/empire_plugin/5b890a50e2440.pdf"
       },
       {
         "en": "Apply to RATEL for the amateur licence using form ZRLA with exam proof and payment receipt.",
-        "local": "Podnesite RATEL-u zahtev za radioamatersku licencu na obrascu ZRLA, uz dokaz o položenom ispitu i uplati takse.",
+        "local": "Поднесите РАТЕЛ-у захтев за радиоаматерску лиценцу на обрасцу ЗРЛА, уз доказ о положеном испиту и уплати таксе.",
         "url": "https://www.ratel.rs/sr/radioamaterska-licenca"
       },
       {
         "en": "Apply separately for an individual spectrum permit for your personal amateur station using form ZPDLA; the operator licence alone is insufficient to operate a station.",
-        "local": "Posebno zatražite pojedinačnu dozvolu za ličnu amatersku radio-stanicu na obrascu ZPDLA; sama radioamaterska licenca nije dovoljna za korišćenje stanice.",
+        "local": "Посебно затражите појединачну дозволу за личну аматерску радио-станицу на обрасцу ЗПДЛА; сама радиоаматерска лиценца није довољна за коришћење станице.",
         "url": "https://www.ratel.rs/sr/dozvola-za-radioamatersku-stanicu"
       }
     ],
     "cost": {
       "en": "RATEL's 2026 fee is 1,389 RSD for the operator licence and 1,389 RSD for the personal-station permit, or 2,778 RSD in total, excluding any exam charge not verified here.",
-      "local": "RATEL-ove takse u 2026. iznose 1.389 RSD za radioamatersku licencu i 1.389 RSD za dozvolu za ličnu stanicu, ukupno 2.778 RSD, bez eventualne naknade za ispit koja ovde nije potvrđena.",
+      "local": "РАТЕЛ-ове таксе у 2026. износе 1.389 динара за радиоаматерску лиценцу и 1.389 динара за дозволу за личну станицу, укупно 2.778 динара, без евентуалне накнаде за испит, која овде није потврђена.",
       "url": "https://www.ratel.rs/storage/upload/2025/11/Pravilnik-o-uskla%C4%91ivanju-visine-taksi-za-pru%C5%BEanje-usluga-iz-nadle%C5%BEnosti-Ratela-%28Sl.-glasnik-RS%2C-77-25%29.pdf",
       "sourceType": "regulator tariff plus RATEL licence fee equivalence",
       "date": "2026-01-01"
@@ -1855,12 +1855,12 @@
     "requirements": [
       {
         "en": "The personal-station permit requires a copy of the amateur licence, identity card showing personal number and residence, fee receipt and ZPDLA form.",
-        "local": "Za dozvolu za ličnu stanicu potrebni su kopija radioamaterske licence, lična karta sa JMBG-om i prebivalištem, dokaz o uplati takse i obrazac ZPDLA.",
+        "local": "За дозволу за личну станицу потребни су копија радиоаматерске лиценце, лична карта са ЈМБГ-ом и пребивалиштем, доказ о уплати таксе и образац ЗПДЛА.",
         "url": "https://www.ratel.rs/sr/dozvola-za-radioamatersku-stanicu"
       },
       {
         "en": "The operator licence is valid for 10 years.",
-        "local": "Radioamaterska licenca važi 10 godina.",
+        "local": "Радиоаматерска лиценца важи 10 година.",
         "url": "https://www.ratel.rs/sr/radioamaterska-licenca"
       }
     ],
