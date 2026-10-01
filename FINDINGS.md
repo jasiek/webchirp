@@ -449,3 +449,13 @@ identify their own request by a position no other test uses.
   to 10 on the older FAQ. Kept as partial pending a payment notice.
 - Belgium's BIPT FAQ pages disagree on whether a station licence is free or
   costs EUR 63.30 filing plus EUR 63.30 a year.
+- Claude in Chrome also hard-blocks reddit.com (a safety restriction, not a
+  site permission), and Whirlpool and boards.ie sit behind bot checks. Google
+  search in Chrome has no call budget and supports a 2025+ date filter
+  (`tbs=cdr:1,cd_min:1/1/2025`), which made it the better engine for the
+  second pass. Facebook group posts opened only because the Chrome profile is
+  signed in to the user's account; treat them as sources only when public.
+- A second Chrome-driven pass over 68 countries found 5 more dated applicant
+  reports (Poland, Italy, Latvia, Colombia, Bangladesh). Google indexes very
+  few 2025+ first-hand posts in Ukrainian, Baltic, Kazakh or Kyrgyz, and most
+  Latin American and Asian reports live in Facebook groups.

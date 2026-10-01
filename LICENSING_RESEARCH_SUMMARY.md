@@ -6,10 +6,10 @@ Reviewed: 2026-09-30. This audit is deliberately outside the published website. 
 | --- | ---: | --- | --- | --- | ---: | --- |
 | Albania | 3 steps | Partial | Found | Missing | 2 items | Member |
 | Angola | Partial (2 steps) | Missing | Missing | Missing | 1 item | Outside / not listed |
-| Argentina | 3 steps | Partial | Missing | Missing | 2 items | Outside / not listed |
+| Argentina | 3 steps | Partial | Found | Missing | 2 items | Outside / not listed |
 | Australia | 3 steps | Found | Found | Missing | 2 items | Implements T/R 61-01 |
 | Austria | 3 steps | Partial | Found | Missing | 2 items | Member |
-| Bangladesh | 3 steps | Partial | Found | Missing | 1 item | Outside / not listed |
+| Bangladesh | 3 steps | Partial | Found | Found | 1 item | Outside / not listed |
 | Belgium | 3 steps | Partial | Found | Missing | 2 items | Member |
 | Bosnia & Herzegovina | 2 steps | Found | Found | Missing | 1 item | Member |
 | Brazil | 2 steps | Found | Found | Missing | 2 items | Outside / not listed |
@@ -18,7 +18,7 @@ Reviewed: 2026-09-30. This audit is deliberately outside the published website. 
 | Canada | 3 steps | Partial | Found | Found | 2 items | Implements T/R 61-01 |
 | Chile | 3 steps | Found | Found | Missing | 1 item | Outside / not listed |
 | China | 3 steps | Found | Found | Found | 2 items | Outside / not listed |
-| Colombia | 3 steps | Found | Found | Missing | 1 item | Outside / not listed |
+| Colombia | 3 steps | Found | Found | Found | 1 item | Outside / not listed |
 | Croatia | 2 steps | Partial | Found | Missing | 2 items | Member |
 | Cyprus | 2 steps | Found | Found | Missing | 1 item | Member |
 | Czechia | 3 steps | Found | Found | Missing | 1 item | Member |
@@ -38,12 +38,12 @@ Reviewed: 2026-09-30. This audit is deliberately outside the published website. 
 | Iran | Partial (3 steps) | Missing | Missing | Missing | 1 item | Outside / not listed |
 | Ireland | 2 steps | Found | Found | Missing | 1 item | Member |
 | Israel | 2 steps | Found | Missing | Missing | 2 items | Implements T/R 61-01 |
-| Italy | 3 steps | Found | Found | Missing | 1 item | Member |
+| Italy | 3 steps | Found | Found | Found | 1 item | Member |
 | Japan | 3 steps | Found | Found | Found | 2 items | Outside / not listed |
 | Kazakhstan | 2 steps | Found | Found | Missing | 1 item | Outside / not listed |
 | Kenya | 2 steps | Partial | Missing | Missing | 2 items | Outside / not listed |
 | Kyrgyzstan | Partial (1 step) | Missing | Missing | Missing | 0 items | Outside / not listed |
-| Latvia | 2 steps | Found | Found | Missing | 2 items | Member |
+| Latvia | 2 steps | Found | Found | Found | 2 items | Member |
 | Lithuania | 2 steps | Found | Found | Missing | 2 items | Member |
 | Malaysia | 2 steps | Found | Found | Missing | 2 items | Outside / not listed |
 | Mauritius | 2 steps | Found | Missing | Missing | 2 items | Outside / not listed |
@@ -59,22 +59,22 @@ Reviewed: 2026-09-30. This audit is deliberately outside the published website. 
 | Paraguay | 3 steps | Missing | Missing | Missing | 2 items | Outside / not listed |
 | Peru | 2 steps | Found | Found | Missing | 2 items | Implements T/R 61-01 |
 | Philippines | 3 steps | Partial | Found | Missing | 2 items | Outside / not listed |
-| Poland | 3 steps | Found | Found | Missing | 1 item | Member |
+| Poland | 3 steps | Found | Found | Found | 1 item | Member |
 | Portugal | 2 steps | Partial | Missing | Missing | 2 items | Member |
 | Puerto Rico | 3 steps | Found | Found | Missing | 1 item | US territory; US arrangement |
 | Romania | 2 steps | Partial | Found | Missing | 2 items | Member |
 | Russia | 3 steps | Partial | Found | Missing | 1 item | Suspended |
 | Samoa | 2 steps | Missing | Missing | Missing | 1 item | Outside / not listed |
 | Saudi Arabia | 2 steps | Partial | Found | Missing | 2 items | Outside / not listed |
-| Serbia | 3 steps | Found | Missing | Missing | 2 items | Member |
+| Serbia | 3 steps | Found | Found | Missing | 2 items | Member |
 | Seychelles | 2 steps | Found | Missing | Missing | 1 item | Outside / not listed |
-| Singapore | 2 steps | Partial | Missing | Missing | 2 items | Outside / not listed |
+| Singapore | 2 steps | Partial | Found | Missing | 2 items | Outside / not listed |
 | Slovakia | 2 steps | Found | Found | Missing | 2 items | Member |
 | Slovenia | 2 steps | Found | Found | Found | 2 items | Member |
 | South Africa | 3 steps | Found | Found | Missing | 1 item | Implements T/R 61-01 |
 | South Korea | 2 steps | Found | Found | Found | 2 items | Outside / not listed |
 | Spain | 3 steps | Found | Found | Found | 1 item | Member |
-| Sweden | 2 steps | Partial | Missing | Missing | 1 item | Member |
+| Sweden | 2 steps | Found | Missing | Missing | 1 item | Member |
 | Switzerland | 3 steps | Found | Missing | Missing | 2 items | Member |
 | Taiwan | 2 steps | Found | Found | Found | 2 items | Outside / not listed |
 | Thailand | 2 steps | Partial | Found | Missing | 1 item | Outside / not listed |
@@ -89,9 +89,9 @@ Reviewed: 2026-09-30. This audit is deliberately outside the published website. 
 ## Coverage
 
 - Sourced steps: 81 of 81; full procedure not verified for 6.
-- Sourced cost: 73 of 81; 23 have only a component or variable total.
-- Official processing or exam timeline: 58 of 81.
-- Applicant processing reports dated 2025 onward: 13 of 81.
+- Sourced cost: 73 of 81; 22 have only a component or variable total.
+- Official processing or exam timeline: 61 of 81.
+- Applicant processing reports dated 2025 onward: 18 of 81.
 - Official additional requirements: 79 of 81.
 - CEPT membership and T/R 61-01 implementation: checked for all 81 against [ECO's current membership list](https://docdb.cept.org/implementation/overview) and [T/R 61-01 implementation table](https://docdb.cept.org/implementation/925).
 
