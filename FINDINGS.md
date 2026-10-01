@@ -428,3 +428,34 @@ identify their own request by a position no other test uses.
 - Moldova's May 2026 ARCOM amateur-radio regulation replaces the older
   ANRCETI procedure. It separates the free exam and certificate from a later
   frequency licence, each with a distinct administrative timeline.
+
+## Country licensing gap research (October 2026)
+
+- Research agents cannot read Reddit: WebFetch, curl and the in-app browser
+  pane all refuse reddit.com, and boards.ie, Whirlpool and funkbasis block or
+  login-wall fetches too. First-hand processing reports are mostly found on
+  national-language boards and blogs instead (URE foro, zendamateur.com,
+  s5tech.net, naaran.com, vocus.cc, onair.jp, Naver blogs, f4mby.fr).
+- WebSearch has a budget of about 200 calls that parallel agents exhaust within
+  minutes; ten concurrent country batches all ran dry partway. Run fewer agents
+  in sequence when the remaining gaps are forum reports.
+- Taiwan's operator-licence application window after passing the test is ten
+  years (Art. 9, amended 2020-07-10, law.moj.gov.tw K0060145), not one year as
+  older NCC pages say.
+- Romania's Decision ANCOM 245/2017 Art. 18(3) obliges ANCOM to issue the
+  amateur authorisation within 30 days of a complete application.
+- Ecuador's ARCOTEL procedure page (updated 2025-12-22) lists 0.05 SBU title
+  fee plus 1.00 SBU spectrum fee, about USD 506 at the 2026 SBU, against USD 5
+  to 10 on the older FAQ. Kept as partial pending a payment notice.
+- Belgium's BIPT FAQ pages disagree on whether a station licence is free or
+  costs EUR 63.30 filing plus EUR 63.30 a year.
+- Claude in Chrome also hard-blocks reddit.com (a safety restriction, not a
+  site permission), and Whirlpool and boards.ie sit behind bot checks. Google
+  search in Chrome has no call budget and supports a 2025+ date filter
+  (`tbs=cdr:1,cd_min:1/1/2025`), which made it the better engine for the
+  second pass. Facebook group posts opened only because the Chrome profile is
+  signed in to the user's account; treat them as sources only when public.
+- A second Chrome-driven pass over 68 countries found 5 more dated applicant
+  reports (Poland, Italy, Latvia, Colombia, Bangladesh). Google indexes very
+  few 2025+ first-hand posts in Ukrainian, Baltic, Kazakh or Kyrgyz, and most
+  Latin American and Asian reports live in Facebook groups.

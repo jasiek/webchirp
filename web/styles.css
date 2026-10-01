@@ -319,6 +319,38 @@ body {
 
 /* Country licensing guides share the static page shell and use one compact
    facts layout so every translated page has the same reading order. */
+.licensing-language-switch {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.licensing-language-switch button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0.35rem;
+}
+
+.licensing-language-switch button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--selected-bg);
+}
+
+.licensing-language-switch button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.licensing-language-panel[hidden] {
+  display: none;
+}
+
 .licensing-header {
   display: flex;
   align-items: center;

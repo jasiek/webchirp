@@ -41,6 +41,19 @@ test("one localized, cited guide is built for each named CSV location", async ()
       assert.match(html, new RegExp(`<html lang="${record.locale}"`), filename);
       assert.ok(html.includes("English translation of visible guide:"), filename);
       assert.ok(html.includes("class=\"licensing-flag\""), filename);
+      assert.ok(html.includes('data-licensing-panel="native"'), filename);
+      if (record.locale === "en") {
+        assert.ok(!html.includes('data-licensing-language="en"'), filename);
+        assert.ok(!html.includes('data-licensing-panel="en"'), filename);
+      } else {
+        assert.ok(html.includes('data-licensing-language="native" aria-pressed="true"'), filename);
+        assert.ok(html.includes('data-licensing-language="en" aria-pressed="false"'), filename);
+        assert.ok(html.includes('data-licensing-panel="en"'), filename);
+        assert.ok(html.includes('src="../js/licensing-language.js"'), filename);
+      }
+      const sourceIds = [...html.matchAll(/<li id="(source-(?:native|en)-\d+)">/g)]
+        .map((match) => match[1]);
+      assert.equal(new Set(sourceIds).size, sourceIds.length, filename);
       assert.ok(html.includes(record.authority.url.replaceAll("&", "&amp;")), filename);
       assert.ok(html.includes(record.society.url.replaceAll("&", "&amp;")), filename);
       assert.ok(html.includes(`/licensing/${filename}`), filename);
@@ -61,8 +74,12 @@ test("the English comment matches the translated claims on a country guide", asy
     assert.match(html, /<ol class="licensing-steps">/);
     assert.match(html, /Procedure: 1\./);
     assert.match(html, /CEPT status:/);
-    assert.match(html, /href="#source-\d+">\[\d+\]<\/a>/);
-    assert.match(html, /<li id="source-\d+"><a href=/);
+    assert.match(html, /href="#source-native-\d+">\[\d+\]<\/a>/);
+    assert.match(html, /href="#source-en-\d+">\[\d+\]<\/a>/);
+    assert.match(html, /<li id="source-native-\d+"><a href=/);
+    assert.match(html, /<li id="source-en-\d+"><a href=/);
+    assert.match(html, /data-licensing-panel="en"[^>]+lang="en" dir="ltr" hidden>/);
+    assert.match(html, /<h1>How to get licensed: Poland<\/h1>/);
     const summary = await readFile(path.join(root, "LICENSING_RESEARCH_SUMMARY.md"), "utf8");
     assert.match(summary, /\| Poland \| 3 steps \|/);
     assert.ok(!html.includes("LICENSING_RESEARCH_SUMMARY"));
