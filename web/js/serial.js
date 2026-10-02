@@ -775,7 +775,7 @@ export class BrowserSerialBridge {
 
   _describePort(port) {
     if (this.transport === "webbluetooth") {
-      return port.device?.name?.trim() || "Bluetooth serial adapter";
+      return port.driverName || "BLE serial adapter";
     }
     const identity = this._getPortIdentity(port);
     const vid = identity.usbVendorId;

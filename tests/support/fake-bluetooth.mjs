@@ -33,10 +33,11 @@ export function makeBluetoothDongle({ onOperation = async () => {} } = {}) {
     async getCharacteristic(uuid) {
       const short = uuid.slice(4, 8);
       await record(`characteristic:${short}`);
+      if (!characteristics.has(short)) throw new DOMException("Missing characteristic", "NotFoundError");
       return characteristics.get(short);
     },
   };
-  const device = makeEmitter({ name: "BF_Writer", gatt: {
+  const device = makeEmitter({ name: "BT-1AD", gatt: {
     connected: false,
     async connect() { await record("connect"); this.connected = true; return this; },
     async getPrimaryService(uuid) { await record(`service:${uuid}`); return service; },
@@ -49,7 +50,7 @@ export function makeBluetoothDongle({ onOperation = async () => {} } = {}) {
     },
   } });
   return {
-    device, tx, rx, baud, calls,
+    device, tx, rx, baud, calls, characteristics,
     // Deliver the original DataView, including its byte window, as browsers do.
     notify(value) { rx.value = value; rx.emit("characteristicvaluechanged", { target: rx }); },
   };

@@ -357,7 +357,7 @@ export function createSerialActions(ctx) {
     dom.webbluetoothConnectToggleEl.hidden = !showWebBluetoothToggle;
     dom.webbluetoothConnectToggleEl.disabled = !actionsAllowed;
     dom.webbluetoothConnectToggleEl.title = selectionBlockedTitle
-      || "Connect over WebBluetooth to a BF_Writer programming dongle used with Ola Radio";
+      || "Connect over WebBluetooth to a BT-1AD programming dongle used with Ola Radio";
 
     // Both clone operations talk to an open port, so neither is offered until
     // a port has been picked and opened through one of the connect buttons.

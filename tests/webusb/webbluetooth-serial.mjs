@@ -3,6 +3,7 @@ import test from "node:test";
 import { BrowserSerialBridge } from "../../web/js/serial.js";
 import { isPortSelectionCancelled } from "../../web/js/serial-errors.js";
 import { WebBluetoothSerialPort, createWebBluetoothSerial } from "../../web/js/webbluetooth-serial.js";
+import { bt1adDriver } from "../../web/js/webbluetooth/bt-1ad.js";
 import { makeBluetoothDongle } from "../support/fake-bluetooth.mjs";
 import { withNavigator, tick } from "../support/globals.mjs";
 
@@ -136,7 +137,7 @@ test("unexpected BLE link loss tears down the bridge and reports the device", as
   const lost = new Promise((resolve) => { bridge.onPortLost = resolve; });
   device.gatt.disconnect();
   const event = await lost;
-  assert.match(event.deviceName, /BF_Writer/);
+  assert.match(event.deviceName, /BT-1AD/);
   assert.equal(bridge.port, null);
   assert.equal(bridge.writer, null);
   assert.equal(rx.listenerCount("characteristicvaluechanged"), 0);
@@ -162,7 +163,7 @@ test("failed partial opens clean up both GATT and event listeners before retry",
   }
 });
 
-test("unsupported serial framing and invalid rates are rejected before touching hardware", async () => {
+test("unsupported BT-1AD UART settings are rejected before subscription or writes", async () => {
   const dongle = makeBluetoothDongle();
   const port = new WebBluetoothSerialPort(dongle.device, { settleMs: 0 });
   for (const options of [{ baudRate: 0 }, { baudRate: 1.5 }, { baudRate: 2 ** 32 },
@@ -170,7 +171,58 @@ test("unsupported serial framing and invalid rates are rejected before touching 
     { baudRate: 9600, dataBits: 7 }, { baudRate: 9600, flowControl: "hardware" }]) {
     await assert.rejects(port.open(options), /baud rate|8N1/);
   }
-  assert.deepEqual(dongle.calls, []);
+  assert.ok(dongle.calls.every((call) => !/:subscribe|:response|:command/.test(call.operation)));
+  assert.equal(dongle.device.gatt.connected, false);
+});
+
+test("driver probing skips unmatched profiles and identifies BT-1AD without its advertised name", async (t) => {
+  const dongle = makeBluetoothDongle();
+  dongle.device.name = "Custom advertised name";
+  const probes = [];
+  const drivers = [
+    { async probe() { probes.push("unmatched"); return null; } },
+    bt1adDriver,
+    { async probe() { throw new Error("Must stop at the first match"); } },
+  ];
+  const port = new WebBluetoothSerialPort(dongle.device, { drivers, settleMs: 0 });
+  t.after(() => port.close());
+  await port.open({ baudRate: 9600 });
+  assert.deepEqual(probes, ["unmatched"]);
+  assert.equal(port.driverName, "BT-1AD");
+});
+
+test("missing or incompatible BT-1AD characteristics reject the device without protocol writes", async () => {
+  for (const mismatch of ["missing", "properties"]) {
+    const dongle = makeBluetoothDongle();
+    if (mismatch === "missing") dongle.characteristics.delete("ae10");
+    else dongle.rx.properties.indicate = false;
+    const port = new WebBluetoothSerialPort(dongle.device, { settleMs: 0 });
+    await assert.rejects(port.open({ baudRate: 9600 }), /No supported BLE serial driver/);
+    assert.equal(dongle.device.gatt.connected, false);
+    assert.equal(dongle.device.listenerCount("gattserverdisconnected"), 0);
+    assert.ok(dongle.calls.every((call) => !/:subscribe|:response|:command/.test(call.operation)));
+  }
+});
+
+test("probe link failures propagate without trying another driver", async () => {
+  const dongle = makeBluetoothDongle({ async onOperation(call) {
+    if (call.operation.startsWith("service:")) throw new DOMException("Lost link", "NetworkError");
+  } });
+  const port = new WebBluetoothSerialPort(dongle.device, { drivers: [bt1adDriver,
+    { async probe() { assert.fail("Link failures are not profile mismatches"); } },
+  ] });
+  await assert.rejects(port.open({ baudRate: 9600 }), /Lost link/);
+  assert.equal(dongle.device.gatt.connected, false);
+});
+
+test("chooser includes every registered profile and deduplicates service permissions", async (t) => {
+  const dongle = makeBluetoothDongle();
+  let requested;
+  withNavigator(t, { bluetooth: { async requestDevice(options) { requested = options; return dongle.device; } } });
+  const second = { filters: [{ namePrefix: "Future adapter" }], optionalServices: ["other-service", ...bt1adDriver.optionalServices] };
+  await createWebBluetoothSerial({ drivers: [bt1adDriver, second] }).requestPort();
+  assert.deepEqual(requested.filters, [...bt1adDriver.filters, ...second.filters]);
+  assert.deepEqual(requested.optionalServices, [...bt1adDriver.optionalServices, "other-service"]);
 });
 
 test("BLE-only browsers advertise capability and chooser dismissal is a cancellation", async (t) => {

@@ -58,5 +58,5 @@ if (serialCapability.webusb && !serialCapability.native) {
   );
 }
 if (serialCapability.webbluetooth) {
-  ui.logSerial("Use WebBluetooth for a BF_Writer BLE programming dongle used with Ola Radio.");
+  ui.logSerial("Use WebBluetooth for a BT-1AD BLE programming dongle used with Ola Radio.");
 }
