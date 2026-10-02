@@ -1,5 +1,6 @@
 import { createPortSelectionCancelledError } from "./serial-errors.js";
 import { createWebUsbSerial } from "./webusb-serial.js";
+import { createWebBluetoothSerial } from "./webbluetooth-serial.js";
 
 // Parse user-entered hex byte text into a Uint8Array for serial writes.
 function parseHex(input) {
@@ -45,6 +46,12 @@ function hasWebUsb() {
   return typeof navigator !== "undefined" && "usb" in navigator;
 }
 
+// Check the actual chooser API so unsupported platforms never offer BLE.
+function hasWebBluetooth() {
+  return typeof navigator !== "undefined"
+    && typeof navigator.bluetooth?.requestDevice === "function";
+}
+
 // Manage Web Serial lifecycle and provide buffered byte-oriented I/O helpers.
 // What a port is opened with before any driver has asked for something else.
 // A clone starts from these every time: framing a previous clone's driver set
@@ -63,7 +70,8 @@ const DEFAULT_PORT_OPTIONS = Object.freeze({
 });
 
 export class BrowserSerialBridge {
-  constructor({ createWebUsbSerial: createWebUsbSerialImpl } = {}) {
+  constructor({ createWebUsbSerial: createWebUsbSerialImpl,
+    createWebBluetoothSerial: createWebBluetoothSerialImpl } = {}) {
     this.port = null;
     this.reader = null;
     this.writer = null;
@@ -74,12 +82,12 @@ export class BrowserSerialBridge {
     // loop MUST report why it ended: a silently-dead read loop is
     // indistinguishable from "no data" and cost us a debugging session.
     this.onDebug = null;
-    // The resolved Web Serial provider (native navigator.serial or the WebUSB
-    // chip-aware provider) and which transport it represents, set on connect.
+    // The resolved native, USB, or Bluetooth provider and its transport,
+    // set on connect. All providers expose a Web Serial-shaped port.
     this.serial = null;
     this.transport = "";
     // Which transport open() should use: "auto" (native preferred), "webserial",
-    // or "webusb". Forcing "webusb" is needed where native Web Serial exists but
+    // "webusb", or "webbluetooth". Forcing "webusb" is needed where native Web Serial exists but
     // cannot drive the adapter (e.g. FTDI cables on Chrome for Android).
     this.preferredTransport = "auto";
     // Called when the browser reports that the adapter behind the open port has
@@ -101,6 +109,7 @@ export class BrowserSerialBridge {
     // interleave stale and fresh bytes.
     this._readLoop = null;
     this._createWebUsbSerial = createWebUsbSerialImpl || createWebUsbSerial;
+    this._createWebBluetoothSerial = createWebBluetoothSerialImpl || createWebBluetoothSerial;
   }
 
   // Choose the transport open() will use. Resets any cached provider while
@@ -113,7 +122,7 @@ export class BrowserSerialBridge {
 
   setPreferredTransport(transport) {
     this.preferredTransport =
-      transport === "webusb" || transport === "webserial" ? transport : "auto";
+      ["webusb", "webserial", "webbluetooth"].includes(transport) ? transport : "auto";
     if (!this.port) {
       this.serial = null;
       this.transport = "";
@@ -121,20 +130,29 @@ export class BrowserSerialBridge {
   }
 
   isSupported() {
-    return hasNativeSerial() || hasWebUsb();
+    return hasNativeSerial() || hasWebUsb() || hasWebBluetooth();
   }
 
   // Report what serial transport(s) this browser can offer.
   getCapability() {
     const native = hasNativeSerial();
     const webusb = hasWebUsb();
-    return { supported: native || webusb, native, webusb };
+    const webbluetooth = hasWebBluetooth();
+    return { supported: native || webusb || webbluetooth, native, webusb, webbluetooth };
   }
 
   // Resolve the serial provider: prefer native Web Serial, otherwise fall back
   // to the WebUSB chip-aware provider. Cached after the first call.
   async _ensureSerial() {
     if (this.serial) {
+      return this.serial;
+    }
+    if (this.preferredTransport === "webbluetooth") {
+      if (!hasWebBluetooth()) {
+        throw new Error("Web Bluetooth is not supported in this browser.");
+      }
+      this.serial = this._createWebBluetoothSerial();
+      this.transport = "webbluetooth";
       return this.serial;
     }
     if (this.preferredTransport === "webusb") {
@@ -222,10 +240,11 @@ export class BrowserSerialBridge {
       this.writer = this.port.writable.getWriter();
       this._readLoop = this._startReadLoop();
       this._watchForPortLoss();
-      const viaWebUsb = this.transport === "webusb";
+      const viaTransport = this.transport === "webusb" ? " (via WebUSB)"
+        : this.transport === "webbluetooth" ? " (via WebBluetooth)" : "";
       return {
         connected: true,
-        message: `Connected at ${baudRate} baud${viaWebUsb ? " (via WebUSB)" : ""}`,
+        message: `Connected at ${baudRate} baud${viaTransport}`,
         deviceName: this.lastDeviceName,
         usbVendorId: identity.usbVendorId,
         usbProductId: identity.usbProductId,
@@ -553,6 +572,16 @@ export class BrowserSerialBridge {
   // clone-start re-rate and a mid-clone change.
   async _reopenPort(nextOptions, { preserveBuffer = false } = {}) {
     const port = this.port;
+    // BLE configures the dongle's UART without dropping GATT. Reconnecting
+    // would lose notifications and interrupt drivers that change speed mid-clone.
+    if (typeof port.reconfigure === "function") {
+      await port.reconfigure(nextOptions);
+      this.portOptions = nextOptions;
+      if (!preserveBuffer) {
+        this.readBuffer = new Uint8Array(0);
+      }
+      return;
+    }
     this._unwatchPortLoss();
     await this._releaseStreams();
     // Snapshotted only now, and installed below before the next loop starts.
@@ -593,16 +622,18 @@ export class BrowserSerialBridge {
     }
   }
 
-  // Both transports report a device going away as a "disconnect" event on the
-  // API object rather than on the port, so each event has to be matched back
-  // against the adapter we hold open: a different device being unplugged must
-  // not tear down a clone in progress.
+  // Serial and USB report loss on the API object; the Bluetooth provider
+  // reports it on its port. Match every event to the adapter we hold open so
+  // a different device being unplugged cannot tear down a clone in progress.
   _watchForPortLoss() {
     this._unwatchPortLoss();
     const handler = (event) => {
       this._handleTransportDisconnect(event);
     };
     const targets = [];
+    if (this.transport === "webbluetooth") {
+      targets.push(this.port);
+    }
     if (hasNativeSerial() && typeof navigator.serial?.addEventListener === "function") {
       targets.push(navigator.serial);
     }
@@ -743,6 +774,9 @@ export class BrowserSerialBridge {
   }
 
   _describePort(port) {
+    if (this.transport === "webbluetooth") {
+      return port.device?.name?.trim() || "Bluetooth serial adapter";
+    }
     const identity = this._getPortIdentity(port);
     const vid = identity.usbVendorId;
     const pid = identity.usbProductId;

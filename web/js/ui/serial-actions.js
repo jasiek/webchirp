@@ -30,7 +30,7 @@ const CLONE_UNSUPPORTED_MESSAGE =
   + "which the radio download/upload needs. Recent Chrome, Edge and Firefox support it. "
   + "Editing CSV and image files still works here.";
 
-// Everything on the serial path: connect/disconnect over Web Serial or WebUSB,
+// Everything on the serial path: connect/disconnect over Web Serial, WebUSB or BLE,
 // the enabled/visible state of the sidebar's radio actions, the clone progress
 // bar, and the download/upload clone operations with their preflight. Owns the
 // connection and capability state.
@@ -48,20 +48,19 @@ export function createSerialActions(ctx) {
   const { dom, state, log, actions } = ctx;
 
   let transportController = null;
-  let capability = { supported: false, native: false, webusb: false };
+  let capability = { supported: false, native: false, webusb: false, webbluetooth: false };
   // Whether this browser can run a clone at all (WebAssembly JSPI). Checked
   // when a connection is started, not at init: the rest of the app works
   // without it and the user only needs to hear about it when it matters.
   let cloneSupported = true;
   let sidebarControlsEnabled = false;
   let connected = false;
-  // Transport of the active connection ("webserial" or "webusb"), used to
-  // collapse the two connect toggles to a single Disconnect button when both
-  // are visible (Android).
+  // Transport of the active connection, used to show one Disconnect button
+  // while any serial transport is connected.
   let transport = "";
 
   // Wire the serial bridge's transport controls (capability + forced transport)
-  // so the UI can offer an explicit WebUSB connect path.
+  // so the UI can offer explicit WebUSB and WebBluetooth connect paths.
   function setSerialController(controller) {
     transportController = controller || null;
     capability = controller?.capability || capability;
@@ -71,6 +70,7 @@ export function createSerialActions(ctx) {
   function setSerialButtonsBusy(busy) {
     dom.serialConnectToggleEl.disabled = busy;
     dom.webusbConnectToggleEl.disabled = busy;
+    dom.webbluetoothConnectToggleEl.disabled = busy;
   }
 
   // Record whether a clone can run here at all; web/app.js decides from the
@@ -79,7 +79,7 @@ export function createSerialActions(ctx) {
     cloneSupported = Boolean(supported);
   }
 
-  // Connect using the requested transport ("auto" or "webusb").
+  // Connect using the requested transport ("auto", "webusb" or "webbluetooth").
   async function connectSerial(preferredTransport) {
     if (connected) {
       return;
@@ -93,7 +93,10 @@ export function createSerialActions(ctx) {
     setSerialButtonsBusy(true);
     try {
       const baudRate = Number(state.selectedRadio?.baudRate || 9600);
-      log.setStatus(`Connecting serial${preferredTransport === "webusb" ? " via WebUSB" : ""}...`);
+      const transportLabel = preferredTransport === "webbluetooth"
+        ? " via WebBluetooth"
+        : (preferredTransport === "webusb" ? " via WebUSB" : "");
+      log.setStatus(`Connecting serial${transportLabel}...`);
       const result = await requireRuntimeApi(state).serialConnect({ baudRate });
       connected = Boolean(result?.connected);
       if (result?.deviceName) {
@@ -151,12 +154,12 @@ export function createSerialActions(ctx) {
       recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.FAILED, {
         ...radioEventParams(state.selectedRadio),
         // What was being attempted, since nothing was negotiated. Without it a
-        // dashboard grouped by transport counts WebUSB's successes and drops
+        // dashboard grouped by transport counts explicit transports' successes and drops
         // its failures, which reads as a success rate far better than the real
-        // one. "auto" is an honest third value: the browser was left to choose
+        // one. "auto" is an honest fallback value: the browser was left to choose
         // and the attempt never got far enough to say what it would have
         // chosen.
-        transport: preferredTransport === "webusb" ? "webusb" : "auto",
+        transport: preferredTransport || "auto",
         error_kind: errorKind,
         error_type: errorType,
       });
@@ -260,6 +263,9 @@ export function createSerialActions(ctx) {
     dom.webusbConnectToggleEl.textContent = connected
       ? "Disconnect"
       : (mobile ? "Connect via WebUSB (wired adapter)" : "Connect via WebUSB");
+    dom.webbluetoothConnectToggleEl.textContent = connected
+      ? "Disconnect"
+      : "Connect via WebBluetooth";
   }
 
   // Show the clone progress bar in its indeterminate state until the driver's
@@ -314,22 +320,25 @@ export function createSerialActions(ctx) {
     setLiveRadioSupportWarningVisible(liveRadioUnsupported);
 
     // Connect controls by platform capability:
-    // - Desktop with native Web Serial: WebSerial toggle only.
+    // - Desktop with native Web Serial: WebSerial toggle.
     // - Android with native Web Serial (Bluetooth RFCOMM serial ports): both
     //   toggles — WebSerial for Bluetooth serial, WebUSB for wired USB
     //   adapters, which Android's native Web Serial cannot drive.
     // - WebUSB-only browsers (older Android Chrome): WebUSB toggle only.
-    // - Neither API: the WebSerial toggle stays visible (disabled) alongside
+    // - WebBluetooth adds a separate BLE dongle toggle on supported browsers.
+    // - No transport API: the WebSerial toggle stays visible (disabled) alongside
     //   the unsupported-browser warning.
     const webusbOnly = capability.webusb && !capability.native;
-    let showWebSerialToggle = !webusbOnly;
+    let showWebSerialToggle = !webusbOnly && (capability.native || !capability.webbluetooth);
     let showWebUsbToggle =
       capability.webusb && (!capability.native || isAndroidPlatform());
+    let showWebBluetoothToggle = Boolean(capability.webbluetooth);
     // While connected, collapse to a single Disconnect button on the toggle
     // matching the active transport.
-    if (connected && showWebSerialToggle && showWebUsbToggle) {
+    if (connected) {
       showWebUsbToggle = transport === "webusb";
-      showWebSerialToggle = !showWebUsbToggle;
+      showWebBluetoothToggle = transport === "webbluetooth";
+      showWebSerialToggle = !showWebUsbToggle && !showWebBluetoothToggle;
     }
 
     dom.serialConnectToggleEl.hidden = !showWebSerialToggle;
@@ -344,6 +353,11 @@ export function createSerialActions(ctx) {
     dom.webusbConnectToggleEl.title = selectionBlockedTitle
       || "Connect over WebUSB, for use with FTDI, Prolific PL2303, "
         + "WCH CH340/CH341 or Silicon Labs CP2102 adapters";
+
+    dom.webbluetoothConnectToggleEl.hidden = !showWebBluetoothToggle;
+    dom.webbluetoothConnectToggleEl.disabled = !actionsAllowed;
+    dom.webbluetoothConnectToggleEl.title = selectionBlockedTitle
+      || "Connect over WebBluetooth to a BF_Writer programming dongle used with Ola Radio";
 
     // Both clone operations talk to an open port, so neither is offered until
     // a port has been picked and opened through one of the connect buttons.
@@ -625,6 +639,14 @@ export function createSerialActions(ctx) {
         disconnectSerial();
       } else {
         connectSerial("webusb");
+      }
+    });
+
+    dom.webbluetoothConnectToggleEl.addEventListener("click", () => {
+      if (connected) {
+        disconnectSerial();
+      } else {
+        connectSerial("webbluetooth");
       }
     });
 

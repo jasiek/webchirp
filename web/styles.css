@@ -1048,7 +1048,8 @@ button:disabled {
   margin: 0.3rem 0 0.6rem;
 }
 
-.serial-actions > :only-child {
+.serial-actions > :only-child,
+#serial-connect-webbluetooth {
   grid-column: 1 / -1;
 }
 

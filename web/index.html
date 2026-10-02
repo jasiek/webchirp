@@ -222,6 +222,7 @@
             <div class="serial-actions">
               <button id="serial-connect-toggle" disabled>Connect via WebSerial</button>
               <button id="serial-connect-webusb" disabled hidden>Connect via WebUSB</button>
+              <button id="serial-connect-webbluetooth" disabled hidden>Connect via WebBluetooth</button>
             </div>
             <div class="serial-actions">
               <button id="radio-download" disabled>Load from radio</button>
@@ -708,7 +709,7 @@
           <h2 id="unsupported-browser-ios-title">iPhone and iPad are not supported yet</h2>
           <p>
             Every browser on iOS and iPadOS is built on Apple's WebKit engine,
-            which offers neither Web Serial nor WebUSB - so installing Chrome,
+            which offers neither Web Serial, WebUSB nor WebBluetooth - so installing Chrome,
             Edge or Firefox here will not help.
           </p>
           <p>
@@ -727,8 +728,8 @@
         <div id="unsupported-browser-serial-info" class="unsupported-browser-info" hidden>
           <h2 id="unsupported-browser-serial-title">This browser cannot program radios</h2>
           <p>
-            WebCHIRP talks to radios through Web Serial, or WebUSB as a fallback,
-            and this browser provides neither. This app won't work with this browser.
+            WebCHIRP talks to radios through Web Serial, WebUSB or WebBluetooth,
+            and this browser provides none of these connections.
           </p>
           <p>
             To program a radio, open this page in a browser with

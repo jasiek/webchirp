@@ -11,10 +11,12 @@ function pressConnectToggle(ctx) {
   return ctx.dom.serialConnectToggleEl.dispatch("click");
 }
 
-function makeContext({ hasInvalidSettings = false } = {}) {
+// Build a serial action context with independently selectable connection results.
+function makeContext({ hasInvalidSettings = false, transport = "webserial" } = {}) {
   const dom = {
     serialConnectToggleEl: new FakeElement(),
     webusbConnectToggleEl: new FakeElement(),
+    webbluetoothConnectToggleEl: new FakeElement(),
     radioDownloadEl: new FakeElement(),
     radioUploadEl: new FakeElement(),
     liveRadioSupportWarningEl: new FakeElement(),
@@ -24,13 +26,14 @@ function makeContext({ hasInvalidSettings = false } = {}) {
   dom.sidebarControlEls = [
     dom.serialConnectToggleEl,
     dom.webusbConnectToggleEl,
+    dom.webbluetoothConnectToggleEl,
     dom.radioDownloadEl,
     dom.radioUploadEl,
   ];
   const state = {
     selectedRadio: { vendor: "Baofeng", model: "UV-5R", module: "uv5r", className: "BaofengUV5R" },
     runtimeApi: {
-      serialConnect: async () => ({ connected: true, transport: "webserial", message: "ok" }),
+      serialConnect: async () => ({ connected: true, transport, message: "ok" }),
       serialDisconnect: async () => ({ connected: false, message: "bye" }),
     },
   };
@@ -48,10 +51,11 @@ function makeContext({ hasInvalidSettings = false } = {}) {
   };
 }
 
-async function loadSerialActions() {
+// Set the platform before importing UI helpers so each case controls visibility.
+async function loadSerialActions(userAgent = "FakeBrowser/1.0") {
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
-    value: { userAgent: "FakeBrowser/1.0", maxTouchPoints: 0 },
+    value: { userAgent, maxTouchPoints: 0 },
   });
   const { createSerialActions } = await import("../../web/js/ui/serial-actions.js");
   return createSerialActions;
@@ -163,4 +167,110 @@ test("a browser without JSPI is refused at connect time with the reason", async 
   await pressConnectToggle(ctx);
   assert.equal(connectCalls, 1);
   assert.equal(ctx.dom.radioDownloadEl.disabled, false);
+});
+
+test("WebBluetooth visibility preserves wired transport choices on each platform", async () => {
+  for (const { userAgent, capability, visible } of [
+    { userAgent: "Desktop", capability: { native: true, webusb: true, webbluetooth: true }, visible: [true, false, true] },
+    { userAgent: "Android", capability: { native: true, webusb: true, webbluetooth: true }, visible: [true, true, true] },
+    { userAgent: "Android", capability: { native: false, webusb: true, webbluetooth: true }, visible: [false, true, true] },
+    { userAgent: "Desktop", capability: { native: false, webusb: false, webbluetooth: true }, visible: [false, false, true] },
+    { userAgent: "Desktop", capability: { native: true, webusb: false, webbluetooth: false }, visible: [true, false, false] },
+    { userAgent: "Desktop", capability: { native: false, webusb: false, webbluetooth: false }, visible: [true, false, false] },
+  ]) {
+    const createSerialActions = await loadSerialActions(userAgent);
+    const ctx = makeContext();
+    const serial = createSerialActions(ctx);
+    serial.setSerialController({ capability });
+    assert.deepEqual([
+      !ctx.dom.serialConnectToggleEl.hidden,
+      !ctx.dom.webusbConnectToggleEl.hidden,
+      !ctx.dom.webbluetoothConnectToggleEl.hidden,
+    ], visible, JSON.stringify({ userAgent, capability }));
+  }
+});
+
+test("each connected transport leaves exactly its own Disconnect button", async () => {
+  for (const transport of ["webserial", "webusb", "webbluetooth"]) {
+    const createSerialActions = await loadSerialActions("Android");
+    const ctx = makeContext({ transport });
+    const serial = createSerialActions(ctx);
+    const preferred = [];
+    serial.setSerialController({
+      capability: { native: true, webusb: true, webbluetooth: true },
+      setPreferredTransport(value) { preferred.push(value); },
+    });
+    serial.setSidebarControlsEnabled(true);
+    serial.bindEvents();
+    const buttons = {
+      webserial: ctx.dom.serialConnectToggleEl,
+      webusb: ctx.dom.webusbConnectToggleEl,
+      webbluetooth: ctx.dom.webbluetoothConnectToggleEl,
+    };
+    const activeButton = buttons[transport];
+    await activeButton.dispatch("click");
+    assert.deepEqual(preferred, [transport === "webserial" ? "auto" : transport]);
+    assert.deepEqual(Object.values(buttons).filter((button) => !button.hidden), [activeButton]);
+    assert.equal(activeButton.textContent, "Disconnect");
+    assert.equal(ctx.dom.radioDownloadEl.disabled, false);
+
+    await activeButton.dispatch("click");
+    assert.ok(Object.values(buttons).every((button) => !button.hidden));
+    assert.equal(ctx.dom.webbluetoothConnectToggleEl.textContent, "Connect via WebBluetooth");
+    assert.equal(ctx.dom.radioDownloadEl.disabled, true);
+  }
+});
+
+test("WebBluetooth follows selection, startup, busy and JSPI restrictions", async () => {
+  const createSerialActions = await loadSerialActions();
+  const ctx = makeContext({ transport: "webbluetooth" });
+  const serial = createSerialActions(ctx);
+  serial.setSerialController({
+    capability: { native: true, webbluetooth: true },
+    setPreferredTransport() {},
+  });
+  const button = ctx.dom.webbluetoothConnectToggleEl;
+  assert.equal(button.disabled, true, "startup blocks BLE too");
+  serial.setSidebarControlsEnabled(true);
+  assert.equal(button.disabled, false);
+  const radio = ctx.state.selectedRadio;
+  ctx.state.selectedRadio = null;
+  serial.updateSerialActionState();
+  assert.equal(button.disabled, true);
+  assert.equal(button.title, "Search for and select a radio first");
+  ctx.state.selectedRadio = { ...radio, isLiveRadio: true };
+  serial.updateSerialActionState();
+  assert.equal(button.disabled, true);
+  assert.match(button.title, /Live-mode/);
+  ctx.state.selectedRadio = radio;
+  serial.updateSerialActionState();
+
+  const statuses = [];
+  ctx.log.setStatus = (message) => statuses.push(message);
+  let finishConnect;
+  let connectCalls = 0;
+  ctx.state.runtimeApi.serialConnect = () => {
+    connectCalls += 1;
+    return new Promise((resolve) => { finishConnect = resolve; });
+  };
+  serial.bindEvents();
+  serial.setCloneSupported(false);
+  await button.dispatch("click");
+  assert.equal(connectCalls, 0);
+  assert.match(statuses.at(-1), /JSPI/);
+
+  serial.setCloneSupported(true);
+  await button.dispatch("click");
+  assert.equal(connectCalls, 1);
+  assert.equal(button.disabled, true);
+  assert.equal(ctx.dom.serialConnectToggleEl.disabled, true);
+  assert.equal(ctx.dom.webusbConnectToggleEl.disabled, true);
+  finishConnect({ connected: true, transport: "webbluetooth" });
+  await Promise.resolve();
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, "Disconnect");
+  serial.handlePortLost("BLE dongle");
+  assert.equal(button.textContent, "Connect via WebBluetooth");
+  assert.equal(ctx.dom.radioDownloadEl.disabled, true);
+  assert.equal(ctx.dom.serialConnectToggleEl.hidden, false);
 });

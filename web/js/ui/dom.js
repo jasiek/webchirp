@@ -53,6 +53,7 @@ export const REQUIRED_ELEMENTS = {
   radioSelectionNameEl: "#radio-selection-name",
   serialConnectToggleEl: "#serial-connect-toggle",
   webusbConnectToggleEl: "#serial-connect-webusb",
+  webbluetoothConnectToggleEl: "#serial-connect-webbluetooth",
   radioDownloadEl: "#radio-download",
   radioUploadEl: "#radio-upload",
   cloneProgressEl: "#clone-progress",
