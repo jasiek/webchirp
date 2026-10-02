@@ -17,6 +17,8 @@
 // in package.json to pin the version of record, and shipped from the CDN URL
 // below. tests/channels/sentry.mjs fails the build if the two drift apart.
 
+import { isPythonError, isRuntimeCallError } from "./runtime-errors.mjs";
+
 // Project this app reports into. Unlike a secret, a DSN is meant to be public --
 // it only grants the right to submit events -- which is why it can sit in a
 // file served to every visitor. The host gate below, not the DSN's secrecy, is
@@ -47,54 +49,75 @@ export const SENTRY_HOSTS = Object.freeze([
   "webchirp.org",
 ]);
 
-// Noise that is never actionable: a benign layout notification the browser
-// raises, failures thrown by whatever the user has installed into their own
-// browser, the runtime's own "you have not done X yet" guards, and the CHIRP
-// errors that describe the user's file, the user's radio or the user's cable.
-// The first two are not this app's code; the last two are this app, and CHIRP,
-// working as designed.
+// Browser noise that is never actionable: a benign layout notification. It is
+// a native browser error with nothing but its message to go on, so it stays a
+// message pattern for the SDK's own ignoreErrors filter. Everything this app's
+// runtime raises is filtered by type instead (isIgnoredError below).
+const IGNORE_ERRORS = Object.freeze([
+  /ResizeObserver loop/i,
+]);
+
+// The CHIRP errors that describe the user's file, the user's radio or the
+// user's cable, by class name within chirp.errors.
 //
-// RuntimePreconditionError (web/python/webchirp_bridge/runtime_errors.py) is
-// what the runtime raises when an action needs something the user has not
-// supplied -- pressing Upload before ever downloading, most of all. Its message
-// is already the instruction that fixes it, so a report says only that someone
-// pressed the buttons out of order, once per person who did. Matching the class
-// name rather than the sentence keeps the rule from lapsing silently the next
-// time the wording is improved; the debug panel still prints the whole
-// traceback either way. Pyodide flattens a Python exception into the message
-// text, which is what puts the class name within reach of a message filter at
-// all.
-//
-// The chirp.errors rule names its classes rather than taking the module whole,
-// because the module is not a severity boundary. Upstream CHIRP is a desktop
-// app where every one of these ends in a dialog box, so it never had to tell
-// "the user handed us something we cannot use" apart from "we asked for
-// something that does not exist". The classes below are the first kind: a CSV
-// with no channels in it, a value or a tone the radio will not take, an image
-// no driver claims, a radio that did not answer because the cable is not in.
-// The ones deliberately left out are the second kind and stay reportable --
+// The rule names its classes rather than taking the module whole, because the
+// module is not a severity boundary. Upstream CHIRP is a desktop app where
+// every one of these ends in a dialog box, so it never had to tell "the user
+// handed us something we cannot use" apart from "we asked for something that
+// does not exist". The classes below are the first kind: a CSV with no
+// channels in it, a value or a tone the radio will not take, an image no
+// driver claims, a radio that did not answer because the cable is not in. The
+// ones deliberately left out are the second kind and stay reportable --
 // InvalidMemoryLocation (we computed a channel bound the driver rejects),
 // FrozenMemoryError (we mutated a memory we were told not to), and the bare
 // RadioError the drivers raise as a catch-all, which is where a short read from
 // the Web Serial stand-in (web/python/webchirp_bridge/serial_pipe.py) would
 // surface -- the one failure class upstream CHIRP has never had to see.
+export const IGNORED_CHIRP_ERRORS = Object.freeze([
+  "InvalidDataError",
+  "InvalidValueError",
+  "UnsupportedToneError",
+  "ImageDetectFailed",
+  "ImageMetadataInvalidModel",
+  "RadioNoResponse",
+  "RadioNoContactLikelyK1",
+  "RadioFixedBanks",
+]);
+
+// Whether a failure is one this app never reports: the runtime's own "you have
+// not done X yet" guard, or a CHIRP error from the list above. Both are this
+// app, and CHIRP, working as designed. Read off the RuntimeCallError the
+// dispatcher throws (web/js/runtime-errors.mjs), which beforeSend receives as
+// the hint's originalException -- for a capture from the one funnel and for an
+// unhandled rejection through the SDK's global handlers alike.
 //
-// Matching on the defining module is also what keeps this app's own errors
-// clear of the rule: RuntimeUnsupportedError and ImageDetectionError subclass
-// errors.RadioError, but Pyodide names a flattened exception after the module
-// that defines it, so they arrive as webchirp_bridge.runtime_errors.* and are
-// reported as before.
+// RuntimePreconditionError (web/python/webchirp_bridge/runtime_errors.py) is
+// what the runtime raises when an action needs something the user has not
+// supplied -- pressing Upload before ever downloading, most of all. Its message
+// is already the instruction that fixes it, so a report says only that someone
+// pressed the buttons out of order, once per person who did. It is matched as
+// a class or any subclass of it; the sentence is user-facing copy, and a rule
+// on the wording would lapse silently the next time it improved.
 //
-// Dropping the events does not drop the signal. ignoreErrors filters events
-// only, while the failure metrics in web/js/ui/metrics.js carry error_kind,
+// The CHIRP rule is exact on both class and defining module, never on a base:
+// RuntimeUnsupportedError and ImageDetectionError subclass errors.RadioError,
+// so a hierarchy match on the listed classes' shared base would swallow them,
+// while an exact match leaves them -- defined in
+// webchirp_bridge.runtime_errors -- reported as before.
+//
+// Dropping the events does not drop the signal. This filters events only,
+// while the failure metrics in web/js/ui/metrics.js carry error_kind,
 // error_type and the driver out through beforeSendMetric -- so "what share of
 // clones fail on this model" stays a question a dashboard can answer even for
-// the classes filtered here.
-const IGNORE_ERRORS = Object.freeze([
-  /ResizeObserver loop/i,
-  /\bRuntimePreconditionError\b/,
-  /\bchirp\.errors\.(?:InvalidDataError|InvalidValueError|UnsupportedToneError|ImageDetectFailed|ImageMetadataInvalidModel|RadioNoResponse|RadioNoContactLikelyK1|RadioFixedBanks)\b/,
-]);
+// the classes filtered here. The debug panel still prints the whole traceback.
+export function isIgnoredError(error) {
+  if (isPythonError(error, "RuntimePreconditionError")) {
+    return true;
+  }
+  return isRuntimeCallError(error)
+    && error.pythonModule === "chirp.errors"
+    && IGNORED_CHIRP_ERRORS.includes(error.pythonType);
+}
 
 const DENY_URLS = Object.freeze([
   /^chrome-extension:\/\//i,
@@ -283,10 +306,43 @@ export function scrubEvent(event) {
   for (const crumb of event.breadcrumbs || []) {
     scrubBreadcrumb(crumb);
   }
+  const python = event.contexts?.python;
+  if (python && typeof python === "object") {
+    for (const key of ["message", "traceback", "js_cause"]) {
+      if (typeof python[key] === "string") {
+        python[key] = scrubText(python[key]);
+      }
+    }
+  }
   if (typeof event.request?.url === "string") {
     event.request.url = scrubText(event.request.url);
   }
   return event;
+}
+
+// Put the Python side of a runtime failure on its event, as a "python"
+// context. The event's own exception is the RuntimeCallError: its type is the
+// Python class and its value the one-line message, which is what Sentry titles
+// and groups by, and its stack is the JS call that asked for the method. The
+// frames that say where CHIRP broke are only in the traceback, which used to
+// ride in the exception value and now rides here instead; scrubEvent redacts
+// it like any other free-form text.
+function attachPythonContext(event, error) {
+  if (!isRuntimeCallError(error)) {
+    return;
+  }
+  event.contexts = {
+    ...(event.contexts || {}),
+    python: {
+      type: error.pythonType,
+      module: error.pythonModule,
+      bases: error.pythonBases.join(", "),
+      message: error.message,
+      traceback: error.pythonTraceback,
+      js_cause: error.jsCause ? `${error.jsCause.name}: ${error.jsCause.message}` : "",
+      rpc_method: error.rpcMethod,
+    },
+  };
 }
 
 // The loaded SDK namespace, or null while reporting is off or still loading.
@@ -524,12 +580,18 @@ export function initOptions(release) {
     // panel's whole job is to print full tracebacks, and anything that reaches
     // the console has already been through it.
     beforeBreadcrumb: (crumb) => (crumb?.category === "console" ? null : scrubBreadcrumb(crumb)),
-    // The last gate every event passes through. Tags from the UI are applied
-    // first so an explicit tag on a capture still wins, then the whole event is
-    // redacted -- including events the SDK raised on its own, which never went
-    // through captureError().
-    beforeSend: (event) => {
+    // The last gate every event passes through. A failure isIgnoredError
+    // names is dropped here; then tags from the UI are applied so an explicit
+    // tag on a capture still wins, a runtime failure gets its Python side
+    // attached, and the whole event is redacted -- including events the SDK
+    // raised on its own, which never went through captureError().
+    beforeSend: (event, hint) => {
+      const original = hint?.originalException;
+      if (isIgnoredError(original)) {
+        return null;
+      }
       event.tags = { ...stringTags(safeContext()), ...(event.tags || {}) };
+      attachPythonContext(event, original);
       return scrubEvent(event);
     },
     // Metrics never pass through beforeSend, so the allowlist has to be applied

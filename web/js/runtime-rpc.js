@@ -15,6 +15,7 @@ import {
 } from "./runtime-bootstrap.mjs";
 import { createSelectedDriverRuntime } from "./selected-driver-runtime.mjs";
 import { rpcDispatcherFor } from "./rpc-dispatch.mjs";
+import { isRuntimeCallError, runtimeErrorDetail } from "./runtime-errors.mjs";
 import {
   CHIRP_BUNDLE_DIR,
   createBrowserPythonSource,
@@ -30,11 +31,10 @@ const CHIRP_REVISION = DEFAULT_CHIRP_REVISION;
 const DRIVER_SET = driverSetFromSearch(globalThis.location?.search);
 
 // Where the browser fetches each runtime Python file from, keyed the way
-// RUNTIME_PYTHON_FILES (web/js/python-sources.mjs) names them. The literals
-// live in this .js file because scripts/build-dist.mjs rewrites references to
-// their hashed names in .js files and copies .mjs files verbatim; the provider
-// refuses to construct if a listed file has no URL here, and
-// tests/build/build-dist.mjs checks the pairing statically.
+// RUNTIME_PYTHON_FILES (web/js/python-sources.mjs) names them. Each literal is
+// what scripts/build-dist.mjs rewrites to the file's hashed name, so every file
+// needs one; the provider refuses to construct if a listed file has no URL
+// here, and tests/build/build-dist.mjs checks the pairing statically.
 const RUNTIME_PYTHON_URLS = Object.freeze({
   "runtime_bridge.py": "./python/runtime_bridge.py",
   "webchirp_bridge/__init__.py": "./python/webchirp_bridge/__init__.py",
@@ -655,17 +655,16 @@ export function createRuntimeRpcClient({
         }
         return await enqueueRuntimeCall(() => handler(payload));
       } catch (error) {
-        const detailedError =
-          (typeof error?.stack === "string" && error.stack) ||
-          error?.message ||
-          String(error);
+        // For a runtime failure, its Python traceback followed by the JS
+        // frames of the call; for anything else, its own stack.
+        const detailedError = runtimeErrorDetail(error);
 
-        // A dismissed port chooser reaches here as a Python traceback like any
-        // other failure, but it is not one: the user closed a dialog. Report it
-        // as one quiet line and hand the caller the sentence rather than the
-        // traceback, so the UI can say what happened instead of showing a stack
-        // nobody can act on. The name is restored because `new Error` below
-        // would otherwise drop it on the way out of the runtime.
+        // A dismissed port chooser reaches here as a RuntimeCallError like any
+        // other failure through Python, but it is not one: the user closed a
+        // dialog. Report it as one quiet line and hand the caller the plain
+        // named cancellation rather than the Python wrapper around it, so the
+        // UI can say what happened instead of showing a stack nobody can act
+        // on.
         if (isPortSelectionCancelled(error)) {
           if (logDebug) {
             logDebug(`RUNTIME ${PORT_SELECTION_CANCELLED_MESSAGE}`);
@@ -688,10 +687,16 @@ export function createRuntimeRpcClient({
           logDebug(`RUNTIME ERROR ${detailedError}`, { isError: true });
         }
 
-        // Carry the classification onto the error leaving the runtime. Without
-        // it the action-level funnel sees an ordinary failure and files a
-        // second Sentry event for the crash just reported above.
-        const outgoing = new Error(detailedError);
+        // A Python failure leaves as the RuntimeCallError it arrived as: its
+        // type, bases and traceback are what every caller classifies it by.
+        // Anything else -- a native JS failure, or a bootstrap PythonError
+        // raised while seeding, before rpc_dispatch exists -- is flattened into
+        // a fresh Error carrying the whole detail, as it always was.
+        //
+        // Either way the classification is carried onto the error leaving the
+        // runtime. Without it the action-level funnel sees an ordinary failure
+        // and files a second Sentry event for the crash just reported above.
+        const outgoing = isRuntimeCallError(error) ? error : new Error(detailedError);
         throw reportedAsCrash ? markBootstrapFailure(outgoing) : outgoing;
       }
     };

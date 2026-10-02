@@ -8,80 +8,74 @@
 //
 // Two halves have to agree for the drop to happen, and neither is visible from
 // the other: the runtime has to raise RuntimePreconditionError
-// (web/python/webchirp_bridge/runtime_errors.py), and IGNORE_ERRORS in
-// web/js/sentry.js has to match that name. Pyodide flattens the exception into
-// the error message, so the class name is the only contract between them --
-// rename the class and the rule stops matching in a way nothing else notices.
+// (web/python/webchirp_bridge/runtime_errors.py), and isIgnoredError in
+// web/js/sentry.js has to test for that class. The dispatcher sends the class
+// as a field of the error envelope, so the class name is the contract between
+// them -- rename the class and the rule stops matching in a way nothing else
+// notices.
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import { initOptions } from "../../web/js/sentry.js";
-import { runtimeErrorSentence } from "../../web/js/runtime-errors.mjs";
+import { isPythonError, runtimeErrorSentence } from "../../web/js/runtime-errors.mjs";
 import { createDebugLog } from "../../web/js/ui/debug-log.js";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
 import { fakeDebugDom } from "../support/fake-dom.mjs";
+import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
-// The traceback as it reaches the UI: Pyodide prefixes its own line, CHIRP's
-// frames sit in the middle, and the sentence the user needs is the last line.
-const UPLOAD_TRACEBACK = [
-  "PythonError: Traceback (most recent call last):",
-  '  File "/lib/python312.zip/_pyodide/_base.py", line 597, in eval_code_async',
-  "    await CodeRunner(",
-  '  File "/webchirp_runtime/webchirp_bridge/clone.py", line 216, in upload_selected_radio',
-  "    return _upload_selected_radio_sync(resolve_session(session_id), rows, settings_groups)",
-  "webchirp_bridge.runtime_errors.RuntimePreconditionError: No cached radio image for this"
-  + " model. Download from radio first, then upload.",
-].join("\n");
+const UPLOAD_SENTENCE = "No cached radio image for this model. Download from radio first, then upload.";
+
+// The failure as it reaches the UI: a RuntimeCallError whose message is the
+// sentence the user needs and whose traceback carries CHIRP's frames.
+function uploadPreconditionError() {
+  return runtimeCallError("RuntimePreconditionError", UPLOAD_SENTENCE);
+}
 
 // A clone-mode driver, so the upload gets past the clone-mode check and reaches
 // the cached-image guard this test is about. Which model it is does not matter.
 const DRIVER_MODULE = "uv5r";
 const DRIVER_CLASS = "BaofengF11Radio";
 
-function isIgnored(message) {
-  return initOptions().ignoreErrors.some((pattern) => pattern.test(message));
+// Whether beforeSend drops the event Sentry would build for this failure.
+function isIgnored(error) {
+  const event = { exception: { values: [{ type: error.name, value: error.message }] } };
+  return initOptions().beforeSend(event, { originalException: error }) === null;
 }
 
 test("an upload with nothing downloaded raises the precondition error, and Sentry drops it", async () => {
   // A session of its own, freshly opened: nothing has been downloaded into
-  // it, which is exactly the state the guard is checking for.
+  // it, which is exactly the state the guard is checking for. Called through
+  // the dispatcher, so the error is the one the browser would hold.
   const harness = await sharedHarness();
   await ensureModule(harness, DRIVER_MODULE);
+  const { sessionId } = await harness.rpc("open_session", {
+    module_name: DRIVER_MODULE,
+    class_name: DRIVER_CLASS,
+  });
 
   const error = await harness
-    .runPython(
-      "await upload_selected_radio(open_session(_m, _c)[\"sessionId\"], [])",
-      { _m: DRIVER_MODULE, _c: DRIVER_CLASS },
-    )
+    .rpc("upload_selected_radio", { session_id: sessionId, rows: [], settings_groups: [] })
     .then(
       () => null,
       (thrown) => thrown,
     );
+  await harness.rpc("close_session", { session_id: sessionId });
 
   assert.ok(error, "upload with no cached image should have failed");
-  const message = String(error.message || error);
-  assert.match(message, /RuntimePreconditionError/);
-  assert.match(message, /Download from radio first/);
-  assert.ok(isIgnored(message), "the traceback should be filtered out of Sentry");
+  assert.ok(isPythonError(error, "RuntimePreconditionError"));
+  assert.match(error.message, /Download from radio first/);
+  assert.ok(isIgnored(error), "the failure should be filtered out of Sentry");
 });
 
 test("an ordinary radio failure is still reported", () => {
-  // The same shape of traceback, raised by the error class that means something
+  // The same shape of failure, raised by the error class that means something
   // went wrong. A filter that swallowed this too would be worse than none.
-  const message = [
-    "PythonError: Traceback (most recent call last):",
-    '  File "/webchirp_runtime/webchirp_bridge/clone.py", line 216, in upload_selected_radio',
-    "chirp.errors.RadioError: Radio did not respond",
-  ].join("\n");
-  assert.equal(isIgnored(message), false);
+  assert.equal(isIgnored(runtimeCallError("RadioError", "Radio did not respond")), false);
 });
 
-test("the sentence is lifted out of the traceback, not shown alongside it", () => {
-  assert.equal(
-    runtimeErrorSentence(new Error(UPLOAD_TRACEBACK)),
-    "No cached radio image for this model. Download from radio first, then upload.",
-  );
+test("the sentence is the Python message, not the traceback that carries it", () => {
+  assert.equal(runtimeErrorSentence(uploadPreconditionError()), UPLOAD_SENTENCE);
   // A JS failure has no traceback to read; its own message is the sentence.
   assert.equal(runtimeErrorSentence(new Error("Failed to fetch")), "Failed to fetch");
 });
@@ -91,7 +85,7 @@ test("a precondition failure raises a notice instead of a bug report", () => {
   const dom = fakeDebugDom();
   const log = createDebugLog({ dom, notice: { show: (notice) => shown.push(notice) } });
 
-  log.reportActionError("Upload", new Error(UPLOAD_TRACEBACK));
+  log.reportActionError("Upload", uploadPreconditionError());
 
   assert.deepEqual(shown, [{
     title: "Upload not possible yet",
@@ -111,7 +105,7 @@ test("an ordinary failure still opens the panel and raises no notice", () => {
   const dom = fakeDebugDom();
   const log = createDebugLog({ dom, notice: { show: (notice) => shown.push(notice) } });
 
-  log.reportActionError("Upload", new Error("chirp.errors.RadioError: Radio did not respond"));
+  log.reportActionError("Upload", runtimeCallError("RadioError", "Radio did not respond"));
 
   assert.deepEqual(shown, []);
   assert.match(String(log.getLastErrorSummary()), /Radio did not respond/);

@@ -1,37 +1,43 @@
 // Which CHIRP failures are bug reports and which are descriptions of the user's
 // own file, radio or cable.
 //
-// IGNORE_ERRORS in web/js/sentry.js drops the second kind, named class by
-// class. That list is the whole of the boundary and it is invisible from both
-// sides: CHIRP does not know it exists, and in Sentry a rule that quietly stops
-// matching looks exactly like a failure that stopped happening. So the tests
-// here pin both directions -- what is dropped and what must still get through
-// -- and check the names against chirp/chirp/errors.py, because a rename
-// upstream is what would break the rule without breaking anything else.
+// isIgnoredError in web/js/sentry.js drops the second kind, named class by
+// class (IGNORED_CHIRP_ERRORS). That list is the whole of the boundary and it
+// is invisible from both sides: CHIRP does not know it exists, and in Sentry a
+// rule that quietly stops matching looks exactly like a failure that stopped
+// happening. So the tests here pin both directions -- what is dropped and what
+// must still get through -- and check the names against chirp/chirp/errors.py,
+// because a rename upstream is what would break the rule without breaking
+// anything else.
+//
+// Each failure is the RuntimeCallError the dispatcher throws, and the rule is
+// checked where Sentry applies it: beforeSend, handed the error as the hint's
+// originalException.
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { initOptions } from "../../web/js/sentry.js";
+import { IGNORED_CHIRP_ERRORS, initOptions } from "../../web/js/sentry.js";
 import { repoRoot } from "../support/repo-paths.mjs";
+import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
-// One Python traceback ending on the given exception, in the shape Pyodide
-// hands to the JS side: its own frames on top, the exception on the last line.
-function traceback(qualifiedName, message) {
-  return [
-    "PythonError: Traceback (most recent call last):",
-    '  File "/lib/python312.zip/_pyodide/_base.py", line 597, in eval_code_async',
-    "    await CodeRunner(",
-    '  File "/webchirp_runtime/webchirp_bridge/channel_rows.py", line 104, in parse_csv',
-    "    radio.load_from(csv_text)",
-    `${qualifiedName}: ${message}`,
-  ].join("\n");
+// The event Sentry would build for a runtime failure: its type is the error's
+// name, its value the one-line message.
+function eventFor(error) {
+  return { exception: { values: [{ type: error.name, value: error.message }] } };
 }
 
-function isIgnored(message) {
-  return initOptions().ignoreErrors.some((pattern) => pattern.test(message));
+// Whether beforeSend drops this failure's event.
+function isIgnored(error) {
+  return initOptions().beforeSend(eventFor(error), { originalException: error }) === null;
+}
+
+// A chirp.errors failure, as "chirp.errors.InvalidDataError" names it.
+function chirpError(qualifiedName, message) {
+  const type = qualifiedName.split(".").pop();
+  return runtimeCallError(type, message, { module: "chirp.errors" }, "parse_csv");
 }
 
 // The user's file, the user's radio, the user's cable. None of these is a
@@ -60,35 +66,47 @@ const REPORTED = [
 ];
 
 test("a CSV the user's spreadsheet exported wrong is not a bug report", () => {
-  assert.ok(isIgnored(traceback("chirp.errors.InvalidDataError", "No channels found")));
+  assert.ok(isIgnored(chirpError("chirp.errors.InvalidDataError", "No channels found")));
 });
 
 test("every circumstance-shaped CHIRP failure is dropped", () => {
   for (const [name, message] of DROPPED) {
-    assert.ok(isIgnored(traceback(name, message)), `${name} should be dropped`);
+    assert.ok(isIgnored(chirpError(name, message)), `${name} should be dropped`);
   }
 });
 
 test("the CHIRP failures that mean this app asked for something impossible are kept", () => {
   for (const [name, message] of REPORTED) {
-    assert.equal(isIgnored(traceback(name, message)), false, `${name} should be reported`);
+    assert.equal(isIgnored(chirpError(name, message)), false, `${name} should be reported`);
   }
 });
 
 test("this app's own errors are clear of the rule despite subclassing RadioError", () => {
   // web/python/webchirp_bridge/runtime_errors.py derives from errors.RadioError,
-  // but Pyodide names a flattened exception after the module that defines it --
-  // which is what a module-qualified filter has to rely on.
-  const detection = traceback(
-    "webchirp_bridge.runtime_errors.ImageDetectionError",
-    "No driver claims this image",
-  );
+  // and the envelope lists RadioError among the bases -- so the rule has to be
+  // exact on class and defining module, which is what keeps these reported.
+  const detection = runtimeCallError("ImageDetectionError", "No driver claims this image");
+  assert.ok(detection.pythonBases.includes("RadioError"));
   assert.equal(isIgnored(detection), false);
+  assert.equal(isIgnored(runtimeCallError("RuntimeUnsupportedError", "Not a clone-mode radio")), false);
+  // A class the list names, but defined somewhere other than chirp.errors, is
+  // not the class the list means.
+  assert.equal(
+    isIgnored(runtimeCallError("InvalidDataError", "No channels found", { module: "webchirp_bridge.x" })),
+    false,
+  );
   // The one exception, dropped by its own rule rather than this one.
-  assert.ok(isIgnored(traceback(
-    "webchirp_bridge.runtime_errors.RuntimePreconditionError",
+  assert.ok(isIgnored(runtimeCallError(
+    "RuntimePreconditionError",
     "Download from radio first, then upload.",
   )));
+});
+
+test("a native JS error is never dropped by the runtime rule", () => {
+  // Only a RuntimeCallError carries a Python type; a JS error whose text
+  // happens to name a CHIRP class is an ordinary failure.
+  const error = new Error("chirp.errors.InvalidDataError: No channels found");
+  assert.equal(isIgnored(error), false);
 });
 
 test("every class the rule names still exists in CHIRP", () => {
@@ -98,16 +116,26 @@ test("every class the rule names still exists in CHIRP", () => {
   for (const [name] of [...DROPPED, ...REPORTED]) {
     assert.ok(defined.has(name.split(".").pop()), `${name} is no longer defined by CHIRP`);
   }
+  // And the list the rule reads is exactly the dropped set above, so a class
+  // added to it without a test here fails.
+  assert.deepEqual(
+    [...IGNORED_CHIRP_ERRORS].sort(),
+    DROPPED.map(([name]) => name.split(".").pop()).sort(),
+  );
 });
 
-test("a filtered class is still redacted and still reaches the debug panel path", () => {
-  // The rule drops the event, not the diagnostics: scrubbing and the debug
-  // panel are unaffected, so a user reporting a bad CSV by hand still has the
-  // whole traceback to paste.
-  const options = initOptions();
-  const event = options.beforeSend({
-    exception: { values: [{ type: "Error", value: traceback("chirp.errors.InvalidDataError", "Frequency 145.500000 rejected") }] },
-  });
-  assert.match(event.exception.values[0].value, /InvalidDataError/);
+test("a reported runtime failure is redacted, traceback and all", () => {
+  // The traceback no longer rides in the exception value; it travels as the
+  // event's python context, and is scrubbed like every other free-form string.
+  const error = chirpError("chirp.errors.InvalidMemoryLocation", "Frequency 145.500000 rejected");
+  const event = initOptions().beforeSend(eventFor(error), { originalException: error });
+  assert.equal(event.exception.values[0].type, "InvalidMemoryLocation");
   assert.doesNotMatch(event.exception.values[0].value, /145\.500000/);
+  const python = event.contexts.python;
+  assert.equal(python.type, "InvalidMemoryLocation");
+  assert.equal(python.module, "chirp.errors");
+  assert.match(python.traceback, /chirp\.errors\.InvalidMemoryLocation: Frequency \[num\] rejected/);
+  assert.doesNotMatch(python.traceback, /145\.500000/);
+  // The frame paths survive the quoted-value rule: they are the useful part.
+  assert.match(python.traceback, /"\/webchirp_runtime\/webchirp_bridge\/clone\.py"/);
 });
