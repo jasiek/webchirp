@@ -410,6 +410,8 @@ export const UI_STUBBED_SELECTORS = new Map([
   ["#unofficial-driver-warning", "p"],
   ["#radio-search-results", "ul"],
   ["#serial-connect-toggle", "button"],
+  ["#serial-connect-webusb", "button"],
+  ["#serial-connect-webbluetooth", "button"],
   ["#radio-download", "button"],
   ["#radio-upload", "button"],
   ["#clone-progress-bar", "progress"],

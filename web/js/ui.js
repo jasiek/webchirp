@@ -260,9 +260,9 @@ export function createUiController() {
     catalog.setRadioSelectPlaceholder("Loading...");
     try {
       if (!serialSupported) {
-        log.logSerial("Web Serial unsupported in this browser.");
+        log.logSerial("Serial transports unsupported in this browser.");
       } else {
-        log.logSerial("Web Serial available.");
+        log.logSerial("Serial transport available.");
       }
       if (!jspiSupported) {
         log.logSerial(

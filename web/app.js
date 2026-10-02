@@ -45,7 +45,7 @@ const jspiSupported =
 ui.init(serialCapability.supported, jspiSupported);
 if (serialCapability.webusb && !serialCapability.native) {
   ui.logSerial(
-    "This browser has no native Web Serial, so serial connections use WebUSB. "
+    "This browser has no native Web Serial; wired serial connections use WebUSB. "
     + `WebUSB supports ${WEBUSB_SUPPORTED_ADAPTERS}; `
     + "other vendor-specific UART chips are not supported yet.",
   );
@@ -56,4 +56,7 @@ if (serialCapability.webusb && !serialCapability.native) {
     + "serial ports, or WebUSB for wired USB adapters "
     + `(${WEBUSB_SUPPORTED_ADAPTERS}).`,
   );
+}
+if (serialCapability.webbluetooth) {
+  ui.logSerial("Use WebBluetooth for a BT-1AD BLE programming dongle used with Ola Radio.");
 }

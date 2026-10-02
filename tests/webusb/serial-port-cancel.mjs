@@ -152,6 +152,7 @@ function makeSerialActionsContext(connectError) {
   const dom = {
     serialConnectToggleEl: new FakeElement(),
     webusbConnectToggleEl: new FakeElement(),
+    webbluetoothConnectToggleEl: new FakeElement(),
     radioDownloadEl: new FakeElement(),
     radioUploadEl: new FakeElement(),
     liveRadioSupportWarningEl: new FakeElement(),
@@ -161,6 +162,7 @@ function makeSerialActionsContext(connectError) {
   dom.sidebarControlEls = [
     dom.serialConnectToggleEl,
     dom.webusbConnectToggleEl,
+    dom.webbluetoothConnectToggleEl,
     dom.radioDownloadEl,
     dom.radioUploadEl,
   ];

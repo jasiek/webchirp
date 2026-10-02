@@ -1052,6 +1052,11 @@ button:disabled {
   grid-column: 1 / -1;
 }
 
+/* Match every transport button's dimensions while keeping Bluetooth last. */
+.connection-actions {
+  grid-template-columns: 1fr;
+}
+
 .clone-progress {
   margin: 0.1rem 0 0.6rem;
 }
