@@ -1048,9 +1048,13 @@ button:disabled {
   margin: 0.3rem 0 0.6rem;
 }
 
-.serial-actions > :only-child,
-#serial-connect-webbluetooth {
+.serial-actions > :only-child {
   grid-column: 1 / -1;
+}
+
+/* Match every transport button's dimensions while keeping Bluetooth last. */
+.connection-actions {
+  grid-template-columns: 1fr;
 }
 
 .clone-progress {
