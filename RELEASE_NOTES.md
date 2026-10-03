@@ -1,5 +1,15 @@
 # Release Notes
 
+## 2026-10-03
+- BT-1AD Bluetooth programming adapters can now connect through a new Connect via WebBluetooth button, shown on browsers that support WebBluetooth (#210).
+- Every radio's model page now has a researched hardware table (battery, charging, power, bands, modulations, display, APRS/GPS and more) with its sources cited (#202).
+- Added amateur radio licensing guides for 81 countries, each in the local language with an English toggle, with cited steps, costs, timelines and CEPT visiting rules (#206, #208, #209).
+- One Load button now opens both CSV and `.img` files, and an Export menu replaces the separate CSV and binary export buttons (#204).
+- Drivers now load from one archive on webchirp's own server instead of module by module from a CDN, so browsers without WebAssembly stack switching can start the app and edit files (#201).
+- Updated the bundled CHIRP to 29592824. This adds the Retevis RT97S and fixes the Wouxun KG-UV920P-A checksum and Alinco upload after download. Images without CHIRP metadata no longer open as an unrelated radio of the same size.
+- The selected radio is now one runtime session, so a slow load can no longer overwrite a newer selection; no user-visible change (#203).
+- JS now calls the Python runtime through one checked dispatch contract instead of evaluating Python strings; no user-visible change (#200).
+
 ## 2026-09-24
 - The per-model pages now cover the whole catalog rather than just the 55 Baofengs: 535 radios across 62 vendors, each described from its own driver, with a hub page for the 31 vendors that have more than one radio.
 - Each model page now says whether the radio's firmware can be updated and where to get it; 465 of the 535 answer, and the rest show no section rather than guess a download that could brick a radio (#190).
