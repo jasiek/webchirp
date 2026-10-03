@@ -14,12 +14,15 @@ around, external API behaviour, browser and platform constraints, and rules abou
 Corpus counts (image totals, driver/class counts) are measurements against one CHIRP submodule pin —
 they are stated with the date they were taken and are expected to drift on the next bump; the method
 that produced them is the durable part. A count is dated by its entry unless it names a date of its
-own. The pin is CHIRP `4acbeb8a` (2026-09-24); the bump from `098f57b2` (2026-09-11) carried eight
-upstream commits, including the new Retevis RT18 driver, another Radtel T18 identification string,
-and Kenwood memory and FTM-300D settings changes. The wxPython and Ukrainian localization changes
-do not run in the browser. The default catalog is 557 radios from 194 upstream driver modules; the
-`drivers=quansheng-unofficial` catalog contains 13 separately bundled drivers. Counts measured on or
-after 2026-09-24 are against this pin, and dated counts name their own.
+own. The pin is CHIRP `29592824` (2026-09-29); the bump from `4acbeb8a` (2026-09-24) carried ten
+upstream commits, including the new Retevis RT97S driver, a Wouxun KG-UV920P-A checksum fix, an
+Alinco upload-after-download fix, a UV-K5 7.01 firmware blessing, and making `match_model()`
+legacy size-based image detection opt-in (the `CloneModeRadio` default now returns False, so a
+metadata-less image only opens through a driver that declares legacy or external-format
+detection). The wxPython and localization changes do not run in the browser. The default catalog is
+558 radios from 195 upstream driver modules; the `drivers=quansheng-unofficial` catalog contains 13
+separately bundled drivers. Counts measured on or after 2026-10-03 are against this pin, and dated
+counts name their own.
 
 ## CHIRP / Pyodide runtime
 

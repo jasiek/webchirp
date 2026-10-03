@@ -4,7 +4,7 @@
 // all match this revision; scripts/build-catalog.mjs and the bundle build
 // enforce it at build time and the runtime rejects a mismatched static catalog
 // or bundle manifest.
-export const DEFAULT_CHIRP_REVISION = "4acbeb8a40ec247e0a0e89ff78d52eaa1b128def";
+export const DEFAULT_CHIRP_REVISION = "29592824286f836b2ee281d8cd85132f8a8f4cc0";
 export const DEFAULT_DRIVER_SET = "chirp";
 export const QUANSHENG_UNOFFICIAL_DRIVER_SET = "quansheng-unofficial";
 export const DRIVER_SETS = Object.freeze([

@@ -24163,6 +24163,24 @@
       "caveat": "RT95 variant with VOX firmware and the same hardware.",
       "note": "RT95 variant with VOX firmware; same hardware as RT95"
     },
+    "Retevis|RT97S": {
+      "formFactor": null,
+      "batteryMah": null,
+      "charging": null,
+      "powerW": null,
+      "bands": null,
+      "modulations": null,
+      "display": null,
+      "inProduction": null,
+      "dualReceive": null,
+      "crossBandRepeater": null,
+      "aprs": null,
+      "gps": null,
+      "bluetoothProgramming": null,
+      "sources": [],
+      "caveat": "",
+      "note": ""
+    },
     "Retevis|RT98": {
       "formFactor": "mobile",
       "batteryMah": null,
