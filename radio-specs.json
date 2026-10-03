@@ -24166,20 +24166,41 @@
     "Retevis|RT97S": {
       "formFactor": null,
       "batteryMah": null,
-      "charging": null,
-      "powerW": null,
-      "bands": null,
-      "modulations": null,
-      "display": null,
-      "inProduction": null,
-      "dualReceive": null,
-      "crossBandRepeater": null,
+      "charging": [],
+      "powerW": {
+        "min": null,
+        "max": 5
+      },
+      "bands": [
+        {
+          "band": "GMRS",
+          "rxMHz": [
+            467.55,
+            467.725
+          ],
+          "txMHz": [
+            462.55,
+            462.725
+          ]
+        }
+      ],
+      "modulations": [
+        "FM"
+      ],
+      "display": true,
+      "inProduction": true,
+      "dualReceive": false,
+      "crossBandRepeater": false,
       "aprs": null,
       "gps": null,
       "bluetoothProgramming": null,
-      "sources": [],
-      "caveat": "",
-      "note": ""
+      "sources": [
+        "https://www.retevis.com/products/rt97s-full-duplex-portable-gmrs-repeater",
+        "https://shop.mygmrs.com/products/retevis-rt97s-portable-gmrs-repeater",
+        "https://www.retevis.com/blog/portable-radio-repeater-rt97-rt97s-and-rt97p"
+      ],
+      "caveat": "10 W transmitter; about 5 W reaches the antenna after the built-in duplexer. Needs external 12-24 V DC power and has no internal battery.",
+      "note": "Retevis product page: Power Output 5W, F3E (FM), TX 462.550-462.725 / RX 467.550-467.725 MHz, 8 repeater channels, DC 12-24 V, LCD, USB programming, in stock; high/low selectable in software but no low-power figure given, so min is null (the CHIRP driver's Low 5 W is self-described as inferred). MyGMRS: 10W transmitter, 5W after duplexer. Retevis blog: RT97S 5W vs 10W for RT97/RT97P. formFactor left null: marketed as portable but has no battery and runs from vehicle plug or AC, so neither base nor mobile is clearly supported."
     },
     "Retevis|RT98": {
       "formFactor": "mobile",
