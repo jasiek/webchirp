@@ -36,9 +36,9 @@ import path from "node:path";
 const DIST_DIR = path.join(process.cwd(), "dist");
 const CNAME_FILE = path.join(process.cwd(), "CNAME");
 const RETAINED_LIST = "retained-assets.json";
-// Keep prior generations well past the 10-minute Pages cache window; cheap
-// insurance for edge caches and long-lived tabs that lazy-load modules.
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// Keep prior generations for 30 days so long-lived tabs can still load their
+// pinned CHIRP archives and the matching hashed runtime assets.
+const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 // An immutable asset is either content-hashed, name.<10 hex chars>.ext (see
 // build-dist.mjs), or the CHIRP archive and manifest named after their 40-hex
 // submodule pin (see scripts/build-chirp-bundle.mjs): a pin bump is a new
