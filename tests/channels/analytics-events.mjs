@@ -47,6 +47,23 @@ test("classifyErrorKind maps radio failures onto the fixed vocabulary", () => {
   assert.equal(classifyErrorKind(new Error("Checksum mismatch in block 4")), "checksum");
 });
 
+test("Python traceback wrappers do not masquerade as the exception type", () => {
+  for (const name of ["StopIteration", "StopAsyncIteration", "KeyboardInterrupt", "SystemExit", "GeneratorExit"]) {
+    for (const suffix of ["", ": stopped"]) {
+      const error = pythonError(`${name}${suffix}`);
+      assert.equal(errorTypeName(error), name);
+      error.name = "PythonError";
+      error.stack = "new_error@pyodide.asm.js:10:10028\n307@wasm-function[307]";
+      assert.equal(errorTypeName(error), name);
+    }
+  }
+  const unknown = pythonError("CustomFailure: stopped");
+  assert.equal(errorTypeName(unknown), "");
+  unknown.name = "PythonError";
+  unknown.stack = "new_error@pyodide.asm.js:10:10028";
+  assert.equal(errorTypeName(unknown), "");
+});
+
 test("classifyErrorKind recognizes the geolocation failure sentences", () => {
   // The sentences web/js/ui/repeater-query.js writes for GeolocationPositionError
   // codes must land in the bucket the GA event promises, or a deny would read

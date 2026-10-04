@@ -1,4 +1,5 @@
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs";
+import { errorDetails } from "./error-details.mjs";
 import { createCallQueue } from "./call-queue.mjs";
 import {
   PORT_SELECTION_CANCELLED_MESSAGE,
@@ -655,17 +656,13 @@ export function createRuntimeRpcClient({
         }
         return await enqueueRuntimeCall(() => handler(payload));
       } catch (error) {
-        const detailedError =
-          (typeof error?.stack === "string" && error.stack) ||
-          error?.message ||
-          String(error);
+        const detailedError = errorDetails(error);
 
         // A dismissed port chooser reaches here as a Python traceback like any
         // other failure, but it is not one: the user closed a dialog. Report it
         // as one quiet line and hand the caller the sentence rather than the
         // traceback, so the UI can say what happened instead of showing a stack
-        // nobody can act on. The name is restored because `new Error` below
-        // would otherwise drop it on the way out of the runtime.
+        // nobody can act on. Normalize the Python wrapper to a JS cancellation.
         if (isPortSelectionCancelled(error)) {
           if (logDebug) {
             logDebug(`RUNTIME ${PORT_SELECTION_CANCELLED_MESSAGE}`);
@@ -688,10 +685,10 @@ export function createRuntimeRpcClient({
           logDebug(`RUNTIME ERROR ${detailedError}`, { isError: true });
         }
 
-        // Carry the classification onto the error leaving the runtime. Without
-        // it the action-level funnel sees an ordinary failure and files a
-        // second Sentry event for the crash just reported above.
-        const outgoing = new Error(detailedError);
+        // Preserve the original message, stack and exception identity for
+        // Sentry. Diagnostic frames belong in Debug Output, not in its message.
+        // Non-Error throws still need an Error for capture and crash marking.
+        const outgoing = error instanceof Error ? error : new Error(detailedError);
         throw reportedAsCrash ? markBootstrapFailure(outgoing) : outgoing;
       }
     };

@@ -113,9 +113,15 @@ export function errorTypeName(error) {
     .map((line) => line.trim())
     .filter(Boolean);
   for (let i = lines.length - 1; i >= 0; i -= 1) {
-    // "chirp.errors.RadioError: Radio did not respond" -> RadioError.
-    const name = lines[i].match(/^([\w.]+)\s*:/)?.[1]?.split(".").pop();
-    if (name && /(?:Error|Exception)$/.test(name)) {
+    // A JS/Pyodide wrapper prefix on the traceback header is not the Python
+    // exception type. Skip it when no recognized exception follows.
+    if (/^(?:[\w.]+:\s*)*Traceback \(most recent call last\):$/.test(lines[i])) {
+      continue;
+    }
+    // Include the fixed built-in Python exceptions without Error/Exception
+    // suffixes, even when they have no message; never accept arbitrary text.
+    const name = lines[i].match(/^([\w.]+)(?:\s*:|$)/)?.[1]?.split(".").pop();
+    if (name && /(?:(?:Error|Exception)$|^(?:StopIteration|StopAsyncIteration|KeyboardInterrupt|SystemExit|GeneratorExit)$)/.test(name)) {
       return name;
     }
   }

@@ -5,6 +5,7 @@ import {
 } from "../datasources.js";
 import { encodeMaidenhead } from "../rsgb.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
+import { errorDetails } from "./format.js";
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
 import {
   RepeaterInputError,
@@ -225,7 +226,7 @@ export function createRepeaterQuery(ctx) {
           search: (query) => fetchCitySuggestions(endpoints.cities, query),
           // Not reportActionError: a failed suggestion is not a failed action
           // and must not take over the status line the real query uses.
-          onError: (error) => log.logDebug(`CITY LOOKUP FAILED ${error?.stack || error}`),
+          onError: (error) => log.logDebug(`CITY LOOKUP FAILED ${errorDetails(error)}`),
           onSelect: (city) => onCitySelected(city),
           // Reopening the modal shows the place last chosen, in step with the
           // coordinates the position field restores beside it.
@@ -315,7 +316,7 @@ export function createRepeaterQuery(ctx) {
       positionField?.setMarkers(null, "failed");
       // The whole error, as the city lookup logs it: a preview that fails
       // inside the XML parser is only diagnosable from the stack.
-      log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW FAILED ${error?.stack || error}`);
+      log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW FAILED ${errorDetails(error)}`);
       return;
     }
     if (generation !== previewGeneration) {
