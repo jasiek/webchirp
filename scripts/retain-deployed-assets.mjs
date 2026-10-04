@@ -3,7 +3,9 @@
 // `Cache-Control: max-age=600` and no header control, so for up to 10 minutes
 // after a deploy a cached index.html can still reference the previous build's
 // hashed asset names; without retention those names 404 and the app breaks
-// until the cache expires. Hashed names are immutable (name == content), so
+// until the cache expires. Tabs also boot the runtime lazily, potentially days
+// after page load, so retain pinned archives and runtime assets for 30 days.
+// Hashed names are immutable (name == content), so
 // carrying the old files forward is always safe.
 //
 // Usage: node scripts/retain-deployed-assets.mjs [deployed-site-base-url]
@@ -36,9 +38,9 @@ import path from "node:path";
 const DIST_DIR = path.join(process.cwd(), "dist");
 const CNAME_FILE = path.join(process.cwd(), "CNAME");
 const RETAINED_LIST = "retained-assets.json";
-// Keep prior generations well past the 10-minute Pages cache window; cheap
-// insurance for edge caches and long-lived tabs that lazy-load modules.
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// Keep prior generations for 30 days so long-lived tabs can still load their
+// pinned CHIRP archives and the matching hashed runtime assets.
+const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 // An immutable asset is either content-hashed, name.<10 hex chars>.ext (see
 // build-dist.mjs), or the CHIRP archive and manifest named after their 40-hex
 // submodule pin (see scripts/build-chirp-bundle.mjs): a pin bump is a new
@@ -53,16 +55,40 @@ function normalizeAssetPath(ref) {
   return ref.replace(/^\.?\//, "");
 }
 
-async function fetchJson(url) {
-  try {
-    const res = await fetch(url, { redirect: "follow" });
-    if (!res.ok) {
-      return null;
+// Retry complete reads (including interrupted bodies) before failing the build;
+// publishing a partial retention set would permanently lose older generations.
+async function fetchBytes(url, { allowMissing = false } = {}) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
+      if (allowMissing && res.status === 404) {
+        return null;
+      }
+      if (!res.ok) {
+        await res.body?.cancel();
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return Buffer.from(await res.arrayBuffer());
+    } catch (error) {
+      if (attempt === 3) {
+        throw new Error(`Unable to retain ${url} after 3 attempts; deployment stopped to preserve existing assets`, { cause: error });
+      }
+      console.warn(`Retrying ${url}: ${error.message}`);
+      await new Promise((resolve) => setTimeout(resolve, attempt * 250));
     }
-    return await res.json();
-  } catch {
-    return null;
   }
+}
+
+// Only a real 404 means an older deployment has no inventory yet; other
+// failures must not masquerade as an empty history.
+async function fetchJson(url) {
+  const body = await fetchBytes(url, { allowMissing: true });
+  if (body === null) return null;
+  const value = JSON.parse(body.toString("utf8"));
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Invalid inventory at ${url}; refusing to discard retention history`);
+  }
+  return value;
 }
 
 // Does the host serve anything at all? Separates "first deploy" from "wrong
@@ -101,7 +127,7 @@ async function main() {
   console.log(`Retaining assets from ${baseUrl}`);
 
   const manifest = await fetchJson(`${baseUrl}/asset-manifest.json`);
-  if (!manifest?.assets) {
+  if (manifest === null) {
     if (!(await siteIsReachable(baseUrl))) {
       throw new Error(
         `${baseUrl} does not serve a site — retention would silently do nothing. ` +
@@ -115,9 +141,18 @@ async function main() {
     console.warn(`No deployed asset manifest at ${baseUrl}; nothing to retain (first deploy?).`);
     return;
   }
-  // The deployed site's own retained list chains retention across deploys that
-  // land closer together than the cache window.
-  const previousRetained = (await fetchJson(`${baseUrl}/${RETAINED_LIST}`)) || {};
+  if (!manifest.assets || typeof manifest.assets !== "object" || Array.isArray(manifest.assets)) {
+    throw new Error("Invalid deployed asset manifest; refusing to discard retention history");
+  }
+  // Chain the original retention dates across deploys for long-lived tabs.
+  const retainedHistory = await fetchJson(`${baseUrl}/${RETAINED_LIST}`);
+  if (retainedHistory === null) {
+    console.warn("No deployed retained-assets.json (404); starting retention history");
+  }
+  const previousRetained = retainedHistory ?? {};
+  if (typeof previousRetained !== "object" || Array.isArray(previousRetained)) {
+    throw new Error("Invalid retained asset history; refusing to discard it");
+  }
 
   const now = Date.now();
   const candidates = new Map(); // asset path -> firstSeen ISO timestamp
@@ -132,41 +167,42 @@ async function main() {
   }
 
   const retained = {};
-  for (const [assetPath, firstSeen] of candidates) {
-    const hashMatch = path.basename(assetPath).match(HASHED_NAME_RE);
-    if (!hashMatch) {
-      continue; // only immutably named files are safe to carry forward
+  const pending = candidates.entries();
+  // Bound network load while copying independent files; any failed worker
+  // prevents this artifact from being deployed by the Pages workflow.
+  async function retainNextAssets() {
+    for (const [assetPath, firstSeen] of pending) {
+      const hashMatch = path.basename(assetPath).match(HASHED_NAME_RE);
+      if (!hashMatch) {
+        continue; // only immutably named files are safe to carry forward
+      }
+      const target = path.join(DIST_DIR, assetPath);
+      if (!path.resolve(target).startsWith(path.resolve(DIST_DIR) + path.sep)) {
+        continue; // ignore traversal attempts from a hostile manifest
+      }
+      if (existsSync(target)) {
+        // Since issue #114 a hashed name is derived from the bytes actually
+        // emitted under it, so an identical path really is identical content.
+        continue;
+      }
+      const body = await fetchBytes(`${baseUrl}/${assetPath}`);
+      // The res.ok check is the integrity gate; Pages returns real 404s (no SPA
+      // fallback), so a miss can't smuggle an error page in here. Re-deriving the
+      // name from the bytes would be tighter but is not sound as a gate: members
+      // of an import cycle are named after a digest of the whole group rather
+      // than their own bytes (see build-dist.mjs), so a legitimate asset could
+      // fail the check.
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, body);
+      retained[assetPath] = firstSeen;
+      console.log(`Retained ${assetPath}`);
     }
-    const target = path.join(DIST_DIR, assetPath);
-    if (!path.resolve(target).startsWith(path.resolve(DIST_DIR) + path.sep)) {
-      continue; // ignore traversal attempts from a hostile manifest
-    }
-    if (existsSync(target)) {
-      // Since issue #114 a hashed name is derived from the bytes actually
-      // emitted under it, so an identical path really is identical content.
-      continue;
-    }
-    const res = await fetch(`${baseUrl}/${assetPath}`, { redirect: "follow" });
-    if (!res.ok) {
-      console.warn(`Skipping ${assetPath}: deployed site returned ${res.status}`);
-      continue;
-    }
-    const body = Buffer.from(await res.arrayBuffer());
-    // The res.ok check is the integrity gate; Pages returns real 404s (no SPA
-    // fallback), so a miss can't smuggle an error page in here. Re-deriving the
-    // name from the bytes would be tighter but is not sound as a gate: members
-    // of an import cycle are named after a digest of the whole group rather
-    // than their own bytes (see build-dist.mjs), so a legitimate asset could
-    // fail the check.
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, body);
-    retained[assetPath] = firstSeen;
-    console.log(`Retained ${assetPath}`);
   }
+  await Promise.all(Array.from({ length: 8 }, () => retainNextAssets()));
 
   await writeFile(
     path.join(DIST_DIR, RETAINED_LIST),
-    `${JSON.stringify(retained, null, 2)}\n`,
+    `${JSON.stringify(Object.fromEntries(Object.entries(retained).sort()), null, 2)}\n`,
     "utf8",
   );
   console.log(`Retained ${Object.keys(retained).length} previous-generation asset(s).`);
