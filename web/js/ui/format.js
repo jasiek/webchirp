@@ -1,3 +1,6 @@
+import { errorDetails } from "../error-details.mjs";
+export { errorDetails } from "../error-details.mjs";
+
 // Pure formatting, encoding and environment-detection helpers shared across the
 // UI modules. Nothing here touches UI state or the document, so it stays
 // directly unit-testable.
@@ -42,27 +45,6 @@ export function bytesToBase64(bytes) {
     out += String.fromCharCode(...chunk);
   }
   return btoa(out);
-}
-
-// Normalize unknown error shapes into a detailed string for diagnostics.
-export function errorDetails(error) {
-  if (!error) {
-    return "Unknown error";
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (typeof error.stack === "string" && error.stack.length > 0) {
-    return error.stack;
-  }
-  if (typeof error.message === "string" && error.message.length > 0) {
-    return error.message;
-  }
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
 }
 
 // Extract a short first-line summary from a detailed error payload.

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import "../support/register-cdn-imports.mjs";
 
 import { createDebugLog } from "../../web/js/ui/debug-log.js";
-import { initSentry, resetSentryForTests } from "../../web/js/sentry.js";
+import { initOptions, initSentry, resetSentryForTests } from "../../web/js/sentry.js";
 import { markBootstrapFailure } from "../../web/js/runtime-bootstrap.mjs";
 import { fakeDebugDom } from "../support/fake-dom.mjs";
 
@@ -139,6 +140,41 @@ test("an ordinary action failure is still captured by the action funnel", async 
   assert.equal(sdk.captured.length, 1);
   assert.equal(sdk.captured[0].error.message, "Failed to fetch");
   resetSentryForTests();
+});
+
+test("runtime errors keep their message through debug output and Sentry when stacks omit it", async (t) => {
+  const { createRuntimeRpcClient } = await import("../../web/js/runtime-rpc.js");
+  const original = new Error("Traceback (most recent call last):\nchirp.errors.InvalidDataError: No channels found");
+  original.name = "PythonError";
+  original.stack = "new_error@pyodide.asm.js:10:10028\n307@wasm-function[307]";
+  // Fail catalog loading before interpreter boot to exercise the real runtime
+  // catch/rethrow boundary with the same error shape as a Pyodide failure.
+  t.mock.method(globalThis, "fetch", async () => { throw original; });
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const sdk = makeSentrySdk();
+  await initSentry(makeSentryWindow(), { loadSdk: async () => sdk });
+  const dom = fakeDebugDom();
+  const log = createDebugLog({ dom });
+  const runtimeLines = [];
+  const runtime = createRuntimeRpcClient({ logDebug: (line) => runtimeLines.push(line) });
+  await assert.rejects(runtime.listRadios(), (error) => {
+    assert.ok(error.message.includes(original.message));
+    assert.ok(error.message.includes(original.stack));
+    // Simulate another browser-created Error whose stack also omits its message.
+    error.stack = "invokeRuntimeMethod@runtime-rpc.js:1:1";
+    log.reportActionError("Import CSV", error);
+    return true;
+  });
+  assert.ok(runtimeLines.some((line) => line.includes(original.message) && line.includes(original.stack)));
+  assert.ok(dom.debugOutputEl.value.includes(original.message));
+  assert.ok(dom.debugOutputEl.value.includes(original.stack));
+  assert.equal(sdk.captured.length, 1);
+  const sent = sdk.captured[0].error;
+  assert.ok(sent.message.includes(original.message));
+  assert.ok(sent.message.includes(original.stack));
+  assert.ok(initOptions().ignoreErrors.some((pattern) => pattern.test(sent.message)),
+    "the SDK filter can still recognize the original CHIRP exception");
 });
 
 test("input the form rejected is shown to the user and never captured", async () => {

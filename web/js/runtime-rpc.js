@@ -1,4 +1,5 @@
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs";
+import { errorDetails } from "./error-details.mjs";
 import { createCallQueue } from "./call-queue.mjs";
 import {
   PORT_SELECTION_CANCELLED_MESSAGE,
@@ -655,10 +656,7 @@ export function createRuntimeRpcClient({
         }
         return await enqueueRuntimeCall(() => handler(payload));
       } catch (error) {
-        const detailedError =
-          (typeof error?.stack === "string" && error.stack) ||
-          error?.message ||
-          String(error);
+        const detailedError = errorDetails(error);
 
         // A dismissed port chooser reaches here as a Python traceback like any
         // other failure, but it is not one: the user closed a dialog. Report it
