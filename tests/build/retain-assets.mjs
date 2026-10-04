@@ -39,6 +39,10 @@ function withTempRepo(cname, fn) {
 async function withSite(routes, fn) {
   const server = createServer((req, res) => {
     const body = routes[req.url.split("?")[0]];
+    if (typeof body === "function") {
+      body(req, res);
+      return;
+    }
     if (body === undefined) {
       res.writeHead(404).end("not found");
       return;
@@ -190,3 +194,71 @@ test("no CNAME and no argument is an error, not a silent skip", async () => {
     assert.match(result.stderr, /No CNAME file/);
   });
 });
+
+// Exercise age pruning through deployed inventories, including repeated deploys
+// that must preserve the original date rather than extend the retention window.
+test("retains 29-day assets and prunes 31-day assets without resetting dates", async () => {
+  const recent = "chirp/chirp-" + "b".repeat(40) + ".zip";
+  const expired = "chirp/chirp-" + "c".repeat(40) + ".zip";
+  const firstSeen = new Date(Date.now() - 29 * 86400000).toISOString();
+  const routes = {
+    "/asset-manifest.json": JSON.stringify({ assets: {} }),
+    "/retained-assets.json": JSON.stringify({
+      [recent]: firstSeen,
+      [expired]: new Date(Date.now() - 31 * 86400000).toISOString(),
+    }),
+    ["/" + recent]: "old archive",
+  };
+  await withSite(routes, (url) => withTempRepo("unused.test", async (dir) => {
+    const result = await run(dir, [url]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(await readFile(path.join(dir, "dist", "retained-assets.json"), "utf8")), { [recent]: firstSeen });
+    assert.equal(await readFile(path.join(dir, "dist", recent), "utf8"), "old archive");
+  }));
+});
+
+// A temporary HTTP failure or dropped connection must not erase an asset.
+for (const failure of [429, 503, "disconnect"]) {
+  test(`retries asset download after ${failure}`, async () => {
+    let attempts = 0;
+    const routes = {
+      "/asset-manifest.json": JSON.stringify({ assets: { ui: "js/ui.0123456789.js" } }),
+      "/retained-assets.json": "{}",
+      "/js/ui.0123456789.js": (req, res) => {
+        attempts += 1;
+        if (attempts === 1) {
+          if (failure === "disconnect") req.socket.destroy();
+          else res.writeHead(failure).end("temporary failure");
+        } else res.writeHead(200).end("complete asset");
+      },
+    };
+    await withSite(routes, (url) => withTempRepo("unused.test", async (dir) => {
+      const result = await run(dir, [url]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.ok(attempts >= 2);
+      assert.equal(await readFile(path.join(dir, "dist", "js/ui.0123456789.js"), "utf8"), "complete asset");
+    }));
+  });
+}
+
+// Publishing after an exhausted fetch or corrupt inventory would destroy the
+// chain; the Pages workflow must instead keep serving its previous artifact.
+for (const target of ["/asset-manifest.json", "/retained-assets.json", "/js/ui.0123456789.js"]) {
+  for (const failure of [503, "invalid-json"]) {
+    if (target.endsWith(".js") && failure === "invalid-json") continue;
+    test(`fails closed for ${target} returning ${failure}`, async () => {
+      const routes = {
+        "/": "{}",
+        "/asset-manifest.json": JSON.stringify({ assets: { ui: "js/ui.0123456789.js" } }),
+        "/retained-assets.json": "{}",
+        "/js/ui.0123456789.js": "asset",
+        [target]: failure === "invalid-json" ? "not json" : (req, res) => res.writeHead(503).end("unavailable"),
+      };
+      await withSite(routes, (url) => withTempRepo("unused.test", async (dir) => {
+        const result = await run(dir, [url]);
+        assert.notEqual(result.status, 0);
+        await assert.rejects(readFile(path.join(dir, "dist", "retained-assets.json")), { code: "ENOENT" });
+      }));
+    });
+  }
+}
