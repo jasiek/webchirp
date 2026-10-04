@@ -92,6 +92,9 @@ export const SENTRY_HOSTS = Object.freeze([
 // the classes filtered here.
 const IGNORE_ERRORS = Object.freeze([
   /ResizeObserver loop/i,
+  // Match the browser message even inside a Pyodide traceback, without hiding
+  // other NetworkError or JsException failures. Debug logging is unaffected.
+  /Failed to execute 'open' on 'SerialPort': Failed to open serial port\./,
   /\bRuntimePreconditionError\b/,
   /\bchirp\.errors\.(?:InvalidDataError|InvalidValueError|UnsupportedToneError|ImageDetectFailed|ImageMetadataInvalidModel|RadioNoResponse|RadioNoContactLikelyK1|RadioFixedBanks)\b/,
 ]);

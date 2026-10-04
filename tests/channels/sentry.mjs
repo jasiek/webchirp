@@ -101,6 +101,31 @@ test("the host gate admits only the production deployment", () => {
   assert.equal(isSentryHost(null), false);
 });
 
+test("serial port open failures are ignored directly and through Pyodide", () => {
+  const message = "Failed to execute 'open' on 'SerialPort': Failed to open serial port.";
+  const messages = [
+    message,
+    `NetworkError: ${message}`,
+    `pyodide.ffi.JsException: NetworkError: ${message}`,
+    `PythonError: Traceback (most recent call last):\n  File "/webchirp_runtime/webchirp_bridge/serial_pipe.py", line 1, in open\npyodide.ffi.JsException: NetworkError: ${message}\n`,
+  ];
+  for (const value of messages) {
+    assert.ok(initOptions().ignoreErrors.some((pattern) => pattern.test(value)), value);
+  }
+});
+
+test("other network, Pyodide and serial failures remain reportable", () => {
+  const messages = [
+    "NetworkError: Failed to fetch",
+    "pyodide.ffi.JsException: TypeError: unexpected value",
+    "NetworkError: Failed to execute 'open' on 'SerialPort': unexpected failure",
+    "NetworkError: Failed to execute 'close' on 'SerialPort': Failed to open serial port.",
+  ];
+  for (const value of messages) {
+    assert.equal(initOptions().ignoreErrors.some((pattern) => pattern.test(value)), false, value);
+  }
+});
+
 test("scrubText removes the user data a CHIRP traceback carries", () => {
   // Frequencies, in both the forms CHIRP prints them.
   assert.equal(scrubText("Frequency 145.500000 out of range"), "Frequency [num] out of range");
