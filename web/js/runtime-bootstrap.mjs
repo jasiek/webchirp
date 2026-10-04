@@ -20,9 +20,9 @@ export function isBootstrapFailure(error) {
 }
 
 // Record an error as a bootstrap failure, normalizing non-Error throws so there
-// is always an object identity to key the marker on. Exported because the RPC
-// layer rethrows a fresh Error out of the runtime and has to carry the
-// classification onto it, or the failure is captured a second time downstream.
+// is always an object identity to key the marker on. The RPC layer preserves
+// that identity when rethrowing, so downstream action handling can avoid
+// capturing the same bootstrap failure a second time.
 export function markBootstrapFailure(error) {
   const marked = error instanceof Error ? error : new Error(String(error));
   bootstrapFailures.add(marked);

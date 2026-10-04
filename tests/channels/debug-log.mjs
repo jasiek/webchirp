@@ -143,13 +143,15 @@ test("an ordinary action failure is still captured by the action funnel", async 
 });
 
 test("runtime errors keep their message through debug output and Sentry when stacks omit it", async (t) => {
-  const { createRuntimeRpcClient } = await import("../../web/js/runtime-rpc.js");
+  const { createRuntimeRpcClient } = await import("../../web/js/runtime-rpc.js?error-reporting-test");
   const original = new Error("Traceback (most recent call last):\nchirp.errors.InvalidDataError: No channels found");
   original.name = "PythonError";
   original.stack = "new_error@pyodide.asm.js:10:10028\n307@wasm-function[307]";
-  // Fail catalog loading before interpreter boot to exercise the real runtime
-  // catch/rethrow boundary with the same error shape as a Pyodide failure.
-  t.mock.method(globalThis, "fetch", async () => { throw original; });
+  // Use a separate module instance, and clear its callbacks on completion.
+  // Fail argument conversion inside a real handler, before interpreter boot,
+  // so the test cannot depend on catalog-fetch fallback ordering.
+  t.after(() => createRuntimeRpcClient({}));
+  const payload = { sessionId: { toString() { throw original; } } };
   resetSentryForTests();
   t.after(resetSentryForTests);
   const sdk = makeSentrySdk();
@@ -158,11 +160,10 @@ test("runtime errors keep their message through debug output and Sentry when sta
   const log = createDebugLog({ dom });
   const runtimeLines = [];
   const runtime = createRuntimeRpcClient({ logDebug: (line) => runtimeLines.push(line) });
-  await assert.rejects(runtime.listRadios(), (error) => {
-    assert.ok(error.message.includes(original.message));
-    assert.ok(error.message.includes(original.stack));
-    // Simulate another browser-created Error whose stack also omits its message.
-    error.stack = "invokeRuntimeMethod@runtime-rpc.js:1:1";
+  await assert.rejects(runtime.closeRadioSession(payload), (error) => {
+    assert.equal(error, original);
+    assert.equal(error.message, original.message);
+    assert.equal(error.stack, original.stack);
     log.reportActionError("Import CSV", error);
     return true;
   });
@@ -171,8 +172,10 @@ test("runtime errors keep their message through debug output and Sentry when sta
   assert.ok(dom.debugOutputEl.value.includes(original.stack));
   assert.equal(sdk.captured.length, 1);
   const sent = sdk.captured[0].error;
-  assert.ok(sent.message.includes(original.message));
-  assert.ok(sent.message.includes(original.stack));
+  assert.equal(sent, original);
+  assert.equal(sent.message, original.message);
+  assert.ok(!sent.message.includes("wasm-function"));
+  assert.equal(sent.stack, original.stack);
   assert.ok(initOptions().ignoreErrors.some((pattern) => pattern.test(sent.message)),
     "the SDK filter can still recognize the original CHIRP exception");
 });

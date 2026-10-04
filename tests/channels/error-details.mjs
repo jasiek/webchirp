@@ -32,3 +32,12 @@ test("message-only, stack-only and non-Error diagnostics remain available", () =
   cyclic.self = cyclic;
   assert.equal(errorDetails(cyclic), "[object Object]");
 });
+
+test("unserializable thrown values still yield usable diagnostic strings", () => {
+  // These serialize to undefined without throwing, unlike a circular object.
+  const values = [() => {}, Symbol("failed"), { toJSON() { return undefined; } }];
+  for (const value of values) {
+    assert.equal(errorDetails(value), String(value));
+    assert.equal(errorSummary(value), String(value));
+  }
+});

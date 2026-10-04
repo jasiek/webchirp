@@ -230,8 +230,8 @@ test("a reportCrash function is required", () => {
 });
 
 test("marking carries the classification onto a rethrown error", () => {
-  // runtime-rpc.js rethrows a fresh Error out of the runtime; without the mark
-  // the action funnel sees an ordinary failure and captures it a second time.
+  // The runtime preserves this marker when rethrowing, so the action funnel
+  // does not capture a bootstrap crash a second time.
   const outgoing = markBootstrapFailure(new Error("RuntimeError: boot failed"));
   assert.equal(isBootstrapFailure(outgoing), true);
   assert.equal(isBootstrapFailure(new Error("RuntimeError: boot failed")), false);

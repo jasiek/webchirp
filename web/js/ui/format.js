@@ -1,9 +1,9 @@
-import { errorDetails } from "../error-details.mjs";
-export { errorDetails } from "../error-details.mjs";
-
 // Pure formatting, encoding and environment-detection helpers shared across the
 // UI modules. Nothing here touches UI state or the document, so it stays
 // directly unit-testable.
+
+import { errorDetails } from "../error-details.mjs";
+export { errorDetails };
 
 function sanitizeFileNamePart(text) {
   return String(text || "")

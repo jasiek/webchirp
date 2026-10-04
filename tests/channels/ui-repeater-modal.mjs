@@ -1959,12 +1959,21 @@ test("an invalid radius is an inactive preview, not an empty one", async () => {
   assert.ok(!log.debug.some((line) => /PREVIEW 0 repeater/.test(line)));
 });
 
-test("a failed city lookup puts the whole error in the debug panel", async () => {
+test("a failed city lookup puts the whole error in the debug panel", async (t) => {
   const { dom, log } = buildHarness();
   installFetch([
     { match: "/meta", body: META_JSON },
     { match: "/cities", ok: false, status: 503, body: "down" },
   ]);
+
+  const failure = new Error("Network connection lost");
+  failure.name = "NetworkError";
+  failure.stack = "fetch@datasources.js:1:1";
+  const fetchResponse = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    if (String(url).includes("/cities")) throw failure;
+    return fetchResponse(url, init);
+  });
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
   const city = fieldByName(dom, "city");
@@ -1976,6 +1985,9 @@ test("a failed city lookup puts the whole error in the debug panel", async () =>
     log.debug.some((line) => /CITY LOOKUP FAILED/.test(line)),
     "a service failure must be diagnosable from Debug Output",
   );
+  const detail = log.debug.find((line) => /CITY LOOKUP FAILED/.test(line));
+  assert.ok(detail.includes(failure.message));
+  assert.ok(detail.includes(failure.stack));
   // Still only a hint: the status line belongs to the real query.
   assert.deepEqual(log.errors, []);
 });
@@ -2089,12 +2101,21 @@ test("nudging the radius reuses the body already fetched", async () => {
   assert.equal(previewCalls(calls, "/przemienniki").length, 2);
 });
 
-test("a preview failure reaches the debug panel with its stack", async () => {
+test("a preview failure reaches the debug panel with its stack", async (t) => {
   const { dom, log } = buildHarness();
   installFetch([
     { match: "/meta", body: META_JSON },
     { match: "/przemienniki", ok: false, status: 503, body: "down" },
   ]);
+
+  const failure = new Error("Network connection lost");
+  failure.name = "NetworkError";
+  failure.stack = "fetch@datasources.js:1:1";
+  const fetchResponse = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    if (String(url).includes("/przemienniki") && !String(url).includes("/meta")) throw failure;
+    return fetchResponse(url, init);
+  });
 
   await dom.channelImportPrzemiennikiEl.dispatch("click");
   await setPreviewPosition(dom);
@@ -2103,7 +2124,8 @@ test("a preview failure reaches the debug panel with its stack", async () => {
   const line = log.debug.find((entry) => /PREVIEW FAILED/.test(entry));
   assert.ok(line, "the failure is logged");
   // error.message alone cannot say which step threw.
-  assert.match(line, /at /, "the stack comes with it");
+  assert.ok(line.includes(failure.stack), "the stack comes with it");
+  assert.ok(line.includes(failure.message), "the message comes with it");
 });
 
 // Repeaters due north of the preview position. A degree of latitude is ~111 km,

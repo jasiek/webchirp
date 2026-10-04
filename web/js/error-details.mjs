@@ -19,7 +19,7 @@ export function errorDetails(error) {
     return error.message;
   }
   try {
-    return JSON.stringify(error);
+    return JSON.stringify(error) ?? String(error);
   } catch {
     return String(error);
   }
