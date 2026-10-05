@@ -37,9 +37,12 @@ import { repoRoot } from "../support/repo-paths.mjs";
 function makeSdk() {
   const captured = [];
   const recorded = [];
+  const breadcrumbs = [];
   let options = null;
   return {
     captured,
+    breadcrumbs,
+    addBreadcrumb: (crumb) => breadcrumbs.push(crumb),
     // Metrics go down a pipeline of their own in the real SDK, so the fake
     // keeps them in a separate list rather than folding them into captured.
     recorded,
@@ -481,6 +484,30 @@ test("this module never sets a scope attribute, which would bypass the allowlist
     false,
     "web/js/sentry.js sets a scope attribute, which is not covered by METRIC_ATTRIBUTES",
   );
+});
+
+test("delivery headers recorded during SDK loading precede buffered errors", async () => {
+  resetSentryForTests();
+  const sdk = makeSdk();
+  const win = makeWindow({ fetch: async () => new Response('{"webchirpSha":"abc123"}', {
+    headers: { "x-served-by": "cache-vie-VIE", "x-fastly-request-id": "delivery-id" },
+  }) });
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const started = initSentry(win, { loadSdk: async () => { await pending; return sdk; } });
+  await win.fetch("https://webchirp.org/chirp/archive.zip");
+  captureError(new Error("startup failed"));
+  const capture = sdk.captureException.bind(sdk);
+  sdk.captureException = (error) => {
+    assert.ok(sdk.breadcrumbs.some((crumb) => crumb.data["x-fastly-request-id"] === "delivery-id"));
+    capture(error);
+  };
+  release();
+  await started;
+  assert.equal(sdk.captured.length, 1);
+  await win.fetch("https://cdn.jsdelivr.net/pyodide/v0.27.2/full/python_stdlib.zip");
+  assert.ok(sdk.breadcrumbs.some((crumb) => crumb.data.url.includes("cdn.jsdelivr.net")));
+  resetSentryForTests();
 });
 
 test("errors raised before the SDK arrives are buffered and replayed once", async () => {
