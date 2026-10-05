@@ -1,5 +1,6 @@
 import {
   errorSummary,
+  errorDetails,
   isAndroidPlatform,
   isIosPlatform,
   makeModelLabel,
@@ -17,6 +18,7 @@ import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
 import {
   PORT_SELECTION_CANCELLED_MESSAGE,
   isPortSelectionCancelled,
+  isSerialUnsupported,
 } from "../serial-errors.js";
 import { requireRuntimeApi } from "./state.js";
 
@@ -149,6 +151,13 @@ export function createSerialActions(ctx) {
       // error_kind separates the two.
       if (isPortSelectionCancelled(error)) {
         log.reportActionCancelled("Serial connect", PORT_SELECTION_CANCELLED_MESSAGE);
+        return;
+      }
+      // A missing browser API is a capability limit, not a failed adapter.
+      // Forced transport calls can still reach this path despite UI gating.
+      if (isSerialUnsupported(error)) {
+        log.setStatus("This browser does not support the selected serial transport. Editing CSV and image files still works here.");
+        log.logSerial(errorDetails(error));
         return;
       }
       recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.FAILED, {
@@ -310,7 +319,8 @@ export function createSerialActions(ctx) {
     // every serial action has to explain that rather than act on nothing.
     const noRadioSelected = !state.selectedRadio;
     const actionsAllowed =
-      sidebarControlsEnabled && !liveRadioUnsupported && !noRadioSelected;
+      sidebarControlsEnabled && !liveRadioUnsupported && !noRadioSelected
+      && (connected || capability.supported);
     // Why the radio itself blocks these controls, if it does. Checked before
     // the connection state so the buttons name the first thing to fix.
     const selectionBlockedTitle = noRadioSelected
@@ -344,6 +354,7 @@ export function createSerialActions(ctx) {
     dom.serialConnectToggleEl.hidden = !showWebSerialToggle;
     dom.serialConnectToggleEl.disabled = !actionsAllowed;
     dom.serialConnectToggleEl.title = selectionBlockedTitle
+      || (!capability.supported ? "This browser has no supported serial transport API" : "")
       || (isAndroidPlatform()
         ? "Connect over native Web Serial, for use with Bluetooth serial ports"
         : "");

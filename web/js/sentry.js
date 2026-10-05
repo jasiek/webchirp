@@ -97,7 +97,7 @@ const IGNORE_ERRORS = Object.freeze([
   /Failed to execute 'open' on 'SerialPort': Failed to open serial port\./,
   // An unsupported browser is an expected capability limit, including when
   // web/js/serial.js throws through Pyodide. Keep its local diagnostics.
-  /Neither Web Serial nor WebUSB is supported in this browser\./,
+  /\bSerialUnsupportedError\b/,
   /\bRuntimePreconditionError\b/,
   /\bchirp\.errors\.(?:InvalidDataError|InvalidValueError|UnsupportedToneError|ImageDetectFailed|ImageMetadataInvalidModel|RadioNoResponse|RadioNoContactLikelyK1|RadioFixedBanks)\b/,
 ]);

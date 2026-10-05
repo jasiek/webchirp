@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { FakeElement } from "../support/fake-dom.mjs";
+import { makeWindow } from "../support/fake-window.mjs";
+import { initSentry, resetSentryForTests } from "../../web/js/sentry.js";
+import { createSerialUnsupportedError } from "../../web/js/serial-errors.js";
 
 // The clone buttons must stay dead until a serial port has actually been
 // opened: pressing Download with no port only ever produced a runtime error.
@@ -65,6 +68,7 @@ test("clone buttons stay disabled until a serial port is connected", async () =>
   const createSerialActions = await loadSerialActions();
   const ctx = makeContext();
   const serial = createSerialActions(ctx);
+  serial.setSerialController({ capability: { supported: true, native: true }, setPreferredTransport() {} });
 
   // Sidebar enabled after init, but no port picked yet.
   serial.setSidebarControlsEnabled(true);
@@ -88,10 +92,53 @@ test("clone buttons stay disabled until a serial port is connected", async () =>
   assert.equal(ctx.dom.radioUploadEl.disabled, true);
 });
 
+test("a browser with no transport keeps Connect disabled with an explanation", async () => {
+  const createSerialActions = await loadSerialActions();
+  const ctx = makeContext();
+  const serial = createSerialActions(ctx);
+  serial.setSerialController({ capability: { supported: false, native: false, webusb: false, webbluetooth: false } });
+  serial.setSidebarControlsEnabled(true);
+  assert.equal(ctx.dom.serialConnectToggleEl.hidden, false);
+  for (const button of [ctx.dom.serialConnectToggleEl, ctx.dom.webusbConnectToggleEl, ctx.dom.webbluetoothConnectToggleEl]) {
+    assert.equal(button.disabled, true);
+  }
+  assert.match(ctx.dom.serialConnectToggleEl.title, /no supported serial transport API/);
+  assert.equal(ctx.dom.radioDownloadEl.disabled, true);
+  assert.equal(ctx.dom.radioUploadEl.disabled, true);
+});
+
+test("unsupported transports never count as failed connects while adapter failures do", async (t) => {
+  const createSerialActions = await loadSerialActions();
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const metrics = [];
+  await initSentry(makeWindow(), { loadSdk: async () => ({
+    init() {},
+    metrics: { count: (name, value, options) => metrics.push({ name, value, ...options }) },
+  }) });
+  const named = createSerialUnsupportedError("Transport unavailable.");
+  for (const error of [named, new Error(`pyodide.ffi.JsException: ${named}`), new Error("Adapter open failed")]) {
+    const ctx = makeContext();
+    const errors = [];
+    ctx.log.reportActionError = (action, thrown) => errors.push(thrown);
+    ctx.state.runtimeApi.serialConnect = async () => { throw error; };
+    const serial = createSerialActions(ctx);
+    serial.setSerialController({ capability: { supported: true, native: true }, setPreferredTransport() {} });
+    serial.setSidebarControlsEnabled(true);
+    serial.bindEvents();
+    await pressConnectToggle(ctx);
+    assert.equal(errors.length, error.message === "Adapter open failed" ? 1 : 0);
+  }
+  assert.equal(metrics.length, 1);
+  assert.equal(metrics[0].attributes.flow, "serial_connect");
+  assert.equal(metrics[0].attributes.outcome, "failed");
+});
+
 test("a connected port does not override the other clone-button blocks", async () => {
   const createSerialActions = await loadSerialActions();
   const ctx = makeContext({ hasInvalidSettings: true });
   const serial = createSerialActions(ctx);
+  serial.setSerialController({ capability: { supported: true, native: true }, setPreferredTransport() {} });
   serial.setSidebarControlsEnabled(true);
   serial.bindEvents();
   await pressConnectToggle(ctx);
@@ -115,6 +162,7 @@ test("losing the port mid-session takes the clone buttons away again", async () 
   const createSerialActions = await loadSerialActions();
   const ctx = makeContext();
   const serial = createSerialActions(ctx);
+  serial.setSerialController({ capability: { supported: true, native: true }, setPreferredTransport() {} });
   serial.setSidebarControlsEnabled(true);
   serial.bindEvents();
   await pressConnectToggle(ctx);
@@ -151,6 +199,7 @@ test("a browser without JSPI is refused at connect time with the reason", async 
     return { connected: true, transport: "webserial", message: "ok" };
   };
   const serial = createSerialActions(ctx);
+  serial.setSerialController({ capability: { supported: true, native: true }, setPreferredTransport() {} });
   serial.setCloneSupported(false);
   serial.setSidebarControlsEnabled(true);
   serial.bindEvents();
@@ -171,11 +220,11 @@ test("a browser without JSPI is refused at connect time with the reason", async 
 
 test("WebBluetooth visibility preserves wired transport choices on each platform", async () => {
   for (const { userAgent, capability, visible } of [
-    { userAgent: "Desktop", capability: { native: true, webusb: true, webbluetooth: true }, visible: [true, false, true] },
-    { userAgent: "Android", capability: { native: true, webusb: true, webbluetooth: true }, visible: [true, true, true] },
+    { userAgent: "Desktop", capability: { supported: true, native: true, webusb: true, webbluetooth: true }, visible: [true, false, true] },
+    { userAgent: "Android", capability: { supported: true, native: true, webusb: true, webbluetooth: true }, visible: [true, true, true] },
     { userAgent: "Android", capability: { native: false, webusb: true, webbluetooth: true }, visible: [false, true, true] },
     { userAgent: "Desktop", capability: { native: false, webusb: false, webbluetooth: true }, visible: [false, false, true] },
-    { userAgent: "Desktop", capability: { native: true, webusb: false, webbluetooth: false }, visible: [true, false, false] },
+    { userAgent: "Desktop", capability: { supported: true, native: true, webusb: false, webbluetooth: false }, visible: [true, false, false] },
     { userAgent: "Desktop", capability: { native: false, webusb: false, webbluetooth: false }, visible: [true, false, false] },
   ]) {
     const createSerialActions = await loadSerialActions(userAgent);
@@ -197,7 +246,7 @@ test("each connected transport leaves exactly its own Disconnect button", async 
     const serial = createSerialActions(ctx);
     const preferred = [];
     serial.setSerialController({
-      capability: { native: true, webusb: true, webbluetooth: true },
+      capability: { supported: true, native: true, webusb: true, webbluetooth: true },
       setPreferredTransport(value) { preferred.push(value); },
     });
     serial.setSidebarControlsEnabled(true);
@@ -226,7 +275,7 @@ test("WebBluetooth follows selection, startup, busy and JSPI restrictions", asyn
   const ctx = makeContext({ transport: "webbluetooth" });
   const serial = createSerialActions(ctx);
   serial.setSerialController({
-    capability: { native: true, webbluetooth: true },
+    capability: { supported: true, native: true, webbluetooth: true },
     setPreferredTransport() {},
   });
   const button = ctx.dom.webbluetoothConnectToggleEl;
