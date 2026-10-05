@@ -114,6 +114,19 @@ test("serial port open failures are ignored directly and through Pyodide", () =>
   }
 });
 
+test("unsupported serial browsers are ignored directly and through Pyodide", () => {
+  const message = "Neither Web Serial nor WebUSB is supported in this browser.";
+  const messages = [
+    message,
+    `Error: ${message}`,
+    `pyodide.ffi.JsException: Error: ${message}`,
+    `PythonError: Traceback (most recent call last):\n  File "/webchirp_runtime/webchirp_bridge/serial_pipe.py", line 1, in open\npyodide.ffi.JsException: Error: ${message}\n`,
+  ];
+  for (const value of messages) {
+    assert.ok(initOptions().ignoreErrors.some((pattern) => pattern.test(value)), value);
+  }
+});
+
 test("other network, Pyodide and serial failures remain reportable", () => {
   const messages = [
     "NetworkError: Failed to fetch",
