@@ -1,3 +1,5 @@
+import { installCdnResponseBreadcrumbs } from "./cdn-response-breadcrumbs.mjs";
+
 // Sentry error reporting.
 //
 // Shaped deliberately like web/js/analytics.js, and for the same reasons: the
@@ -294,6 +296,23 @@ export function scrubEvent(event) {
 
 // The loaded SDK namespace, or null while reporting is off or still loading.
 let sdk = null;
+let stopFetchRecording = null;
+const pendingDeliveryBreadcrumbs = [];
+
+// Retain startup delivery diagnostics until the SDK can attach them to an
+// error. Use the existing redaction gate and never let reporting break fetch.
+function recordDeliveryBreadcrumb(crumb) {
+  try {
+    if (sdk) {
+      sdk.addBreadcrumb(scrubBreadcrumb(crumb));
+    } else {
+      if (pendingDeliveryBreadcrumbs.length === 100) pendingDeliveryBreadcrumbs.shift();
+      pendingDeliveryBreadcrumbs.push(crumb);
+    }
+  } catch {
+    // Missing or failed telemetry must not affect asset loading.
+  }
+}
 
 // Captures raised before the SDK finished loading. The window this covers is
 // small but it is the one that matters: Pyodide boots from a CDN behind a
@@ -510,7 +529,9 @@ export function initOptions(release) {
     // Errors only. Performance tracing would multiply the event volume for a
     // browser app whose slow part is a CDN download nobody can act on.
     tracesSampleRate: 0,
-    maxBreadcrumbs: 30,
+    // A startup fetch produces both the SDK's HTTP breadcrumb and our delivery
+    // headers. Keep enough history for Pyodide plus the Python bridge files.
+    maxBreadcrumbs: 100,
     // Metrics default to on in the SDK; set explicitly for the same reason
     // sendDefaultPii is, because it is a decision rather than an inherited
     // default. Nothing is sent until a captureMetric() call site asks for it.
@@ -554,6 +575,8 @@ export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) }
     return null;
   }
   const stopBuffering = bufferEarlyErrors(win);
+  stopFetchRecording?.();
+  stopFetchRecording = installCdnResponseBreadcrumbs(win, recordDeliveryBreadcrumb);
   try {
     // Both are network round trips and neither needs the other, so they overlap
     // rather than adding up.
@@ -565,9 +588,15 @@ export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) }
     // unaffected; it simply reports nothing.
     pendingCaptures.length = 0;
     pendingMetrics.length = 0;
+    pendingDeliveryBreadcrumbs.length = 0;
+    stopFetchRecording?.();
+    stopFetchRecording = null;
     return null;
   } finally {
     stopBuffering();
+  }
+  for (const crumb of pendingDeliveryBreadcrumbs.splice(0)) {
+    recordDeliveryBreadcrumb(crumb);
   }
   drainPendingCaptures();
   drainPendingMetrics();
@@ -577,6 +606,9 @@ export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) }
 // Test seam: lets a test start from a known state rather than inheriting the
 // SDK a previous test installed.
 export function resetSentryForTests() {
+  stopFetchRecording?.();
+  stopFetchRecording = null;
+  pendingDeliveryBreadcrumbs.length = 0;
   sdk = null;
   pendingCaptures.length = 0;
   pendingMetrics.length = 0;
