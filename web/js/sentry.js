@@ -95,6 +95,9 @@ const IGNORE_ERRORS = Object.freeze([
   // Match the browser message even inside a Pyodide traceback, without hiding
   // other NetworkError or JsException failures. Debug logging is unaffected.
   /Failed to execute 'open' on 'SerialPort': Failed to open serial port\./,
+  // An unsupported browser is an expected capability limit, including when
+  // web/js/serial.js throws through Pyodide. Keep its local diagnostics.
+  /\bSerialUnsupportedError\b/,
   /\bRuntimePreconditionError\b/,
   /\bchirp\.errors\.(?:InvalidDataError|InvalidValueError|UnsupportedToneError|ImageDetectFailed|ImageMetadataInvalidModel|RadioNoResponse|RadioNoContactLikelyK1|RadioFixedBanks)\b/,
 ]);

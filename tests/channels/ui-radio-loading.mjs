@@ -725,6 +725,7 @@ test("serial and clone actions stay disabled until a radio is selected", async (
   const { radioSearchEl, document } = installUiDom();
   const { createUiController } = await import("../../web/js/ui.js");
   const ui = createUiController();
+  ui.setSerialController({ capability: { supported: true, native: true } });
 
   ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({ radios: STALE_TEST_CATALOG }),

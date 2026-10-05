@@ -15,6 +15,26 @@
 // own callers, the CLI, tests).
 export const PORT_SELECTION_CANCELLED = "PortSelectionCancelledError";
 
+// A capability limit stays recognizable after Pyodide flattens the exception.
+export const SERIAL_UNSUPPORTED = "SerialUnsupportedError";
+
+// Name transport capability refusals without coupling reporting to UI wording.
+export function createSerialUnsupportedError(message) {
+  const error = new Error(message);
+  error.name = SERIAL_UNSUPPORTED;
+  return error;
+}
+
+// Recognize both the bridge error and its serialized Python traceback.
+export function isSerialUnsupported(error) {
+  if (!error) return false;
+  if (error.name === SERIAL_UNSUPPORTED) return true;
+  const text = typeof error === "string"
+    ? error
+    : `${error.message || ""}\n${error.stack || ""}`;
+  return /\bSerialUnsupportedError\b/.test(text);
+}
+
 // The wording matters twice over. It has to read as a sentence to a user, and
 // it has to contain "No port selected" because that is the substring
 // classifyErrorKind() in web/js/ui/analytics.js matches to report the outcome

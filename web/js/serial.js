@@ -1,4 +1,4 @@
-import { createPortSelectionCancelledError } from "./serial-errors.js";
+import { createPortSelectionCancelledError, createSerialUnsupportedError } from "./serial-errors.js";
 import { createWebUsbSerial } from "./webusb-serial.js";
 import { createWebBluetoothSerial } from "./webbluetooth-serial.js";
 
@@ -149,7 +149,7 @@ export class BrowserSerialBridge {
     }
     if (this.preferredTransport === "webbluetooth") {
       if (!hasWebBluetooth()) {
-        throw new Error("Web Bluetooth is not supported in this browser.");
+        throw createSerialUnsupportedError("Web Bluetooth is not supported in this browser.");
       }
       this.serial = this._createWebBluetoothSerial();
       this.transport = "webbluetooth";
@@ -157,7 +157,7 @@ export class BrowserSerialBridge {
     }
     if (this.preferredTransport === "webusb") {
       if (!hasWebUsb()) {
-        throw new Error("WebUSB is not supported in this browser.");
+        throw createSerialUnsupportedError("WebUSB is not supported in this browser.");
       }
       this.serial = this._createWebUsbSerial();
       this.transport = "webusb";
@@ -165,7 +165,7 @@ export class BrowserSerialBridge {
     }
     if (this.preferredTransport === "webserial") {
       if (!hasNativeSerial()) {
-        throw new Error("Native Web Serial is not supported in this browser.");
+        throw createSerialUnsupportedError("Native Web Serial is not supported in this browser.");
       }
       this.serial = navigator.serial;
       this.transport = "webserial";
@@ -182,7 +182,7 @@ export class BrowserSerialBridge {
       this.transport = "webusb";
       return this.serial;
     }
-    throw new Error("Neither Web Serial nor WebUSB is supported in this browser.");
+    throw createSerialUnsupportedError("Neither Web Serial nor WebUSB is supported in this browser.");
   }
 
   // Show the browser's chooser and return the port the user picked. Both

@@ -211,7 +211,8 @@ test("dropping an .img file loads it through the binary codeplug loader", async 
 // disabled against a radio the UI was visibly holding.
 test("an .img load enables the serial actions on a session with nothing selected", async () => {
   const { window } = installUiDom();
-  await bootUi({ catalog: [...CATALOG, BETA_RADIO], imageRadio: BETA_RADIO });
+  const { ui } = await bootUi({ catalog: [...CATALOG, BETA_RADIO], imageRadio: BETA_RADIO });
+  ui.setSerialController({ capability: { supported: true, native: true } });
   const connectEl = globalThis.document.querySelector("#serial-connect-toggle");
   const downloadEl = globalThis.document.querySelector("#radio-download");
   assert.equal(connectEl.disabled, true);
