@@ -1,7 +1,7 @@
-// Silicon Labs CP2102 USB-UART driver implemented over WebUSB, exposing the
-// same subset of the Web Serial `SerialPort` interface as the FTDI, PL2303 and
-// CH340 drivers (open, readable, writable, setSignals, getSignals, getInfo,
-// close) so BrowserSerialBridge can use any of them interchangeably.
+// Silicon Labs CP2102 USB-UART driver implemented over WebUSB, implementing
+// the same serial transport contract (web/js/serial-transport.mjs) as the
+// FTDI, PL2303 and CH340 drivers -- plus getSignals, which only this chip can
+// answer -- so the serial bridge can use any of them interchangeably.
 //
 // Scope is the single-UART CP210x parts that speak the vendor protocol —
 // CP2101/2/3/4/9 and CP2102N. The multi-UART CP2105/CP2108 are out of scope,

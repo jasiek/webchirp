@@ -1,9 +1,10 @@
-// FTDI USB-UART driver implemented over WebUSB, exposing the subset of the Web
-// Serial `SerialPort` interface that BrowserSerialBridge uses (open, readable,
-// writable, setSignals, getInfo, close). This lets browsers that have WebUSB
-// but not Web Serial (e.g. Chrome on Android) talk to FTDI adapters such as the
-// FT231X, which are vendor-specific USB devices the generic CDC-ACM polyfill
-// cannot drive.
+// FTDI USB-UART driver implemented over WebUSB, implementing the serial
+// transport contract (web/js/serial-transport.mjs) the serial bridge drives:
+// Web Serial's open, readable, writable, setSignals, getInfo and close, plus
+// the members WebUsbTransport (web/js/webusb-transport.js) supplies. This lets
+// browsers that have WebUSB but not Web Serial (e.g. Chrome on Android) talk
+// to FTDI adapters such as the FT231X, which are vendor-specific USB devices
+// the generic CDC-ACM polyfill cannot drive.
 //
 // Protocol constants and the baud-rate divisor math follow libftdi.
 import { WebUsbTransport } from "./webusb-transport.js";

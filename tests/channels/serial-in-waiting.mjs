@@ -15,7 +15,7 @@ import { repoRoot } from "../support/repo-paths.mjs";
 // Python shim exposes it under both the modern and the legacy spelling.
 
 // ---------------------------------------------------------------------------
-// The JS half: BrowserSerialBridge.inWaiting()
+// The JS half: the serial bridge's inWaiting() (web/js/serial-bridge.mjs)
 // ---------------------------------------------------------------------------
 
 import { makeEmitter, makeRecordingPort } from "../support/fake-serial.mjs";

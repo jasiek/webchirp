@@ -1,7 +1,6 @@
-// Prolific PL2303 USB-UART driver implemented over WebUSB, exposing the same
-// subset of the Web Serial `SerialPort` interface as the FTDI driver (open,
-// readable, writable, setSignals, getInfo, close) so BrowserSerialBridge can
-// use either interchangeably.
+// Prolific PL2303 USB-UART driver implemented over WebUSB, implementing the
+// same serial transport contract (web/js/serial-transport.mjs) as the FTDI
+// driver, so the serial bridge can use either interchangeably.
 //
 // Protocol references: the Linux kernel driver (drivers/usb/serial/pl2303.c)
 // and usb-serial-for-android's ProlificSerialDriver, cross-checked against the

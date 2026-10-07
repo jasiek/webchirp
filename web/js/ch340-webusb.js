@@ -1,7 +1,7 @@
-// WCH CH340/CH341 USB-UART driver implemented over WebUSB, exposing the same
-// subset of the Web Serial `SerialPort` interface as the FTDI and PL2303
-// drivers (open, readable, writable, setSignals, getInfo, close) so
-// BrowserSerialBridge can use any of them interchangeably.
+// WCH CH340/CH341 USB-UART driver implemented over WebUSB, implementing the
+// same serial transport contract (web/js/serial-transport.mjs) as the FTDI
+// and PL2303 drivers, so the serial bridge can use any of them
+// interchangeably.
 //
 // Protocol reference: the Linux kernel driver (drivers/usb/serial/ch341.c),
 // cross-checked against usb-serial-for-android's Ch34xSerialDriver. The chip

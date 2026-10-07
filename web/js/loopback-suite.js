@@ -13,7 +13,7 @@
 // timeouts and reopen.
 //
 // The session below deliberately reimplements read buffering rather than
-// reusing BrowserSerialBridge: the bridge buffers for CHIRP's byte-at-a-time
+// reusing the serial bridge (web/js/serial-bridge.mjs): the bridge buffers for CHIRP's byte-at-a-time
 // protocol needs, while a test needs exact-length reads, explicit timeouts and
 // a drain primitive, and must talk to a port it was handed rather than one it
 // requested.
@@ -207,7 +207,7 @@ export function createPortSession(port) {
         // Already released.
       }
       // Release the lock rather than closing the writer, mirroring
-      // BrowserSerialBridge._teardown(). Two reasons, both load-bearing:
+      // the serial bridge's _teardown(). Two reasons, both load-bearing:
       // close() does NOT release the lock (only releaseLock() does), and a
       // still-locked writable makes SerialPort.close() reject with
       // InvalidStateError — which silently leaves the port open. close() also

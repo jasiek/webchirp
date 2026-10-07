@@ -128,7 +128,8 @@ function installSerialGlobals(serialBridge, target = globalThis) {
 export class TestRadioHarness {
   // serialBridge lets a caller supply its own bridge object - a simulated
   // radio, say - in place of the stub or the real serial port. It only has to
-  // answer the ops installSerialGlobals() forwards.
+  // answer the bridge methods createSerialRpcHandler() calls
+  // (web/js/serial-globals.mjs).
   constructor({
     repoRoot,
     chirpDir = "",
