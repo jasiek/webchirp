@@ -236,45 +236,6 @@ test("a chunk the reopened stream has ready is not overwritten by the kept bytes
   assert.deepEqual(Array.from(bridge.readBuffer), [0x06, 0x42]);
 });
 
-// The four WebUSB chip drivers program the line at 8N1 and read none of open()'s
-// framing options, so honouring a driver's parity or stop-bit change is
-// something only a native Web Serial port (or the CDC polyfill) can do. The
-// bridge has to refuse rather than reopen and claim success -- wrong framing
-// corrupts every byte, and the clone would fail on garbage naming nothing.
-test("an adapter that cannot change framing refuses instead of pretending", async (t) => {
-  const { bridge, port } = await openBridge(t);
-  port.capabilities = { framing: false, signals: true, reconfigure: "reopen" };
-  const opens = port.opens.length;
-
-  await assert.rejects(
-    () => bridge.reconfigure({ parity: "even" }),
-    /cannot change parity: it runs at 8N1 only/,
-  );
-  assert.equal(port.opens.length, opens, "the port must not have been reopened");
-});
-
-test("such an adapter still takes a baud-rate change", async (t) => {
-  const { bridge, port } = await openBridge(t);
-  port.capabilities = { framing: false, signals: true, reconfigure: "reopen" };
-
-  const res = await bridge.reconfigure({ baudRate: 57600 });
-
-  assert.equal(res.reconfigured, true);
-  assert.equal(port.opens.at(-1).baudRate, 57600);
-});
-
-// Every in-repo WebUSB chip driver must declare the limitation, or the refusal
-// above silently stops applying to it.
-test("each WebUSB chip driver declares that it cannot change framing", async () => {
-  const drivers = [
-    ["../../web/js/ftdi-webusb.js", "FtdiSerialPort"],
-    ["../../web/js/pl2303-webusb.js", "Pl2303SerialPort"],
-    ["../../web/js/ch340-webusb.js", "Ch340SerialPort"],
-    ["../../web/js/cp2102-webusb.js", "Cp2102SerialPort"],
-  ];
-  for (const [path, className] of drivers) {
-    const mod = await import(path);
-    const port = new mod[className]({});
-    assert.equal(port.capabilities.framing, false, `${className} must declare capabilities.framing`);
-  }
-});
+// Whether a port that declares framing: false refuses a framing change -- and
+// still takes a rate change -- is a case of
+// tests/webusb/serial-transport-conformance.mjs, run against every transport.

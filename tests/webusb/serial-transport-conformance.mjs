@@ -255,6 +255,9 @@ for (const { name, create } of TRANSPORTS) {
     });
 
     test("close releases the device and a second open works", async () => {
+      // Every rate change at clone start reopens the same port object. The
+      // chip drivers once latched the flag their read loop watches at close(),
+      // so a reopened port handed back streams that delivered nothing.
       const { port } = create();
       await port.open(OPEN_OPTIONS);
       assert.deepEqual(await roundTrip(port, [0x01, 0x02]), [0x01, 0x02]);
