@@ -66,6 +66,7 @@ export function makeWindow({
     injected,
     document: {
       createElement: () => ({}),
+      querySelector: () => null,
       head: {
         appendChild(node) {
           injected.push(node);

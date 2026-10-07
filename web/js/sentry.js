@@ -19,6 +19,8 @@
 
 import { isPythonError, isRuntimeCallError } from "./runtime-errors.mjs";
 import { isSerialUnsupported } from "./serial-errors.js";
+import { createTracingOptions } from "./sentry-tracing.js";
+import { resolveRepeaterApiBase } from "./datasources.js";
 
 // Project this app reports into. Unlike a secret, a DSN is meant to be public --
 // it only grants the right to submit events -- which is why it can sit in a
@@ -564,9 +566,9 @@ export function initOptions(release) {
     // No IP addresses, no cookies, no request headers. The default, set here
     // because it is the kind of default that must not change silently.
     sendDefaultPii: false,
-    // Errors only. Performance tracing would multiply the event volume for a
-    // browser app whose slow part is a CDN download nobody can act on.
+    // Baseline reporting remains usable if optional tracing cannot initialize.
     tracesSampleRate: 0,
+    tracePropagationTargets: [],
     maxBreadcrumbs: 30,
     // Metrics default to on in the SDK; set explicitly for the same reason
     // sendDefaultPii is, because it is a decision rather than an inherited
@@ -621,7 +623,15 @@ export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) }
     // Both are network round trips and neither needs the other, so they overlap
     // rather than adding up.
     const [module, release] = await Promise.all([loadSdk(), resolveRelease(win)]);
-    module.init(initOptions(release));
+    let tracingOptions = {};
+    try {
+      tracingOptions = createTracingOptions(module, resolveRepeaterApiBase(win.document));
+    } catch (error) {
+      // Retain queued crashes and report the tracing failure after the baseline
+      // SDK starts, rather than losing all diagnostics to an optional feature.
+      captureError(error, { action: "Tracing initialization" });
+    }
+    module.init({ ...initOptions(release), ...tracingOptions });
     sdk = module;
   } catch {
     // The CDN is blocked, offline, or serving something unusable. The app is

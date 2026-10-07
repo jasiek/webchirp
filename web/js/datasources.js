@@ -120,8 +120,8 @@ const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
 // features) wins when the tag is present; without the tag the default applies.
 // Shared rather than owned by the query modal, because the hover map reads the
 // same deployment setting and the two must not disagree about it.
-export function resolveRepeaterApiBase() {
-  const meta = document.querySelector(`meta[name="${REPEATER_API_BASE_META}"]`);
+export function resolveRepeaterApiBase(doc = globalThis.document) {
+  const meta = doc?.querySelector(`meta[name="${REPEATER_API_BASE_META}"]`);
   if (meta) {
     return String(meta.getAttribute("content") || "").trim();
   }
