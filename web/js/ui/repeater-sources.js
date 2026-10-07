@@ -1,3 +1,4 @@
+import { tracedFetch } from "../sentry.js";
 import {
   buildPrzemiennikiRows,
   parsePrzemiennikiMetaJson,
@@ -300,7 +301,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
         return summarizeRemote(cached, values.position, radiusKm);
       }
       const text = await withRequestTimeout(`${label} preview`, async (signal) => {
-        const response = await fetch(url.toString(), { signal });
+        const response = await tracedFetch(url.toString(), { signal });
         if (!response.ok) {
           throw new Error(`${actionLabel} preview failed: HTTP ${response.status}`);
         }
@@ -376,7 +377,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
             // stalled proxy would otherwise leave the toolbar click doing nothing
             // visible for minutes.
             const text = await withRequestTimeout(`${label} dictionary request`, async (signal) => {
-              const response = await fetch(metaUrl, { signal });
+              const response = await tracedFetch(metaUrl, { signal });
               if (!response.ok) {
                 throw new Error(`Dictionary request failed: HTTP ${response.status}`);
               }
@@ -412,7 +413,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
         // error-path read of a failed response can stall exactly as the success
         // path can, and either one strands the submit button on "Querying...".
         const text = await withRequestTimeout(`${label} query`, async (signal) => {
-          const response = await fetch(url.toString(), { signal });
+          const response = await tracedFetch(url.toString(), { signal });
           if (!response.ok) {
             const body = await response.text();
             throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);

@@ -92,6 +92,7 @@ function makeSentrySdk() {
   return {
     captured,
     init() {},
+    browserTracingIntegration: () => ({ name: "BrowserTracing" }),
     withScope(fn) {
       const tags = {};
       this.pendingTags = tags;

@@ -1,3 +1,4 @@
+import { tracedFetch } from "./sentry.js";
 import { withRequestTimeout } from "./request-timeout.js";
 import { highestPowerOption, setHighestPower } from "./row-power.js";
 import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.js";
@@ -158,7 +159,7 @@ export async function fetchCitySuggestions(citiesUrl, query, near = null) {
   // The body is read inside the deadline for the same reason every other
   // directory request reads it there: fetch() resolves on headers alone.
   const body = await withRequestTimeout("City lookup", async (signal) => {
-    const response = await fetch(url.toString(), { signal });
+    const response = await tracedFetch(url.toString(), { signal });
     if (!response.ok) {
       throw new Error(`City lookup failed: HTTP ${response.status}`);
     }

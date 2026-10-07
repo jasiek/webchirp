@@ -1,4 +1,4 @@
-// Sentry error reporting.
+// Sentry error reporting and sampled API tracing.
 //
 // Shaped deliberately like web/js/analytics.js, and for the same reasons: the
 // production-host gate, the vendor loader and the redaction rules all live in
@@ -49,6 +49,29 @@ export const SENTRY_HOSTS = Object.freeze([
   "www.codeplug.org",
   "webchirp.org",
 ]);
+
+// Only the first-party API receives tracing headers; other origins may reject
+// them in CORS preflight and must not inherit this project's trace context.
+const TRACE_PROPAGATION_TARGETS = [/^https:\/\/api\.codeplug\.org(?:\/|$)/];
+
+// Match the same API allowlist for both automatic HTTP spans and their parents.
+function isTracedApiRequest(input) {
+  const url = typeof input?.url === "string" ? input.url : String(input);
+  return TRACE_PROPAGATION_TARGETS.some((target) => target.test(url));
+}
+
+// Give later API calls a parent even after the page-load span has finished.
+// Fetch runs inside the active span so BrowserTracing propagates its context;
+// the fixed name carries neither the query nor a callsign embedded in a path.
+export function tracedFetch(input, init) {
+  const run = () => globalThis.fetch(input, init);
+  if (!sdk || !isTracedApiRequest(input)) {
+    return run();
+  }
+  const start = () => sdk.startSpan({ name: "API request", op: "api.request" }, run);
+  // Keep a caller's active trace, otherwise sample each new request independently.
+  return sdk.getActiveSpan() ? start() : sdk.startNewTrace(start);
+}
 
 // Browser noise that is never actionable: a benign layout notification. It is
 // a native browser error with nothing but its message to go on, so it stays a
@@ -143,6 +166,9 @@ const SCRUB_RULES = Object.freeze([
   // Query strings first. A repeater query puts the user's coordinates in the
   // URL, so the URL of a failed fetch is a location fix.
   [/(https?:\/\/[^\s"'<>]*?)\?[^\s"'<>]*/gi, "$1?[query]"],
+  [/(https?:\/\/[^\s"'<>]*?)#[^\s"'<>]*/gi, "$1#[fragment]"],
+  // Lookup paths carry a callsign even when the request has no query string.
+  [/\/lookup\/[^/?#\s"'<>]+/g, "/lookup/:callsign"],
   // Codeplug file names, which are named after their owner as often as not.
   // This is defence in depth: nothing in this app throws with a file name in
   // the message, and CHIRP is handed bytes rather than a name. It matches a
@@ -320,6 +346,41 @@ export function scrubEvent(event) {
   }
   if (typeof event.request?.url === "string") {
     event.request.url = scrubText(event.request.url);
+  }
+  return event;
+}
+
+// Sanitize the SDK's URL attributes without touching trace/span identifiers.
+function scrubTraceSpan(span) {
+  if (!span || typeof span !== "object") {
+    return span;
+  }
+  span.description = scrubText(span.description);
+  for (const key of Object.keys(span.data || {})) {
+    if (/^(?:http|url)\.(?:query|fragment)$/.test(key)) {
+      delete span.data[key];
+    } else if (["url", "http.url", "url.full", "url.path", "http.target", "http.route"].includes(key)) {
+      span.data[key] = scrubText(span.data[key]);
+    }
+  }
+  return span;
+}
+
+// Transactions bypass beforeSend, so redact their root and child spans here.
+export function scrubTransaction(event) {
+  scrubEvent(event);
+  event.transaction = scrubText(event.transaction);
+  if (event.request) {
+    event.request.url = scrubText(event.request.url);
+    delete event.request.query_string;
+    delete event.request.fragment;
+    delete event.request.headers;
+    delete event.request.cookies;
+    delete event.request.data;
+  }
+  scrubTraceSpan(event.contexts?.trace);
+  for (const span of event.spans || []) {
+    scrubTraceSpan(span);
   }
   return event;
 }
@@ -556,7 +617,7 @@ function drainPendingMetrics() {
 
 // Options handed to Sentry.init. Split out so a test can assert on them without
 // standing up the real SDK.
-export function initOptions(release) {
+export function initOptions(release, integrations = []) {
   return {
     dsn: SENTRY_DSN,
     release,
@@ -564,9 +625,18 @@ export function initOptions(release) {
     // No IP addresses, no cookies, no request headers. The default, set here
     // because it is the kind of default that must not change silently.
     sendDefaultPii: false,
-    // Errors only. Performance tracing would multiply the event volume for a
-    // browser app whose slow part is a CDN download nobody can act on.
-    tracesSampleRate: 0,
+    // Sample roots once; the API continues the browser's sampling decision.
+    tracesSampleRate: 0.01,
+    integrations,
+    tracePropagationTargets: [...TRACE_PROPAGATION_TARGETS],
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: { request: false, response: false },
+      httpBodies: [],
+      urlQueryParams: false,
+    },
+    beforeSendTransaction: scrubTransaction,
     maxBreadcrumbs: 30,
     // Metrics default to on in the SDK; set explicitly for the same reason
     // sendDefaultPii is, because it is a decision rather than an inherited
@@ -621,7 +691,16 @@ export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) }
     // Both are network round trips and neither needs the other, so they overlap
     // rather than adding up.
     const [module, release] = await Promise.all([loadSdk(), resolveRelease(win)]);
-    module.init(initOptions(release));
+    module.init(initOptions(release, [module.browserTracingIntegration({
+      // API request parents are explicit, including requests long after startup.
+      // Skip unrelated browser performance and DOM-selector instrumentation.
+      instrumentPageLoad: false,
+      instrumentNavigation: false,
+      enableInp: false,
+      enableLongTask: false,
+      enableLongAnimationFrame: false,
+      shouldCreateSpanForRequest: isTracedApiRequest,
+    })]));
     sdk = module;
   } catch {
     // The CDN is blocked, offline, or serving something unusable. The app is

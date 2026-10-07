@@ -24,6 +24,7 @@ function makeSdk() {
       distribution: (name, value, opts) => recorded.push({ type: "distribution", name, value, ...opts }),
     },
     init() {},
+    browserTracingIntegration: () => ({ name: "BrowserTracing" }),
     withScope() {},
     captureException() {},
   };

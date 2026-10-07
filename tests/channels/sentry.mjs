@@ -19,6 +19,8 @@ import {
   scrubMetric,
   scrubMetricAttributes,
   scrubText,
+  scrubTransaction,
+  tracedFetch,
   setContextProvider,
 } from "../../web/js/sentry.js";
 import { ANALYTICS_HOSTS } from "../../web/js/analytics.js";
@@ -40,6 +42,10 @@ function makeSdk() {
   let options = null;
   return {
     captured,
+    browserTracingIntegration: (options) => ({ name: "BrowserTracing", options }),
+    startSpan: (options, run) => run(),
+    getActiveSpan: () => undefined,
+    startNewTrace: (run) => run(),
     // Metrics go down a pipeline of their own in the real SDK, so the fake
     // keeps them in a separate list rather than folding them into captured.
     recorded,
@@ -255,12 +261,21 @@ test("scrubMetric leaves the metric's own shape alone", () => {
   assert.deepEqual(metric.attributes, { flow: "radio_upload" });
 });
 
-test("init options disable tracing and PII, and drop console breadcrumbs", () => {
+test("init options sample one percent of API traces without PII or console breadcrumbs", () => {
   const options = initOptions("webchirp@abc123");
   assert.equal(options.dsn, SENTRY_DSN);
   assert.equal(options.release, "webchirp@abc123");
   assert.equal(options.sendDefaultPii, false);
-  assert.equal(options.tracesSampleRate, 0);
+  assert.equal(options.tracesSampleRate, 0.01);
+  const matches = (url) => options.tracePropagationTargets.some((target) => target.test(url));
+  assert.equal(matches("https://api.codeplug.org/repeaterbook?lat=51.5"), true);
+  assert.equal(matches("https://api.codeplug.org.evil.example/"), false);
+  assert.equal(matches("https://example.com/?url=https://api.codeplug.org/"), false);
+  assert.equal(matches("https://cdn.jsdelivr.net/"), false);
+  assert.deepEqual(options.dataCollection, {
+    userInfo: false, cookies: false, httpHeaders: { request: false, response: false },
+    httpBodies: [], urlQueryParams: false,
+  });
   // The debug panel exists to print full tracebacks; anything on the console
   // has already been through it.
   assert.equal(options.beforeBreadcrumb({ category: "console", message: "145.500000" }), null);
@@ -336,6 +351,12 @@ test("init loads the SDK, tags the release, and reports afterwards", async () =>
   const result = await initSentry(win, { loadSdk: async () => sdk });
   assert.equal(result, sdk);
   assert.equal(sdk.getOptions().release, "webchirp@deadbeef");
+  const integration = sdk.getOptions().integrations[0];
+  assert.equal(integration.name, "BrowserTracing");
+  assert.equal(integration.options.instrumentPageLoad, false);
+  assert.equal(integration.options.enableInp, false);
+  assert.equal(integration.options.shouldCreateSpanForRequest("https://api.codeplug.org/cities"), true);
+  assert.equal(integration.options.shouldCreateSpanForRequest("https://cdn.jsdelivr.net/"), false);
 
   captureError(new Error("clone failed"), {
     action: "Download",
@@ -551,5 +572,64 @@ test("a missing version.json costs the release tag, not the reporting", async ()
   await initSentry(win, { loadSdk: async () => sdk });
   assert.equal(sdk.getOptions().release, undefined);
   assert.equal(sdk.getOptions().dsn, SENTRY_DSN);
+  resetSentryForTests();
+});
+
+
+test("transaction redaction preserves trace IDs while removing queries and lookup callsigns", () => {
+  const traceId = "12345678901234567890123456789012";
+  const event = initOptions().beforeSendTransaction({
+    type: "transaction",
+    transaction: "GET /lookup/GB3IC",
+    breadcrumbs: [{ category: "fetch", data: { url: "https://api.codeplug.org/lookup/GB3IC" } }],
+    request: { url: "https://api.codeplug.org/lookup/GB3IC?lat=51.5074", query_string: "q=London", headers: { secret: "value" } },
+    contexts: { trace: { trace_id: traceId, span_id: "1234567890123456", data: { "url.full": "https://codeplug.org/?locator=IO82MM", "url.query": "locator=IO82MM" } } },
+    spans: [{ span_id: "1234567890123456", parent_span_id: "8765432109876543", description: "GET https://api.codeplug.org/lookup/GB3IC?lon=-0.1278", data: { url: "https://api.codeplug.org/cities?q=London", "http.query": "q=London&lat=51.5074", "http.fragment": "private", "http.url": "https://api.codeplug.org/lookup/GB3IC#private", "http.response.status_code": 200 } }],
+  });
+  const json = JSON.stringify(event);
+  for (const sensitive of ["GB3IC", "London", "51.5074", "-0.1278", "IO82MM", "secret", "private"]) {
+    assert.equal(json.includes(sensitive), false, sensitive);
+  }
+  assert.equal(event.transaction, "GET /lookup/:callsign");
+  assert.equal(event.contexts.trace.trace_id, traceId);
+  assert.equal(event.spans[0].span_id, "1234567890123456");
+  assert.equal(event.spans[0].parent_span_id, "8765432109876543");
+  assert.equal(event.spans[0].data["http.response.status_code"], 200);
+  assert.equal(scrubTransaction({ spans: [] }).spans.length, 0);
+});
+
+test("late API fetches run inside a parent span and preserve responses and failures", async (t) => {
+  resetSentryForTests();
+  const sdk = makeSdk();
+  let active = false;
+  const parents = [];
+  let roots = 0;
+  sdk.startNewTrace = (run) => { roots++; return run(); };
+  sdk.startSpan = (options, run) => {
+    parents.push(options);
+    active = true;
+    try { return run(); } finally { active = false; }
+  };
+  await initSentry(makeWindow(), { loadSdk: async () => sdk });
+  const response = new Response("ok");
+  const init = { signal: new AbortController().signal };
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async (input, options) => {
+    calls++;
+    assert.equal(active, input === "https://api.codeplug.org/cities?q=London");
+    assert.equal(options, init);
+    return response;
+  });
+  assert.equal(await tracedFetch("https://api.codeplug.org/cities?q=London", init), response);
+  assert.equal(await tracedFetch("https://example.com/", init), response);
+  assert.equal(calls, 2);
+  assert.equal(roots, 1);
+  assert.deepEqual(parents, [{ name: "API request", op: "api.request" }]);
+  sdk.getActiveSpan = () => ({ name: "existing parent" });
+  await tracedFetch("https://api.codeplug.org/cities?q=London", init);
+  assert.equal(roots, 1, "an active parent must retain its existing trace");
+  const failure = new TypeError("Failed to fetch");
+  t.mock.method(globalThis, "fetch", async () => { throw failure; });
+  await assert.rejects(tracedFetch("https://api.codeplug.org/repeaterbook", init), (error) => error === failure);
   resetSentryForTests();
 });

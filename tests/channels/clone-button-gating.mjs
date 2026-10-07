@@ -114,6 +114,7 @@ test("unsupported transports never count as failed connects while adapter failur
   const metrics = [];
   await initSentry(makeWindow(), { loadSdk: async () => ({
     init() {},
+    browserTracingIntegration: () => ({ name: "BrowserTracing" }),
     metrics: { count: (name, value, options) => metrics.push({ name, value, ...options }) },
   }) });
   const named = createSerialUnsupportedError("Transport unavailable.");

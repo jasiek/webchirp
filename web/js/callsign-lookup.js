@@ -1,3 +1,4 @@
+import { tracedFetch } from "./sentry.js";
 import { firstText, parseQrgMhz, parseRxfLocation, parseXmlDocument } from "./rxf.js";
 
 // Per-callsign position lookup behind the channel grid's context map
@@ -105,7 +106,7 @@ const LOOKUP_TIMEOUT_MS = 5000;
 //
 // `fetchImpl` exists for the headless tests, which have no network and need to
 // count requests to prove the cache works.
-export function createCallsignLookup(lookupUrl, { fetchImpl = (...args) => fetch(...args) } = {}) {
+export function createCallsignLookup(lookupUrl, { fetchImpl = tracedFetch } = {}) {
   // Callsign -> in-flight or settled promise of that callsign's entries. It
   // serves two purposes the HTTP cache cannot: it collapses the burst of
   // hovers a pointer crossing one cell produces into a single request, and it
