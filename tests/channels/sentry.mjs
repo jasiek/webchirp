@@ -337,7 +337,7 @@ test("init loads the SDK, tags the release, and reports afterwards", async () =>
   const result = await initSentry(win, { loadSdk: async () => sdk });
   assert.equal(result, sdk);
   assert.equal(sdk.getOptions().release, "webchirp@deadbeef");
-  assert.equal(sdk.getOptions().tracesSampleRate, 1);
+  assert.equal(sdk.getOptions().tracesSampleRate, 0.1);
   assert.equal(sdk.getOptions().traceLifecycle, "stream");
   assert.ok(sdk.getOptions().integrations.some(({ name }) => name === "BrowserTracing"));
 
@@ -348,6 +348,41 @@ test("init loads the SDK, tags the release, and reports afterwards", async () =>
   assert.equal(sdk.captured.length, 1);
   assert.equal(sdk.captured[0].tags.action, "Download");
   assert.equal(sdk.captured[0].tags.error_kind, "checksum");
+  resetSentryForTests();
+});
+
+test("tracing initialization uses the deployment's configured API base", async () => {
+  resetSentryForTests();
+  const sdk = makeSdk();
+  const win = makeWindow();
+  win.document.querySelector = () => ({ getAttribute: () => "https://proxy.example/api" });
+  await initSentry(win, { loadSdk: async () => sdk });
+  assert.ok(sdk.getOptions().tracePropagationTargets.some((pattern) => pattern.test("https://proxy.example/api/irts")));
+  assert.equal(sdk.getOptions().tracePropagationTargets.some((pattern) => pattern.test("https://api.codeplug.org/irts")), false);
+  resetSentryForTests();
+});
+
+test("missing or throwing tracing factories preserve errors and metrics", async () => {
+  for (const factory of ["browserTracingIntegration", "spanStreamingIntegration", "withStreamedSpan"]) {
+    for (const throws of [false, true]) {
+      resetSentryForTests();
+      const sdk = makeSdk();
+      sdk[factory] = throws ? () => { throw new Error("Tracing factory failed"); } : undefined;
+      const queued = new Error("queued crash");
+      captureError(queued);
+      captureMetric("flow.completed", { type: "count", value: 1, attributes: { flow: "radio_download" } });
+      const result = await initSentry(makeWindow(), { loadSdk: async () => sdk });
+      assert.equal(result, sdk);
+      assert.equal(sdk.getOptions().tracesSampleRate, 0);
+      assert.deepEqual(sdk.getOptions().tracePropagationTargets, []);
+      assert.equal(sdk.captured[0].error, queued);
+      assert.equal(sdk.captured[1].tags.action, "Tracing initialization");
+      assert.equal(sdk.recorded.length, 1);
+      const later = new Error("later crash");
+      captureError(later);
+      assert.equal(sdk.captured.at(-1).error, later);
+    }
+  }
   resetSentryForTests();
 });
 
