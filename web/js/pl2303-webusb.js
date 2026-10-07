@@ -465,5 +465,8 @@ export class Pl2303SerialPort extends WebUsbTransport {
     } catch {
       // Ignore close errors.
     }
+    // A closed port has no streams, as on Web Serial.
+    this.readable = null;
+    this.writable = null;
   }
 }

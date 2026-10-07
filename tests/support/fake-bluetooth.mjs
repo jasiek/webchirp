@@ -2,7 +2,9 @@ import { makeEmitter } from "./fake-serial.mjs";
 
 // Model the verified dongle GATT surface, recording operation order and letting
 // tests pause or reject an operation without substituting the serial provider.
-export function makeBluetoothDongle({ onOperation = async () => {} } = {}) {
+// echo: true jumpers the dongle's UART TX to RX, so every byte written to FF02
+// comes back as an FF01 notification on a later turn, as a loopback plug does.
+export function makeBluetoothDongle({ onOperation = async () => {}, echo = false } = {}) {
   const calls = [];
   const characteristics = new Map();
 
@@ -12,6 +14,19 @@ export function makeBluetoothDongle({ onOperation = async () => {} } = {}) {
     const call = { operation, ...(bytes ? { bytes: Array.from(bytes) } : {}) };
     calls.push(call);
     await onOperation(call);
+    if (echo && operation === "ff02:command") {
+      setImmediate(() => {
+        if (device.gatt.connected) {
+          notify(new DataView(Uint8Array.from(call.bytes).buffer));
+        }
+      });
+    }
+  }
+
+  // Deliver the original DataView, including its byte window, as browsers do.
+  function notify(value) {
+    rx.value = value;
+    rx.emit("characteristicvaluechanged", { target: rx });
   }
 
   // Use the same event-listener bookkeeping as the other serial test fakes.
@@ -49,9 +64,5 @@ export function makeBluetoothDongle({ onOperation = async () => {} } = {}) {
       }
     },
   } });
-  return {
-    device, tx, rx, baud, calls, characteristics,
-    // Deliver the original DataView, including its byte window, as browsers do.
-    notify(value) { rx.value = value; rx.emit("characteristicvaluechanged", { target: rx }); },
-  };
+  return { device, tx, rx, baud, calls, characteristics, notify };
 }

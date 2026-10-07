@@ -740,5 +740,8 @@ export class Cp2102SerialPort extends WebUsbTransport {
       // Device may already be gone.
     }
     await this._releaseDevice();
+    // A closed port has no streams, as on Web Serial.
+    this.readable = null;
+    this.writable = null;
   }
 }
