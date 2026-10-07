@@ -1,4 +1,4 @@
-// Sentry error reporting.
+// Sentry error reporting and sampled API tracing.
 //
 // Shaped deliberately like web/js/analytics.js, and for the same reasons: the
 // production-host gate, the vendor loader and the redaction rules all live in
@@ -19,6 +19,7 @@
 
 import { isPythonError, isRuntimeCallError } from "./runtime-errors.mjs";
 import { isSerialUnsupported } from "./serial-errors.js";
+import { DEFAULT_REPEATER_API_BASE } from "./repeater-api.js";
 
 // Project this app reports into. Unlike a secret, a DSN is meant to be public --
 // it only grants the right to submit events -- which is why it can sit in a
@@ -49,6 +50,45 @@ export const SENTRY_HOSTS = Object.freeze([
   "www.codeplug.org",
   "webchirp.org",
 ]);
+
+// Deployment overrides do not automatically become trusted tracing targets.
+// Share the production base with endpoint configuration without importing UI.
+function isTracedApiRequest(input) {
+  try {
+    const value = typeof input?.url === "string" ? input.url : String(input);
+    return new URL(value).origin === new URL(DEFAULT_REPEATER_API_BASE).origin;
+  } catch {
+    return false;
+  }
+}
+
+// Page-load and navigation tracing are disabled: each explicit API exchange
+// needs its own root unless a caller already supplied an active parent.
+// Keep all SDK calls outside the operation, so telemetry cannot retry a fetch,
+// replace its error, or end the trace before its body consumer has settled.
+export async function traceApiRequest(input, run) {
+  let span;
+  let headers = {};
+  try {
+    if (sdk && isTracedApiRequest(input)) {
+      const create = () => sdk.startInactiveSpan({ name: "API request", op: "http.client" });
+      span = sdk.getActiveSpan() ? create() : sdk.startNewTrace(create);
+      headers = sdk.getTraceData({ span });
+    }
+  } catch {
+    // A broken SDK costs telemetry, never the API exchange.
+  }
+  try {
+    const result = await run(headers);
+    try { span?.setStatus({ code: 1 }); } catch { /* Telemetry only. */ }
+    return result;
+  } catch (error) {
+    try { span?.setStatus({ code: 2, message: "internal_error" }); } catch { /* Telemetry only. */ }
+    throw error;
+  } finally {
+    try { span?.end(); } catch { /* Telemetry only. */ }
+  }
+}
 
 // Browser noise that is never actionable: a benign layout notification. It is
 // a native browser error with nothing but its message to go on, so it stays a
@@ -143,6 +183,9 @@ const SCRUB_RULES = Object.freeze([
   // Query strings first. A repeater query puts the user's coordinates in the
   // URL, so the URL of a failed fetch is a location fix.
   [/(https?:\/\/[^\s"'<>]*?)\?[^\s"'<>]*/gi, "$1?[query]"],
+  [/(https?:\/\/[^\s"'<>]*?)#[^\s"'<>]*/gi, "$1#[fragment]"],
+  // Lookup paths carry a callsign even when the request has no query string.
+  [/\/lookup\/[^/?#\s"'<>]+/g, "/lookup/:callsign"],
   // Codeplug file names, which are named after their owner as often as not.
   // This is defence in depth: nothing in this app throws with a file name in
   // the message, and CHIRP is handed bytes rather than a name. It matches a
@@ -320,6 +363,47 @@ export function scrubEvent(event) {
   }
   if (typeof event.request?.url === "string") {
     event.request.url = scrubText(event.request.url);
+  }
+  return event;
+}
+
+// Sanitize the SDK's URL attributes without touching trace/span identifiers.
+function scrubTraceSpan(span) {
+  if (!span || typeof span !== "object") {
+    return span;
+  }
+  if (typeof span.description === "string") {
+    span.description = scrubText(span.description);
+  }
+  for (const key of Object.keys(span.data || {})) {
+    if (/^(?:http|url)\.(?:.*\.)?(?:query|fragment|body|cookies?|headers?)(?:[._]|$)/.test(key)) {
+      delete span.data[key];
+    } else if (typeof span.data[key] === "string"
+      && !/(?:^|[._])(?:trace|span|parent_span|segment)[._]id$/.test(key)) {
+      // SDK attributes can gain URL-bearing keys; redact values rather than
+      // maintaining a list of URL keys. Identifiers still join trace segments.
+      span.data[key] = scrubText(span.data[key]);
+    }
+  }
+  return span;
+}
+
+// Transactions bypass beforeSend, so redact their root and child spans here.
+export function scrubTransaction(event) {
+  scrubEvent(event);
+  if (typeof event.transaction === "string") {
+    event.transaction = scrubText(event.transaction);
+  }
+  if (event.request) {
+    delete event.request.query_string;
+    delete event.request.fragment;
+    delete event.request.headers;
+    delete event.request.cookies;
+    delete event.request.data;
+  }
+  scrubTraceSpan(event.contexts?.trace);
+  for (const span of event.spans || []) {
+    scrubTraceSpan(span);
   }
   return event;
 }
@@ -564,9 +648,19 @@ export function initOptions(release) {
     // No IP addresses, no cookies, no request headers. The default, set here
     // because it is the kind of default that must not change silently.
     sendDefaultPii: false,
-    // Errors only. Performance tracing would multiply the event volume for a
-    // browser app whose slow part is a CDN download nobody can act on.
-    tracesSampleRate: 0,
+    // Sample roots once; the API continues the browser's sampling decision.
+    tracesSampleRate: 0.01,
+    // Headers are attached only by web/js/api-request.js to an explicit span.
+    // A future plain fetch must not inherit a page-lifetime propagation context.
+    tracePropagationTargets: [],
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: { request: false, response: false },
+      httpBodies: [],
+      urlQueryParams: false,
+    },
+    beforeSendTransaction: scrubTransaction,
     maxBreadcrumbs: 30,
     // Metrics default to on in the SDK; set explicitly for the same reason
     // sendDefaultPii is, because it is a decision rather than an inherited

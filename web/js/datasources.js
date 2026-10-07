@@ -1,3 +1,6 @@
+import { apiRequest } from "./api-request.js";
+import { DEFAULT_REPEATER_API_BASE } from "./repeater-api.js";
+export { resolveRepeaterApiBase } from "./repeater-api.js";
 import { withRequestTimeout } from "./request-timeout.js";
 import { highestPowerOption, setHighestPower } from "./row-power.js";
 import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.js";
@@ -64,18 +67,6 @@ const GMRS_CHANNELS = [
   { name: "GMRS 22R", frequency: "462.72500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
 ];
 
-// Base URL of the API that fronts przemienniki.net, repeaterbook.com and IRTS.
-// The first two upstreams don't send browser CORS headers, so their query
-// features depend on a proxy that adds them. api.codeplug.org restricts its
-// CORS allowlist to this app's own production origins -- https://codeplug.org
-// and https://webchirp.org, exact-match and https-only -- so forks hosted
-// elsewhere can point
-// this at their own proxy or leave it blank to disable those two sources. IRTS
-// remains available through the default API when the override is blank.
-// Overridable per-deployment via a <meta name="webchirp-repeater-api-base">
-// tag (see index.html and buildRepeaterEndpoints).
-const DEFAULT_REPEATER_API_BASE = "https://api.codeplug.org";
-
 // Derive the remote-directory endpoint URLs from an API base. A blank base
 // disables the two proxy-dependent directories, but IRTS remains on the
 // default API: that first-party route is part of the hosted app's contract and
@@ -112,22 +103,6 @@ function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
   };
 }
 
-const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
-
-// Resolve the repeater API base for this deployment. A
-// <meta name="webchirp-repeater-api-base"> tag overrides the built-in default:
-// its content (a proxy base URL, or blank to disable the online-query
-// features) wins when the tag is present; without the tag the default applies.
-// Shared rather than owned by the query modal, because the hover map reads the
-// same deployment setting and the two must not disagree about it.
-export function resolveRepeaterApiBase() {
-  const meta = document.querySelector(`meta[name="${REPEATER_API_BASE_META}"]`);
-  if (meta) {
-    return String(meta.getAttribute("content") || "").trim();
-  }
-  return DEFAULT_REPEATER_API_BASE;
-}
-
 // Shorter than REPEATER_REQUEST_TIMEOUT_MS because this fires on a keystroke: a
 // suggestion list that arrives after the user has finished typing is worth
 // nothing, and a stalled connection would only block tile requests.
@@ -158,11 +133,12 @@ export async function fetchCitySuggestions(citiesUrl, query, near = null) {
   // The body is read inside the deadline for the same reason every other
   // directory request reads it there: fetch() resolves on headers alone.
   const body = await withRequestTimeout("City lookup", async (signal) => {
-    const response = await fetch(url.toString(), { signal });
-    if (!response.ok) {
-      throw new Error(`City lookup failed: HTTP ${response.status}`);
-    }
-    return response.text();
+    return apiRequest(url.toString(), { signal }, (response) => {
+      if (!response.ok) {
+        throw new Error(`City lookup failed: HTTP ${response.status}`);
+      }
+      return response.text();
+    });
   }, CITY_SUGGEST_TIMEOUT_MS);
   return parseCitySuggestions(body);
 }

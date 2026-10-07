@@ -19,8 +19,11 @@ import {
   scrubMetric,
   scrubMetricAttributes,
   scrubText,
+  scrubTransaction,
   setContextProvider,
 } from "../../web/js/sentry.js";
+import { apiRequest } from "../../web/js/api-request.js";
+import { DEFAULT_REPEATER_API_BASE } from "../../web/js/repeater-api.js";
 import { ANALYTICS_HOSTS } from "../../web/js/analytics.js";
 import { makeWindow } from "../support/fake-window.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
@@ -40,6 +43,10 @@ function makeSdk() {
   let options = null;
   return {
     captured,
+    startInactiveSpan: () => ({ end() {}, setStatus() {} }),
+    getTraceData: () => ({}),
+    getActiveSpan: () => undefined,
+    startNewTrace: (run) => run(),
     // Metrics go down a pipeline of their own in the real SDK, so the fake
     // keeps them in a separate list rather than folding them into captured.
     recorded,
@@ -255,12 +262,17 @@ test("scrubMetric leaves the metric's own shape alone", () => {
   assert.deepEqual(metric.attributes, { flow: "radio_upload" });
 });
 
-test("init options disable tracing and PII, and drop console breadcrumbs", () => {
+test("init options sample one percent of API traces without PII or console breadcrumbs", () => {
   const options = initOptions("webchirp@abc123");
   assert.equal(options.dsn, SENTRY_DSN);
   assert.equal(options.release, "webchirp@abc123");
   assert.equal(options.sendDefaultPii, false);
-  assert.equal(options.tracesSampleRate, 0);
+  assert.equal(options.tracesSampleRate, 0.01);
+  assert.deepEqual(options.tracePropagationTargets, []);
+  assert.deepEqual(options.dataCollection, {
+    userInfo: false, cookies: false, httpHeaders: { request: false, response: false },
+    httpBodies: [], urlQueryParams: false,
+  });
   // The debug panel exists to print full tracebacks; anything on the console
   // has already been through it.
   assert.equal(options.beforeBreadcrumb({ category: "console", message: "145.500000" }), null);
@@ -336,6 +348,7 @@ test("init loads the SDK, tags the release, and reports afterwards", async () =>
   const result = await initSentry(win, { loadSdk: async () => sdk });
   assert.equal(result, sdk);
   assert.equal(sdk.getOptions().release, "webchirp@deadbeef");
+  assert.equal(sdk.getOptions().integrations, undefined);
 
   captureError(new Error("clone failed"), {
     action: "Download",
@@ -552,4 +565,165 @@ test("a missing version.json costs the release tag, not the reporting", async ()
   assert.equal(sdk.getOptions().release, undefined);
   assert.equal(sdk.getOptions().dsn, SENTRY_DSN);
   resetSentryForTests();
+});
+
+
+test("transaction redaction preserves trace IDs while removing queries and lookup callsigns", () => {
+  const traceId = "12345678901234567890123456789012";
+  const event = initOptions().beforeSendTransaction({
+    type: "transaction",
+    transaction: "GET /lookup/GB3IC",
+    breadcrumbs: [{ category: "fetch", data: { url: "https://api.codeplug.org/lookup/GB3IC" } }],
+    request: { url: "https://api.codeplug.org/lookup/GB3IC?lat=51.5074", query_string: "q=London", headers: { secret: "value" } },
+    contexts: { trace: { trace_id: traceId, span_id: "1234567890123456", data: { "url.full": "https://codeplug.org/?locator=IO82MM", "url.query": "locator=IO82MM" } } },
+    spans: [{ span_id: "1234567890123456", parent_span_id: "8765432109876543", description: "GET https://api.codeplug.org/lookup/GB3IC?lon=-0.1278", data: { url: "https://api.codeplug.org/cities?q=London", "http.query": "q=London&lat=51.5074", "http.fragment": "private", "http.url": "https://api.codeplug.org/lookup/GB3IC#private", "http.response.status_code": 200 } }],
+  });
+  const json = JSON.stringify(event);
+  for (const sensitive of ["GB3IC", "London", "51.5074", "-0.1278", "IO82MM", "secret", "private"]) {
+    assert.equal(json.includes(sensitive), false, sensitive);
+  }
+  assert.equal(event.transaction, "GET /lookup/:callsign");
+  assert.equal(event.contexts.trace.trace_id, traceId);
+  assert.equal(event.spans[0].span_id, "1234567890123456");
+  assert.equal(event.spans[0].parent_span_id, "8765432109876543");
+  assert.equal(event.spans[0].data["http.response.status_code"], 200);
+  assert.equal(scrubTransaction({ spans: [] }).spans.length, 0);
+  assert.equal(Object.hasOwn(event.contexts.trace, "description"), false);
+});
+
+test("API exchanges propagate explicit sampled and unsampled contexts through body completion", async (t) => {
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const sdk = makeSdk();
+  const spans = [];
+  let roots = 0;
+  let sampled = "0";
+  sdk.startNewTrace = (run) => { roots++; return run(); };
+  sdk.startInactiveSpan = (options) => {
+    const span = { options, ended: false, setStatus(status) { this.status = status; }, end() { this.ended = true; } };
+    spans.push(span);
+    return span;
+  };
+  sdk.getTraceData = ({ span }) => {
+    assert.equal(span, spans.at(-1));
+    return { "sentry-trace": "12345678901234567890123456789012-1234567890123456-" + sampled, baggage: "sentry-sampled=" + (sampled === "1") };
+  };
+  await initSentry(makeWindow(), { loadSdk: async () => sdk });
+  let finishBody;
+  let received;
+  const init = { signal: new AbortController().signal, headers: { Authorization: "Bearer fixture" } };
+  const body = new Promise((resolve) => { finishBody = resolve; });
+  const fetching = apiRequest(DEFAULT_REPEATER_API_BASE + "/cities?q=London", init, (response) => response.text(), async (input, options) => {
+    received = options;
+    return { text: () => body };
+  });
+  await Promise.resolve();
+  assert.equal(spans[0].ended, false, "headers alone must not close the span");
+  assert.equal(received.signal, init.signal);
+  assert.equal(received.headers.get("Authorization"), "Bearer fixture");
+  assert.equal(received.headers.get("sentry-trace").endsWith("-0"), true);
+  assert.equal(received.headers.get("baggage"), "sentry-sampled=false");
+  assert.deepEqual(init.headers, { Authorization: "Bearer fixture" }, "caller headers must not be mutated");
+  finishBody("complete");
+  assert.equal(await fetching, "complete");
+  assert.equal(spans[0].ended, true);
+  assert.deepEqual(spans[0].status, { code: 1 });
+  assert.deepEqual(spans[0].options, { name: "API request", op: "http.client" });
+  assert.equal(roots, 1);
+  sampled = "1";
+  sdk.getActiveSpan = () => ({ name: "existing parent" });
+  await apiRequest(DEFAULT_REPEATER_API_BASE + "/repeaterbook", {}, (response) => response.text(), async (_, options) => {
+    assert.equal(options.headers.get("sentry-trace").endsWith("-1"), true);
+    return new Response("ok");
+  });
+  assert.equal(roots, 1, "an active parent retains its existing trace");
+  for (const input of ["https://api.codeplug.org.evil.example/cities", "https://example.com/?url=https://api.codeplug.org/", "https://proxy.example.com/cities"]) {
+    await apiRequest(input, init, (response) => response.text(), async (_, options) => {
+      assert.equal(options, init);
+      return new Response("ok");
+    });
+  }
+  assert.equal(spans.length, 2);
+});
+
+test("SDK failures at setup or finalization cannot fail or retry an API exchange", async (t) => {
+  t.after(resetSentryForTests);
+  for (const method of ["getActiveSpan", "startNewTrace", "startInactiveSpan", "getTraceData", "setStatus", "end"]) {
+    resetSentryForTests();
+    const sdk = makeSdk();
+    const broken = () => { throw new Error("telemetry failed"); };
+    if (method === "setStatus" || method === "end") {
+      sdk.startInactiveSpan = () => ({ setStatus: method === "setStatus" ? broken : () => {}, end: method === "end" ? broken : () => {} });
+    } else {
+      sdk[method] = broken;
+    }
+    await initSentry(makeWindow(), { loadSdk: async () => sdk });
+    let calls = 0;
+    assert.equal(await apiRequest(DEFAULT_REPEATER_API_BASE + "/cities", {}, (response) => response.text(), async () => {
+      calls++;
+      return new Response("ok");
+    }), "ok", method);
+    assert.equal(calls, 1, method);
+    const failure = new TypeError("original network failure");
+    await assert.rejects(apiRequest(DEFAULT_REPEATER_API_BASE + "/cities", {}, () => {}, async () => {
+      calls++;
+      throw failure;
+    }), (error) => error === failure);
+    assert.equal(calls, 2, method);
+  }
+});
+
+test("body failures retain their identity and mark the API trace as failed", async (t) => {
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const sdk = makeSdk();
+  const span = { ended: false, setStatus(status) { this.status = status; }, end() { this.ended = true; } };
+  sdk.startInactiveSpan = () => span;
+  await initSentry(makeWindow(), { loadSdk: async () => sdk });
+  const failure = new DOMException("Body timed out", "AbortError");
+  let calls = 0;
+  await assert.rejects(apiRequest(DEFAULT_REPEATER_API_BASE + "/repeaterbook", {}, (response) => response.text(), async () => {
+    calls++;
+    return { text: async () => { throw failure; } };
+  }), (error) => error === failure);
+  assert.equal(calls, 1);
+  assert.deepEqual(span.status, { code: 2, message: "internal_error" });
+  assert.equal(span.ended, true);
+});
+
+
+test("transaction redaction covers new string attributes and removes request inputs", () => {
+  const data = {
+    "http.request.header.referer": "https://example.com/?locator=IO82MM",
+    "http.response.headers.private": "secret",
+    "http.request.body": "private payload",
+    "http.request.cookies": "session=secret",
+    "url.query": "q=London",
+    "url.fragment": "private",
+    "future.sdk.url": "https://example.com/lookup/GB3IC?lat=51.5074",
+    "future.sdk.text": "at 51.5074 on IO82MM",
+    "server.address": "api.codeplug.org",
+    "sentry.trace_id": "12345678",
+    "sentry.span_id": "12345678",
+    "http.response.status_code": 200,
+  };
+  const event = initOptions().beforeSendTransaction({
+    type: "transaction", transaction: "API request",
+    contexts: { trace: { trace_id: "12345678901234567890123456789012", data: { ...data } } },
+    spans: [{ description: "GET /lookup/GB3IC", data: { ...data } }],
+    request: { url: "https://codeplug.org/?locator=IO82MM" },
+  });
+  const expected = {
+    "future.sdk.url": "https://example.com/lookup/:callsign?[query]",
+    "future.sdk.text": "at [num] on [loc]",
+    "server.address": "api.codeplug.org",
+    "sentry.trace_id": "12345678",
+    "sentry.span_id": "12345678",
+    "http.response.status_code": 200,
+  };
+  assert.deepEqual(event.contexts.trace.data, expected);
+  assert.deepEqual(event.spans[0].data, expected);
+  assert.equal(event.spans[0].description, "GET /lookup/:callsign");
+  assert.equal(Object.hasOwn(event.contexts.trace, "description"), false);
+  assert.equal(event.request.url, "https://codeplug.org/?[query]");
 });

@@ -1,3 +1,4 @@
+import { apiRequest } from "./api-request.js";
 import { firstText, parseQrgMhz, parseRxfLocation, parseXmlDocument } from "./rxf.js";
 
 // Per-callsign position lookup behind the channel grid's context map
@@ -105,7 +106,7 @@ const LOOKUP_TIMEOUT_MS = 5000;
 //
 // `fetchImpl` exists for the headless tests, which have no network and need to
 // count requests to prove the cache works.
-export function createCallsignLookup(lookupUrl, { fetchImpl = (...args) => fetch(...args) } = {}) {
+export function createCallsignLookup(lookupUrl, { fetchImpl = (...args) => globalThis.fetch(...args) } = {}) {
   // Callsign -> in-flight or settled promise of that callsign's entries. It
   // serves two purposes the HTTP cache cannot: it collapses the burst of
   // hovers a pointer crossing one cell produces into a single request, and it
@@ -119,19 +120,20 @@ export function createCallsignLookup(lookupUrl, { fetchImpl = (...args) => fetch
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
     try {
-      const response = await fetchImpl(`${lookupUrl}/${encodeURIComponent(callsign)}`, {
+      return await apiRequest(`${lookupUrl}/${encodeURIComponent(callsign)}`, {
         signal: controller.signal,
-      });
-      // 404 is the documented "not in any directory" answer and the reason the
-      // map simply does not appear; it is not an error and must not be logged
-      // or reported as one.
-      if (response.status === 404) {
-        return [];
-      }
-      if (!response.ok) {
-        throw new Error(`Callsign lookup failed with HTTP ${response.status}.`);
-      }
-      return parseLookupXml(await response.text());
+      }, async (response) => {
+        // 404 is the documented "not in any directory" answer and the reason the
+        // map simply does not appear; it is not an error and must not be logged
+        // or reported as one.
+        if (response.status === 404) {
+          return [];
+        }
+        if (!response.ok) {
+          throw new Error(`Callsign lookup failed with HTTP ${response.status}.`);
+        }
+        return parseLookupXml(await response.text());
+      }, fetchImpl);
     } finally {
       clearTimeout(timer);
     }
