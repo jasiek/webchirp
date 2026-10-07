@@ -159,6 +159,8 @@ export class Ch340SerialPort extends WebUsbTransport {
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
   constructor(device, options = {}) {
     super(device, options);
+    this.readable = null;
+    this.writable = null;
     this.version = 0;
     this._interfaceNumber = 0;
     this._inEndpoint = 0;

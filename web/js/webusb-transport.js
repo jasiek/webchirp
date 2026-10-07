@@ -20,11 +20,11 @@ export const WEBUSB_CHIP_CAPABILITIES = Object.freeze({
 export class WebUsbTransport {
   // usb is the event source WebUSB reports device loss on. It defaults to
   // navigator.usb, read when the port opens rather than here, so a port can be
-  // constructed where no navigator exists; tests pass a stand-in.
+  // constructed where no navigator exists; tests pass a stand-in. The streams
+  // are the subclass's to define: the chip drivers hold their own, the CDC
+  // wrapper forwards the polyfill's.
   constructor(device, { usb } = {}) {
     this.device = device;
-    this.readable = null;
-    this.writable = null;
     this._usbEvents = usb;
     this._lossNotifier = createDisconnectNotifier(this);
     this._stopUsbWatch = null;

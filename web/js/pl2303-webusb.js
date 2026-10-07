@@ -110,6 +110,8 @@ export class Pl2303SerialPort extends WebUsbTransport {
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
   constructor(device, options = {}) {
     super(device, options);
+    this.readable = null;
+    this.writable = null;
     this.chipType = PL2303_TYPE_HX;
     this._interfaceNumber = 0;
     this._inEndpoint = 0;

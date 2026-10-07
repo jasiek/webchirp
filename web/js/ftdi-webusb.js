@@ -109,6 +109,8 @@ export class FtdiSerialPort extends WebUsbTransport {
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
   constructor(device, options = {}) {
     super(device, options);
+    this.readable = null;
+    this.writable = null;
     this._interfaceNumber = 0;
     this._inEndpoint = 0;
     this._outEndpoint = 0;
