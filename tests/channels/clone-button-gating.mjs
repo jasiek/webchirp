@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { FakeElement } from "../support/fake-dom.mjs";
 import { makeWindow } from "../support/fake-window.mjs";
+import { fakeSentryTracing } from "../support/fake-sentry-tracing.mjs";
 import { initSentry, resetSentryForTests } from "../../web/js/sentry.js";
 import { createSerialUnsupportedError } from "../../web/js/serial-errors.js";
 
@@ -113,6 +114,7 @@ test("unsupported transports never count as failed connects while adapter failur
   t.after(resetSentryForTests);
   const metrics = [];
   await initSentry(makeWindow(), { loadSdk: async () => ({
+    ...fakeSentryTracing,
     init() {},
     metrics: { count: (name, value, options) => metrics.push({ name, value, ...options }) },
   }) });

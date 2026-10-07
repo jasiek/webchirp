@@ -5,6 +5,7 @@ import test from "node:test";
 import { FLOWS, OUTCOMES, recordFlow } from "../../web/js/ui/metrics.js";
 import { METRIC_ATTRIBUTES, initSentry, resetSentryForTests } from "../../web/js/sentry.js";
 import { makeWindow } from "../support/fake-window.mjs";
+import { fakeSentryTracing } from "../support/fake-sentry-tracing.mjs";
 import { callArgumentKeys, sourceFiles } from "../support/param-scanner.mjs";
 import { jsDir } from "../support/repo-paths.mjs";
 
@@ -18,6 +19,7 @@ import { jsDir } from "../support/repo-paths.mjs";
 function makeSdk() {
   const recorded = [];
   return {
+    ...fakeSentryTracing,
     recorded,
     metrics: {
       count: (name, value, opts) => recorded.push({ type: "count", name, value, ...opts }),

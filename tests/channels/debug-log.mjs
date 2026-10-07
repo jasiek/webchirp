@@ -6,6 +6,7 @@ import { createDebugLog } from "../../web/js/ui/debug-log.js";
 import { initOptions, initSentry, resetSentryForTests } from "../../web/js/sentry.js";
 import { markBootstrapFailure } from "../../web/js/runtime-bootstrap.mjs";
 import { fakeDebugDom } from "../support/fake-dom.mjs";
+import { fakeSentryTracing } from "../support/fake-sentry-tracing.mjs";
 
 test("debug output is folded initially and toggles both hidden regions together", () => {
   const dom = fakeDebugDom();
@@ -90,6 +91,7 @@ test("a delayed clipboard failure reopens a panel collapsed while copying", asyn
 function makeSentrySdk() {
   const captured = [];
   return {
+    ...fakeSentryTracing,
     captured,
     init() {},
     withScope(fn) {
