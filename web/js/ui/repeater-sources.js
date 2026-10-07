@@ -1,4 +1,4 @@
-import { tracedFetch } from "../sentry.js";
+import { apiRequest } from "../api-request.js";
 import {
   buildPrzemiennikiRows,
   parsePrzemiennikiMetaJson,
@@ -301,11 +301,12 @@ export function createRepeaterSources(ctx, { endpoints }) {
         return summarizeRemote(cached, values.position, radiusKm);
       }
       const text = await withRequestTimeout(`${label} preview`, async (signal) => {
-        const response = await tracedFetch(url.toString(), { signal });
-        if (!response.ok) {
-          throw new Error(`${actionLabel} preview failed: HTTP ${response.status}`);
-        }
-        return response.text();
+        return apiRequest(url.toString(), { signal }, (response) => {
+          if (!response.ok) {
+            throw new Error(`${actionLabel} preview failed: HTTP ${response.status}`);
+          }
+          return response.text();
+        });
       });
       const parsed = parsePrzemiennikiXml(text);
       const plotted = [];
@@ -377,11 +378,12 @@ export function createRepeaterSources(ctx, { endpoints }) {
             // stalled proxy would otherwise leave the toolbar click doing nothing
             // visible for minutes.
             const text = await withRequestTimeout(`${label} dictionary request`, async (signal) => {
-              const response = await tracedFetch(metaUrl, { signal });
-              if (!response.ok) {
-                throw new Error(`Dictionary request failed: HTTP ${response.status}`);
-              }
-              return response.text();
+              return apiRequest(metaUrl, { signal }, (response) => {
+                if (!response.ok) {
+                  throw new Error(`Dictionary request failed: HTTP ${response.status}`);
+                }
+                return response.text();
+              });
             });
             const parsed = parsePrzemiennikiMetaJson(text);
             log.logDebug(`Loaded ${label} filter options from /meta.`);
@@ -413,12 +415,13 @@ export function createRepeaterSources(ctx, { endpoints }) {
         // error-path read of a failed response can stall exactly as the success
         // path can, and either one strands the submit button on "Querying...".
         const text = await withRequestTimeout(`${label} query`, async (signal) => {
-          const response = await tracedFetch(url.toString(), { signal });
-          if (!response.ok) {
-            const body = await response.text();
-            throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
-          }
-          return response.text();
+          return apiRequest(url.toString(), { signal }, async (response) => {
+            if (!response.ok) {
+              const body = await response.text();
+              throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
+            }
+            return response.text();
+          });
         });
         const parsed = parsePrzemiennikiXml(text);
         const { rows, skipped } = buildPrzemiennikiRows(

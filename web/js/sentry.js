@@ -19,6 +19,7 @@
 
 import { isPythonError, isRuntimeCallError } from "./runtime-errors.mjs";
 import { isSerialUnsupported } from "./serial-errors.js";
+import { DEFAULT_REPEATER_API_BASE } from "./repeater-api.js";
 
 // Project this app reports into. Unlike a secret, a DSN is meant to be public --
 // it only grants the right to submit events -- which is why it can sit in a
@@ -50,27 +51,43 @@ export const SENTRY_HOSTS = Object.freeze([
   "webchirp.org",
 ]);
 
-// Only the first-party API receives tracing headers; other origins may reject
-// them in CORS preflight and must not inherit this project's trace context.
-const TRACE_PROPAGATION_TARGETS = [/^https:\/\/api\.codeplug\.org(?:\/|$)/];
-
-// Match the same API allowlist for both automatic HTTP spans and their parents.
+// Deployment overrides do not automatically become trusted tracing targets.
+// Share the production base with endpoint configuration without importing UI.
 function isTracedApiRequest(input) {
-  const url = typeof input?.url === "string" ? input.url : String(input);
-  return TRACE_PROPAGATION_TARGETS.some((target) => target.test(url));
+  try {
+    const value = typeof input?.url === "string" ? input.url : String(input);
+    return new URL(value).origin === new URL(DEFAULT_REPEATER_API_BASE).origin;
+  } catch {
+    return false;
+  }
 }
 
-// Give later API calls a parent even after the page-load span has finished.
-// Fetch runs inside the active span so BrowserTracing propagates its context;
-// the fixed name carries neither the query nor a callsign embedded in a path.
-export function tracedFetch(input, init) {
-  const run = () => globalThis.fetch(input, init);
-  if (!sdk || !isTracedApiRequest(input)) {
-    return run();
+// Page-load and navigation tracing are disabled: each explicit API exchange
+// needs its own root unless a caller already supplied an active parent.
+// Keep all SDK calls outside the operation, so telemetry cannot retry a fetch,
+// replace its error, or end the trace before its body consumer has settled.
+export async function traceApiRequest(input, run) {
+  let span;
+  let headers = {};
+  try {
+    if (sdk && isTracedApiRequest(input)) {
+      const create = () => sdk.startInactiveSpan({ name: "API request", op: "http.client" });
+      span = sdk.getActiveSpan() ? create() : sdk.startNewTrace(create);
+      headers = sdk.getTraceData({ span });
+    }
+  } catch {
+    // A broken SDK costs telemetry, never the API exchange.
   }
-  const start = () => sdk.startSpan({ name: "API request", op: "api.request" }, run);
-  // Keep a caller's active trace, otherwise sample each new request independently.
-  return sdk.getActiveSpan() ? start() : sdk.startNewTrace(start);
+  try {
+    const result = await run(headers);
+    try { span?.setStatus({ code: 1 }); } catch { /* Telemetry only. */ }
+    return result;
+  } catch (error) {
+    try { span?.setStatus({ code: 2, message: "internal_error" }); } catch { /* Telemetry only. */ }
+    throw error;
+  } finally {
+    try { span?.end(); } catch { /* Telemetry only. */ }
+  }
 }
 
 // Browser noise that is never actionable: a benign layout notification. It is
@@ -617,7 +634,7 @@ function drainPendingMetrics() {
 
 // Options handed to Sentry.init. Split out so a test can assert on them without
 // standing up the real SDK.
-export function initOptions(release, integrations = []) {
+export function initOptions(release) {
   return {
     dsn: SENTRY_DSN,
     release,
@@ -627,8 +644,9 @@ export function initOptions(release, integrations = []) {
     sendDefaultPii: false,
     // Sample roots once; the API continues the browser's sampling decision.
     tracesSampleRate: 0.01,
-    integrations,
-    tracePropagationTargets: [...TRACE_PROPAGATION_TARGETS],
+    // Headers are attached only by web/js/api-request.js to an explicit span.
+    // A future plain fetch must not inherit a page-lifetime propagation context.
+    tracePropagationTargets: [],
     dataCollection: {
       userInfo: false,
       cookies: false,
@@ -691,16 +709,7 @@ export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) }
     // Both are network round trips and neither needs the other, so they overlap
     // rather than adding up.
     const [module, release] = await Promise.all([loadSdk(), resolveRelease(win)]);
-    module.init(initOptions(release, [module.browserTracingIntegration({
-      // API request parents are explicit, including requests long after startup.
-      // Skip unrelated browser performance and DOM-selector instrumentation.
-      instrumentPageLoad: false,
-      instrumentNavigation: false,
-      enableInp: false,
-      enableLongTask: false,
-      enableLongAnimationFrame: false,
-      shouldCreateSpanForRequest: isTracedApiRequest,
-    })]));
+    module.init(initOptions(release));
     sdk = module;
   } catch {
     // The CDN is blocked, offline, or serving something unusable. The app is

@@ -20,9 +20,10 @@ import {
   scrubMetricAttributes,
   scrubText,
   scrubTransaction,
-  tracedFetch,
   setContextProvider,
 } from "../../web/js/sentry.js";
+import { apiRequest } from "../../web/js/api-request.js";
+import { DEFAULT_REPEATER_API_BASE } from "../../web/js/repeater-api.js";
 import { ANALYTICS_HOSTS } from "../../web/js/analytics.js";
 import { makeWindow } from "../support/fake-window.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
@@ -42,8 +43,8 @@ function makeSdk() {
   let options = null;
   return {
     captured,
-    browserTracingIntegration: (options) => ({ name: "BrowserTracing", options }),
-    startSpan: (options, run) => run(),
+    startInactiveSpan: () => ({ end() {}, setStatus() {} }),
+    getTraceData: () => ({}),
     getActiveSpan: () => undefined,
     startNewTrace: (run) => run(),
     // Metrics go down a pipeline of their own in the real SDK, so the fake
@@ -267,11 +268,7 @@ test("init options sample one percent of API traces without PII or console bread
   assert.equal(options.release, "webchirp@abc123");
   assert.equal(options.sendDefaultPii, false);
   assert.equal(options.tracesSampleRate, 0.01);
-  const matches = (url) => options.tracePropagationTargets.some((target) => target.test(url));
-  assert.equal(matches("https://api.codeplug.org/repeaterbook?lat=51.5"), true);
-  assert.equal(matches("https://api.codeplug.org.evil.example/"), false);
-  assert.equal(matches("https://example.com/?url=https://api.codeplug.org/"), false);
-  assert.equal(matches("https://cdn.jsdelivr.net/"), false);
+  assert.deepEqual(options.tracePropagationTargets, []);
   assert.deepEqual(options.dataCollection, {
     userInfo: false, cookies: false, httpHeaders: { request: false, response: false },
     httpBodies: [], urlQueryParams: false,
@@ -351,12 +348,7 @@ test("init loads the SDK, tags the release, and reports afterwards", async () =>
   const result = await initSentry(win, { loadSdk: async () => sdk });
   assert.equal(result, sdk);
   assert.equal(sdk.getOptions().release, "webchirp@deadbeef");
-  const integration = sdk.getOptions().integrations[0];
-  assert.equal(integration.name, "BrowserTracing");
-  assert.equal(integration.options.instrumentPageLoad, false);
-  assert.equal(integration.options.enableInp, false);
-  assert.equal(integration.options.shouldCreateSpanForRequest("https://api.codeplug.org/cities"), true);
-  assert.equal(integration.options.shouldCreateSpanForRequest("https://cdn.jsdelivr.net/"), false);
+  assert.equal(sdk.getOptions().integrations, undefined);
 
   captureError(new Error("clone failed"), {
     action: "Download",
@@ -598,38 +590,102 @@ test("transaction redaction preserves trace IDs while removing queries and looku
   assert.equal(scrubTransaction({ spans: [] }).spans.length, 0);
 });
 
-test("late API fetches run inside a parent span and preserve responses and failures", async (t) => {
+test("API exchanges propagate explicit sampled and unsampled contexts through body completion", async (t) => {
   resetSentryForTests();
+  t.after(resetSentryForTests);
   const sdk = makeSdk();
-  let active = false;
-  const parents = [];
+  const spans = [];
   let roots = 0;
+  let sampled = "0";
   sdk.startNewTrace = (run) => { roots++; return run(); };
-  sdk.startSpan = (options, run) => {
-    parents.push(options);
-    active = true;
-    try { return run(); } finally { active = false; }
+  sdk.startInactiveSpan = (options) => {
+    const span = { options, ended: false, setStatus(status) { this.status = status; }, end() { this.ended = true; } };
+    spans.push(span);
+    return span;
+  };
+  sdk.getTraceData = ({ span }) => {
+    assert.equal(span, spans.at(-1));
+    return { "sentry-trace": "12345678901234567890123456789012-1234567890123456-" + sampled, baggage: "sentry-sampled=" + (sampled === "1") };
   };
   await initSentry(makeWindow(), { loadSdk: async () => sdk });
-  const response = new Response("ok");
-  const init = { signal: new AbortController().signal };
-  let calls = 0;
-  t.mock.method(globalThis, "fetch", async (input, options) => {
-    calls++;
-    assert.equal(active, input === "https://api.codeplug.org/cities?q=London");
-    assert.equal(options, init);
-    return response;
+  let finishBody;
+  let received;
+  const init = { signal: new AbortController().signal, headers: { Authorization: "Bearer fixture" } };
+  const body = new Promise((resolve) => { finishBody = resolve; });
+  const fetching = apiRequest(DEFAULT_REPEATER_API_BASE + "/cities?q=London", init, (response) => response.text(), async (input, options) => {
+    received = options;
+    return { text: () => body };
   });
-  assert.equal(await tracedFetch("https://api.codeplug.org/cities?q=London", init), response);
-  assert.equal(await tracedFetch("https://example.com/", init), response);
-  assert.equal(calls, 2);
+  await Promise.resolve();
+  assert.equal(spans[0].ended, false, "headers alone must not close the span");
+  assert.equal(received.signal, init.signal);
+  assert.equal(received.headers.get("Authorization"), "Bearer fixture");
+  assert.equal(received.headers.get("sentry-trace").endsWith("-0"), true);
+  assert.equal(received.headers.get("baggage"), "sentry-sampled=false");
+  assert.deepEqual(init.headers, { Authorization: "Bearer fixture" }, "caller headers must not be mutated");
+  finishBody("complete");
+  assert.equal(await fetching, "complete");
+  assert.equal(spans[0].ended, true);
+  assert.deepEqual(spans[0].status, { code: 1 });
+  assert.deepEqual(spans[0].options, { name: "API request", op: "http.client" });
   assert.equal(roots, 1);
-  assert.deepEqual(parents, [{ name: "API request", op: "api.request" }]);
+  sampled = "1";
   sdk.getActiveSpan = () => ({ name: "existing parent" });
-  await tracedFetch("https://api.codeplug.org/cities?q=London", init);
-  assert.equal(roots, 1, "an active parent must retain its existing trace");
-  const failure = new TypeError("Failed to fetch");
-  t.mock.method(globalThis, "fetch", async () => { throw failure; });
-  await assert.rejects(tracedFetch("https://api.codeplug.org/repeaterbook", init), (error) => error === failure);
+  await apiRequest(DEFAULT_REPEATER_API_BASE + "/repeaterbook", {}, (response) => response.text(), async (_, options) => {
+    assert.equal(options.headers.get("sentry-trace").endsWith("-1"), true);
+    return new Response("ok");
+  });
+  assert.equal(roots, 1, "an active parent retains its existing trace");
+  for (const input of ["https://api.codeplug.org.evil.example/cities", "https://example.com/?url=https://api.codeplug.org/", "https://proxy.example.com/cities"]) {
+    await apiRequest(input, init, (response) => response.text(), async (_, options) => {
+      assert.equal(options, init);
+      return new Response("ok");
+    });
+  }
+  assert.equal(spans.length, 2);
+});
+
+test("SDK failures at setup or finalization cannot fail or retry an API exchange", async (t) => {
+  t.after(resetSentryForTests);
+  for (const method of ["getActiveSpan", "startNewTrace", "startInactiveSpan", "getTraceData", "setStatus", "end"]) {
+    resetSentryForTests();
+    const sdk = makeSdk();
+    const broken = () => { throw new Error("telemetry failed"); };
+    if (method === "setStatus" || method === "end") {
+      sdk.startInactiveSpan = () => ({ setStatus: method === "setStatus" ? broken : () => {}, end: method === "end" ? broken : () => {} });
+    } else {
+      sdk[method] = broken;
+    }
+    await initSentry(makeWindow(), { loadSdk: async () => sdk });
+    let calls = 0;
+    assert.equal(await apiRequest(DEFAULT_REPEATER_API_BASE + "/cities", {}, (response) => response.text(), async () => {
+      calls++;
+      return new Response("ok");
+    }), "ok", method);
+    assert.equal(calls, 1, method);
+    const failure = new TypeError("original network failure");
+    await assert.rejects(apiRequest(DEFAULT_REPEATER_API_BASE + "/cities", {}, () => {}, async () => {
+      calls++;
+      throw failure;
+    }), (error) => error === failure);
+    assert.equal(calls, 2, method);
+  }
+});
+
+test("body failures retain their identity and mark the API trace as failed", async (t) => {
   resetSentryForTests();
+  t.after(resetSentryForTests);
+  const sdk = makeSdk();
+  const span = { ended: false, setStatus(status) { this.status = status; }, end() { this.ended = true; } };
+  sdk.startInactiveSpan = () => span;
+  await initSentry(makeWindow(), { loadSdk: async () => sdk });
+  const failure = new DOMException("Body timed out", "AbortError");
+  let calls = 0;
+  await assert.rejects(apiRequest(DEFAULT_REPEATER_API_BASE + "/repeaterbook", {}, (response) => response.text(), async () => {
+    calls++;
+    return { text: async () => { throw failure; } };
+  }), (error) => error === failure);
+  assert.equal(calls, 1);
+  assert.deepEqual(span.status, { code: 2, message: "internal_error" });
+  assert.equal(span.ended, true);
 });
