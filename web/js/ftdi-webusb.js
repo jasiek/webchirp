@@ -6,6 +6,7 @@
 // cannot drive.
 //
 // Protocol constants and the baud-rate divisor math follow libftdi.
+import { WebUsbTransport } from "./webusb-transport.js";
 
 export const FTDI_VENDOR_ID = 0x0403;
 
@@ -98,29 +99,21 @@ export function stripFtdiStatusBytes(bytes) {
   return bytes.slice(2);
 }
 
-export class FtdiSerialPort {
+export class FtdiSerialPort extends WebUsbTransport {
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: SIO_SET_DATA is issued as DATA_8N1 unconditionally.
-  // Declared so the bridge refuses a framing change on this transport
+  // It therefore declares capabilities.framing false (WEBUSB_CHIP_CAPABILITIES
+  // in web/js/webusb-transport.js), so the bridge refuses a framing change
   // rather than reopening and reporting a success the wire does not have.
-  supportsFraming = false;
 
-  constructor(device) {
-    this.device = device;
-    this.readable = null;
-    this.writable = null;
+  // options.usb is the WebUSB loss-event source (navigator.usb by default).
+  constructor(device, options = {}) {
+    super(device, options);
     this._interfaceNumber = 0;
     this._inEndpoint = 0;
     this._outEndpoint = 0;
     this._inPacketSize = 64;
     this._closed = false;
-  }
-
-  getInfo() {
-    return {
-      usbVendorId: Number(this.device.vendorId),
-      usbProductId: Number(this.device.productId),
-    };
   }
 
   // Bulk IN endpoint size, so a caller can size payloads around the boundary
@@ -202,6 +195,7 @@ export class FtdiSerialPort {
     await this._controlOut(SIO_SET_LATENCY_TIMER, LATENCY_TIMER_MS, PORT_INDEX);
 
     this._setupStreams();
+    this._watchDisconnect();
   }
 
   // Map Web Serial control-signal requests onto FTDI SIO_SET_MODEM_CTRL. The
@@ -332,6 +326,7 @@ export class FtdiSerialPort {
   }
 
   async close() {
+    this._unwatchDisconnect();
     this._closed = true;
     try {
       await this.device.releaseInterface(this._interfaceNumber);

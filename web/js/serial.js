@@ -517,10 +517,14 @@ export class BrowserSerialBridge {
 
     // A transport that cannot carry the requested frame must say so rather than
     // reopen and report success: wrong parity or stop bits corrupts every byte,
-    // and a clone that fails on garbage names nothing. Absence of the flag means
-    // the port honours open()'s framing (native Web Serial, the CDC polyfill).
+    // and a clone that fails on garbage names nothing. Ports that implement the
+    // transport contract (web/js/serial-transport.mjs) declare it in
+    // capabilities.framing; the legacy flag covers the ports not moved yet.
     const framing = changed.filter((key) => FRAMING_OPTIONS.includes(key));
-    if (framing.length && this.port.supportsFraming === false) {
+    const framingSupported = this.port.capabilities
+      ? this.port.capabilities.framing
+      : this.port.supportsFraming !== false;
+    if (framing.length && !framingSupported) {
       throw new Error(
         `This serial adapter cannot change ${framing.join(", ")}: it runs at 8N1 only. `
         + "Connect through a native Web Serial port to clone this radio.",

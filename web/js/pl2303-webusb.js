@@ -10,6 +10,7 @@
 // deliberate divergences from those ports, matching the kernel instead:
 // vendor writes use bmRequestType vendor|device (not class), and vendor reads
 // use bRequest 0x01 on non-HXN chips (0x81 is HXN-only).
+import { WebUsbTransport } from "./webusb-transport.js";
 
 export const PROLIFIC_VENDOR_ID = 0x067b;
 
@@ -99,17 +100,16 @@ export function detectPl2303Type({ deviceClass, maxPacketSize0, usbVersion, devi
   return PL2303_TYPE_HX;
 }
 
-export class Pl2303SerialPort {
+export class Pl2303SerialPort extends WebUsbTransport {
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: the line-coding block is written 8N1 unconditionally.
-  // Declared so the bridge refuses a framing change on this transport
+  // It therefore declares capabilities.framing false (WEBUSB_CHIP_CAPABILITIES
+  // in web/js/webusb-transport.js), so the bridge refuses a framing change
   // rather than reopening and reporting a success the wire does not have.
-  supportsFraming = false;
 
-  constructor(device) {
-    this.device = device;
-    this.readable = null;
-    this.writable = null;
+  // options.usb is the WebUSB loss-event source (navigator.usb by default).
+  constructor(device, options = {}) {
+    super(device, options);
     this.chipType = PL2303_TYPE_HX;
     this._interfaceNumber = 0;
     this._inEndpoint = 0;
@@ -117,13 +117,6 @@ export class Pl2303SerialPort {
     this._inPacketSize = 64;
     this._controlLines = 0;
     this._closed = false;
-  }
-
-  getInfo() {
-    return {
-      usbVendorId: Number(this.device.vendorId),
-      usbProductId: Number(this.device.productId),
-    };
   }
 
   // Bulk IN endpoint size, so a caller can size payloads around the boundary
@@ -342,6 +335,7 @@ export class Pl2303SerialPort {
     await this._setLineCoding(baudRate);
 
     this._setupStreams();
+    this._watchDisconnect();
   }
 
   // Web Serial-style signal control: only the provided keys change; the chip
@@ -457,6 +451,7 @@ export class Pl2303SerialPort {
   }
 
   async close() {
+    this._unwatchDisconnect();
     this._closed = true;
     try {
       await this.device.releaseInterface(this._interfaceNumber);

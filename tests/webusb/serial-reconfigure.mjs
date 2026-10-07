@@ -238,7 +238,7 @@ test("a chunk the reopened stream has ready is not overwritten by the kept bytes
 // corrupts every byte, and the clone would fail on garbage naming nothing.
 test("an adapter that cannot change framing refuses instead of pretending", async (t) => {
   const { bridge, port } = await openBridge(t);
-  port.supportsFraming = false;
+  port.capabilities = { framing: false, signals: true, reconfigure: "reopen" };
   const opens = port.opens.length;
 
   await assert.rejects(
@@ -250,7 +250,7 @@ test("an adapter that cannot change framing refuses instead of pretending", asyn
 
 test("such an adapter still takes a baud-rate change", async (t) => {
   const { bridge, port } = await openBridge(t);
-  port.supportsFraming = false;
+  port.capabilities = { framing: false, signals: true, reconfigure: "reopen" };
 
   const res = await bridge.reconfigure({ baudRate: 57600 });
 
@@ -270,6 +270,6 @@ test("each WebUSB chip driver declares that it cannot change framing", async () 
   for (const [path, className] of drivers) {
     const mod = await import(path);
     const port = new mod[className]({});
-    assert.equal(port.supportsFraming, false, `${className} must declare supportsFraming`);
+    assert.equal(port.capabilities.framing, false, `${className} must declare capabilities.framing`);
   }
 });

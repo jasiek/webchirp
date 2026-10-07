@@ -15,6 +15,7 @@
 // and the bulk IN endpoint carries raw UART payload with no status header,
 // provided event-insertion mode is off. This driver never turns event mode on
 // and clears any it inherited at open, so 0xEC is an ordinary data byte.
+import { WebUsbTransport } from "./webusb-transport.js";
 
 // Silicon Labs' vendor id. The chooser filters on it vendor-wide, because ~150
 // of the kernel id_table's entries are OEM cables that ship a CP210x under a
@@ -252,17 +253,16 @@ export function cp2102QuantizeBaudRate(baudRate, {
   return baud;
 }
 
-export class Cp2102SerialPort {
+export class Cp2102SerialPort extends WebUsbTransport {
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: SET_LINE_CTL is issued as LINE_CTL_8N1 unconditionally.
-  // Declared so the bridge refuses a framing change on this transport
+  // It therefore declares capabilities.framing false (WEBUSB_CHIP_CAPABILITIES
+  // in web/js/webusb-transport.js), so the bridge refuses a framing change
   // rather than reopening and reporting a success the wire does not have.
-  supportsFraming = false;
 
-  constructor(device) {
-    this.device = device;
-    this.readable = null;
-    this.writable = null;
+  // options.usb is the WebUSB loss-event source (navigator.usb by default).
+  constructor(device, options = {}) {
+    super(device, options);
     this.partNumber = CP210X_PARTNUM.UNKNOWN;
     this.baudRate = 0;
     this._interfaceNumber = 0;
@@ -273,13 +273,6 @@ export class Cp2102SerialPort {
     this._rts = false;
     this._claimed = false;
     this._closed = false;
-  }
-
-  getInfo() {
-    return {
-      usbVendorId: Number(this.device.vendorId),
-      usbProductId: Number(this.device.productId),
-    };
   }
 
   // Bulk IN endpoint size, so a caller can size payloads around the boundary
@@ -525,6 +518,7 @@ export class Cp2102SerialPort {
     await this._writeModemControl({ dtr: false, rts: false });
 
     this._setupStreams();
+    this._watchDisconnect();
   }
 
   // Hand the device back, best effort. Used by both the failed-open rollback
@@ -718,6 +712,7 @@ export class Cp2102SerialPort {
   }
 
   async close() {
+    this._unwatchDisconnect();
     this._closed = true;
     // Drive both control lines low first, unconditionally. Disabling the UART
     // does not reset these outputs (CP2102N A01 erratum E106 makes the host
