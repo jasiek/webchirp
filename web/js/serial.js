@@ -1,6 +1,7 @@
 import { createPortSelectionCancelledError, createSerialUnsupportedError } from "./serial-errors.js";
 import { createWebUsbSerial } from "./webusb-serial.js";
 import { createWebBluetoothSerial } from "./webbluetooth-serial.js";
+import { DEFAULT_PORT_OPTIONS, FRAMING_OPTIONS } from "./serial-transport.mjs";
 
 // Parse user-entered hex byte text into a Uint8Array for serial writes.
 function parseHex(input) {
@@ -53,22 +54,6 @@ function hasWebBluetooth() {
 }
 
 // Manage Web Serial lifecycle and provide buffered byte-oriented I/O helpers.
-// What a port is opened with before any driver has asked for something else.
-// A clone starts from these every time: framing a previous clone's driver set
-// (tk280 wants even parity, tg_uv2p two stop bits) must not be inherited by the
-// next radio, which would corrupt every byte it reads.
-// The open() options that describe the character frame rather than its speed.
-// Native Web Serial and the CDC polyfill honour all three; our four WebUSB chip
-// drivers program 8N1 and read none of them, which is why they say so.
-const FRAMING_OPTIONS = Object.freeze(["dataBits", "stopBits", "parity"]);
-
-const DEFAULT_PORT_OPTIONS = Object.freeze({
-  dataBits: 8,
-  stopBits: 1,
-  parity: "none",
-  flowControl: "none",
-});
-
 export class BrowserSerialBridge {
   constructor({ createWebUsbSerial: createWebUsbSerialImpl,
     createWebBluetoothSerial: createWebBluetoothSerialImpl } = {}) {
