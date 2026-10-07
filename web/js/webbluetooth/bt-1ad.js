@@ -12,6 +12,8 @@ class Bt1adProtocol {
   constructor(tx, rx, baud, { settleMs = 1000 } = {}) {
     this.name = "BT-1AD";
     this.supportsFraming = false;
+    // No DTR/RTS command is known for this adapter; see setSignals().
+    this.supportsSignals = false;
     this.rx = rx;
     this.tx = tx;
     this.baud = baud;
