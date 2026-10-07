@@ -1,4 +1,5 @@
-import { BrowserSerialBridge, createSerialRpcHandler } from "./js/serial.js";
+import { BrowserSerialBridge } from "./js/serial.js";
+import { createSerialRpcHandler } from "./js/serial-globals.mjs";
 import { createRuntimeRpcClient } from "./js/runtime-rpc.js";
 import { createUiController } from "./js/ui.js";
 import { installTooltips } from "./js/tooltip.js";

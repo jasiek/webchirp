@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BrowserSerialBridge } from "../../web/js/serial.js";
+import { makeRecordingPort } from "../support/fake-serial.mjs";
 import { withNavigator } from "../support/globals.mjs";
 
 test("prefers native Web Serial when available", async (t) => {
@@ -61,12 +62,7 @@ test("forcing webserial fails when native serial is unavailable", async (t) => {
 
 test("a failed open tears down state instead of leaving a half-open port", async (t) => {
   withNavigator(t, { usb: {} });
-  const failingPort = {
-    open: async () => {
-      throw new Error("boom");
-    },
-    getInfo: () => ({}),
-  };
+  const failingPort = makeRecordingPort({ failOpenWhen: () => "boom" });
   const bridge = new BrowserSerialBridge({
     createWebUsbSerial: () => ({ requestPort: async () => failingPort }),
   });
@@ -76,6 +72,30 @@ test("a failed open tears down state instead of leaving a half-open port", async
   // No half-open port left behind to poison the next connect.
   assert.equal(bridge.port, null);
   assert.equal(bridge.writer, null);
+});
+
+test("a port that does not satisfy the transport contract is refused before use", async (t) => {
+  withNavigator(t, { usb: {} });
+  // What every port used to be: Web Serial-shaped by convention only.
+  const rawPort = {
+    readable: null,
+    writable: null,
+    open: async () => {
+      throw new Error("open must not be reached");
+    },
+    close: async () => {},
+    setSignals: async () => {},
+    getInfo: () => ({}),
+  };
+  const bridge = new BrowserSerialBridge({
+    createWebUsbSerial: () => ({ requestPort: async () => rawPort }),
+  });
+
+  await assert.rejects(
+    () => bridge.open(9600),
+    /does not satisfy the serial transport contract.*capabilities.*onDisconnect/s,
+  );
+  assert.equal(bridge.port, null);
 });
 
 test("reports unsupported and refuses to open with no serial transport", async (t) => {

@@ -1,10 +1,12 @@
 // The serial port contract every transport implements, declared once.
 //
-// The serial bridge (web/js/serial.js) drives a port through nothing but the
-// members listed here, so native Web Serial, the four WebUSB chip drivers, the
-// CDC polyfill (web/js/webusb-serial.js), the Web Bluetooth port
-// (web/js/webbluetooth-serial.js) and the node-serialport bridge the CLI and
-// test harness use (tests/support/radio-harness.mjs) are interchangeable
+// The serial bridge (web/js/serial-bridge.mjs) drives a port through nothing
+// but the members listed here, so native Web Serial (wrapped by
+// web/js/native-serial-port.js), the four WebUSB chip drivers (sharing
+// web/js/webusb-transport.js), the CDC polyfill wrapper
+// (web/js/webusb-serial.js), the Web Bluetooth port
+// (web/js/webbluetooth-serial.js) and the node-serialport adapter the CLI and
+// test harness use (tests/support/node-serial-port.mjs) are interchangeable
 // behind it. What a transport cannot do is a declared capability, read by the
 // bridge, rather than a property the bridge has to probe for or an error it has
 // to recognise.

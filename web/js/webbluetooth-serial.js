@@ -7,10 +7,9 @@ export const BLUETOOTH_SERIAL_DRIVERS = [bt1adDriver];
 // Present the dongle as a serial transport (web/js/serial-transport.mjs) so the
 // existing buffered bridge and every CHIRP driver retain ownership of radio
 // handshakes and memory formats.
-export class WebBluetoothSerialPort extends EventTarget {
+export class WebBluetoothSerialPort {
   // Keep GATT state on the port; it survives UART-rate changes without a picker.
   constructor(device, { drivers = BLUETOOTH_SERIAL_DRIVERS, ...driverOptions } = {}) {
-    super();
     this.device = device;
     this._lossNotifier = createDisconnectNotifier(this);
     this.readable = null;
@@ -37,7 +36,6 @@ export class WebBluetoothSerialPort extends EventTarget {
       this._controller?.error(error);
       this._controller = null;
       this._lossNotifier.fire();
-      this.dispatchEvent(new Event("disconnect"));
     };
   }
 

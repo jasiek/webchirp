@@ -1,11 +1,13 @@
-// Fake Web Serial-shaped ports and transports for the BrowserSerialBridge
-// tests. The bridge only ever sees a port through open/close/setSignals and a
-// reader/writer pair, so one recording port with a few knobs stands in for
-// every scenario the tests exercise: an adapter that disappears, a mid-clone
-// reopen, a refused open, a line that delivers bytes at a chosen moment.
+// Fake serial ports and transports for the serial bridge tests. The bridge
+// only ever sees a port through the transport contract
+// (web/js/serial-transport.mjs), so one recording port with a few knobs stands
+// in for every scenario the tests exercise: an adapter that disappears, a
+// mid-clone reopen, a refused open, a line that delivers bytes at a chosen
+// moment.
 //
 // The loopback fakes (createEchoPort, createChipLoopbackPort in
-// test-loopback-harness.mjs) model a wire and stay separate on purpose.
+// tests/support/loopback-harness.mjs) model a wire and stay separate on purpose.
+import { createDisconnectNotifier } from "../../web/js/serial-transport.mjs";
 import { tick } from "./globals.mjs";
 
 // A minimal EventTarget: what navigator.serial / navigator.usb look like to
@@ -40,10 +42,17 @@ export function makeEmitter(extra = {}) {
 // a real reader does, so the bridge's read loop behaves like a real one
 // instead of spinning through the test.
 //
+// The port satisfies the transport contract, so a fake provider can hand it to
+// the bridge directly; handed over as a native Web Serial port it is wrapped
+// like a real one, and the contract members are simply not used.
+//
 // Options:
 //   usbVendorId/usbProductId — what getInfo() reports
-//   device          — the USBDevice behind a WebUSB port; left off when absent,
-//                     the way the polyfilled CDC port keeps its device private
+//   device          — the USBDevice behind a WebUSB port (usbDevice); null
+//                     when omitted
+//   transport       — the transport name it declares ("webusb" by default)
+//   capabilities    — what it declares it can do; framing, signals and
+//                     reopen by default. Mutable, so a test can take one away.
 //   failOpenWhen    — (options, attempt) => message or null; a message makes
 //                     that open() throw after it has been recorded
 //   failSignalsWith — message every setSignals() throws with
@@ -55,11 +64,14 @@ export function makeEmitter(extra = {}) {
 // The last two are the windows in which a mid-clone reopen can lose bytes.
 //
 // Records: opens (option copies), closes, signals (every call), written
-// (every byte), plus opened/closed flags. push(bytes) puts a chunk on the line.
+// (every byte), plus opened/closed flags. push(bytes) puts a chunk on the line;
+// unplug() reports the port lost through onDisconnect(), as a transport does.
 export function makeRecordingPort({
   usbVendorId = 0x0403,
   usbProductId = 0x6015,
-  device,
+  device = null,
+  transport = "webusb",
+  capabilities = { framing: true, signals: true, reconfigure: "reopen" },
   failOpenWhen = () => null,
   failSignalsWith = null,
   deliverOnCancel = null,
@@ -127,6 +139,9 @@ export function makeRecordingPort({
   }
 
   const port = {
+    transport,
+    capabilities: { ...capabilities },
+    usbDevice: device,
     opened: false,
     closed: false,
     opens: [],
@@ -142,11 +157,18 @@ export function makeRecordingPort({
       }
       port.opened = true;
       port.closed = false;
+      lossNotifier.arm();
     },
     async close() {
+      lossNotifier.disarm();
       port.closes += 1;
       port.closed = true;
       settle();
+    },
+    onDisconnect: (callback) => lossNotifier.subscribe(callback),
+    // The adapter going away: reported once, the way every transport does.
+    unplug() {
+      return lossNotifier.fire();
     },
     async setSignals(signals) {
       if (failSignalsWith) {
@@ -168,8 +190,6 @@ export function makeRecordingPort({
       }),
     },
   };
-  if (device !== undefined) {
-    port.device = device;
-  }
+  const lossNotifier = createDisconnectNotifier(port);
   return port;
 }

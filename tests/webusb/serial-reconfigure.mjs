@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BrowserSerialBridge, createSerialRpcHandler } from "../../web/js/serial.js";
+import { BrowserSerialBridge } from "../../web/js/serial.js";
+import { createSerialRpcHandler } from "../../web/js/serial-globals.mjs";
 import { makeEmitter, makeRecordingPort } from "../support/fake-serial.mjs";
 import { tick, withNavigator } from "../support/globals.mjs";
 
@@ -13,10 +14,14 @@ import { tick, withNavigator } from "../support/globals.mjs";
 
 // Open a bridge on a recording port; portOptions are makeRecordingPort's
 // (failOpenWhen, deliverOnCancel, deliverOnReopen model the reopen hazards).
+// The port goes to the bridge as itself, through a stand-in WebUSB provider,
+// so a test can change the capabilities it declares.
 async function openBridge(t, portOptions = {}) {
   const port = makeRecordingPort(portOptions);
-  withNavigator(t, { serial: makeEmitter({ requestPort: async () => port }) });
-  const bridge = new BrowserSerialBridge();
+  withNavigator(t, { usb: makeEmitter() });
+  const bridge = new BrowserSerialBridge({
+    createWebUsbSerial: () => ({ requestPort: async () => port }),
+  });
   const debug = [];
   bridge.onDebug = (msg) => debug.push(msg);
   await bridge.open(9600);

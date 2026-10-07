@@ -5,10 +5,13 @@ import { makeEmitter, makeRecordingPort } from "../support/fake-serial.mjs";
 import { tick, withNavigator } from "../support/globals.mjs";
 
 // An adapter that disappears mid-session (unplugged, or powered down with the
-// radio) is reported by the browser as a "disconnect" event on the transport
-// API, not on the port. The bridge has to recognize the ones that concern the
-// port it holds open, close it, and say so — while ignoring every other device
-// on the machine going away.
+// radio) is reported by its transport through onDisconnect(), in one shape
+// whatever the transport (web/js/serial-transport.mjs). The bridge has to close
+// the port it holds and say so once. How each transport recognises its own
+// loss -- by event target, by USBDevice identity, by GATT link -- is
+// tests/webusb/serial-transport-conformance.mjs; this file is the bridge's
+// half, plus the native wrapper end to end, since that is the path a desktop
+// browser takes.
 
 async function openNativeBridge(t) {
   const port = makeRecordingPort();
@@ -61,49 +64,57 @@ test("a normal disconnect stops the watch without reporting a loss", async (t) =
   assert.equal(lost.length, 0);
 });
 
-async function openWebUsbBridge(t, port) {
-  const usb = makeEmitter();
-  withNavigator(t, { usb });
+// The same path for a port the bridge holds as itself (here through a
+// stand-in WebUSB provider): the bridge acts on the contract's report and
+// decodes no transport event of its own.
+async function openContractBridge(t, port) {
+  withNavigator(t, { usb: makeEmitter() });
   const bridge = new BrowserSerialBridge({
     createWebUsbSerial: () => ({ requestPort: async () => port }),
   });
   const lost = [];
   bridge.onPortLost = (info) => lost.push(info);
   await bridge.open(9600);
-  return { bridge, usb, lost };
+  return { bridge, lost };
 }
 
-test("a WebUSB disconnect is matched by the USBDevice behind the port", async (t) => {
-  const device = { vendorId: 0x0403, productId: 0x6015 };
-  const port = makeRecordingPort({ device });
-  const { bridge, usb, lost } = await openWebUsbBridge(t, port);
+test("a transport's loss report closes the port and is reported once", async (t) => {
+  const port = makeRecordingPort({ device: { vendorId: 0x0403, productId: 0x6015 } });
+  const { bridge, lost } = await openContractBridge(t, port);
 
-  // WebUSB fires at navigator.usb and names the device.
-  usb.emit("disconnect", { target: usb, device: { vendorId: 0x0403, productId: 0x6015 } });
+  assert.equal(port.unplug(), true);
   await tick();
-  // A different USBDevice object, even with identical ids, is a different
-  // adapter — the port stays open.
-  assert.equal(lost.length, 0);
-  assert.equal(bridge.getPortInfo().connected, true);
 
-  usb.emit("disconnect", { target: usb, device });
-  await tick();
-  assert.equal(lost.length, 1);
+  assert.deepEqual(lost, [{ deviceName: "USB VID:PID 0x0403:0x6015" }]);
   assert.equal(bridge.port, null);
+  assert.equal(port.closed, true);
+  // The closed port cannot report again, and nothing would be listening.
+  assert.equal(port.unplug(), false);
+  assert.equal(lost.length, 1);
 });
 
-test("a port that hides its USBDevice falls back to the reported USB ids", async (t) => {
-  // The polyfilled CDC port keeps its device private; the ids it reports are
-  // the only handle the bridge has on which adapter went away.
-  const port = makeRecordingPort({ usbVendorId: 0x1a86, usbProductId: 0x7523 });
-  const { bridge, usb, lost } = await openWebUsbBridge(t, port);
+test("a port the bridge has let go of cannot tear down the next session", async (t) => {
+  const first = makeRecordingPort();
+  const second = makeRecordingPort();
+  let next = first;
+  withNavigator(t, { usb: makeEmitter() });
+  const bridge = new BrowserSerialBridge({
+    createWebUsbSerial: () => ({ requestPort: async () => next }),
+  });
+  const lost = [];
+  bridge.onPortLost = (info) => lost.push(info);
+  await bridge.open(9600);
+  await bridge.close();
+  next = second;
+  await bridge.open(9600);
 
-  usb.emit("disconnect", { target: usb, device: { vendorId: 0x067b, productId: 0x2303 } });
+  // Re-armed by hand so the first port reports a loss again: the bridge's
+  // subscription to it ended with its session and must not hear it.
+  await first.open({ baudRate: 9600 });
+  first.unplug();
   await tick();
+
   assert.equal(lost.length, 0);
-
-  usb.emit("disconnect", { target: usb, device: { vendorId: 0x1a86, productId: 0x7523 } });
-  await tick();
-  assert.equal(lost.length, 1);
-  assert.equal(bridge.getPortInfo().connected, false);
+  assert.equal(bridge.port, second);
+  await bridge.close();
 });
