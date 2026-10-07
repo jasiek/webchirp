@@ -13,12 +13,23 @@ methods with the same parameters.
 Keys are the functions' own names so that a search for ``parse_csv`` finds the
 definition, this table and the JS call site in one pass; the JS side sends the
 parameters under the Python parameter names for the same reason.
+
+``rpc_dispatch`` never raises an ``Exception`` back across the boundary. Its
+reply is always an envelope, ``{"ok": true, "result": ...}`` or ``{"ok": false,
+"error": {...}}`` built by ``rpc_error_envelope``, so a failure reaches JS as
+fields -- the class, its bases, its module, its message, its traceback and the
+JS error underneath a ``JsException`` -- rather than as one Pyodide
+``PythonError`` whose message is the whole traceback text. The JS half
+(``web/js/rpc-dispatch.mjs``) turns a failed envelope into a
+``RuntimeCallError`` (``web/js/runtime-errors.mjs``), which is what every
+classifier in the UI tests by type.
 """
 
 from __future__ import annotations
 
 import inspect
 import json
+import traceback
 from typing import TYPE_CHECKING
 
 from webchirp_bridge.channel_extra import get_channel_extra
@@ -50,6 +61,11 @@ if TYPE_CHECKING:
     from typing import Any, Callable
 
     from pyodide.ffi import JsProxy
+
+try:
+    from pyodide.ffi import JsException
+except ImportError:  # CPython (compileall, the type checker); never the runtime
+    JsException = None
 
 # The one parameter a method may take that is not JSON: a JS function. It
 # arrives as ``rpc_dispatch``'s third argument and is bound under this name,
@@ -105,19 +121,101 @@ def rpc_method_parameters(method: str) -> list[str]:
     return list(inspect.signature(RPC_METHODS[method]).parameters)
 
 
-async def rpc_dispatch(
-    method: str, params_json: str, callback: JsProxy | None = None
-) -> str:
-    """Run one RPC method and return its result as JSON text.
+def _exception_chain(exc: BaseException) -> list[BaseException]:
+    """List ``exc`` and every exception below it, outermost first.
 
-    The single entry point JS calls: looks ``method`` up in ``RPC_METHODS``,
-    decodes ``params_json`` (one JSON object) into keyword arguments, binds
-    ``callback`` under ``CALLBACK_PARAM`` when one is given, awaits the result
-    if the method is a coroutine function and serialises what comes back.
-    Keyword binding is what makes a mismatch fail loudly: an unknown method or
-    a misnamed parameter raises here instead of silently reading a stale
-    interpreter global, which is what the string-built expressions this
-    replaced did.
+    Follows ``__cause__``, then ``__context__``, as the traceback does, so a
+    driver's ``RadioError`` raised while handling a serial or checksum failure
+    leads to that failure. Guarded against a cycle, which Python allows.
+    """
+    chain: list[BaseException] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    return chain
+
+
+def _js_cause(exc: BaseException) -> dict[str, str] | None:
+    """Name the JS error behind ``exc``, if a rejected JS call raised it.
+
+    A JS rejection that Python awaits -- a serial operation, the port chooser --
+    arrives as a ``JsException``, which keeps the JS error's ``name`` and
+    ``message`` as attributes. Those are what the browser branches on (a
+    dismissed chooser is recognised by its name), so they are lifted out here
+    rather than left for JS to parse back out of the traceback. Walks the
+    exception chain because a driver may re-raise a serial failure as a
+    ``RadioError`` of its own, and that is the exception that reaches the
+    dispatcher; the first ``JsException`` found is the answer.
+    """
+    for current in _exception_chain(exc):
+        if JsException is not None and isinstance(current, JsException):
+            return {
+                "name": str(getattr(current, "name", "") or ""),
+                "message": str(getattr(current, "message", "") or ""),
+            }
+    return None
+
+
+def _python_causes(exc: BaseException) -> list[dict[str, str]]:
+    """Name each exception ``exc`` was raised from or while handling.
+
+    A driver often catches a specific failure and re-raises a generic one --
+    ``iradio_uv_5118plus`` turns "Block failed checksum!" into "Failed to read
+    block" -- so the outer message alone can hide what went wrong. JS
+    classifies a failure by what it said (``classifyErrorKind``,
+    ``web/js/ui/analytics.js``), and these messages are part of what it said;
+    the traceback's frames, which are not, stay out.
+    """
+    return [
+        {"type": type(current).__name__, "message": str(current)}
+        for current in _exception_chain(exc)[1:]
+    ]
+
+
+def rpc_error_envelope(exc: Exception) -> dict[str, Any]:
+    """Describe one failed call as the fields JS classifies it by.
+
+    The one place a Python exception is turned into what crosses the boundary.
+    Before it, Pyodide flattened every failure into a ``PythonError`` whose
+    message was the traceback text, and each JS classifier re-derived the class
+    from that text with a regex. Here the class is sent as data: ``type`` and
+    ``module`` name it, ``bases`` lists every class above it up to
+    ``BaseException`` (``object`` excluded) so JS can match a subclass by the
+    base it tests for, ``message`` is ``str(exc)`` alone -- the sentence a user
+    can be shown -- and ``traceback`` is the full formatted text the debug panel
+    prints. ``causes`` names the exceptions it was chained from, nearest first
+    (``_python_causes``), and ``js`` is the JS error under a ``JsException``
+    (``_js_cause``), or ``None``.
+    """
+    cls = type(exc)
+    return {
+        "type": cls.__name__,
+        "bases": [base.__name__ for base in cls.__mro__[1:] if base is not object],
+        "module": cls.__module__,
+        "message": str(exc),
+        "traceback": "".join(traceback.format_exception(exc)),
+        "causes": _python_causes(exc),
+        "js": _js_cause(exc),
+    }
+
+
+async def _call_rpc_method(
+    method: str, params_json: str, callback: JsProxy | None
+) -> Any:
+    """Run one RPC method and return its result, raising whatever it raises.
+
+    Looks ``method`` up in ``RPC_METHODS``, decodes ``params_json`` (one JSON
+    object) into keyword arguments, binds ``callback`` under ``CALLBACK_PARAM``
+    when one is given and awaits the result if the method is a coroutine
+    function. Keyword binding is what makes a mismatch fail loudly: an unknown
+    method or a misnamed parameter raises here instead of silently reading a
+    stale interpreter global, which is what the string-built expressions this
+    replaced did. Split from ``rpc_dispatch`` so that one ``try`` there turns
+    every failure -- a malformed call as much as a failing method -- into an
+    envelope.
     """
     try:
         function = RPC_METHODS[method]
@@ -135,4 +233,25 @@ async def rpc_dispatch(
     result = function(**kwargs)
     if inspect.isawaitable(result):
         result = await result
-    return json.dumps(result)
+    return result
+
+
+async def rpc_dispatch(
+    method: str, params_json: str, callback: JsProxy | None = None
+) -> str:
+    """Run one RPC method and return its outcome as a JSON envelope.
+
+    The single entry point JS calls. Success is ``{"ok": true, "result": ...}``;
+    any ``Exception`` -- from the method, from decoding the call, or from
+    serialising the result -- is ``{"ok": false, "error": ...}`` as built by
+    ``rpc_error_envelope``, so the Python coroutine never rejects on the JS
+    side. Only ``Exception`` is caught: ``KeyboardInterrupt``, ``SystemExit``
+    and the other bare ``BaseException`` subclasses mean the interpreter is
+    being torn down and must keep propagating rather than be reported as one
+    failed call.
+    """
+    try:
+        result = await _call_rpc_method(method, params_json, callback)
+        return json.dumps({"ok": True, "result": result})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": rpc_error_envelope(exc)})

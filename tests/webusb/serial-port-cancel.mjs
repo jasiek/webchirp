@@ -10,6 +10,7 @@ import {
 import { classifyErrorKind, errorTypeName } from "../../web/js/ui/analytics.js";
 import { createDebugLog } from "../../web/js/ui/debug-log.js";
 import { setNavigator } from "../support/globals.mjs";
+import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
 // Pressing Cancel in the browser's port chooser used to arrive at the UI as a
 // Pyodide traceback, which the app dumped into the Debug Output panel -- so the
@@ -89,23 +90,33 @@ test("a real chooser failure is left alone", async () => {
   assert.equal(isPortSelectionCancelled(error), false);
 });
 
-test("the cancellation is still recognizable after the runtime flattens it", () => {
-  // What reaches the UI once the error has crossed Pyodide: the name is gone
-  // and the sentence is one line of a Python traceback.
-  const flattened = new Error(
-    [
-      "Traceback (most recent call last):",
-      '  File "<exec>", line 1, in <module>',
-      '  File "/webchirp_runtime/webchirp_bridge/serial_pipe.py", line 60, in webserial_connect',
-      "    result = await serial_open(int(baudrate))",
-      `pyodide.ffi.JsException: ${PORT_SELECTION_CANCELLED}: ${PORT_SELECTION_CANCELLED_MESSAGE}`,
-    ].join("\n"),
+test("the cancellation is still recognizable after it has crossed the runtime", () => {
+  // What reaches the UI once the error has gone through Python: a
+  // RuntimeCallError for the JsException, whose jsCause keeps the bridge's
+  // name for the JS error underneath.
+  const crossed = runtimeCallError(
+    "JsException",
+    `${PORT_SELECTION_CANCELLED}: ${PORT_SELECTION_CANCELLED_MESSAGE}`,
+    { js: { name: PORT_SELECTION_CANCELLED, message: PORT_SELECTION_CANCELLED_MESSAGE } },
+    "webserial_connect",
   );
 
-  assert.equal(isPortSelectionCancelled(flattened), true);
-  // And the analytics classification the connect path already relied on keeps
-  // working off the same sentence.
-  assert.equal(classifyErrorKind(flattened), "port_not_selected");
+  assert.equal(isPortSelectionCancelled(crossed), true);
+  // And the analytics classification the connect path relies on reads the
+  // same name.
+  assert.equal(classifyErrorKind(crossed), "port_not_selected");
+  assert.equal(errorTypeName(crossed), "JsException");
+});
+
+test("only the name marks a cancellation, not the sentence", () => {
+  // The wording is user-facing copy, free to change: a failure that merely
+  // quotes it -- or a different JS error under a JsException -- is not one.
+  assert.equal(isPortSelectionCancelled(new Error(PORT_SELECTION_CANCELLED_MESSAGE)), false);
+  const other = runtimeCallError("JsException", "NetworkError: The device has been lost.", {
+    js: { name: "NetworkError", message: "The device has been lost." },
+  }, "webserial_connect");
+  assert.equal(isPortSelectionCancelled(other), false);
+  assert.equal(classifyErrorKind(other), "serial_disconnect");
 });
 
 test("a named cancellation still reports a usable error_type", () => {

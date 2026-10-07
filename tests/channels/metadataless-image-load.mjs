@@ -78,8 +78,8 @@ test("clone image whose metadata resolves to a live-mode driver still loads", as
 });
 
 // The browser retries the ~20 s all-drivers sweep only when detection is what
-// failed, and it decides that by reading the Python class name out of the
-// traceback Pyodide hands it. Nothing else pins the two together: rename the
+// failed, and it decides that by the Python class the dispatcher's error
+// envelope names. Nothing else pins the two together: rename the
 // Python class and the backstop goes quietly dead, while widening the predicate
 // makes every unrelated image failure cost a sweep before it surfaces.
 test("the retry gate recognises a real detection failure and nothing else", async () => {
@@ -93,9 +93,10 @@ test("the retry gate recognises a real detection failure and nothing else", asyn
   assert.equal(isImageDetectionFailure(detectionError), true);
 
   const payloadError = await harness
-    .runPythonJson("json.dumps(load_image_base64(_b))", { _b: "not base64!" })
+    .rpc("load_image_base64", { image_b64: "not base64!" })
     .then(() => null, (error) => error);
   assert.ok(payloadError, "expected an invalid payload to fail");
+  assert.ok(payloadError.pythonType, "the failure should arrive typed, through the dispatcher");
   assert.match(String(payloadError.message), /Invalid image base64 payload/);
   assert.equal(
     isImageDetectionFailure(payloadError),

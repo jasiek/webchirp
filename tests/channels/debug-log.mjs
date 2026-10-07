@@ -176,8 +176,8 @@ test("runtime errors keep their message through debug output and Sentry when sta
   assert.equal(sent.message, original.message);
   assert.ok(!sent.message.includes("wasm-function"));
   assert.equal(sent.stack, original.stack);
-  assert.ok(initOptions().ignoreErrors.some((pattern) => pattern.test(sent.message)),
-    "the SDK filter can still recognize the original CHIRP exception");
+  assert.notEqual(initOptions().beforeSend({}, { originalException: sent }), null,
+    "a native failure outside typed RPC is not classified from traceback text");
 });
 
 test("input the form rejected is shown to the user and never captured", async () => {

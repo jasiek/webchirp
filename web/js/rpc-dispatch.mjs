@@ -15,6 +15,12 @@
 // A plain .mjs rather than .js so tests/support/radio-harness.mjs and the
 // contract test can import it without the CDN resolve hook that
 // web/js/runtime-rpc.js needs.
+//
+// A call never rejects on the Python side: rpc_dispatch answers every call
+// with an envelope, and unwrapRpcEnvelope below turns a failed one into a
+// RuntimeCallError whose name is the Python class.
+
+import { RuntimeCallError } from "./runtime-errors.mjs";
 
 // The one parameter that is not JSON: a JS function, passed to rpc_dispatch as
 // its third argument and bound in Python under this name. Mirrors
@@ -90,6 +96,24 @@ export function prepareRpcCall(name, params = {}) {
   return { paramsJson: JSON.stringify(jsonParams), callback };
 }
 
+// Open the envelope rpc_dispatch replies with: the method's result on
+// {"ok": true}, and on {"ok": false} a RuntimeCallError
+// (web/js/runtime-errors.mjs) built from the fields rpc_error_envelope
+// (web/python/webchirp_bridge/rpc.py) filled in. This is the one place a
+// Python failure becomes a JS error, so the browser and the Node harness
+// (tests/support/radio-harness.mjs), which both call through rpcDispatcherFor,
+// throw the same typed error. A reply that is not an envelope at all means the
+// two halves of the contract are out of step, and says so.
+export function unwrapRpcEnvelope(name, envelope) {
+  if (envelope?.ok === true) {
+    return envelope.result;
+  }
+  if (envelope?.ok === false && envelope.error) {
+    throw new RuntimeCallError(envelope.error, { method: name });
+  }
+  throw new Error(`RPC method ${name} returned no envelope; is the runtime bridge current?`);
+}
+
 // One dispatcher per interpreter, so an interpreter swap (the isolated
 // Quansheng runtime in web/js/selected-driver-runtime.mjs boots a fresh
 // Pyodide per release) gets a fresh handle on its own rpc_dispatch rather
@@ -114,7 +138,7 @@ export function rpcDispatcherFor(pyodide) {
         const { paramsJson, callback } = prepareRpcCall(name, params);
         const pending = dispatch(name, paramsJson, callback);
         try {
-          return JSON.parse(await pending);
+          return unwrapRpcEnvelope(name, JSON.parse(await pending));
         } finally {
           pending?.destroy?.();
         }

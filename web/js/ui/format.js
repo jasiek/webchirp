@@ -2,8 +2,8 @@
 // UI modules. Nothing here touches UI state or the document, so it stays
 // directly unit-testable.
 
-import { errorDetails } from "../error-details.mjs";
-export { errorDetails };
+import { errorDetails as nativeErrorDetails } from "../error-details.mjs";
+import { isRuntimeCallError, runtimeErrorDetail } from "../runtime-errors.mjs";
 
 function sanitizeFileNamePart(text) {
   return String(text || "")
@@ -47,7 +47,27 @@ export function bytesToBase64(bytes) {
   return btoa(out);
 }
 
-// Extract a short first-line summary from a detailed error payload.
+// Normalize unknown error shapes into a detailed string for diagnostics. A
+// runtime failure's detail is its Python traceback (runtimeErrorDetail,
+// web/js/runtime-errors.mjs): its message is one sentence and its JS stack
+// only says which RPC call failed, so without this the debug panel would lose
+// the frames that say where CHIRP broke.
+export function errorDetails(error) {
+  if (!error) {
+    return "Unknown error";
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (isRuntimeCallError(error)) {
+    return runtimeErrorDetail(error);
+  }
+  return nativeErrorDetails(error);
+}
+
+// Extract a short first-line summary from a detailed error payload. For a
+// runtime failure that is "RadioError: Radio did not respond", the line
+// runtimeErrorDetail puts above the traceback.
 export function errorSummary(error) {
   const firstLine = errorDetails(error).split("\n")[0].trim();
   return firstLine || "Unknown error";

@@ -195,14 +195,52 @@ test("a call that does not match the contract is refused before it crosses", asy
   });
 
   // The Python side refuses on its own too, for a caller that bypasses the
-  // JS table.
+  // JS table -- in an envelope like any other failure, never by raising.
   const harness = await sharedHarness();
-  await assert.rejects(
-    harness.runPython('await rpc_dispatch("no_such_method", "{}")'),
-    /Unknown RPC method 'no_such_method'/,
+  const unknown = JSON.parse(await harness.runPython('await rpc_dispatch("no_such_method", "{}")'));
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.error.type, "ValueError");
+  assert.match(unknown.error.message, /Unknown RPC method 'no_such_method'/);
+  const positional = JSON.parse(await harness.runPython('await rpc_dispatch("parse_csv", "[]")'));
+  assert.equal(positional.ok, false);
+  assert.equal(positional.error.type, "TypeError");
+  assert.match(positional.error.message, /expects a JSON object of named parameters/);
+});
+
+test("a successful call answers with an ok envelope around the result", async () => {
+  const harness = await sharedHarness();
+  const reply = JSON.parse(await harness.runPython('await rpc_dispatch("get_default_schema", "{}")'));
+  assert.deepEqual(Object.keys(reply).sort(), ["ok", "result"]);
+  assert.equal(reply.ok, true);
+  // The result is exactly what the method returned: the dispatcher's own
+  // unwrap hands callers the same value.
+  assert.deepEqual(reply.result, await harness.rpc("get_default_schema"));
+});
+
+test("a raised RuntimePreconditionError answers with an error envelope, not a rejection", async () => {
+  const harness = await sharedHarness();
+  const reply = JSON.parse(await harness.runPython(
+    'await rpc_dispatch("get_radio_settings", json.dumps({"session_id": "never-opened"}))',
+  ));
+  assert.deepEqual(Object.keys(reply).sort(), ["error", "ok"]);
+  assert.equal(reply.ok, false);
+  assert.deepEqual(
+    Object.keys(reply.error).sort(),
+    ["bases", "causes", "js", "message", "module", "traceback", "type"],
   );
-  await assert.rejects(
-    harness.runPython('await rpc_dispatch("parse_csv", "[]")'),
-    /expects a JSON object of named parameters/,
-  );
+  assert.equal(reply.error.type, "RuntimePreconditionError");
+  assert.equal(reply.error.module, "webchirp_bridge.runtime_errors");
+  // Every class above it up to BaseException, nearest first, object left out:
+  // what lets JS match a subclass by the base it asks for.
+  assert.deepEqual(reply.error.bases.slice(0, 2), ["RuntimeUnsupportedError", "RadioError"]);
+  assert.equal(reply.error.bases.at(-1), "BaseException");
+  assert.ok(reply.error.bases.includes("Exception"));
+  assert.equal(reply.error.bases.includes("object"), false);
+  // The message is str(exc) alone; the traceback carries the frames and ends
+  // on the qualified class, the way Python prints it.
+  assert.match(reply.error.message, /never-opened.*is not open/s);
+  assert.doesNotMatch(reply.error.message, /Traceback|RuntimePreconditionError/);
+  assert.match(reply.error.traceback, /^Traceback \(most recent call last\):/);
+  assert.match(reply.error.traceback, /webchirp_bridge\.runtime_errors\.RuntimePreconditionError: /);
+  assert.equal(reply.error.js, null);
 });

@@ -9,6 +9,8 @@
 // runs — which compares VENDOR/MODEL/VARIANT across `rclass.ALIASES + [rclass]`
 // (chirp/chirp/directory.py) — and must report ambiguity rather than guessing.
 
+import { isPythonError } from "./runtime-errors.mjs";
+
 function identitiesFor(radio) {
   if (Array.isArray(radio.aliases) && radio.aliases.length > 0) {
     return radio.aliases;
@@ -87,10 +89,11 @@ export function findCatalogRadioForImageMetadata(radioCatalog, metadata) {
 // every other failure (not a clone-mode image, a bad payload, a driver blowing
 // up while reading memories) is about the image itself and would still fail
 // after the sweep — so retrying would just cost ~20 s in the browser before
-// surfacing the same error. Pyodide surfaces the Python traceback as the error
-// message, so the class name is the contract; see the Python docstring.
+// surfacing the same error. The class is read off the RuntimeCallError the
+// dispatcher throws (web/js/runtime-errors.mjs), so the class name is the
+// contract; see the Python docstring.
 export function isImageDetectionFailure(error) {
-  return /\bImageDetectionError\b/.test(String(error?.message || error || ""));
+  return isPythonError(error, "ImageDetectionError");
 }
 
 // Detection after a fast-path resolve, with the all-drivers sweep as a

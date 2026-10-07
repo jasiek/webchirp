@@ -7,9 +7,11 @@
 // the click had never registered at all.
 //
 // This module is the one place that names that outcome, shared by the serial
-// bridge that raises it and the UI that reports it. It is deliberately tiny and
-// dependency-free so the UI can import it without pulling in the whole serial
-// stack.
+// bridge that raises it and the UI that reports it. It is deliberately tiny,
+// depending only on the equally dependency-free web/js/runtime-errors.mjs, so
+// the UI can import it without pulling in the whole serial stack.
+
+import { jsErrorName } from "./runtime-errors.mjs";
 
 // Carried on the Error object while it stays inside one JS realm (the bridge's
 // own callers, the CLI, tests).
@@ -25,22 +27,19 @@ export function createSerialUnsupportedError(message) {
   return error;
 }
 
-// Recognize both the bridge error and its serialized Python traceback.
+// Recognize the bridge error, its runtime envelope and bootstrap traceback.
 export function isSerialUnsupported(error) {
   if (!error) return false;
-  if (error.name === SERIAL_UNSUPPORTED) return true;
+  if (jsErrorName(error) === SERIAL_UNSUPPORTED) return true;
   const text = typeof error === "string"
     ? error
     : `${error.message || ""}\n${error.stack || ""}`;
   return /\bSerialUnsupportedError\b/.test(text);
 }
 
-// The wording matters twice over. It has to read as a sentence to a user, and
-// it has to contain "No port selected" because that is the substring
-// classifyErrorKind() in web/js/ui/analytics.js matches to report the outcome
-// as error_kind=port_not_selected -- the only part of the error that survives
-// the round trip through Pyodide, which flattens everything else into a
-// traceback string.
+// The sentence a user is shown for it. Nothing matches on this wording: the
+// cancellation is recognised by name (isPortSelectionCancelled below), so the
+// copy can change freely.
 export const PORT_SELECTION_CANCELLED_MESSAGE =
   "No port selected: the browser's port chooser was dismissed.";
 
@@ -51,20 +50,12 @@ export function createPortSelectionCancelledError() {
   return error;
 }
 
-// Recognize that outcome again on the far side of the runtime boundary. The
-// name survives only when the error was never serialized, so the message text
-// is checked too: by the time serialConnect() rejects in the UI, the error is a
-// plain Error whose message is a whole Python traceback with our sentence on
-// its last line.
+// Recognize that outcome on either side of the runtime boundary, by name. An
+// error that stayed in JS (the bridge's own callers, the CLI, tests) carries
+// the name itself; one that went through Python -- webserial_connect awaits
+// the bridge, so the rejection becomes a JsException -- arrives as a
+// RuntimeCallError whose jsCause names the JS error underneath, which
+// jsErrorName (web/js/runtime-errors.mjs) reads for either shape.
 export function isPortSelectionCancelled(error) {
-  if (!error) {
-    return false;
-  }
-  if (error.name === PORT_SELECTION_CANCELLED) {
-    return true;
-  }
-  const text = typeof error === "string"
-    ? error
-    : `${error.message || ""}\n${error.stack || ""}`;
-  return text.includes(PORT_SELECTION_CANCELLED_MESSAGE);
+  return jsErrorName(error) === PORT_SELECTION_CANCELLED;
 }
