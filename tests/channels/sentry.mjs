@@ -588,6 +588,7 @@ test("transaction redaction preserves trace IDs while removing queries and looku
   assert.equal(event.spans[0].parent_span_id, "8765432109876543");
   assert.equal(event.spans[0].data["http.response.status_code"], 200);
   assert.equal(scrubTransaction({ spans: [] }).spans.length, 0);
+  assert.equal(Object.hasOwn(event.contexts.trace, "description"), false);
 });
 
 test("API exchanges propagate explicit sampled and unsampled contexts through body completion", async (t) => {
@@ -688,4 +689,41 @@ test("body failures retain their identity and mark the API trace as failed", asy
   assert.equal(calls, 1);
   assert.deepEqual(span.status, { code: 2, message: "internal_error" });
   assert.equal(span.ended, true);
+});
+
+
+test("transaction redaction covers new string attributes and removes request inputs", () => {
+  const data = {
+    "http.request.header.referer": "https://example.com/?locator=IO82MM",
+    "http.response.headers.private": "secret",
+    "http.request.body": "private payload",
+    "http.request.cookies": "session=secret",
+    "url.query": "q=London",
+    "url.fragment": "private",
+    "future.sdk.url": "https://example.com/lookup/GB3IC?lat=51.5074",
+    "future.sdk.text": "at 51.5074 on IO82MM",
+    "server.address": "api.codeplug.org",
+    "sentry.trace_id": "12345678",
+    "sentry.span_id": "12345678",
+    "http.response.status_code": 200,
+  };
+  const event = initOptions().beforeSendTransaction({
+    type: "transaction", transaction: "API request",
+    contexts: { trace: { trace_id: "12345678901234567890123456789012", data: { ...data } } },
+    spans: [{ description: "GET /lookup/GB3IC", data: { ...data } }],
+    request: { url: "https://codeplug.org/?locator=IO82MM" },
+  });
+  const expected = {
+    "future.sdk.url": "https://example.com/lookup/:callsign?[query]",
+    "future.sdk.text": "at [num] on [loc]",
+    "server.address": "api.codeplug.org",
+    "sentry.trace_id": "12345678",
+    "sentry.span_id": "12345678",
+    "http.response.status_code": 200,
+  };
+  assert.deepEqual(event.contexts.trace.data, expected);
+  assert.deepEqual(event.spans[0].data, expected);
+  assert.equal(event.spans[0].description, "GET /lookup/:callsign");
+  assert.equal(Object.hasOwn(event.contexts.trace, "description"), false);
+  assert.equal(event.request.url, "https://codeplug.org/?[query]");
 });

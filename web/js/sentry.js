@@ -372,11 +372,16 @@ function scrubTraceSpan(span) {
   if (!span || typeof span !== "object") {
     return span;
   }
-  span.description = scrubText(span.description);
+  if (typeof span.description === "string") {
+    span.description = scrubText(span.description);
+  }
   for (const key of Object.keys(span.data || {})) {
-    if (/^(?:http|url)\.(?:query|fragment)$/.test(key)) {
+    if (/^(?:http|url)\.(?:.*\.)?(?:query|fragment|body|cookies?|headers?)(?:[._]|$)/.test(key)) {
       delete span.data[key];
-    } else if (["url", "http.url", "url.full", "url.path", "http.target", "http.route"].includes(key)) {
+    } else if (typeof span.data[key] === "string"
+      && !/(?:^|[._])(?:trace|span|parent_span|segment)[._]id$/.test(key)) {
+      // SDK attributes can gain URL-bearing keys; redact values rather than
+      // maintaining a list of URL keys. Identifiers still join trace segments.
       span.data[key] = scrubText(span.data[key]);
     }
   }
@@ -386,9 +391,10 @@ function scrubTraceSpan(span) {
 // Transactions bypass beforeSend, so redact their root and child spans here.
 export function scrubTransaction(event) {
   scrubEvent(event);
-  event.transaction = scrubText(event.transaction);
+  if (typeof event.transaction === "string") {
+    event.transaction = scrubText(event.transaction);
+  }
   if (event.request) {
-    event.request.url = scrubText(event.request.url);
     delete event.request.query_string;
     delete event.request.fragment;
     delete event.request.headers;
