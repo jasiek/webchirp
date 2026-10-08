@@ -9,6 +9,8 @@
 // Protocol constants and the baud-rate divisor math follow libftdi.
 import { WebUsbTransport } from "./webusb-transport.js";
 
+/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+
 export const FTDI_VENDOR_ID = 0x0403;
 
 // FTDI vendor control requests (bRequest values).
@@ -100,6 +102,7 @@ export function stripFtdiStatusBytes(bytes) {
   return bytes.slice(2);
 }
 
+/** @implements {SerialTransport} */
 export class FtdiSerialPort extends WebUsbTransport {
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: SIO_SET_DATA is issued as DATA_8N1 unconditionally.

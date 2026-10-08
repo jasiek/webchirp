@@ -9,6 +9,28 @@
 // createSerialRpcHandler() answers those messages from a serial bridge
 // (web/js/serial-bridge.mjs), logging what the debug panel needs to see.
 
+/**
+ * One serial operation as it crosses from a Python serial_* call to the
+ * bridge: the op name and its normalised arguments.
+ * @typedef {Object} SerialRpcMessage
+ * @property {string} op  A key of the handler's op table ("open", "readBytes", ...).
+ * @property {Record<string, any>} [payload]
+ */
+
+/**
+ * What answers SerialRpcMessages: createSerialRpcHandler()'s result, or a
+ * test's stand-in.
+ * @typedef {(msg: SerialRpcMessage) => Promise<unknown>} SerialRpcHandler
+ */
+
+/**
+ * @typedef {Object} SerialRpcHandlerOptions
+ * @property {import("./serial-bridge.mjs").SerialBridge} serialBridge
+ * @property {(line: string) => void} logSerial  The serial/debug log.
+ * @property {(cur: number, max: number, message: string) => void} [onProgress]
+ *   Clone progress; cur and max are -1 when a driver reports no counts.
+ */
+
 // Render a setSignals payload for the debug panel, naming only the lines the
 // caller actually asked to change.
 function describeSignals(payload = {}) {
@@ -30,6 +52,10 @@ function describeOptions(options = {}, changed = []) {
 
 // Build the handler that answers serial ops from a bridge. logSerial receives
 // the lines meant for the serial/debug log; onProgress receives clone progress.
+/**
+ * @param {SerialRpcHandlerOptions} options
+ * @returns {SerialRpcHandler}
+ */
 export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) {
   async function handleOpen(payload = {}) {
     const res = await serialBridge.open(payload.baudRate);
@@ -170,6 +196,10 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
 
 // Pass a nullable line through as null, so a driver setting one line never
 // implicitly clears the other.
+/**
+ * @param {unknown} value
+ * @returns {boolean|null}
+ */
 function optionalBoolean(value) {
   return value === null || value === undefined ? null : Boolean(value);
 }
@@ -179,7 +209,8 @@ function optionalBoolean(value) {
 // asks for one byte within 1200 ms, a clone settles 350 ms unless told
 // otherwise, and a driver that declares no BAUD_RATE sends 0, which the bridge
 // reads as "keep the rate the port has".
-const SERIAL_GLOBAL_OPS = Object.freeze({
+/** @typedef {(...args: any[]) => [string, Record<string, any>]} SerialGlobalOp */
+const SERIAL_GLOBAL_OPS = Object.freeze(/** @satisfies {Record<string, SerialGlobalOp>} */ ({
   serial_open: (baudRate) => ["open", { baudRate: Number(baudRate) }],
   serial_close: () => ["close", {}],
   serial_write_hex: (hex) => ["writeHex", { hex: String(hex || "") }],
@@ -215,6 +246,7 @@ const SERIAL_GLOBAL_OPS = Object.freeze({
   // the pipe actually holds a value for are sent; the rest keep what the port
   // was opened with.
   serial_reconfigure: (baudRate, dataBits, stopBits, parity) => {
+    /** @type {Record<string, number|string>} */
     const options = {};
     if (baudRate !== null && baudRate !== undefined) {
       options.baudRate = Number(baudRate);
@@ -231,7 +263,7 @@ const SERIAL_GLOBAL_OPS = Object.freeze({
     return ["reconfigure", { options }];
   },
   serial_reset_buffers: () => ["resetBuffers", {}],
-});
+}));
 
 // The names installSerialBridgeGlobals() defines, for the typings check.
 export const SERIAL_GLOBAL_NAMES = Object.freeze(Object.keys(SERIAL_GLOBAL_OPS));
@@ -240,8 +272,16 @@ export const SERIAL_GLOBAL_NAMES = Object.freeze(Object.keys(SERIAL_GLOBAL_OPS))
 // each forwarding one {op, payload} message to handleSerialRpc -- the function
 // createSerialRpcHandler() returns, or anything answering the same messages.
 // Installed before the runtime boots: Python binds these by name at import.
+/**
+ * @template {object} T
+ * @param {T} target
+ * @param {SerialRpcHandler} handleSerialRpc
+ * @returns {T}
+ */
 export function installSerialBridgeGlobals(target, handleSerialRpc) {
-  for (const [name, toMessage] of Object.entries(SERIAL_GLOBAL_OPS)) {
+  /** @type {[string, SerialGlobalOp][]} */
+  const ops = Object.entries(SERIAL_GLOBAL_OPS);
+  for (const [name, toMessage] of ops) {
     target[name] = (...args) => {
       const [op, payload] = toMessage(...args);
       return handleSerialRpc({ op, payload });

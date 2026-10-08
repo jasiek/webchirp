@@ -1,29 +1,75 @@
 import { bt1adDriver } from "./webbluetooth/bt-1ad.js";
 import { createDisconnectNotifier } from "./serial-transport.mjs";
 
+/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+/** @typedef {import("./serial-transport.mjs").SerialTransportCapabilities} SerialTransportCapabilities */
+/** @typedef {import("./serial-transport.mjs").SerialOpenOptions} SerialOpenOptions */
+/** @typedef {import("./serial-transport.mjs").SerialSignals} SerialSignals */
+
+/**
+ * A matched adapter's UART protocol, as a profile's probe() returns it
+ * (web/js/webbluetooth/bt-1ad.js is the one there is).
+ * @typedef {Object} BluetoothSerialProtocol
+ * @property {string} name  How the debug panel names the adapter.
+ * @property {boolean} supportsFraming
+ * @property {boolean} supportsSignals
+ * @property {BluetoothRemoteGATTCharacteristic} rx  Where received bytes arrive.
+ * @property {(options: SerialOpenOptions) => void} validateOptions  Throws on
+ *   settings the adapter cannot carry, before any command is sent.
+ * @property {(options: SerialOpenOptions, previous: SerialOpenOptions|null) => Promise<void>} configure
+ * @property {(bytes: Uint8Array) => Promise<void>} write
+ * @property {(signals: SerialSignals) => Promise<void>} setSignals
+ */
+
+/**
+ * One adapter profile: what the chooser filters on and how to recognise the
+ * adapter once connected.
+ * @typedef {Object} BluetoothSerialDriver
+ * @property {string} name
+ * @property {BluetoothLEScanFilter[]} filters
+ * @property {BluetoothServiceUUID[]} optionalServices
+ * @property {(server: BluetoothRemoteGATTServer, options?: object) => Promise<BluetoothSerialProtocol|null>} probe
+ *   The protocol for a matching adapter, or null for a mismatch.
+ */
+
 // Register adapter profiles here; chooser permissions and probing share this list.
+/** @type {BluetoothSerialDriver[]} */
 export const BLUETOOTH_SERIAL_DRIVERS = [bt1adDriver];
 
 // Present the dongle as a serial transport (web/js/serial-transport.mjs) so the
 // existing buffered bridge and every CHIRP driver retain ownership of radio
 // handshakes and memory formats.
+/** @implements {SerialTransport} */
 export class WebBluetoothSerialPort {
   // Keep GATT state on the port; it survives UART-rate changes without a picker.
+  /**
+   * @param {BluetoothDevice} device
+   * @param {{drivers?: BluetoothSerialDriver[], [option: string]: unknown}} [options]
+   *   drivers to probe, plus options handed to each probe().
+   */
   constructor(device, { drivers = BLUETOOTH_SERIAL_DRIVERS, ...driverOptions } = {}) {
     this.device = device;
     this._lossNotifier = createDisconnectNotifier(this);
+    /** @type {ReadableStream<Uint8Array>|null} */
     this.readable = null;
+    /** @type {WritableStream<Uint8Array>|null} */
     this.writable = null;
+    /** @type {ReadableStreamDefaultController<Uint8Array>|null} */
     this._controller = null;
+    /** @type {BluetoothSerialProtocol|null} */
     this._driver = null;
+    /** @type {BluetoothRemoteGATTCharacteristic|null} */
     this._rx = null;
+    /** @type {SerialOpenOptions|null} */
     this._options = null;
     this._queue = Promise.resolve();
     this._drivers = drivers;
     this._driverOptions = driverOptions;
+    /** @type {string|null} */
     this.driverName = null;
+    /** @param {Event} event */
     this._onValue = (event) => {
-      const value = event.target.value;
+      const value = /** @type {BluetoothRemoteGATTCharacteristic} */ (event.target).value;
       if (value && this._controller) {
         // Copy the DataView's exact window; browsers may reuse its buffer.
         this._controller.enqueue(new Uint8Array(
@@ -48,6 +94,7 @@ export class WebBluetoothSerialPort {
   // matched, so nothing beyond the rate is promised. The UART rate always
   // changes in place, over the same GATT link: a reconnect would drop
   // notifications mid-clone.
+  /** @returns {SerialTransportCapabilities} */
   get capabilities() {
     return {
       framing: Boolean(this._driver?.supportsFraming),
@@ -181,6 +228,10 @@ export class WebBluetoothSerialPort {
 
 // Request devices advertised by registered profiles and permit their services.
 // Detection occurs during open, so failed probes use the normal port cleanup.
+/**
+ * @param {{drivers?: BluetoothSerialDriver[]}} [options]
+ * @returns {{requestPort(): Promise<WebBluetoothSerialPort>}}
+ */
 export function createWebBluetoothSerial({ drivers = BLUETOOTH_SERIAL_DRIVERS } = {}) {
   return {
     // Keep the picker call within the user gesture, before any async discovery.

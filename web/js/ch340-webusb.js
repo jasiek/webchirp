@@ -10,6 +10,8 @@
 // separate interrupt endpoint, which this driver does not read).
 import { WebUsbTransport } from "./webusb-transport.js";
 
+/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+
 // The CH340/CH341 family ships under several vendor/product id pairs — WCH's
 // own, plus the QinHeng/clone ids the kernel's id_table also claims.
 export const CH340_DEVICE_IDS = [
@@ -149,6 +151,7 @@ export function ch340GetDivisor(baudRate, { limitedPrescaler = false } = {}) {
   return ((0x100 - div) << 8) | (fact << 2) | ps;
 }
 
+/** @implements {SerialTransport} */
 export class Ch340SerialPort extends WebUsbTransport {
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: the LCR pair is written LCR_8N1 unconditionally.

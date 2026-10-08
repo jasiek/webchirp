@@ -12,6 +12,12 @@
 // to recognise.
 //
 // No DOM or navigator access at module scope: Node imports this too.
+//
+// The typedefs below are the contract's single statement: every transport
+// class declares @implements {SerialTransport}, so tsc (npm run check:js)
+// checks each one against them, and assertSerialTransport() checks the same
+// members at runtime for ports tsc never sees (a test's stand-in, the Node
+// adapter).
 
 /**
  * What open() and reconfigure() take, in Web Serial's spelling.
@@ -65,7 +71,7 @@
  * @property {WritableStream<Uint8Array>|null} writable  Null while closed.
  * @property {(signals: SerialSignals) => Promise<void>} setSignals
  * @property {() => {usbVendorId?: number, usbProductId?: number}} getInfo
- * @property {object|null} usbDevice  The USBDevice behind the port, or null
+ * @property {USBDevice|null} usbDevice  The USBDevice behind the port, or null
  *   when there is none (native Web Serial, Bluetooth, node-serialport).
  * @property {(callback: (payload: SerialDisconnectPayload) => void) => () => void} onDisconnect
  *   Registers a callback for the loss of the open port and returns its
@@ -77,6 +83,24 @@
  * @property {() => Promise<void>} [discardInput]  Drops bytes the transport
  *   holds but has not delivered yet (the OS queue behind node-serialport).
  * @property {() => Promise<object>} [getSignals]  Input lines, where readable.
+ */
+
+/**
+ * One-shot loss reporting, as createDisconnectNotifier() builds it.
+ * @typedef {Object} DisconnectNotifier
+ * @property {(callback: (payload: SerialDisconnectPayload) => void) => () => void} subscribe
+ *   What a transport's onDisconnect() forwards to.
+ * @property {() => void} arm  At the end of a successful open().
+ * @property {() => void} disarm  At the start of close().
+ * @property {() => boolean} fire  On loss; false when not armed.
+ */
+
+/**
+ * One member of the contract and the test a port's value for it must pass.
+ * @typedef {Object} SerialTransportMember
+ * @property {string} name
+ * @property {string} expect  What a passing value looks like, for the error.
+ * @property {(port: any) => boolean} check
  */
 
 // The transport names a port may declare.
@@ -91,6 +115,7 @@ export const FRAMING_OPTIONS = Object.freeze(["dataBits", "stopBits", "parity"])
 // (tk280 wants even parity, tg_uv2p two stop bits) must not be inherited by the
 // next radio, which would corrupt every byte it reads. The browser and the
 // node-serialport bridge both open from this one object.
+/** @type {Readonly<Omit<SerialOpenOptions, "baudRate">>} */
 export const DEFAULT_PORT_OPTIONS = Object.freeze({
   dataBits: 8,
   stopBits: 1,
@@ -101,6 +126,10 @@ export const DEFAULT_PORT_OPTIONS = Object.freeze({
 const RECONFIGURE_MODES = Object.freeze(["reopen", "update"]);
 
 // True for a function-valued member; the methods every port must have.
+/**
+ * @param {unknown} value
+ * @returns {value is Function}
+ */
 function isFunction(value) {
   return typeof value === "function";
 }
@@ -108,6 +137,10 @@ function isFunction(value) {
 // True for a capabilities object whose every field is one the bridge can act
 // on. A missing or misspelt field would otherwise read as undefined, which the
 // bridge would have to guess about -- the probing this contract replaces.
+/**
+ * @param {any} value
+ * @returns {value is SerialTransportCapabilities}
+ */
 function isCapabilities(value) {
   return Boolean(value)
     && typeof value === "object"
@@ -119,6 +152,7 @@ function isCapabilities(value) {
 // Every member the bridge relies on, each with the test it must pass. The
 // streams and usbDevice only have to be present: they are legitimately null
 // while the port is closed, or when no USBDevice exists.
+/** @type {readonly Readonly<SerialTransportMember>[]} */
 export const SERIAL_TRANSPORT_MEMBERS = Object.freeze([
   Object.freeze({
     name: "transport",
@@ -150,6 +184,11 @@ export const SERIAL_TRANSPORT_MEMBERS = Object.freeze([
 // half-implements the contract is an authoring error, and finding its gaps one
 // failed clone at a time is how the old by-convention interface drifted.
 // Returns the port so a caller can assert and use it in one expression.
+/**
+ * @param {any} port  Anything claiming to be a port.
+ * @param {string} [label]  How the error names it; the class name by default.
+ * @returns {SerialTransport}
+ */
 export function assertSerialTransport(port, label = "") {
   const name = label || port?.constructor?.name || "serial port";
   if (!port || typeof port !== "object") {
@@ -171,7 +210,12 @@ export function assertSerialTransport(port, label = "") {
 // the same way: once, as {transport, port}, and never for a close() it was
 // asked to do. arm() at the end of a successful open(), disarm() at the start
 // of close(); fire() from whatever the transport's own loss signal is.
+/**
+ * @param {SerialTransport} port  The port the payload names.
+ * @returns {DisconnectNotifier}
+ */
 export function createDisconnectNotifier(port) {
+  /** @type {Set<(payload: SerialDisconnectPayload) => void>} */
   const callbacks = new Set();
   let armed = false;
   return {
@@ -216,10 +260,17 @@ export function createDisconnectNotifier(port) {
 // identity here; a second adapter with the same ids is a different object and
 // is ignored. Returns the function that stops watching. A missing source
 // (Node without a stand-in) watches nothing.
+/**
+ * @param {EventTarget|null|undefined} usbEvents  navigator.usb, or a stand-in.
+ * @param {USBDevice|null|undefined} device
+ * @param {() => void} onLost
+ * @returns {() => void}  Stops watching.
+ */
 export function watchUsbDisconnect(usbEvents, device, onLost) {
   if (!usbEvents || typeof usbEvents.addEventListener !== "function" || !device) {
     return () => {};
   }
+  /** @param {Event & {device?: USBDevice}} event */
   const handler = (event) => {
     if (event?.device === device) {
       onLost();

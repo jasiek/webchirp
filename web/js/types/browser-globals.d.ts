@@ -204,8 +204,21 @@ declare global {
     acceptAllDevices?: boolean;
   }
 
+  interface BluetoothCharacteristicProperties {
+    readonly broadcast: boolean;
+    readonly read: boolean;
+    readonly writeWithoutResponse: boolean;
+    readonly write: boolean;
+    readonly notify: boolean;
+    readonly indicate: boolean;
+    readonly authenticatedSignedWrites: boolean;
+    readonly reliableWrite: boolean;
+    readonly writableAuxiliaries: boolean;
+  }
+
   interface BluetoothRemoteGATTCharacteristic extends EventTarget {
     readonly uuid: string;
+    readonly properties: BluetoothCharacteristicProperties;
     readonly value: DataView | null;
     readValue(): Promise<DataView>;
     writeValue(value: BufferSource): Promise<void>;

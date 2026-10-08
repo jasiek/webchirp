@@ -17,6 +17,8 @@
 // and clears any it inherited at open, so 0xEC is an ordinary data byte.
 import { WebUsbTransport } from "./webusb-transport.js";
 
+/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+
 // Silicon Labs' vendor id. The chooser filters on it vendor-wide, because ~150
 // of the kernel id_table's entries are OEM cables that ship a CP210x under a
 // custom product id — an exact-pair allowlist would leave those *invisible in
@@ -253,6 +255,7 @@ export function cp2102QuantizeBaudRate(baudRate, {
   return baud;
 }
 
+/** @implements {SerialTransport} */
 export class Cp2102SerialPort extends WebUsbTransport {
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: SET_LINE_CTL is issued as LINE_CTL_8N1 unconditionally.
@@ -285,7 +288,13 @@ export class Cp2102SerialPort extends WebUsbTransport {
   }
 
   // Vendor request to the interface, value carried entirely in wValue.
+  /**
+   * @param {number} request
+   * @param {number} value
+   * @param {BufferSource} [data]
+   */
   async _controlOut(request, value, data) {
+    /** @type {USBControlTransferParameters} */
     const setup = {
       requestType: "vendor",
       recipient: "interface",
@@ -303,6 +312,12 @@ export class Cp2102SerialPort extends WebUsbTransport {
     }
   }
 
+  /**
+   * @param {number} request
+   * @param {number} length
+   * @param {{recipient?: USBRecipient, value?: number}} [options]
+   * @returns {Promise<DataView|null>}
+   */
   async _controlIn(request, length, { recipient = "interface", value = 0 } = {}) {
     const result = await this.device.controlTransferIn({
       requestType: "vendor",

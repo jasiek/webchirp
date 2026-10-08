@@ -11,6 +11,8 @@
 // use bRequest 0x01 on non-HXN chips (0x81 is HXN-only).
 import { WebUsbTransport } from "./webusb-transport.js";
 
+/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+
 export const PROLIFIC_VENDOR_ID = 0x067b;
 
 // Chip generations. Newer "HXN" silicon (PL2303GC/GB/GT/GL/GE/GS, ~2018+)
@@ -99,6 +101,7 @@ export function detectPl2303Type({ deviceClass, maxPacketSize0, usbVersion, devi
   return PL2303_TYPE_HX;
 }
 
+/** @implements {SerialTransport} */
 export class Pl2303SerialPort extends WebUsbTransport {
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: the line-coding block is written 8N1 unconditionally.
