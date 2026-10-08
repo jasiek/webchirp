@@ -22,6 +22,8 @@ import { withRequestTimeout } from "../request-timeout.js";
 import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from "./format.js";
 import { trackEvent } from "./analytics.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 // Per-source configuration for the shared repeater-query modal
 // (web/js/ui/repeater-query.js). Each source declares which fields its form contains,
 // how its filter options are obtained, and how a query actually runs — the
@@ -74,6 +76,10 @@ export function unmetRequirement(source, values) {
   return "";
 }
 
+/**
+ * @param {UiContext} ctx
+ * @param {{endpoints: import("../datasources.js").RepeaterEndpoints}} options
+ */
 export function createRepeaterSources(ctx, { endpoints }) {
   const { log } = ctx;
 

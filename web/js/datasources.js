@@ -80,6 +80,24 @@ const DEFAULT_REPEATER_API_BASE = "https://api.codeplug.org";
 // disables the two proxy-dependent directories, but IRTS remains on the
 // default API: that first-party route is part of the hosted app's contract and
 // a transport failure should surface to the user rather than hide the action.
+/**
+ * Where one repeater directory is queried: its rows and its filter metadata.
+ * @typedef {{apiUrl: string, metaUrl: string}} DirectoryEndpoint
+ */
+/**
+ * Every remote endpoint the app queries; a directory the deployment switched
+ * off is null.
+ * @typedef {Object} RepeaterEndpoints
+ * @property {DirectoryEndpoint|null} przemienniki
+ * @property {DirectoryEndpoint|null} repeaterbook
+ * @property {DirectoryEndpoint} irts
+ * @property {string} cities  The place-name gazetteer.
+ * @property {string} lookup  The per-callsign position lookup.
+ */
+/**
+ * @param {string} [apiBase]  Blank switches off the proxied directories.
+ * @returns {RepeaterEndpoints}
+ */
 function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
   const base = String(apiBase ?? "").trim().replace(/\/+$/, "");
   const irtsBase = base || DEFAULT_REPEATER_API_BASE;

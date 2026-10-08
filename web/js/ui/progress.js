@@ -1,9 +1,14 @@
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 // The app-wide progress strip above Debug Output. Any long runtime operation
 // that is not owned by one panel reports here; the matching narration goes to
 // the debug log, so the strip stays a single concise line.
 //
 // Deliberately not #clone-progress: that one lives inside a collapsible sidebar
 // <details>, so it is invisible whenever the user has that section closed.
+/**
+ * @param {Pick<UiContext, "dom">} deps
+ */
 export function createProgress({ dom }) {
   // Only the operation that began the strip may update or end it. Without this
   // a slow operation finishing late would tear down the bar a newer one is

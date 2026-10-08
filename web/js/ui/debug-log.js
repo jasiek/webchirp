@@ -4,10 +4,17 @@ import { captureError } from "../sentry.js";
 import { isBootstrapFailure } from "../runtime-bootstrap.mjs";
 import { isUserPreconditionFailure, runtimeErrorSentence } from "../runtime-errors.mjs";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 // The bottom debug panel is the single sink for status text, serial traffic and
 // full error detail. Keeping every write in one module preserves the rule that
 // full errors and tracebacks always reach the panel.
-export function createDebugLog({ dom, notice } = {}) {
+/**
+ * @param {{dom: UiContext["dom"], notice?: Pick<UiContext["notice"], "show">}} deps
+ *   notice: where a precondition failure's sentence goes; without one it
+ *   only reaches the panel.
+ */
+export function createDebugLog({ dom, notice }) {
   let lastErrorSummary = "";
 
   function isExpanded() {

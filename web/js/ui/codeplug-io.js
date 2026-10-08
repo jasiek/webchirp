@@ -14,6 +14,8 @@ import {
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
 import { requireRuntimeApi } from "./state.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 const LOADABLE_FILE_KINDS = new Map([
   [".csv", "csv"],
   [".img", "img"],
@@ -35,8 +37,13 @@ export function classifyLoadableFile(fileName) {
 // Python runtime, CHIRP binary .img import/export, drag-and-drop loading of
 // either kind, and the replace-or-merge prompt shown when an import would
 // discard channels already in the editor.
+/**
+ * @param {UiContext} ctx
+ */
 export function createCodeplugIo(ctx) {
   const { dom, state, log } = ctx;
+  /** @typedef {"replace"|"merge"|"cancel"} ImportChoice */
+  /** @type {((choice: ImportChoice) => void)|null} */
   let importChoiceResolve = null;
   let fileLoadInFlight = false;
   // dragenter/dragleave fire once per element the pointer crosses, so the
@@ -74,6 +81,7 @@ export function createCodeplugIo(ctx) {
     return !dom.importChoiceModalEl.classList.contains("hidden");
   }
 
+  /** @param {ImportChoice} choice */
   function resolveImportChoice(choice) {
     if (!importChoiceResolve) {
       return;
@@ -86,6 +94,10 @@ export function createCodeplugIo(ctx) {
 
   // Ask the user what to do with imported channels when the editor already
   // holds real ones. Resolves to "replace", "merge", or "cancel".
+  /**
+   * @param {string} message
+   * @returns {Promise<ImportChoice>}
+   */
   function askImportChoice(message) {
     dom.importChoiceMessageEl.textContent = message;
     dom.importChoiceModalEl.classList.remove("hidden");
@@ -104,6 +116,12 @@ export function createCodeplugIo(ctx) {
   // wholesale (Locations come from the file); "merge" appends the imported
   // channels below the existing ones, where they keep the Location the file
   // gave them unless it is out of bounds or already taken by a loaded channel.
+  /**
+   * @param {any} parsed  parse_csv's result.
+   * @param {"replace"|"merge"} [mode]
+   * @param {import("./state.js").UiState["codeplugSource"]} [csvSource]
+   *   Where the rows came from, for reporting.
+   */
   function applyParsedCsv(parsed, mode = "replace", csvSource = "csv") {
     const headersFromMeta = state.radioMetadata.headers || [];
     const parsedHeaders = parsed.headers || [];
@@ -164,6 +182,7 @@ export function createCodeplugIo(ctx) {
   // channels the user already has. Shared by the Load button and drops.
   async function importCsvFile(file, source = "button") {
     const parsed = await parseCsvViaRuntime(await file.text());
+    /** @type {"replace"|"merge"} */
     let mode = "replace";
     if (ctx.table.hasRealChannels()) {
       const choice = await askImportChoice(
@@ -510,9 +529,10 @@ export function createCodeplugIo(ctx) {
     });
 
     document.addEventListener("click", (event) => {
+      const target = /** @type {Node} */ (event.target);
       if (isExportMenuOpen()
-        && !dom.exportMenuToggleEl.contains(event.target)
-        && !dom.exportMenuEl.contains(event.target)) {
+        && !dom.exportMenuToggleEl.contains(target)
+        && !dom.exportMenuEl.contains(target)) {
         closeExportMenu();
       }
     });

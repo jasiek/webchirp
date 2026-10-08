@@ -42,6 +42,9 @@ export { buildExportFileName };
 // selection, repeater imports, file import/export, serial actions); this file
 // wires them together, owns the channels/settings view switch, and runs the
 // bootstrap sequence.
+/** @typedef {import("./types/ui-context.js").UiContext} UiContext */
+/** @typedef {import("./types/ui-context.js").UiActions} UiActions */
+
 export function createUiController() {
   const dom = queryUiElements();
   const state = createUiState();
@@ -56,6 +59,7 @@ export function createUiController() {
   // Cross-module calls go through this registry rather than direct imports, so
   // no module has to import a sibling that imports it back. Every entry is
   // resolved when called, never at construction time.
+  /** @type {UiActions} */
   const actions = {
     updateSerialActionState: () => ctx.serial.updateSerialActionState(),
     setEditorView: (view) => setEditorView(view),
@@ -77,7 +81,9 @@ export function createUiController() {
   // Modules hang off one context object so siblings can reach each other
   // through it. The forward references above and below are only dereferenced
   // after every module has been constructed.
-  const ctx = { dom, state, log, progress, notice, actions };
+  // Typed as the whole UiContext from the start: the members not set here are
+  // attached by the Object.assign below, before any of them is read.
+  const ctx = /** @type {UiContext} */ ({ dom, state, log, progress, notice, actions });
   const session = createRadioSession(ctx);
   const settings = createSettingsPanel(ctx);
   const table = createChannelTable(ctx);
@@ -121,6 +127,7 @@ export function createUiController() {
     ...radioEventParams(state.selectedRadio),
   }));
 
+  /** @param {import("./runtime-rpc.js").RuntimeApi} api */
   function setRuntimeApi(api) {
     state.runtimeApi = api;
   }

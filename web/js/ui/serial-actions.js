@@ -22,6 +22,8 @@ import {
 } from "../serial-errors.js";
 import { requireRuntimeApi } from "./state.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 const LIVE_RADIO_TITLE = "Live-mode radios are not supported in this UI yet";
 const NO_RADIO_SELECTED_TITLE = "Search for and select a radio first";
 // Shown when a clone is started on a browser without WebAssembly stack
@@ -46,6 +48,9 @@ const CLONE_FLOW_OUTCOMES = Object.freeze({
   radio_upload_failure: { flow: FLOWS.RADIO_UPLOAD, outcome: OUTCOMES.FAILED },
 });
 
+/**
+ * @param {UiContext} ctx
+ */
 export function createSerialActions(ctx) {
   const { dom, state, log, actions } = ctx;
 

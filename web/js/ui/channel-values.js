@@ -100,7 +100,8 @@ export function inAnyBand(hz, bands) {
 /**
  * @param {string} column  The CSV header being written.
  * @param {unknown} value  What the caller wants stored.
- * @param {ColumnMeta|null|undefined} meta  The column's metadata.
+ * @param {Partial<ColumnMeta>|null|undefined} meta  The column's metadata;
+ *   a column the schema does not describe has none, and stores text as is.
  * @param {unknown} [previous]  The cell's current value, the fallback.
  * @param {{allowReadOnly?: boolean}} [options]
  * @returns {NormalizedCell}
@@ -189,7 +190,7 @@ export function normalizeCellValue(column, value, meta, previous, { allowReadOnl
 /**
  * @param {string} column
  * @param {unknown} value
- * @param {ColumnMeta|null|undefined} meta
+ * @param {Partial<ColumnMeta>|null|undefined} meta
  * @param {unknown} [previous]
  * @param {{allowReadOnly?: boolean}} [options]
  * @returns {string}
