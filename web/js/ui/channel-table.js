@@ -1352,7 +1352,7 @@ export function createChannelTable({ dom, state, log, actions }) {
 
     dom.tableBody.addEventListener("input", (event) => {
       const target = /** @type {HTMLElement} */ (event.target);
-      const cell = cellReferenceFor(event.target);
+      const cell = cellReferenceFor(target);
       if (cell) {
         clearInvalidCell(cell.rowIdx, cell.column);
       }

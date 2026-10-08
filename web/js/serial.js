@@ -154,7 +154,10 @@ export class BrowserSerialBridge extends SerialBridge {
   // The bridge's transport factory: resolve the provider, show its chooser,
   // and wrap a native SerialPort so it meets the contract like every other
   // port does. Its loss events arrive on navigator.serial, the provider.
-  /** @returns {Promise<SerialTransport>} */
+  /**
+   * @override
+   * @returns {Promise<SerialTransport>}
+   */
   async requestTransport() {
     const serial = await this._ensureSerial();
     const port = await this._requestPort(serial);

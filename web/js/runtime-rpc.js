@@ -63,7 +63,7 @@ import {
 /**
  * What the app shell hands createRuntimeRpcClient().
  * @typedef {Object} RuntimeRpcClientOptions
- * @property {(message: object) => Promise<unknown>} handleSerialRpc
+ * @property {import("./serial-globals.mjs").SerialRpcHandler} handleSerialRpc
  *   Answers the serial ops Python sends through the bridge globals.
  * @property {(message: string, options?: {isError?: boolean}) => void} [logDebug]
  * @property {(label: string, total: number) => {update(done: number): void, end(): void}} [onProgress]

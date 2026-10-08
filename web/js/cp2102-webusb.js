@@ -470,7 +470,7 @@ export class Cp2102SerialPort extends WebUsbTransport {
     // the later ones. The app's bridge happens to tear down after a failed
     // open, but the loopback page only closes a port that opened.
     try {
-      await this._initialize(Number(options.baudRate) || 9600);
+      await this._initialize(baudRate);
     } catch (error) {
       await this._releaseDevice();
       throw error;

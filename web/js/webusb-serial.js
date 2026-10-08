@@ -87,7 +87,11 @@ export class CdcSerialPort extends WebUsbTransport {
     }
   }
 
-  /** @returns {Readonly<import("./serial-transport.mjs").SerialTransportCapabilities>} */
+  // The polyfill honours framing, unlike the chip drivers.
+  /**
+   * @override
+   * @returns {Readonly<import("./serial-transport.mjs").SerialTransportCapabilities>}
+   */
   get capabilities() {
     return CDC_CAPABILITIES;
   }

@@ -4,7 +4,12 @@
     "is emitted: the sources are served as they are. Node's types are left out on",
     "purpose so browser code cannot lean on Node globals (setTimeout returning a",
     "Timeout, Buffer, process); scripts/tsconfig.json adds them for the tooling,",
-    "and check:js runs both projects."
+    "and check:js runs both projects.",
+    "Target ES2022: the app needs Web Serial, WebUSB or Web Bluetooth, so it runs on",
+    "Chromium (Web Serial since 89), and every Chromium that can clone also has JSPI",
+    "(137+). strict is off because its two expensive halves are not paid for yet:",
+    "noImplicitAny would ask for ~1700 annotations and strictNullChecks ~250 fixes.",
+    "Every other strict-family flag that costs nothing is on."
   ],
   "compilerOptions": {
     "allowJs": true,
@@ -16,6 +21,13 @@
     "lib": ["es2023", "dom", "dom.iterable"],
     "types": [],
     "strict": false,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
     "skipLibCheck": true,
     "paths": {
       "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs": ["./node_modules/pyodide/pyodide.d.ts"]
