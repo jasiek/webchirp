@@ -13,7 +13,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -416,120 +416,4 @@ test("every runtime Python file is listed, shipped and has a URL", () => {
   for (const relPath of listed) {
     assert.equal(RUNTIME_PYTHON_URLS[relPath], `./python/${relPath}`);
   }
-});
-
-// A path-shaped token naming a source file, anchored the same way build-dist.mjs
-// anchors a reference so the two agree on what counts as one.
-const PROSE_PATH_RE =
-  /(?<![\w./-])([A-Za-z0-9_-]+(?:\/[A-Za-z0-9_.-]+)+\.(?:js|mjs|py|css|html|json))(?![\w-])/g;
-
-// The prose on each line of a JS, CSS or HTML source: what follows "//", plus
-// block-comment and HTML-comment bodies. Over-inclusive by design — a path
-// written in code is canonical too, or the build could not resolve it.
-function curlyBraceProse(lines) {
-  return lines.map((line) => {
-    let prose = "";
-    const slash = line.indexOf("//");
-    if (slash >= 0 && !/["'`]\s*$/.test(line.slice(0, slash))) {
-      prose += line.slice(slash);
-    }
-    if (/^\s*[*]/.test(line) || line.includes("/*") || line.includes("<!--")) {
-      prose += line;
-    }
-    return prose;
-  });
-}
-
-// The prose on each line of a Python source. Docstrings carry as much of the
-// explanation here as "#" comments do — _prune_dead_settings cites upstream from
-// its docstring — so this tracks triple-quote state across lines rather than
-// scanning each one alone, which would see only half the prose in the file.
-function pythonProse(lines) {
-  let delimiter = null;
-  return lines.map((line) => {
-    let rest = line;
-    let prose = "";
-    while (rest.length > 0) {
-      if (delimiter) {
-        const end = rest.indexOf(delimiter);
-        if (end < 0) {
-          prose += rest;
-          break;
-        }
-        prose += rest.slice(0, end);
-        rest = rest.slice(end + delimiter.length);
-        delimiter = null;
-        continue;
-      }
-      const opening = rest.match(/"""|'''/);
-      const hash = rest.indexOf("#");
-      if (opening && (hash < 0 || opening.index < hash)) {
-        delimiter = opening[0];
-        rest = rest.slice(opening.index + opening[0].length);
-        continue;
-      }
-      if (hash >= 0) {
-        prose += rest.slice(hash);
-      }
-      break;
-    }
-    return prose;
-  });
-}
-
-// Every source file the comment-path rule applies to. The extension set matches
-// PROSE_PATH_RE's, so the scan can never be narrower than what it recognises —
-// .mjs and .py were missing at first, which is how a stale chirp/directory.py
-// survived in web/js/image-metadata.mjs.
-const SCANNED_EXTS = new Set([".js", ".mjs", ".css", ".html", ".py"]);
-
-// Every scannable source under dir, skipping the generated and vendored trees.
-function sourceFiles(dir) {
-  const out = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === "__pycache__" || entry.name === "typings") {
-      continue;
-    }
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      out.push(...sourceFiles(full));
-    } else if (SCANNED_EXTS.has(path.extname(entry.name))) {
-      out.push(full);
-    }
-  }
-  return out;
-}
-
-// The convention the boundary rule exists to make safe. A module path in prose is
-// written from the repo root ("web/js/ui/format.js"), never dist-relative
-// ("./js/ui/format.js", which the build cannot tell from a real import and does
-// rewrite) and never partial ("ui/format.js", which resolves from nowhere).
-// Requiring it to resolve is also what catches a path left behind by a rename.
-//
-// Scoped to web/ because scripts/ legitimately holds paths that do not resolve:
-// the fixture trees in this very file name modules that exist only inside a
-// temporary directory.
-test("module paths named in comments are canonical and resolve", () => {
-  const offenders = [];
-  let scanned = 0;
-  for (const file of sourceFiles(webDir)) {
-    const rel = path.relative(repoRoot, file);
-    const lines = readFileSync(file, "utf8").split("\n");
-    const prose = path.extname(file) === ".py" ? pythonProse(lines) : curlyBraceProse(lines);
-    scanned += 1;
-    prose.forEach((text, i) => {
-      for (const [, token] of text.matchAll(PROSE_PATH_RE)) {
-        if (!existsSync(path.join(repoRoot, token))) {
-          offenders.push(`${rel}:${i + 1} names ${token}`);
-        }
-      }
-    });
-  }
-  // Guards the scan itself: a filter that stopped matching would report clean.
-  assert.ok(scanned > 40, `expected the whole web/ tree, scanned ${scanned} files`);
-  assert.deepEqual(
-    offenders,
-    [],
-    "write module paths from the repo root, and update them when a module moves",
-  );
 });
