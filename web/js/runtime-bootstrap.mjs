@@ -15,6 +15,10 @@ const bootstrapFailures = new WeakSet();
 
 // True when the error came out of the bootstrap sequence itself, so a caller can
 // report a genuine runtime crash and stay quiet about everything else.
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
 export function isBootstrapFailure(error) {
   return typeof error === "object" && error !== null && bootstrapFailures.has(error);
 }
@@ -23,6 +27,10 @@ export function isBootstrapFailure(error) {
 // is always an object identity to key the marker on. The RPC layer preserves
 // that identity when rethrowing, so downstream action handling can avoid
 // capturing the same bootstrap failure a second time.
+/**
+ * @param {unknown} error
+ * @returns {Error}  The error itself, or an Error wrapping a non-Error throw.
+ */
 export function markBootstrapFailure(error) {
   const marked = error instanceof Error ? error : new Error(String(error));
   bootstrapFailures.add(marked);
@@ -43,6 +51,11 @@ export function markBootstrapFailure(error) {
 // while still reporting the next attempt's different failure. The return value
 // says whether this failure has been reported at all, now or earlier, so the
 // caller can stop the action-level funnel capturing the same crash twice.
+/**
+ * @param {(detail: string) => void} reportCrash  Told the failure's detail once.
+ * @returns {(error: unknown, detail: string) => boolean}
+ *   Whether the error is a bootstrap failure (and so has been reported).
+ */
 export function createBootstrapCrashReporter(reportCrash) {
   if (typeof reportCrash !== "function") {
     throw new Error("createBootstrapCrashReporter requires a reportCrash() function");
@@ -65,6 +78,17 @@ export function createBootstrapCrashReporter(reportCrash) {
 
 // Build the bootstrap gate around a caller-supplied loadRuntime(), which must
 // resolve to a fully seeded runtime and reject if any step of that fails.
+/**
+ * @template T
+ * @typedef {Object} RuntimeBootstrap
+ * @property {() => Promise<T>} ensure  The seeded runtime, booting it if needed.
+ * @property {() => T|null} getRuntime  The seeded runtime, or null before boot.
+ */
+/**
+ * @template T
+ * @param {{loadRuntime?: () => Promise<T>}} [options]
+ * @returns {RuntimeBootstrap<T>}
+ */
 export function createRuntimeBootstrap({ loadRuntime } = {}) {
   if (typeof loadRuntime !== "function") {
     throw new Error("createRuntimeBootstrap requires a loadRuntime() function");

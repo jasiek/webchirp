@@ -1,10 +1,54 @@
 // Pure coercion/validation for channel cell values, driven by the CHIRP column
 // metadata the Python runtime reports for the selected radio.
 
+/**
+ * One channel in the grid: CHIRP CSV header -> cell text. Rows read from a
+ * radio or an image may also carry the driver's per-channel extras under the
+ * "__extra" sidecar key (web/js/row-extra.js), which no header names.
+ * @typedef {Record<string, any>} ChannelRow
+ */
+
+/**
+ * What the grid knows about one column, as _column_metadata_for_radio
+ * (web/python/webchirp_bridge/column_metadata.py) reports it. `kind` decides
+ * which of the other fields apply.
+ * @typedef {Object} ColumnMeta
+ * @property {"text"|"int"|"freq"|"enum"} kind
+ * @property {boolean} [editable]  False renders the cell read-only.
+ * @property {number} [maxLength]  text: the driver's name length.
+ * @property {string} [validChars]  text: every character the driver accepts.
+ * @property {number} [min]  int: the lowest memory number.
+ * @property {number} [max]  int: the highest; absent for unbounded radios.
+ * @property {Array<[number, number]>} [bands]  freq: [low, high) in Hz.
+ * @property {string[]} [options]  enum: the driver's values, in its order.
+ * @property {string} [default]  enum: CHIRP's starting value, when listed.
+ * @property {Record<string, string>} [optionWatts]  Power: option label ->
+ *   its wattage, spelled as an exported CSV spells it ("5.0W").
+ */
+
+/**
+ * The grid's schema for the selected radio (get_radio_column_metadata) or
+ * for none (get_default_schema).
+ * @typedef {Object} RadioMetadata
+ * @property {string[]} headers  The CSV columns this radio has, in order.
+ * @property {Record<string, ColumnMeta>} columns
+ */
+
+/**
+ * What normalizeCellValue did with a write.
+ * @typedef {Object} NormalizedCell
+ * @property {string} value  What to store.
+ * @property {boolean} accepted  False when value is a fallback, not the input.
+ */
+
 // Parse CHIRP-style frequency text (MHz) to integer Hz for validation checks.
 // Blank is not a frequency, so it parses to null like any other unparsable
 // text; callers that give blank its own meaning (an empty Frequency erases the
 // memory on upload) must test for it before calling this.
+/**
+ * @param {unknown} value  Frequency text in MHz.
+ * @returns {number|null}  Integer Hz, or null for blank or unparsable text.
+ */
 export function parseFreqToHz(value) {
   const text = String(value || "").trim();
   if (!text) {
@@ -21,6 +65,11 @@ export function parseFreqToHz(value) {
 }
 
 // Check whether a frequency in Hz falls within any allowed CHIRP band range.
+/**
+ * @param {number} hz
+ * @param {ColumnMeta["bands"]} bands  No bands at all means no constraint.
+ * @returns {boolean}
+ */
 export function inAnyBand(hz, bands) {
   if (!Array.isArray(bands) || bands.length === 0) {
     return true;
@@ -48,6 +97,14 @@ export function inAnyBand(hz, bands) {
 // allowReadOnly lets programmatic row builders (paste, repeater imports) fill
 // columns the grid renders read-only (e.g. TStep on radios with
 // has_tuning_step=False); kind/options validation still applies.
+/**
+ * @param {string} column  The CSV header being written.
+ * @param {unknown} value  What the caller wants stored.
+ * @param {ColumnMeta|null|undefined} meta  The column's metadata.
+ * @param {unknown} [previous]  The cell's current value, the fallback.
+ * @param {{allowReadOnly?: boolean}} [options]
+ * @returns {NormalizedCell}
+ */
 export function normalizeCellValue(column, value, meta, previous, { allowReadOnly = false } = {}) {
   const rejected = (fallback) => ({ value: String(fallback ?? ""), accepted: false });
   const stored = (out) => ({ value: String(out ?? ""), accepted: true });
@@ -129,6 +186,14 @@ export function normalizeCellValue(column, value, meta, previous, { allowReadOnl
 }
 
 // The value-only form, for the many call sites that only store the result.
+/**
+ * @param {string} column
+ * @param {unknown} value
+ * @param {ColumnMeta|null|undefined} meta
+ * @param {unknown} [previous]
+ * @param {{allowReadOnly?: boolean}} [options]
+ * @returns {string}
+ */
 export function normalizeValue(column, value, meta, previous, options = {}) {
   return normalizeCellValue(column, value, meta, previous, options).value;
 }

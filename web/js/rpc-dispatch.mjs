@@ -22,6 +22,42 @@
 
 import { RuntimeCallError } from "./runtime-errors.mjs";
 
+/** @typedef {import("./runtime-errors.mjs").RpcErrorFields} RpcErrorFields */
+/** @typedef {import("pyodide").PyodideInterface} PyodideInterface */
+
+/**
+ * What rpc_dispatch answers every call with: the method's JSON-decoded result,
+ * or the fields describing the Python exception it raised.
+ * @typedef {{ok: true, result: any} | {ok: false, error: RpcErrorFields}} RpcEnvelope
+ */
+
+/**
+ * A runtime method's name: a key of RPC_METHODS.
+ * @typedef {keyof typeof RPC_METHODS} RpcMethodName
+ */
+
+/**
+ * The named parameters of one call, under their Python spelling. Every value
+ * but `callback` must survive JSON.stringify.
+ * @typedef {{[param: string]: unknown, callback?: Function|null}} RpcParams
+ */
+
+/**
+ * What prepareRpcCall hands to rpc_dispatch: the JSON object of named
+ * parameters, and the callback or null.
+ * @typedef {Object} PreparedRpcCall
+ * @property {string} paramsJson
+ * @property {Function|null} callback
+ */
+
+/**
+ * The one way through an interpreter's rpc_dispatch. The result is whatever
+ * the Python method returned, decoded from JSON, so it is typed at each call
+ * site rather than here.
+ * @typedef {Object} RpcDispatcher
+ * @property {(name: string, params?: RpcParams) => Promise<any>} call
+ */
+
 // The one parameter that is not JSON: a JS function, passed to rpc_dispatch as
 // its third argument and bound in Python under this name. Mirrors
 // CALLBACK_PARAM in web/python/webchirp_bridge/rpc.py.
@@ -72,8 +108,14 @@ export const RPC_METHODS = Object.freeze({
 // on a Python default that a later signature change removes; the callback is
 // the one optional slot, because a method that takes one keeps working
 // without it.
+/**
+ * @param {string} name  The method; anything not in RPC_METHODS throws.
+ * @param {RpcParams} [params]
+ * @returns {PreparedRpcCall}
+ */
 export function prepareRpcCall(name, params = {}) {
-  const declared = RPC_METHODS[name];
+  /** @type {readonly string[]|undefined} */
+  const declared = RPC_METHODS[/** @type {RpcMethodName} */ (name)];
   if (!declared) {
     throw new Error(`Unknown RPC method ${name}; known methods: ${Object.keys(RPC_METHODS).join(", ")}`);
   }
@@ -104,6 +146,11 @@ export function prepareRpcCall(name, params = {}) {
 // (tests/support/radio-harness.mjs), which both call through rpcDispatcherFor,
 // throw the same typed error. A reply that is not an envelope at all means the
 // two halves of the contract are out of step, and says so.
+/**
+ * @param {string} name  The method the envelope answers, for the error.
+ * @param {RpcEnvelope|null|undefined} envelope  The decoded reply.
+ * @returns {any}  The method's result.
+ */
 export function unwrapRpcEnvelope(name, envelope) {
   if (envelope?.ok === true) {
     return envelope.result;
@@ -118,11 +165,16 @@ export function unwrapRpcEnvelope(name, envelope) {
 // Quansheng runtime in web/js/selected-driver-runtime.mjs boots a fresh
 // Pyodide per release) gets a fresh handle on its own rpc_dispatch rather
 // than calling into the interpreter it replaced.
+/** @type {WeakMap<object, RpcDispatcher>} */
 const dispatchers = new WeakMap();
 
 // The rpc_dispatch handle of one seeded interpreter, with call() as the only
 // way through it. Memoized per interpreter because pyodide.globals.get()
 // allocates a new PyProxy on every read.
+/**
+ * @param {Pick<PyodideInterface, "globals">} pyodide  A seeded interpreter.
+ * @returns {RpcDispatcher}
+ */
 export function rpcDispatcherFor(pyodide) {
   let dispatcher = dispatchers.get(pyodide);
   if (!dispatcher) {
