@@ -194,7 +194,9 @@ async function main() {
     recursive: true,
     // Type declarations (web/js/types/) are read by tsc alone; nothing a page
     // loads names them, so they have no business being served.
-    filter: (src) => path.basename(src) !== "__pycache__" && !src.endsWith(".d.ts"),
+    filter: (src) => path.basename(src) !== "__pycache__"
+      && src !== path.join(WEB_DIR, "js", "types")
+      && !src.endsWith(".d.ts"),
   });
 
   for (const relPath of REQUIRED_WEB_FILES) {
