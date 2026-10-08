@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@types/node": "25.9.9",
+    "esbuild": "0.28.2",
     "fflate": "^0.8.3",
     "pyright": "1.1.413",
     "typescript": "7.0.2"

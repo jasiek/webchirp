@@ -115,9 +115,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 ## Rules for Agents
 - Keep Python and JavaScript separated. Put runtime Python code in
   `web/python/webchirp_bridge/*.py`; a new module must be listed in `RUNTIME_PYTHON_FILES`
-  (`web/js/python-sources.mjs`) so it is seeded into Pyodide, and in `RUNTIME_PYTHON_URLS`
-  (`web/js/runtime-rpc.js`) so the build can rewrite its URL. The module graph must stay
-  acyclic; call across modules by importing, never through the globals.
+  (`web/js/python-sources.mjs`) so it is seeded into Pyodide; its URL follows from that
+  list (`web/js/runtime-python-urls.js`, which the dist build replaces with the hashed
+  URLs). The module graph must stay acyclic; call across modules by importing, never
+  through the globals.
 - A new RPC method is a function registered in `RPC_METHODS`
   (`web/python/webchirp_bridge/rpc.py`) and listed with its parameter names in
   `RPC_METHODS` (`web/js/rpc-dispatch.mjs`); `tests/channels/rpc-contract.mjs` fails when
