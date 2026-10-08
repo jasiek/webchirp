@@ -93,7 +93,8 @@ function findFreePort() {
     const probe = net.createServer();
     probe.once("error", reject);
     probe.listen(0, "127.0.0.1", () => {
-      const { port } = probe.address();
+      // A TCP listener's address() is an AddressInfo; only pipes give a string.
+      const { port } = /** @type {import("node:net").AddressInfo} */ (probe.address());
       probe.close(() => resolve(port));
     });
   });

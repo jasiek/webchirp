@@ -38,6 +38,10 @@ function bundleFor(chirpPackageDir) {
 
 // A provider over a CHIRP checkout (repo/chirp by default, or
 // WEBCHIRP_CHIRP_DIR / an explicit chirpDir) and the repo's web/python tree.
+/**
+ * The same shape as web/js/python-sources.mjs's PythonSourceProvider.
+ * @param {{repoRoot?: string, chirpDir?: string, driverSet?: string}} [options]
+ */
 export async function createLocalPythonSource({ repoRoot, chirpDir = "", driverSet } = {}) {
   const selectedDriverSet = normalizeDriverSet(driverSet || DEFAULT_DRIVER_SET);
   const chirpInputDir =

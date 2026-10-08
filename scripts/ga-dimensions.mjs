@@ -233,6 +233,11 @@ async function accessToken() {
   }
 }
 
+/**
+ * @param {string} token
+ * @param {string} path  Under ADMIN_API.
+ * @param {{method?: string, body?: unknown, query?: Record<string, string>}} [options]
+ */
 async function api(token, path, { method = "GET", body, query } = {}) {
   const url = new URL(`${ADMIN_API}/${path}`);
   for (const [key, value] of Object.entries(query || {})) {
