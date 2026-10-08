@@ -81,6 +81,11 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   runs (`rsgb-live` needs the network, `hw-radio` needs a radio on a serial
   port). `support` holds shared fixtures and the two harnesses, not tests.
 - `scripts/`: Build, coverage and CLI tooling only. No tests live here.
+- `tsconfig.json` (browser code, lib.dom, no Node types) and
+  `scripts/tsconfig.json` (tooling, with `@types/node`) are the two projects
+  `npm run check:js` runs. `web/js/types/browser-globals.d.ts` declares the
+  browser APIs lib.dom lacks (Web Serial, WebUSB, Web Bluetooth, JSPI, gtag);
+  `web/js/types/ui-context.d.ts` names every member of the UI `ctx`.
 
 ### Test conventions
 - Each suite is globbed, not listed: `npm run test:channels` runs
@@ -124,13 +129,19 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Do not reintroduce radio-specific RPC methods when generic selected-radio methods can be used.
 - Preserve debug visibility: full errors/tracebacks should be logged to the bottom debug panel.
 - Newly added functions need a comment as to what they do and why.
+- New exported JavaScript functions carry JSDoc types (`@param`, `@returns`)
+  that `npm run check:js` accepts. Sources stay plain `.js`/`.mjs`: no `.ts`.
 - Name other modules in comments by their canonical repo-root path
   (`web/js/ui/format.js`), never dist-relative (`./js/ui/format.js`) and never
   partial (`ui/format.js`). `build-dist.mjs` matches references textually, so a
   comment spelled exactly like a real import is rewritten into the built file;
   the canonical form is anchored away from that and is checked by
   `tests/build/build-dist.mjs`, which also fails when a rename leaves a path
-  behind.
+  behind. A JSDoc `import("./x.js")` type is a module specifier, not prose, so
+  it stays relative -- and the build sees it as a reference too, so never
+  type-import from a module that imports yours (it reads as a cycle and the two
+  share a hash). Types that must name many modules, like `UiContext`, live in
+  `web/js/types/*.d.ts`, which never reach dist.
 - Python functions must have type signatures.
 - An import used only in annotations goes under `if TYPE_CHECKING:` so it adds no
   runtime dependency; every module has `from __future__ import annotations`, which is
@@ -196,6 +207,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 
 ## Validation
 Before committing, run syntax checks, typechecking and all tests.
-`npm test` covers syntax, types and the four automatic suites.
+`npm test` covers syntax, Python types (`check:types`, pyright), JavaScript
+types (`check:js`, tsc over the JSDoc) and the four automatic suites.
 
 
