@@ -1,7 +1,9 @@
 // Switch between the two complete static licensing views without changing the
 // default native-language page that visitors and crawlers receive.
-const buttons = [...document.querySelectorAll("[data-licensing-language]")];
-const panels = [...document.querySelectorAll("[data-licensing-panel]")];
+// The generated pages (scripts/build-licensing-pages.mjs) put these attributes
+// on HTML elements only, so each match has dataset, hidden, lang and dir.
+const buttons = [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-licensing-language]"))];
+const panels = [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-licensing-panel]"))];
 
 // Keep the visible panel, button state, document language, and title together.
 function showLanguage(language) {

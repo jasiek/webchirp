@@ -9,5 +9,5 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["./**/*.mjs", "../web/js/types"]
+  "include": ["./**/*.mjs", "../web/js/types/browser-globals.d.ts"]
 }

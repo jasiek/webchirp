@@ -9,7 +9,8 @@ async function loadVersionInfo() {
     const dateEl = document.getElementById("version-date");
     if (dateEl && version.lastUpdated) dateEl.textContent = version.lastUpdated;
 
-    const chirpEl = document.getElementById("version-chirp");
+    // An <a> in index.html: the pin links to its upstream commit.
+    const chirpEl = /** @type {HTMLAnchorElement|null} */ (document.getElementById("version-chirp"));
     if (chirpEl && version.chirpShaShort) {
       chirpEl.textContent = version.chirpShaShort;
       if (version.chirpCommitUrl) chirpEl.href = version.chirpCommitUrl;

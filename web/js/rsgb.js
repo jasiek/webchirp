@@ -271,6 +271,24 @@ export function parseRsgbPayload(payload) {
 // user would write those channels to a radio believing the missing repeaters
 // simply are not there. A failed query the user can retry is the honest
 // outcome; the error names the square that stalled.
+/**
+ * One station as the RSGB directory API returns it (tx, rx, band, mode,
+ * status, locator, callsign, ...), read field by field as the API spells it.
+ * @typedef {Record<string, any>} RsgbRecord
+ */
+/**
+ * @typedef {Object} RsgbFetchOptions
+ * @property {Iterable<string>} [squares]  Four-character locator squares.
+ * @property {typeof fetch} [fetchImpl]  globalThis.fetch by default.
+ * @property {string} [baseUrl]
+ * @property {(request: {locator: string, url: string, count: number}) => void} [onRequest]
+ *   Told about each square once it has answered.
+ * @property {number} [timeoutMs]  Per square.
+ */
+/**
+ * @param {RsgbFetchOptions} [options]
+ * @returns {Promise<RsgbRecord[]>}  Every record the squares hold.
+ */
 export async function fetchRsgbRecords({
   squares,
   fetchImpl,
@@ -347,6 +365,19 @@ export function isRepeaterRecord(record) {
 
 // Rank and filter. An empty band or mode selection means "any", matching the
 // convention the other repeater sources use.
+/**
+ * @typedef {Object} RsgbFilter
+ * @property {number} [latitude]
+ * @property {number} [longitude]
+ * @property {number} [radiusKm]
+ * @property {Iterable<string>} [bands]  Empty means any band.
+ * @property {Iterable<string>} [modes]  Empty means any mode.
+ * @property {boolean} [onlyOperational]
+ */
+/**
+ * @param {RsgbRecord[]|null|undefined} records
+ * @param {RsgbFilter} [filter]
+ */
 export function filterRsgbRecords(records, {
   latitude,
   longitude,

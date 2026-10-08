@@ -484,7 +484,7 @@ export function createRepeaterQuery(ctx) {
       const code = Number(error?.code);
       const failureText = GEOLOCATION_FAILURE_TEXT[code];
       if (failureText) {
-        const refusal = new Error(failureText);
+        const refusal = /** @type {Error & {code?: number}} */ (new Error(failureText));
         refusal.code = code;
         throw refusal;
       }

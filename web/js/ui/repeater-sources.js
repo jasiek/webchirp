@@ -496,6 +496,10 @@ export function createRepeaterSources(ctx, { endpoints }) {
     // `onSquare` is called once per square of the plan, whether it was fetched
     // now or served from the cache, and says which, so the debug panel keeps a
     // line per square however little of the plan cost a request this time.
+    /**
+     * @param {string[]} squares
+     * @param {{onSquare?: (square: {locator: string, count: number, cached: boolean}) => void}} [options]
+     */
     async function recordsForSquares(squares, { onSquare } = {}) {
       const held = new Map();
       const missing = [];
