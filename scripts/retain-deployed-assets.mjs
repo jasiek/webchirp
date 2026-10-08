@@ -41,17 +41,23 @@ const RETAINED_LIST = "retained-assets.json";
 // Keep prior generations for 30 days so long-lived tabs can still load their
 // pinned CHIRP archives and the matching hashed runtime assets.
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-// An immutable asset is either content-hashed, name.<10 hex chars>.ext (see
-// build-dist.mjs), or the CHIRP archive and manifest named after their 40-hex
-// submodule pin (see scripts/build-chirp-bundle.mjs): a pin bump is a new
-// name, so an old name always means the old bytes and is as safe to carry
-// forward as a hashed one. The previous pin's archive is the one worth
-// keeping most -- a cached page from the last deploy boots from it, and
-// without it every user in the cache window gets a runtime that cannot start.
-const HASHED_NAME_RE = /\.([0-9a-f]{10})\.[a-z]+$|^chirp-[0-9a-f]{40}\.(zip|json)$/;
+// An immutable asset has one of three name shapes (see scripts/build-dist.mjs):
+//   * esbuild's bundled JS and CSS, name.<8 base32 chars>.js|css, and the
+//     source map beside each (name.<hash>.js.map);
+//   * a runtime Python file, or any asset the pre-esbuild build emitted,
+//     name.<10 hex chars>.ext, so the first esbuild deploy still carries the
+//     last textual build's assets forward;
+//   * the CHIRP archive and manifest named after their 40-hex submodule pin
+//     (see scripts/build-chirp-bundle.mjs): a pin bump is a new name, so an
+//     old name always means the old bytes and is as safe to carry forward as
+//     a hashed one. The previous pin's archive is the one worth keeping most
+//     -- a cached page from the last deploy boots from it, and without it
+//     every user in the cache window gets a runtime that cannot start.
+const HASHED_NAME_RE =
+  /\.[A-Z2-7]{8}\.(?:js|css)(?:\.map)?$|\.([0-9a-f]{10})\.[a-z]+$|^chirp-[0-9a-f]{40}\.(zip|json)$/;
 
 function normalizeAssetPath(ref) {
-  // Manifest values appear as both "./js/ui.<hash>.js" and "/js/ui.<hash>.js".
+  // Manifest values appear as both "./js/app.<hash>.js" and "/js/app.<hash>.js".
   return ref.replace(/^\.?\//, "");
 }
 
@@ -181,17 +187,17 @@ async function main() {
         continue; // ignore traversal attempts from a hostile manifest
       }
       if (existsSync(target)) {
-        // Since issue #114 a hashed name is derived from the bytes actually
-        // emitted under it, so an identical path really is identical content.
+        // A hashed name is derived from the bytes emitted under it (and, for
+        // esbuild's chunks, from the names they import), so an identical path
+        // really is identical content.
         continue;
       }
       const body = await fetchBytes(`${baseUrl}/${assetPath}`);
       // The res.ok check is the integrity gate; Pages returns real 404s (no SPA
       // fallback), so a miss can't smuggle an error page in here. Re-deriving the
-      // name from the bytes would be tighter but is not sound as a gate: members
-      // of an import cycle are named after a digest of the whole group rather
-      // than their own bytes (see build-dist.mjs), so a legitimate asset could
-      // fail the check.
+      // name from the bytes would be tighter but is not possible for most of
+      // them: esbuild's hash covers a chunk's content and the names of the
+      // chunks it imports, not a digest anything here can recompute.
       await mkdir(path.dirname(target), { recursive: true });
       await writeFile(target, body);
       retained[assetPath] = firstSeen;
