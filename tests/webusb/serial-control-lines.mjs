@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BrowserSerialBridge, createSerialRpcHandler } from "../../web/js/serial.js";
+import { BrowserSerialBridge } from "../../web/js/serial.js";
+import { createSerialRpcHandler } from "../../web/js/serial-globals.mjs";
 import { makeRecordingPort } from "../support/fake-serial.mjs";
 
 // The recording port stands in for Web Serial or one of the WebUSB adapter

@@ -318,8 +318,10 @@ function answerControlIn(chip, setup, length) {
  *   noStatusHeader — FTDI only: omit the two status bytes the driver strips,
  *                    so the driver eats two payload bytes per packet
  *   stallOnce      — the first bulk IN transfer reports a stall
+ * `usb` is the WebUSB loss-event source handed to the driver (navigator.usb
+ * when omitted), so a test can report the device unplugged.
  */
-export function createChipLoopbackPort(chip, { faults = {}, latencyMs = 4 } = {}) {
+export function createChipLoopbackPort(chip, { faults = {}, latencyMs = 4, usb } = {}) {
   const profile = CHIP_PROFILES[chip];
   if (!profile) {
     throw new Error(`unknown chip: ${chip}`);
@@ -412,7 +414,7 @@ export function createChipLoopbackPort(chip, { faults = {}, latencyMs = 4 } = {}
   };
 
   return {
-    port: new profile.Driver(device),
+    port: new profile.Driver(device, { usb }),
     device,
     controlLog,
     packetSize: inEndpointPacketSize,

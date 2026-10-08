@@ -14,6 +14,7 @@ import {
   markBootstrapFailure,
 } from "./runtime-bootstrap.mjs";
 import { createSelectedDriverRuntime } from "./selected-driver-runtime.mjs";
+import { installSerialBridgeGlobals } from "./serial-globals.mjs";
 import { rpcDispatcherFor } from "./rpc-dispatch.mjs";
 import { runtimeErrorDetail } from "./runtime-errors.mjs";
 import {
@@ -90,83 +91,13 @@ const DRIVER_LOG_INTERVAL = 25;
 // All Pyodide-backed methods must run one at a time; see call-queue.mjs.
 const enqueueRuntimeCall = createCallQueue();
 
-// Dispatch serial operations to the app's browser-serial bridge handler.
-async function serialRpc(op, payload = {}) {
+// Dispatch one serial op message to the app's browser-serial bridge handler,
+// which createRuntimeRpcClient() supplies after the globals are installed.
+async function serialRpc(msg) {
   if (!handleSerialRpc) {
     throw new Error("Serial RPC handler is not configured");
   }
-  return handleSerialRpc({ op, payload });
-}
-
-function installSerialBridgeGlobals() {
-  globalThis.serial_open = (baudRate) => serialRpc("open", { baudRate: Number(baudRate) });
-  globalThis.serial_close = () => serialRpc("close", {});
-  globalThis.serial_write_hex = (hex) => serialRpc("writeHex", { hex: String(hex || "") });
-  globalThis.serial_read_hex = (count, timeoutMs) =>
-    serialRpc("readHex", {
-      count: Number(count || 1),
-      timeoutMs: Number(timeoutMs || 1200),
-    });
-  globalThis.serial_write_bytes = (bytes) =>
-    serialRpc("writeBytes", {
-      bytes: Array.from(bytes || []),
-    });
-  globalThis.serial_read_bytes = (count, timeoutMs) =>
-    serialRpc("readBytes", {
-      count: Number(count || 1),
-      timeoutMs: Number(timeoutMs || 1200),
-    });
-  globalThis.serial_in_waiting = (waitMs) =>
-    serialRpc("inWaiting", {
-      waitMs: Number(waitMs || 0),
-    });
-  globalThis.serial_log = (message) =>
-    serialRpc("log", {
-      message: String(message || ""),
-    });
-  globalThis.serial_progress = (cur, max, msg) =>
-    serialRpc("progress", {
-      cur: Number(cur),
-      max: Number(max),
-      msg: String(msg || ""),
-    });
-  globalThis.serial_prepare_clone = (wantsDtr, wantsRts, settleMs, baudRate) =>
-    serialRpc("prepareClone", {
-      wantsDtr: Boolean(wantsDtr),
-      wantsRts: Boolean(wantsRts),
-      settleMs: Number(settleMs || 350),
-      // 0 means "the driver declares no rate"; the bridge then keeps whatever
-      // the port was opened with.
-      baudRate: Number(baudRate || 0),
-    });
-  // Mid-clone control-line changes from CHIRP drivers. Each line is passed
-  // through as null when the pipe has no opinion on it yet, so setting one
-  // line never implicitly clears the other.
-  globalThis.serial_set_signals = (dtr, rts) =>
-    serialRpc("setSignals", {
-      dataTerminalReady: dtr === null || dtr === undefined ? null : Boolean(dtr),
-      requestToSend: rts === null || rts === undefined ? null : Boolean(rts),
-    });
-  // Mid-clone port reconfiguration (baud rate and framing). Only the fields
-  // the pipe actually holds a value for are sent; the rest keep what the port
-  // was opened with.
-  globalThis.serial_reconfigure = (baudRate, dataBits, stopBits, parity) => {
-    const options = {};
-    if (baudRate !== null && baudRate !== undefined) {
-      options.baudRate = Number(baudRate);
-    }
-    if (dataBits !== null && dataBits !== undefined) {
-      options.dataBits = Number(dataBits);
-    }
-    if (stopBits !== null && stopBits !== undefined) {
-      options.stopBits = Number(stopBits);
-    }
-    if (parity !== null && parity !== undefined) {
-      options.parity = String(parity);
-    }
-    return serialRpc("reconfigure", { options });
-  };
-  globalThis.serial_reset_buffers = () => serialRpc("resetBuffers", {});
+  return handleSerialRpc(msg);
 }
 
 // Import the selected driver from the mounted CHIRP tree before any radio-bound call.
@@ -333,7 +264,7 @@ async function loadRadioCatalog() {
 const runtimeBootstrap = createSelectedDriverRuntime({
   isolated: DRIVER_SET === QUANSHENG_UNOFFICIAL_DRIVER_SET,
   async loadRuntime() {
-    installSerialBridgeGlobals();
+    installSerialBridgeGlobals(globalThis, serialRpc);
     const loaded = await loadPyodide({ indexURL: PYODIDE_INDEX_URL });
     await seedPyodideRuntime(loaded, pythonSource);
     return loaded;

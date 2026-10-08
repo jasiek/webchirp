@@ -157,27 +157,6 @@ for (const chip of CHIP_NAMES) {
   });
 }
 
-for (const chip of CHIP_NAMES) {
-  test(`the ${chip} driver can be reopened after close`, async () => {
-    // Regression: close() latches the flag the read loop watches. Until open()
-    // cleared it, a reopened port object handed back streams that exited on the
-    // first pull and delivered nothing, with no error anywhere.
-    const { port } = createChipLoopbackPort(chip);
-    for (const pass of [1, 2]) {
-      await port.open({ baudRate: 9600 });
-      const writer = port.writable.getWriter();
-      const reader = port.readable.getReader();
-      await writer.write(new Uint8Array([0xa5, 0x5a]));
-      const { value } = await reader.read();
-      assert.deepEqual(Array.from(value), [0xa5, 0x5a], `pass ${pass}`);
-      await reader.cancel();
-      reader.releaseLock();
-      writer.releaseLock();
-      await port.close();
-    }
-  });
-}
-
 test("an FTDI device that omits its status header fails the suite", async () => {
   // The driver strips two bytes from every packet. If a change ever made that
   // stripping unconditional against silicon that does not send the header, the

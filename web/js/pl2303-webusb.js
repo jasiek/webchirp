@@ -1,7 +1,6 @@
-// Prolific PL2303 USB-UART driver implemented over WebUSB, exposing the same
-// subset of the Web Serial `SerialPort` interface as the FTDI driver (open,
-// readable, writable, setSignals, getInfo, close) so BrowserSerialBridge can
-// use either interchangeably.
+// Prolific PL2303 USB-UART driver implemented over WebUSB, implementing the
+// same serial transport contract (web/js/serial-transport.mjs) as the FTDI
+// driver, so the serial bridge can use either interchangeably.
 //
 // Protocol references: the Linux kernel driver (drivers/usb/serial/pl2303.c)
 // and usb-serial-for-android's ProlificSerialDriver, cross-checked against the
@@ -10,6 +9,7 @@
 // deliberate divergences from those ports, matching the kernel instead:
 // vendor writes use bmRequestType vendor|device (not class), and vendor reads
 // use bRequest 0x01 on non-HXN chips (0x81 is HXN-only).
+import { WebUsbTransport } from "./webusb-transport.js";
 
 export const PROLIFIC_VENDOR_ID = 0x067b;
 
@@ -99,15 +99,16 @@ export function detectPl2303Type({ deviceClass, maxPacketSize0, usbVersion, devi
   return PL2303_TYPE_HX;
 }
 
-export class Pl2303SerialPort {
+export class Pl2303SerialPort extends WebUsbTransport {
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: the line-coding block is written 8N1 unconditionally.
-  // Declared so the bridge refuses a framing change on this transport
+  // It therefore declares capabilities.framing false (WEBUSB_CHIP_CAPABILITIES
+  // in web/js/webusb-transport.js), so the bridge refuses a framing change
   // rather than reopening and reporting a success the wire does not have.
-  supportsFraming = false;
 
-  constructor(device) {
-    this.device = device;
+  // options.usb is the WebUSB loss-event source (navigator.usb by default).
+  constructor(device, options = {}) {
+    super(device, options);
     this.readable = null;
     this.writable = null;
     this.chipType = PL2303_TYPE_HX;
@@ -117,13 +118,6 @@ export class Pl2303SerialPort {
     this._inPacketSize = 64;
     this._controlLines = 0;
     this._closed = false;
-  }
-
-  getInfo() {
-    return {
-      usbVendorId: Number(this.device.vendorId),
-      usbProductId: Number(this.device.productId),
-    };
   }
 
   // Bulk IN endpoint size, so a caller can size payloads around the boundary
@@ -342,6 +336,7 @@ export class Pl2303SerialPort {
     await this._setLineCoding(baudRate);
 
     this._setupStreams();
+    this._watchDisconnect();
   }
 
   // Web Serial-style signal control: only the provided keys change; the chip
@@ -457,6 +452,7 @@ export class Pl2303SerialPort {
   }
 
   async close() {
+    this._unwatchDisconnect();
     this._closed = true;
     try {
       await this.device.releaseInterface(this._interfaceNumber);
@@ -468,5 +464,8 @@ export class Pl2303SerialPort {
     } catch {
       // Ignore close errors.
     }
+    // A closed port has no streams, as on Web Serial.
+    this.readable = null;
+    this.writable = null;
   }
 }

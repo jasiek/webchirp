@@ -7,7 +7,7 @@ import {
   isFtdiDevice,
   stripFtdiStatusBytes,
 } from "../../web/js/ftdi-webusb.js";
-import { createWebUsbSerial } from "../../web/js/webusb-serial.js";
+import { CdcSerialPort, createWebUsbSerial } from "../../web/js/webusb-serial.js";
 import { withNavigator } from "../support/globals.mjs";
 
 test("ftdiConvertBaudrate matches known libftdi divisor encodings", () => {
@@ -62,8 +62,9 @@ test("WebUSB provider dispatches FTDI devices to the FTDI driver", async (t) => 
 
 test("WebUSB provider dispatches devices without a native driver to the CDC polyfill", async (t) => {
   // An Arduino-style CDC-ACM device: neither FTDI nor Prolific.
+  const device = { vendorId: 0x2341, productId: 0x0043 };
   withNavigator(t, {
-    usb: { requestDevice: async () => ({ vendorId: 0x2341, productId: 0x0043 }) },
+    usb: { requestDevice: async () => device },
   });
   let loaded = false;
   class FakeCdcPort {
@@ -79,5 +80,11 @@ test("WebUSB provider dispatches devices without a native driver to the CDC poly
   });
   const port = await serial.requestPort();
   assert.ok(loaded, "CDC polyfill loader should be invoked for non-FTDI devices");
-  assert.ok(port instanceof FakeCdcPort);
+  // Wrapped, not handed over raw: the polyfill keeps its device private, and
+  // the wrapper is what names it.
+  assert.ok(port instanceof CdcSerialPort);
+  assert.ok(port.polyfillPort instanceof FakeCdcPort);
+  assert.equal(port.polyfillPort.device, device);
+  assert.equal(port.usbDevice, device);
+  assert.equal(port.capabilities.framing, true);
 });

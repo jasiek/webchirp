@@ -118,7 +118,7 @@ test("mid-clone baud changes keep the GATT link, streams and buffered input", as
 test("intentional close removes notification listeners without reporting port loss", async (t) => {
   const { port, device, rx } = await openPort(t);
   let losses = 0;
-  port.addEventListener("disconnect", () => { losses += 1; });
+  port.onDisconnect(() => { losses += 1; });
   const reader = port.readable.getReader();
   const pendingRead = reader.read();
   await port.close();

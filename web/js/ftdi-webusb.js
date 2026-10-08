@@ -1,11 +1,13 @@
-// FTDI USB-UART driver implemented over WebUSB, exposing the subset of the Web
-// Serial `SerialPort` interface that BrowserSerialBridge uses (open, readable,
-// writable, setSignals, getInfo, close). This lets browsers that have WebUSB
-// but not Web Serial (e.g. Chrome on Android) talk to FTDI adapters such as the
-// FT231X, which are vendor-specific USB devices the generic CDC-ACM polyfill
-// cannot drive.
+// FTDI USB-UART driver implemented over WebUSB, implementing the serial
+// transport contract (web/js/serial-transport.mjs) the serial bridge drives:
+// Web Serial's open, readable, writable, setSignals, getInfo and close, plus
+// the members WebUsbTransport (web/js/webusb-transport.js) supplies. This lets
+// browsers that have WebUSB but not Web Serial (e.g. Chrome on Android) talk
+// to FTDI adapters such as the FT231X, which are vendor-specific USB devices
+// the generic CDC-ACM polyfill cannot drive.
 //
 // Protocol constants and the baud-rate divisor math follow libftdi.
+import { WebUsbTransport } from "./webusb-transport.js";
 
 export const FTDI_VENDOR_ID = 0x0403;
 
@@ -98,15 +100,16 @@ export function stripFtdiStatusBytes(bytes) {
   return bytes.slice(2);
 }
 
-export class FtdiSerialPort {
+export class FtdiSerialPort extends WebUsbTransport {
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: SIO_SET_DATA is issued as DATA_8N1 unconditionally.
-  // Declared so the bridge refuses a framing change on this transport
+  // It therefore declares capabilities.framing false (WEBUSB_CHIP_CAPABILITIES
+  // in web/js/webusb-transport.js), so the bridge refuses a framing change
   // rather than reopening and reporting a success the wire does not have.
-  supportsFraming = false;
 
-  constructor(device) {
-    this.device = device;
+  // options.usb is the WebUSB loss-event source (navigator.usb by default).
+  constructor(device, options = {}) {
+    super(device, options);
     this.readable = null;
     this.writable = null;
     this._interfaceNumber = 0;
@@ -114,13 +117,6 @@ export class FtdiSerialPort {
     this._outEndpoint = 0;
     this._inPacketSize = 64;
     this._closed = false;
-  }
-
-  getInfo() {
-    return {
-      usbVendorId: Number(this.device.vendorId),
-      usbProductId: Number(this.device.productId),
-    };
   }
 
   // Bulk IN endpoint size, so a caller can size payloads around the boundary
@@ -202,6 +198,7 @@ export class FtdiSerialPort {
     await this._controlOut(SIO_SET_LATENCY_TIMER, LATENCY_TIMER_MS, PORT_INDEX);
 
     this._setupStreams();
+    this._watchDisconnect();
   }
 
   // Map Web Serial control-signal requests onto FTDI SIO_SET_MODEM_CTRL. The
@@ -332,6 +329,7 @@ export class FtdiSerialPort {
   }
 
   async close() {
+    this._unwatchDisconnect();
     this._closed = true;
     try {
       await this.device.releaseInterface(this._interfaceNumber);
@@ -343,5 +341,8 @@ export class FtdiSerialPort {
     } catch {
       // Ignore close errors.
     }
+    // A closed port has no streams, as on Web Serial.
+    this.readable = null;
+    this.writable = null;
   }
 }

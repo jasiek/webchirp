@@ -240,7 +240,7 @@ test("WebUSB provider sends a CDC Silicon Labs device to the polyfill", async (t
   const serial = createWebUsbSerial({ loadCdcSerialPort: async () => FakeCdcSerialPort });
   const port = await serial.requestPort();
 
-  assert.ok(port instanceof FakeCdcSerialPort, "CP2102C must reach the CDC polyfill");
+  assert.ok(port.polyfillPort instanceof FakeCdcSerialPort, "CP2102C must reach the CDC polyfill");
   assert.ok(!(port instanceof Cp2102SerialPort));
 });
 

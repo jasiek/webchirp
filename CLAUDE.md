@@ -1,8 +1,27 @@
 This repository hosts a browser-based CHIRP interface (`web/`) that executes CHIRP Python code in Pyodide and communicates with radios via Web Serial.
 
 ## Core Architecture
-- `web/app.js`: Browser UI and Web Serial bridge implementation.
+- `web/app.js`: Browser entry point: wires the UI, the runtime RPC client and
+  the browser serial bridge together.
 - `web/js/runtime-rpc.js`: Main-thread runtime RPC layer and Pyodide bootstrap.
+- Serial layer: `web/js/serial-transport.mjs` declares the port contract every
+  transport satisfies (Web Serial's surface plus `transport`, `capabilities` --
+  framing, signals, reopen-or-update reconfigure -- `usbDevice` and
+  `onDisconnect`, which reports `{transport, port}` once per loss);
+  `assertSerialTransport()` checks it at open. Implementations: the four WebUSB
+  chip drivers on `web/js/webusb-transport.js`, the CDC polyfill wrapper in
+  `web/js/webusb-serial.js`, `web/js/native-serial-port.js` (wraps, never
+  patches, native Web Serial), `web/js/webbluetooth-serial.js`, and
+  `tests/support/node-serial-port.mjs` for node-serialport. One `SerialBridge`
+  (`web/js/serial-bridge.mjs`, no DOM or navigator) owns buffering, clone
+  preparation, re-rating and reconfigure for both environments, given a
+  transport factory: `web/js/serial.js` adds the browser chooser,
+  `tests/support/radio-harness.mjs` the tty. `web/js/serial-globals.mjs`
+  installs the `serial_*` globals Python imports (declared in
+  `web/python/typings/js.pyi`) for both. A transport that cannot do something
+  declares it in `capabilities`; the bridge never probes.
+  `tests/webusb/serial-transport-conformance.mjs` runs one set of cases against
+  every implementation -- a new transport joins its table.
 - `web/js/ui.js`: Composes the UI modules and exposes `createUiController()`.
 - `web/js/ui/`: One module per UI area — `channel-table`, `settings-panel`,
   `radio-catalog`, `radio-session`, `repeater-query`, `codeplug-io`,
