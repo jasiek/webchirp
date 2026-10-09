@@ -100,8 +100,8 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   comes from the manifest. The Node harness (`tests/support/chirp-bundle-source.mjs`)
   builds the same archive in-process from the submodule.
 - `tests/`: The node:test suite, one directory per suite — `channels` and
-  `settings` boot Pyodide and need `--experimental-wasm-stack-switching`,
-  `webusb` and `build` do not. `manual` holds the two tests npm test never
+  `settings` boot Pyodide (the clone tests use JSPI, which Node 25 has on by
+  default: no flag), `webusb` and `build` do not. `manual` holds the two tests npm test never
   runs (`rsgb-live` needs the network, `hw-radio` needs a radio on a serial
   port). `support` holds shared fixtures and the two harnesses, not tests.
 - `scripts/`: Build, coverage and CLI tooling only. No tests live here.
