@@ -600,7 +600,10 @@ export function createChannelTable(ctx: UiContext) {
   // with the answers, until a run asks for nothing new. A builder is a pure
   // function of its input and these hooks, so a rerun builds afresh; most
   // imports settle after one call, and a branch a rejection opened takes one
-  // more.
+  // more. Verdicts are only good for the radio they came from: an answer that
+  // arrives after the selection moved on is dropped with every verdict
+  // gathered so far, and the builder starts over against the radio now
+  // selected -- as a pending cell edit is sent again (checkRows).
   /**
    * @param build The builder, given the grid's row hooks.
    * @returns Whatever the last run of build returned.
@@ -611,7 +614,7 @@ export function createChannelTable(ctx: UiContext) {
     const verdicts = new Map<string, { value: string; accepted: boolean }>();
     const verdictKey = (column: string, value: string, previous: unknown) =>
       JSON.stringify([column, value, previous === undefined ? null : String(previous)]);
-    const handle = state.radioSession;
+    let handle = state.radioSession;
     for (let round = 0; ; round += 1) {
       // Per row the builder created this run: the blank row it started from
       // and every write it made, in order, so the runtime replays them with
@@ -653,7 +656,24 @@ export function createChannelTable(ctx: UiContext) {
       if (round >= MAX_BUILD_ROUNDS) {
         throw new Error(`Row builder did not settle after ${MAX_BUILD_ROUNDS} runtime checks`);
       }
-      const response = await runRowCheck(handle, asked.map(({ base, edits }) => ({ row: base, edits })));
+      let response: Awaited<ReturnType<typeof runRowCheck>>;
+      try {
+        response = await runRowCheck(handle, asked.map(({ base, edits }) => ({ row: base, edits })));
+      } catch (error) {
+        // A handle closed under the call fails in idOf(); that is the same
+        // radio change as a stale answer, not a failed check.
+        if (!ctx.session.isCurrent(handle)) {
+          verdicts.clear();
+          handle = state.radioSession;
+          continue;
+        }
+        throw error;
+      }
+      if (!ctx.session.isCurrent(handle)) {
+        verdicts.clear();
+        handle = state.radioSession;
+        continue;
+      }
       asked.forEach(({ base, edits }, index) => {
         const current: ChannelRow = { ...base };
         (response?.rows?.[index]?.cells ?? []).forEach((cell, editIndex) => {

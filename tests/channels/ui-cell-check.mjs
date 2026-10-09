@@ -220,3 +220,33 @@ test("a paste is checked in one call, however many rows and cells it writes", as
   const names = channelRows(document).map((tr) => tr.children[1].children[0].value);
   assert.deepEqual(names, ["ALPHA", "BRAVO", "CHARL", "DELTA", "ECHO"]);
 });
+
+test("a band plan built against a radio no longer selected is built again for the new one", async () => {
+  // Review of #224: a builder awaiting the runtime's verdicts used to take the
+  // answer for the radio it started on even after the user picked another,
+  // and inserted rows normalized by the wrong driver.
+  const { document, rowCheck } = await grid({ held: true });
+
+  document.querySelector("#channel-add-pmr446").dispatchEvent({ type: "click" });
+  await flushMicrotasks();
+  assert.equal(rowCheck.calls.length, 1);
+  assert.equal(rowCheck.calls[0].module, "one");
+
+  selectRadioBySearch(document, "Acme Two");
+  await flushMicrotasks();
+  rowCheck.release(0);
+  await flushMicrotasks();
+
+  // Radio One's verdicts are dropped and the builder asks radio Two.
+  assert.equal(rowCheck.calls.length, 2);
+  assert.equal(rowCheck.calls[1].module, "two");
+  assert.equal(channelRows(document).length, 2, "nothing is inserted on a stale answer");
+
+  rowCheck.release();
+  await flushMicrotasks();
+  rowCheck.release();
+  await flushMicrotasks();
+  const names = channelRows(document).map((tr) => tr.children[1].children[0].value);
+  assert.equal(names.length, 18);
+  assert.deepEqual(names.slice(2), Array(16).fill("PMR"), "radio Two cuts names to 3 characters");
+});
