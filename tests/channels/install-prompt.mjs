@@ -6,7 +6,7 @@ import {
   isInstallAvailable,
   onInstallAvailabilityChange,
   promptInstall,
-} from "../../web/js/install-prompt.js";
+} from "../../web/js/install-prompt.ts";
 import { makeWindow } from "../support/fake-window.mjs";
 
 // Guards the one thing this module does that is not undoable from the UI: it

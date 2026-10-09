@@ -4,7 +4,7 @@ import {
   deterministicBytes,
   formatLoopbackReport,
   runLoopbackSuite,
-} from "../../web/js/loopback-suite.js";
+} from "../../web/js/loopback-suite.ts";
 import {
   CHIP_NAMES,
   FAST_SUITE_OPTIONS,

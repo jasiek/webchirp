@@ -36,7 +36,7 @@ const RUNTIME_API = {
 };
 
 async function bootUi() {
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   ui.setRuntimeApi(withRadioSessions(RUNTIME_API));
   await ui.init(true);

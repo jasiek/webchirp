@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BrowserSerialBridge } from "../../web/js/serial.js";
-import { isPortSelectionCancelled } from "../../web/js/serial-errors.js";
-import { WebBluetoothSerialPort, createWebBluetoothSerial } from "../../web/js/webbluetooth-serial.js";
-import { bt1adDriver } from "../../web/js/webbluetooth/bt-1ad.js";
+import { BrowserSerialBridge } from "../../web/js/serial.ts";
+import { isPortSelectionCancelled } from "../../web/js/serial-errors.ts";
+import { WebBluetoothSerialPort, createWebBluetoothSerial } from "../../web/js/webbluetooth-serial.ts";
+import { bt1adDriver } from "../../web/js/webbluetooth/bt-1ad.ts";
 import { makeBluetoothDongle } from "../support/fake-bluetooth.mjs";
 import { withNavigator, tick } from "../support/globals.mjs";
 

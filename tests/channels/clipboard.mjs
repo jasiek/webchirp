@@ -9,7 +9,7 @@ import {
   parseTsv,
   rowLooksNonEmpty,
   serializeRowsToTsv,
-} from "../../web/js/clipboard.js";
+} from "../../web/js/clipboard.ts";
 
 function makeRow(values = {}) {
   const row = {};

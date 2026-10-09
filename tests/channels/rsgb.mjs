@@ -18,7 +18,7 @@ import {
   parseRsgbPayload,
   rsgbLocatorUrl,
   squaresForRadius,
-} from "../../web/js/rsgb.js";
+} from "../../web/js/rsgb.ts";
 import { makeRowHooks } from "../support/row-hooks.mjs";
 
 // Herne Bay: the API places GB3KI at JO01NI, 145.6625 out / 145.0625 in.

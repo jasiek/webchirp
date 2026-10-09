@@ -6,7 +6,7 @@ import {
   createCallsignLookup,
   parseLookupXml,
   pickLookupEntry,
-} from "../../web/js/callsign-lookup.js";
+} from "../../web/js/callsign-lookup.ts";
 import { installFakeDom } from "../support/fake-dom.mjs";
 import { fakeXmlGlobals } from "../support/fake-xml.mjs";
 

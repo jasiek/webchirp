@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { CUSTOM_DIMENSIONS } from "../../web/js/analytics.js";
-import { parseArgs, planSync, validateDeclarations } from "../../scripts/ga-dimensions.mjs";
+import { CUSTOM_DIMENSIONS } from "../../web/js/analytics.ts";
+import { parseArgs, planSync, validateDeclarations } from "../../scripts/ga-dimensions.ts";
 import { callArgumentKeys, sourceFiles } from "../support/param-scanner.mjs";
 import { jsDir } from "../support/repo-paths.mjs";
 

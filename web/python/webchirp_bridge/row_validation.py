@@ -62,7 +62,7 @@ MEMORY_FIELD_HEADERS: dict[str, str] = {
 }
 # The grid's synthetic column for driver extras, which every findings message
 # about them is reported against so the cell the button sits in is the one that
-# highlights. Spelled the same way web/js/ui/channel-table.js spells it.
+# highlights. Spelled the same way web/js/ui/channel-table.ts spells it.
 EXTRA_COLUMN = "Extra"
 
 # Fields an immutable-field error can name that are not grid fields: number

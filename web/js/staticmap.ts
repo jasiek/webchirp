@@ -1,0 +1,137 @@
+// Static OSM map maths: pure functions that turn a coordinate into the tile
+// grid a fixed-size viewport needs, with the point dead-center. The UI module
+// (web/js/ui/repeater-map.ts) owns the DOM; nothing here touches it, so the
+// projection and tile plan are testable headless.
+
+export const OSM_TILE_SIZE = 256;
+export const OSM_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+// Required by the OSM tile usage policy on every rendered map. The policy
+// points at the OSMF attribution guidelines, which ask that the credit reach
+// the origin and licence information — so the text is a link to the copyright
+// page, not bare characters.
+export const OSM_ATTRIBUTION = "© OpenStreetMap contributors";
+export const OSM_COPYRIGHT_URL = "https://www.openstreetmap.org/copyright";
+
+// Web Mercator: coordinate -> absolute pixel position on the world map at a
+// zoom level (the map is 2^zoom * 256 pixels square).
+export function latLonToWorldPixel(latitude: number, longitude: number, zoom: number): { x: number; y: number } {
+  const worldSize = Math.pow(2, zoom) * OSM_TILE_SIZE;
+  const lat = Math.max(-85.05112878, Math.min(85.05112878, Number(latitude)));
+  const lon = Number(longitude);
+  const x = ((lon + 180) / 360) * worldSize;
+  const latRad = (lat * Math.PI) / 180;
+  const mercator = Math.log(Math.tan(Math.PI / 4 + latRad / 2));
+  const y = (0.5 - mercator / (2 * Math.PI)) * worldSize;
+  return { x, y };
+}
+
+// The inverse of latLonToWorldPixel: where an absolute world pixel falls on
+// the globe. This is what turns a drag in screen pixels back into a
+// coordinate, so a map can be an input and not only a picture. Latitude is
+// clamped to Mercator's limit and longitude wrapped, so a drag off the edge of
+// the world still yields a coordinate the form can hold.
+export function worldPixelToLatLon(x: number, y: number, zoom: number): { latitude: number; longitude: number } {
+  const worldSize = Math.pow(2, zoom) * OSM_TILE_SIZE;
+  const wrappedX = ((Number(x) % worldSize) + worldSize) % worldSize;
+  const longitude = (wrappedX / worldSize) * 360 - 180;
+  const clampedY = Math.max(0, Math.min(worldSize, Number(y)));
+  const mercator = (0.5 - clampedY / worldSize) * 2 * Math.PI;
+  const latitude = (Math.atan(Math.sinh(mercator)) * 180) / Math.PI;
+  return { latitude, longitude };
+}
+
+/** One OSM tile of a planned map, with the CSS offset that places it. */
+export interface PlannedTile {
+  x: number;
+  y: number;
+  z: number;
+  left: number;
+  top: number;
+}
+
+// Plan the tiles a width x height viewport centered on the coordinate needs.
+// Tiles carry the CSS offset that puts them in place inside the (relatively
+// positioned, overflow-hidden) viewport; x wraps around the antimeridian and
+// rows outside the map (polar regions) are dropped.
+export function planStaticMap(
+  latitude: number,
+  longitude: number,
+  { zoom, width, height }: { zoom: number; width: number; height: number },
+) {
+  const tileCount = Math.pow(2, zoom);
+  const center = latLonToWorldPixel(latitude, longitude, zoom);
+  const viewLeft = center.x - width / 2;
+  const viewTop = center.y - height / 2;
+
+  const firstTileX = Math.floor(viewLeft / OSM_TILE_SIZE);
+  const lastTileX = Math.floor((viewLeft + width - 1) / OSM_TILE_SIZE);
+  const firstTileY = Math.floor(viewTop / OSM_TILE_SIZE);
+  const lastTileY = Math.floor((viewTop + height - 1) / OSM_TILE_SIZE);
+
+  const tiles: PlannedTile[] = [];
+  for (let tileY = firstTileY; tileY <= lastTileY; tileY += 1) {
+    if (tileY < 0 || tileY >= tileCount) {
+      continue;
+    }
+    for (let tileX = firstTileX; tileX <= lastTileX; tileX += 1) {
+      tiles.push({
+        x: ((tileX % tileCount) + tileCount) % tileCount,
+        y: tileY,
+        z: zoom,
+        left: Math.round(tileX * OSM_TILE_SIZE - viewLeft),
+        top: Math.round(tileY * OSM_TILE_SIZE - viewTop),
+      });
+    }
+  }
+  return { width, height, tiles };
+}
+
+// Ground resolution: how many metres one screen pixel covers at a latitude and
+// zoom. The constant is the equator's circumference over the 256 pixels the
+// whole world occupies at zoom 0; Mercator stretches everything away from the
+// equator, which the cosine takes back out.
+export const OSM_EQUATOR_METRES_PER_PIXEL = 40075016.686 / OSM_TILE_SIZE;
+
+export function metresPerPixel(latitude: number, zoom: number): number {
+  const lat = Math.max(-85.05112878, Math.min(85.05112878, Number(latitude)));
+  const worldMetresPerPixel = OSM_EQUATOR_METRES_PER_PIXEL * Math.cos((lat * Math.PI) / 180);
+  return worldMetresPerPixel / Math.pow(2, zoom);
+}
+
+// The zoom at which a circle of `radiusMetres` fills `fill` of a `size`-pixel
+// square viewport — what a search-radius preview needs to show the whole
+// radius and not much more. Fractional on purpose: renderStaticMap scales a
+// whole-zoom tile grid to reach it, where rounding down to a whole zoom would
+// show up to four times the area asked for. Returns null for a radius or a
+// viewport that is not a positive number, so callers can fall back to a fixed
+// zoom rather than test the inputs themselves.
+export function zoomForRadius(
+  latitude: number,
+  radiusMetres: number,
+  size: number,
+  { fill = 0.9, minZoom = 1, maxZoom = 17 }: { fill?: number; minZoom?: number; maxZoom?: number } = {},
+): number | null {
+  const radius = Number(radiusMetres);
+  const viewport = Number(size) * fill;
+  if (!Number.isFinite(radius) || radius <= 0 || !Number.isFinite(viewport) || viewport <= 0) {
+    return null;
+  }
+  const required = (2 * radius) / viewport;
+  const zoom = Math.log2(metresPerPixel(latitude, 0) / required);
+  if (!Number.isFinite(zoom)) {
+    return null;
+  }
+  return Math.max(minZoom, Math.min(maxZoom, zoom));
+}
+
+export function osmTileUrl(tile: Pick<PlannedTile, "x" | "y" | "z">, template: string = OSM_TILE_URL_TEMPLATE): string {
+  return template
+    .replace("{z}", String(tile.z))
+    .replace("{x}", String(tile.x))
+    .replace("{y}", String(tile.y));
+}
+
+// Decimal-degree display form, e.g. "52.73774, 14.70523" (5 decimals ~ 1 m).
+export function formatCoordinates(latitude: number, longitude: number): string {
+  return `${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)}`;
+}

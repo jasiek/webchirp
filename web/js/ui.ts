@@ -1,0 +1,363 @@
+import {
+  buildExportFileName,
+  detectBrowserName,
+  detectPlatformName,
+} from "./ui/format.ts";
+import { queryUiElements } from "./ui/dom.ts";
+import {
+  createUiState,
+  exposeCurrentRowsForDebugging,
+  requireRuntimeApi,
+} from "./ui/state.ts";
+import { createDebugLog } from "./ui/debug-log.ts";
+import { createNoticeModal } from "./ui/notice-modal.ts";
+import { createProgress } from "./ui/progress.ts";
+import { createIssueReporter } from "./ui/issue-report.ts";
+import { createSettingsPanel } from "./ui/settings-panel.ts";
+import { createChannelExtra } from "./ui/channel-extra.ts";
+import { createChannelBulkEdit } from "./ui/channel-bulk-edit.ts";
+import { createChannelTable } from "./ui/channel-table.ts";
+import { createRadioCatalog } from "./ui/radio-catalog.ts";
+import { createRadioSession } from "./ui/radio-session.ts";
+import { createRepeaterQuery } from "./ui/repeater-query.ts";
+import { createRepeaterMap } from "./ui/repeater-map.ts";
+import { createCodeplugIo } from "./ui/codeplug-io.ts";
+import { createSerialActions } from "./ui/serial-actions.ts";
+import { createInstallButton } from "./ui/install-button.ts";
+import { createConnectivity } from "./ui/connectivity.ts";
+import {
+  classifyErrorKind,
+  errorTypeName,
+  radioEventParams,
+  trackEvent,
+} from "./ui/analytics.ts";
+import { FLOWS, OUTCOMES, recordFlow } from "./ui/metrics.ts";
+import { captureError, setContextProvider } from "./sentry.ts";
+import type { RuntimeApi } from "./runtime-rpc.ts";
+import type { UiActions, UiContext } from "./types/ui-context.js";
+
+// Re-exported so existing importers (and tests) keep a stable entry point.
+export { buildExportFileName };
+
+// Compose the UI from its feature modules and expose the controller the app
+// shell drives. Each module owns one area (channel grid, radio settings, radio
+// selection, repeater imports, file import/export, serial actions); this file
+// wires them together, owns the channels/settings view switch, and runs the
+// bootstrap sequence.
+
+export function createUiController() {
+  const dom = queryUiElements();
+  const state = createUiState();
+  // Constructed ahead of the other modules, and outside ctx's forward
+  // references, because the debug log is what raises a notice and the debug log
+  // is itself constructed before any of them.
+  const notice = createNoticeModal({ dom });
+  const log = createDebugLog({ dom, notice });
+  const progress = createProgress({ dom });
+  const issueReporter = createIssueReporter({ state, log });
+
+  // Cross-module calls go through this registry rather than direct imports, so
+  // no module has to import a sibling that imports it back. Every entry is
+  // resolved when called, never at construction time.
+  const actions: UiActions = {
+    updateSerialActionState: () => ctx.serial.updateSerialActionState(),
+    setEditorView: (view) => setEditorView(view),
+    // Any modal that owns the keyboard: the channel grid's clipboard and
+    // reorder shortcuts stand down while one is open.
+    isAnyModalOpen: () =>
+      notice.isModalOpen()
+      || ctx.repeaterQuery.isModalOpen()
+      || ctx.repeaterMap.isModalOpen()
+      || ctx.channelExtra.isModalOpen()
+      || ctx.bulkEdit.isModalOpen(),
+    openChannelExtra: (rowIdx, trigger) => ctx.channelExtra.openForRow(rowIdx, trigger),
+    // The grid owns the row selection; the controls that only apply to one
+    // (the bulk editor) are told through here rather than polling it.
+    channelSelectionChanged: () => ctx.bulkEdit.refreshAvailability(),
+    currentViewLabel: () => currentViewLabel(),
+  };
+
+  // Modules hang off one context object so siblings can reach each other
+  // through it. The forward references above and below are only dereferenced
+  // after every module has been constructed.
+  // Typed as the whole UiContext from the start: the members not set here are
+  // attached by the Object.assign below, before any of them is read.
+  const ctx = { dom, state, log, progress, notice, actions } as UiContext;
+  const session = createRadioSession(ctx);
+  const settings = createSettingsPanel(ctx);
+  const table = createChannelTable(ctx);
+  const channelExtra = createChannelExtra(ctx);
+  const bulkEdit = createChannelBulkEdit(ctx);
+  const catalog = createRadioCatalog(ctx);
+  const repeaterQuery = createRepeaterQuery(ctx);
+  const repeaterMap = createRepeaterMap(ctx);
+  const codeplugIo = createCodeplugIo(ctx);
+  const serial = createSerialActions(ctx);
+  const installButton = createInstallButton(ctx);
+  const connectivity = createConnectivity(ctx);
+  Object.assign(ctx, {
+    session, settings, table, channelExtra, bulkEdit, catalog, repeaterQuery, repeaterMap,
+    codeplugIo, serial, installButton, connectivity,
+  });
+
+  exposeCurrentRowsForDebugging(state);
+
+  // Which radio was selected when something broke, stamped onto every error
+  // report including the unhandled ones that never pass through app code.
+  // Registered as a provider rather than pushed on each selection so there is
+  // one place that decides what an error carries, and so it is read at the
+  // moment of the failure. radioEventParams is reused verbatim: the driver
+  // identity worth reporting is the same one analytics already sends, and it is
+  // a CHIRP identifier rather than anything belonging to the user.
+  //
+  // Browser and platform ride along for a reason specific to this app: it talks
+  // to hardware through APIs only some browsers have, so "which flows are
+  // broken" usually has a browser answer. They are not read once at startup --
+  // the Brave probe in web/js/ui/format.ts is async and settles after the first
+  // few calls, and a provider read per failure picks that up for free.
+  //
+  // These go to Sentry only, never to GA: GA4 already collects browser, OS and
+  // device as built-in dimensions, and per FINDINGS the EVENT-scoped custom
+  // dimension budget is scarce and one-way, so declaring them there would spend
+  // two slots to duplicate what the property already has.
+  setContextProvider(() => ({
+    browser: detectBrowserName(),
+    platform: detectPlatformName(),
+    ...radioEventParams(state.selectedRadio),
+  }));
+
+  function setRuntimeApi(api: RuntimeApi) {
+    state.runtimeApi = api;
+  }
+
+  function currentViewLabel() {
+    return state.currentEditorView === "settings" ? "radio settings" : "channels";
+  }
+
+  function setEditorView(nextView: string) {
+    state.currentEditorView = nextView === "settings" ? "settings" : "channels";
+    const channelsActive = state.currentEditorView === "channels";
+    dom.channelEditorEl.classList.toggle("is-active", channelsActive);
+    dom.settingsEditorEl.classList.toggle("is-active", !channelsActive);
+    dom.channelEditorEl.hidden = !channelsActive;
+    dom.settingsEditorEl.hidden = channelsActive;
+    dom.viewChannelsEl.classList.toggle("is-active", channelsActive);
+    dom.viewSettingsEl.classList.toggle("is-active", !channelsActive);
+    dom.viewChannelsEl.setAttribute("aria-selected", channelsActive ? "true" : "false");
+    dom.viewSettingsEl.setAttribute("aria-selected", channelsActive ? "false" : "true");
+  }
+
+  // Register the handlers that are not owned by a single feature module: the
+  // view switch, the global Escape key, the issue link and the window-level
+  // error sinks.
+  function bindEvents() {
+    log.bindEvents();
+    notice.bindEvents();
+    table.bindEvents();
+    channelExtra.bindEvents();
+    bulkEdit.bindEvents();
+    repeaterQuery.bindEvents();
+    repeaterMap.bindEvents();
+    codeplugIo.bindEvents();
+    catalog.bindEvents();
+    serial.bindEvents();
+    installButton.bindEvents();
+    connectivity.bindEvents();
+
+    // Escape closes the topmost open surface: a notice, which is shown over
+    // whatever else is open, then the import prompt, then the channel extras
+    // editor, then the bulk editor, then the repeater modals and export menu.
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        if (notice.isModalOpen()) {
+          notice.closeModal();
+          return;
+        }
+        if (codeplugIo.isImportChoiceModalOpen()) {
+          codeplugIo.resolveImportChoice("cancel");
+          return;
+        }
+        if (channelExtra.isModalOpen()) {
+          channelExtra.closeModal();
+          return;
+        }
+        if (bulkEdit.isModalOpen()) {
+          bulkEdit.closeModal();
+          return;
+        }
+        if (repeaterMap.isModalOpen()) {
+          repeaterMap.closeModal();
+          return;
+        }
+        if (repeaterQuery.isModalOpen()) {
+          repeaterQuery.setModalOpen(false);
+          return;
+        }
+        if (codeplugIo.isExportMenuOpen()) {
+          codeplugIo.closeExportMenu();
+          dom.exportMenuToggleEl.focus();
+        }
+        return;
+      }
+      if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+        if (!table.channelShortcutsActive(event)) {
+          return;
+        }
+        event.preventDefault();
+        table.moveSelectedChannelRows(event.key === "ArrowUp" ? -1 : 1);
+      }
+    });
+
+    dom.viewChannelsEl.addEventListener("click", () => {
+      setEditorView("channels");
+      // The grid sizes its rendered window against its viewport, which has no
+      // height while the settings view is showing.
+      table.refreshVisibleRows();
+    });
+
+    dom.viewSettingsEl.addEventListener("click", () => {
+      // Not reported: updateViewButtons() disables this tab on exactly this
+      // condition, so the branch is unreachable defence rather than something
+      // a user can hit, and an event here would always read as zero.
+      if (!settings.radioHasSettings()) {
+        log.setStatus(settings.settingsUnavailableMessage());
+        return;
+      }
+      trackEvent("settings_view_opened", radioEventParams(state.selectedRadio));
+      setEditorView("settings");
+      settings.render();
+    });
+
+    dom.reportIssueEl.addEventListener("click", () => {
+      // A frustration signal, and one that pairs with the clone failure events:
+      // it says how much of what breaks is actually being reported to us.
+      trackEvent("report_issue_clicked", radioEventParams(state.selectedRadio));
+      issueReporter.openPrefilledIssue();
+    });
+
+    window.addEventListener("error", (event) => {
+      log.logError(`WINDOW ERROR ${event.message}`);
+    });
+
+    window.addEventListener("unhandledrejection", (event) => {
+      const msg = event.reason?.message || String(event.reason || "Unhandled rejection");
+      log.logError(`PROMISE ERROR ${msg}`);
+    });
+  }
+
+  // Bootstrap UI: capability checks, catalog load, metadata load, empty grid.
+  // The two capability gaps are independent (Safari has both) and both only
+  // cost the radio-programming path: missing serial means no port to open,
+  // missing JSPI means the blocking clone loops cannot wait on one. Neither
+  // touches driver imports, which read the mounted CHIRP archive, so init
+  // completes either way and the clone actions carry the explanation.
+  async function init(serialSupported: boolean, jspiSupported = true) {
+    // Covers the whole cold start the user waits through — including the
+    // Pyodide boot the metadata and settings loads below trigger — so this is
+    // the number that decides whether people wait or leave.
+    const startedAt = Date.now();
+    bindEvents();
+    serial.refreshSerialConnectToggleLabel();
+    serial.setBrowserUnsupportedOverlayVisible(!serialSupported, { serial: !serialSupported });
+    serial.setCloneSupported(jspiSupported);
+    serial.setSidebarControlsEnabled(false);
+    catalog.setRadioSelectPlaceholder("Loading...");
+    try {
+      if (!serialSupported) {
+        log.logSerial("Serial transports unsupported in this browser.");
+      } else {
+        log.logSerial("Serial transport available.");
+      }
+      if (!jspiSupported) {
+        log.logSerial(
+          "WASM stack switching (JSPI) unsupported; radio download/upload is "
+          + "unavailable in this browser, file editing works.",
+        );
+      }
+      const catalogResponse = await requireRuntimeApi(state).listRadios();
+      // Live-mode drivers need a different interaction model from the clone
+      // workflow this UI exposes, so do not offer entries the user cannot use.
+      state.radioCatalog = (catalogResponse.radios || []).filter(
+        (radio) => !radio.isLiveRadio,
+      );
+      state.runtimeInfo = (await requireRuntimeApi(state).getRuntimeInfo()) || state.runtimeInfo;
+      catalog.refreshCatalog();
+      // A ?radio= link is an explicit choice for this visit and outranks the
+      // cookie's memory of the last one; the cookie only answers when the
+      // visitor arrived without naming a radio.
+      if (!catalog.selectRadioByLinkParam()) {
+        catalog.restoreSelectedRadioCookie();
+      }
+      // Captured before the loads: a user who picks another radio while these
+      // run has moved the current session on, and the marker below must then
+      // not claim the new one is loaded.
+      const startupSession = session.current();
+      await catalog.loadSelectedRadioMetadata();
+      await settings.load();
+      // Schema only: the grid starts empty and shows its own "load something"
+      // notice, so the status line stays on the catalog result.
+      await codeplugIo.loadEmptySchema();
+      // Restored/link-selected radios have completed the same metadata/settings
+      // load as a picker selection; reselecting them must preserve current edits.
+      session.markLoaded(startupSession);
+      log.setStatus(
+        state.selectedRadio
+          ? `Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources.`
+          : `Loaded ${state.radioCatalog.length} radio definitions from CHIRP sources. `
+            + "Search for your radio to get started.",
+      );
+      settings.render();
+      serial.setSidebarControlsEnabled(true);
+      const readyMs = Date.now() - startedAt;
+      // "sources" means the prebuilt catalog was missing or stale and every
+      // driver had to be imported in Pyodide first — a much slower start.
+      const catalogSource = catalogResponse.source || "unknown";
+      trackEvent("app_ready", { duration_ms: readyMs, catalog_source: catalogSource });
+      recordFlow(FLOWS.APP_START, OUTCOMES.OK, { catalog_source: catalogSource }, readyMs);
+    } catch (error) {
+      catalog.setRadioSelectPlaceholder("Unavailable");
+      const failedMs = Date.now() - startedAt;
+      const errorKind = classifyErrorKind(error);
+      const errorType = errorTypeName(error);
+      trackEvent("app_init_failed", {
+        duration_ms: failedMs,
+        error_kind: errorKind,
+        error_type: errorType,
+      });
+      // The startup flow is the one whose failures can leave nothing else
+      // behind: if the runtime never boots there is no session to read in GA,
+      // and often no error either, so the share of starts that never reach
+      // ready is the only thing that says anything is wrong.
+      recordFlow(
+        FLOWS.APP_START,
+        OUTCOMES.FAILED,
+        { error_kind: errorKind, error_type: errorType },
+        failedMs,
+      );
+      log.reportActionError("Initialization", error);
+      log.setStatus("Initialization failed; sidebar controls remain disabled.");
+    }
+  }
+
+  return {
+    setRuntimeApi,
+    setSerialController: serial.setSerialController,
+    onSerialPortLost: serial.handlePortLost,
+    setStatus: log.setStatus,
+    logSerial: log.logSerial,
+    logDebug: log.logDebug,
+    updateCloneProgress: serial.updateCloneProgress,
+    beginProgress: progress.begin,
+    init,
+    selectedRowsForOperations: table.selectedRowsForOperations,
+    // The Pyodide worker died rather than returned an error. Reported directly
+    // instead of through reportActionError because there is no action to name:
+    // the runtime took whatever was in flight down with it, and the message is
+    // all that survives.
+    onRuntimeCrash(message: string) {
+      log.logError(`RUNTIME CRASH ${message}`);
+      captureError(message, { action: "Runtime", tags: { error_kind: "runtime_crash" } });
+      recordFlow(FLOWS.RUNTIME, OUTCOMES.CRASHED, { error_kind: "runtime_crash" });
+    },
+  };
+}

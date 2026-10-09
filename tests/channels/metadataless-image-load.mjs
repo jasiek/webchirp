@@ -4,8 +4,8 @@ import test from "node:test";
 import {
   findCatalogRadioForImageMetadata,
   isImageDetectionFailure,
-} from "../../web/js/image-metadata.mjs";
-import { listDriverModules } from "../../web/js/python-sources.mjs";
+} from "../../web/js/image-metadata.ts";
+import { listDriverModules } from "../../web/js/python-sources.ts";
 import {
   ensureModule,
   imageMetadata,

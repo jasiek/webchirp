@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { OSM_ATTRIBUTION, OSM_COPYRIGHT_URL, metresPerPixel } from "../../web/js/staticmap.js";
+import { OSM_ATTRIBUTION, OSM_COPYRIGHT_URL, metresPerPixel } from "../../web/js/staticmap.ts";
 import { installFakeDom } from "../support/fake-dom.mjs";
 
 // The field components build every element themselves via
 // document.createElement, so the shared fake DOM's element class is all they
-// need — no index.html, no dom.js, no UI controller boot.
+// need — no index.html, no dom.ts, no UI controller boot.
 installFakeDom();
 
 const {
@@ -17,7 +17,7 @@ const {
   createCityField,
   createNumberField,
   createPositionField,
-} = await import("../../web/js/ui/query-fields.js");
+} = await import("../../web/js/ui/query-fields.ts");
 
 test("select field renders a placeholder-first option list and reads the chosen value", () => {
   const field = createSelectField({

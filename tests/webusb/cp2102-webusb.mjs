@@ -10,8 +10,8 @@ import {
   cp2102SpeedLimits,
   hasCdcInterface,
   isCp2102Device,
-} from "../../web/js/cp2102-webusb.js";
-import { createWebUsbSerial } from "../../web/js/webusb-serial.js";
+} from "../../web/js/cp2102-webusb.ts";
+import { createWebUsbSerial } from "../../web/js/webusb-serial.ts";
 import { bytesOf, makeFakeUsbDevice } from "../support/fake-usb.mjs";
 import { withNavigator } from "../support/globals.mjs";
 import {

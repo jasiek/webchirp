@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { OSM_ATTRIBUTION, OSM_COPYRIGHT_URL } from "../../web/js/staticmap.js";
+import { OSM_ATTRIBUTION, OSM_COPYRIGHT_URL } from "../../web/js/staticmap.ts";
 import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
 import { fakeXmlGlobals } from "../support/fake-xml.mjs";
 
@@ -68,7 +68,7 @@ function installMapDom({ hoverCapable = false } = {}) {
 }
 
 // Channel rows rendered as Location buttons inside table rows, the shape
-// channel-table.js produces. Each row's Name is what the hover looks up.
+// web/js/ui/channel-table.ts produces. Each row's Name is what the hover looks up.
 function buildFixture(rows) {
   const dom = {};
   for (const key of [
@@ -130,8 +130,8 @@ async function bootMap({ rows = DEFAULT_ROWS, bodies = DEFAULT_BODIES, ...option
   installMapDom(options);
   const fixture = buildFixture(rows);
   const { fetchImpl, requested } = installFakeLookupFetch(bodies);
-  const { createCallsignLookup } = await import("../../web/js/callsign-lookup.js");
-  const { createRepeaterMap } = await import("../../web/js/ui/repeater-map.js");
+  const { createCallsignLookup } = await import("../../web/js/callsign-lookup.ts");
+  const { createRepeaterMap } = await import("../../web/js/ui/repeater-map.ts");
   const { lookup } = createCallsignLookup("https://api.example.com/lookup", { fetchImpl });
   const map = createRepeaterMap({ dom: fixture.dom, state: fixture.state }, { lookup });
   map.bindEvents();

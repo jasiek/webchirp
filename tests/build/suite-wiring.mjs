@@ -1,5 +1,5 @@
 // The suite layout is load-bearing: npm test globs tests/<suite>/*.mjs and
-// scripts/coverage.mjs discovers the same directories, so a test file is run
+// scripts/coverage.ts discovers the same directories, so a test file is run
 // and measured purely by where it sits. Nothing lists the files any more, which
 // is the point -- and also why the wiring itself needs a test. Each assertion
 // below covers a way a file can end up silently unrun: sitting in a directory
@@ -13,7 +13,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { suitesRunByNpmTest, testFiles } from "../../scripts/coverage.mjs";
+import { suitesRunByNpmTest, testFiles } from "../../scripts/coverage.ts";
 import { repoRoot } from "../support/repo-paths.mjs";
 
 const TESTS_DIR = path.join(repoRoot, "tests");

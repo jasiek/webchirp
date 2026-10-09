@@ -7,7 +7,7 @@ import {
   BAUD_CHECKBOX_SELECTOR,
   ELEMENT_IDS,
   describePort,
-} from "../../web/js/serial-test-page.js";
+} from "../../web/js/serial-test-page.ts";
 
 // serial-test.html is a hand-maintained page with no framework between it and
 // its controller, so the same drift that motivated test-dom-selectors.mjs
@@ -36,7 +36,7 @@ test("the baud checkboxes the controller reads are present and pre-selected", ()
 test("the page loads no analytics and does not offer itself for install", () => {
   // A hardware-debugging page must not mint page_view traffic, and it is not
   // part of the installable app.
-  assert.ok(!HTML.includes("js/analytics.js"), "diagnostics page must not load analytics");
+  assert.ok(!HTML.includes("js/analytics.ts"), "diagnostics page must not load analytics");
   assert.ok(!HTML.includes("manifest.webmanifest"), "diagnostics page must not link the manifest");
   assert.ok(!HTML.includes("pyodide"), "diagnostics page must not pull in the Python runtime");
 });
@@ -104,16 +104,16 @@ test("the report names the commit it ran on, from keys the build actually writes
   // on the build side is invisible until a report says "unknown" — which is
   // exactly when the commit is needed and no longer recoverable.
   const controller = fs.readFileSync(
-    path.join(process.cwd(), "web", "js", "serial-test-page.js"),
+    path.join(process.cwd(), "web", "js", "serial-test-page.ts"),
     "utf8",
   );
   const builder = fs.readFileSync(
-    path.join(process.cwd(), "scripts", "build-version.mjs"),
+    path.join(process.cwd(), "scripts", "build-version.ts"),
     "utf8",
   );
   for (const key of ["webchirpShaShort", "lastUpdated"]) {
     assert.ok(controller.includes(key), `the page no longer reads version.${key}`);
-    assert.ok(builder.includes(key), `build-version.mjs no longer writes version.${key}`);
+    assert.ok(builder.includes(key), `scripts/build-version.ts no longer writes version.${key}`);
   }
   assert.match(controller, /WebCHIRP: \$\{webchirpVersion\}/, "the report must carry the version");
 });

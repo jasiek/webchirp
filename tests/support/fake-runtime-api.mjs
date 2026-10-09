@@ -1,6 +1,6 @@
 // Session bookkeeping for hand-written runtime API stubs.
 //
-// The UI opens a radio session for every selection (web/js/ui/radio-session.js)
+// The UI opens a radio session for every selection (web/js/ui/radio-session.ts)
 // and names it by sessionId on every radio-bound call, so a stub of the
 // runtime API has to answer openRadioSession/closeRadioSession and read the
 // id back into the radio it stands for. The fake-DOM tests are about the
@@ -14,7 +14,7 @@
 // own, so a test about the session calls can still observe them.
 
 // Every runtime method that names a session. Kept in step with RUNTIME_METHODS
-// in web/js/runtime-rpc.js.
+// in web/js/runtime-rpc.ts.
 const SESSION_BOUND_METHODS = [
   "normalizeRows",
   "validateRowsForUpload",

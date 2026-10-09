@@ -1,0 +1,631 @@
+import { withRequestTimeout } from "./request-timeout.ts";
+import { highestPowerOption, setHighestPower } from "./row-power.ts";
+import type { RepeaterRowsResult, RowBuilderHooks, SkippedRepeater } from "./row-power.ts";
+import type { ChannelRow } from "./ui/channel-values.ts";
+import type { City } from "./ui/query-fields.ts";
+import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.ts";
+import { errorFields } from "./error-details.ts";
+
+const PMR446_FREQUENCIES_MHZ = Array.from(
+  { length: 16 },
+  (_, index) => (446.00625 + (index * 0.0125)).toFixed(5),
+);
+const FRS_FREQUENCIES_MHZ = [
+  "462.56250",
+  "462.58750",
+  "462.61250",
+  "462.63750",
+  "462.66250",
+  "462.68750",
+  "462.71250",
+  "467.56250",
+  "467.58750",
+  "467.61250",
+  "467.63750",
+  "467.66250",
+  "467.68750",
+  "467.71250",
+  "462.55000",
+  "462.57500",
+  "462.60000",
+  "462.62500",
+  "462.65000",
+  "462.67500",
+  "462.70000",
+  "462.72500",
+];
+const GMRS_CHANNELS = [
+  { name: "GMRS 1", frequency: "462.56250", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 2", frequency: "462.58750", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 3", frequency: "462.61250", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 4", frequency: "462.63750", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 5", frequency: "462.66250", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 6", frequency: "462.68750", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 7", frequency: "462.71250", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "low" },
+  { name: "GMRS 8", frequency: "467.56250", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 9", frequency: "467.58750", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 10", frequency: "467.61250", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 11", frequency: "467.63750", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 12", frequency: "467.66250", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 13", frequency: "467.68750", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 14", frequency: "467.71250", duplex: "", offset: "0.000000", bandwidthKhz: 12.5, powerTier: "low" },
+  { name: "GMRS 15", frequency: "462.55000", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 16", frequency: "462.57500", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 17", frequency: "462.60000", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 18", frequency: "462.62500", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 19", frequency: "462.65000", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 20", frequency: "462.67500", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 21", frequency: "462.70000", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 22", frequency: "462.72500", duplex: "", offset: "0.000000", bandwidthKhz: 25, powerTier: "high" },
+  // The table lists 467 MHz repeater inputs; program receive/output frequency plus +5 MHz offset for usable memories.
+  { name: "GMRS 15R", frequency: "462.55000", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 16R", frequency: "462.57500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 17R", frequency: "462.60000", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 18R", frequency: "462.62500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 19R", frequency: "462.65000", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 20R", frequency: "462.67500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 21R", frequency: "462.70000", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+  { name: "GMRS 22R", frequency: "462.72500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
+];
+
+// Base URL of the API that fronts przemienniki.net, repeaterbook.com and IRTS.
+// The first two upstreams don't send browser CORS headers, so their query
+// features depend on a proxy that adds them. api.codeplug.org restricts its
+// CORS allowlist to this app's own production origins -- https://codeplug.org
+// and https://webchirp.org, exact-match and https-only -- so forks hosted
+// elsewhere can point
+// this at their own proxy or leave it blank to disable those two sources. IRTS
+// remains available through the default API when the override is blank.
+// Overridable per-deployment via a <meta name="webchirp-repeater-api-base">
+// tag (see index.html and buildRepeaterEndpoints).
+const DEFAULT_REPEATER_API_BASE = "https://api.codeplug.org";
+
+// Derive the remote-directory endpoint URLs from an API base. A blank base
+// disables the two proxy-dependent directories, but IRTS remains on the
+// default API: that first-party route is part of the hosted app's contract and
+// a transport failure should surface to the user rather than hide the action.
+/** Where one repeater directory is queried: its rows and its filter metadata. */
+export type DirectoryEndpoint = {apiUrl: string, metaUrl: string};
+/**
+ * Every remote endpoint the app queries; a directory the deployment switched
+ * off is null.
+ */
+export interface RepeaterEndpoints {
+  przemienniki: DirectoryEndpoint | null;
+  repeaterbook: DirectoryEndpoint | null;
+  irts: DirectoryEndpoint;
+  /** The place-name gazetteer. */
+  cities: string;
+  /** The per-callsign position lookup. */
+  lookup: string;
+}
+/**
+ * @param apiBase Blank switches off the proxied directories.
+ */
+function buildRepeaterEndpoints(apiBase: string = DEFAULT_REPEATER_API_BASE): RepeaterEndpoints {
+  const base = String(apiBase ?? "").trim().replace(/\/+$/, "");
+  const irtsBase = base || DEFAULT_REPEATER_API_BASE;
+  return {
+    przemienniki: base ? {
+      apiUrl: `${base}/przemienniki`,
+      metaUrl: `${base}/przemienniki/meta`,
+    } : null,
+    repeaterbook: base ? {
+      apiUrl: `${base}/repeaterbook`,
+      metaUrl: `${base}/repeaterbook/meta`,
+    } : null,
+    irts: {
+      apiUrl: `${irtsBase}/irts`,
+      metaUrl: `${irtsBase}/irts/meta`,
+    },
+    // The gazetteer behind the Place name autocomplete. It follows the IRTS
+    // rule rather than the proxy rule: it is a first-party api.codeplug.org
+    // route and it is not a directory at all -- it only turns a place name into
+    // the coordinate pair every source already filters by -- so a deployment
+    // that blanks the base to switch off the two proxied directories keeps its
+    // city lookup.
+    cities: `${irtsBase}/cities`,
+    // Per-callsign position lookup for the channel grid's context map
+    // (web/js/callsign-lookup.ts). Same rule as cities and IRTS: a first-party
+    // api.codeplug.org route rather than a proxied directory, so a deployment
+    // that blanks the base to switch off przemienniki.net and RepeaterBook
+    // keeps its maps.
+    lookup: `${irtsBase}/lookup`,
+  };
+}
+
+const REPEATER_API_BASE_META = "webchirp-repeater-api-base";
+
+// Resolve the repeater API base for this deployment. A
+// <meta name="webchirp-repeater-api-base"> tag overrides the built-in default:
+// its content (a proxy base URL, or blank to disable the online-query
+// features) wins when the tag is present; without the tag the default applies.
+// Shared rather than owned by the query modal, because the hover map reads the
+// same deployment setting and the two must not disagree about it.
+export function resolveRepeaterApiBase() {
+  const meta = document.querySelector(`meta[name="${REPEATER_API_BASE_META}"]`);
+  if (meta) {
+    return String(meta.getAttribute("content") || "").trim();
+  }
+  return DEFAULT_REPEATER_API_BASE;
+}
+
+// Shorter than REPEATER_REQUEST_TIMEOUT_MS because this fires on a keystroke: a
+// suggestion list that arrives after the user has finished typing is worth
+// nothing, and a stalled connection would only block tile requests.
+const CITY_SUGGEST_TIMEOUT_MS = 4000;
+
+// The endpoint defaults to and caps at 20 (see FINDINGS.md), so no limit is
+// sent; this is the ceiling the drop-down is sized for, not a request.
+const CITY_SUGGEST_MAX = 20;
+
+// Look up place names matching `query` in the api.codeplug.org gazetteer.
+// `near` is an optional { latitude, longitude } proximity hint; the endpoint
+// takes lat and lon together or not at all, so a half-known position is sent
+// as no hint. Results are normalized to this app's { latitude, longitude }
+// shape, and an entry without a usable coordinate pair is dropped.
+export async function fetchCitySuggestions(
+  citiesUrl: string,
+  query: string,
+  near: { latitude?: number; longitude?: number } | null = null,
+) {
+  const text = String(query ?? "").trim();
+  if (!citiesUrl || text.length === 0) {
+    return [];
+  }
+  const url = new URL(citiesUrl);
+  url.searchParams.set("q", text);
+  const latitude = Number(near?.latitude);
+  const longitude = Number(near?.longitude);
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    url.searchParams.set("lat", String(latitude));
+    url.searchParams.set("lon", String(longitude));
+  }
+  // The body is read inside the deadline for the same reason every other
+  // directory request reads it there: fetch() resolves on headers alone.
+  const body = await withRequestTimeout("City lookup", async (signal) => {
+    const response = await fetch(url.toString(), { signal });
+    if (!response.ok) {
+      throw new Error(`City lookup failed: HTTP ${response.status}`);
+    }
+    return response.text();
+  }, CITY_SUGGEST_TIMEOUT_MS);
+  return parseCitySuggestions(body);
+}
+
+// Number(null) and Number("") are 0, not NaN, so a missing coordinate would
+// otherwise pass the finiteness check and land the city on the equator.
+function coordinate(value: unknown): number {
+  if (value === null || value === undefined || value === "") {
+    return Number.NaN;
+  }
+  return Number(value);
+}
+
+// Split out from the fetch so the parsing is testable without a network stub.
+// The endpoint reports its own failures as { error: "..." } with HTTP 200, so
+// that case is checked before the result list.
+export function parseCitySuggestions(jsonText: string): City[] {
+  // JSON from the gazetteer: every field is checked before it is used.
+  let payload: { error?: unknown; results?: unknown } | null;
+  try {
+    payload = JSON.parse(String(jsonText || ""));
+  } catch (error) {
+    throw new Error(`City lookup returned invalid JSON: ${errorFields(error).message}`);
+  }
+  if (payload && typeof payload.error === "string") {
+    throw new Error(`City lookup failed: ${payload.error}`);
+  }
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  return results
+    .map((entry) => ({
+      id: String(entry?.id ?? ""),
+      name: String(entry?.name ?? "").trim(),
+      region: String(entry?.region ?? "").trim(),
+      country: String(entry?.country ?? "").trim(),
+      countryCode: String(entry?.cc ?? "").trim().toUpperCase(),
+      latitude: coordinate(entry?.lat),
+      longitude: coordinate(entry?.lon),
+    }))
+    .filter((entry) => entry.name.length > 0
+      && Number.isFinite(entry.latitude)
+      && Number.isFinite(entry.longitude))
+    // Only matters if the endpoint ever raises its own cap.
+    .slice(0, CITY_SUGGEST_MAX);
+}
+
+// Read an RXF <ctcss> body as a CTCSS frequency, yielding "" for anything that
+// is not one. The element is not always a tone: RepeaterBook publishes "CSQ"
+// for carrier squelch, "Restricted" for a closed repeater, and DTCS codes such
+// as "D023" in the very same field. Those must count as "no tone" rather than
+// be written through, because setRowValue would reject them against the
+// rToneFreq enum and leave the row asserting a tone mode with no tone behind
+// it - a channel that transmits a default 88.5 the directory never mentioned.
+// (Carrying the DTCS codes properly needs the DtcsCode/RxDtcsCode/DtcsPolarity
+// columns and is deliberately out of scope here.)
+function parseCtcssFreq(text: unknown): string {
+  const value = String(text ?? "").trim();
+  if (!/^\d+(\.\d+)?$/.test(value)) {
+    return "";
+  }
+  return Number(value) > 0 ? value : "";
+}
+
+// Write a normalized transmit/receive CTCSS pair into a row's tone columns.
+//
+// The mode is the part that matters: chirp_common.split_tone_encode reads
+// rToneFreq only under "Tone", reads cToneFreq only under "TSQL", and reads
+// both only under "Cross", so a tone written without the mode that encodes it
+// is silently inert. The branches below mirror chirp_common.split_tone_decode,
+// which is how CHIRP itself turns the same tx/rx pair back into a tmode, and
+// each writes only the field its mode actually encodes.
+//
+// A radio whose valid_tmodes omit the mode a case calls for gets an explicit
+// fallback rather than a half-written row, because valid_cross_modes stays
+// fully populated even when has_cross is false - so the CrossMode options are
+// no evidence that the radio can hold a split pair. The Tone column's own
+// options are.
+//
+// Every tone is written before the mode that encodes it, and the mode is
+// committed only once setRowValue reports the tone was accepted. The driver's
+// tone table is an enum, and a rejected enum write is invisible: it leaves the
+// column's first option behind, typically 67.0, so a directory tone the radio
+// cannot produce would otherwise reach the grid as a plausible-looking tone
+// under a committed tone mode - a channel that keys nothing (issue #104).
+//
+// Returns false when the repeater's *access* tone - the one the radio has to
+// transmit for the repeater to open - could not be written, so the caller can
+// leave the repeater out rather than insert a channel that can never work it.
+// A receive-only tone that cannot be written costs the squelch and nothing
+// else, so it returns true with the tone columns left alone.
+function applyTonePair(
+  row: ChannelRow,
+  { setRowValue, findEnumOption }: Pick<RowBuilderHooks, "setRowValue" | "findEnumOption">,
+  transmitTone: string,
+  receiveTone: string,
+): boolean {
+  const toneMode = (mode: string) => findEnumOption("Tone", [mode], true);
+  const writeTransmitOnly = () => {
+    const mode = toneMode("Tone");
+    if (!mode || !setRowValue(row, "rToneFreq", transmitTone)) {
+      return false;
+    }
+    setRowValue(row, "Tone", mode);
+    return true;
+  };
+  const writeReceiveAsTsql = () => {
+    const mode = toneMode("TSQL");
+    if (!mode || !setRowValue(row, "cToneFreq", receiveTone)) {
+      return false;
+    }
+    setRowValue(row, "Tone", mode);
+    return true;
+  };
+
+  if (!transmitTone && !receiveTone) {
+    return true;
+  }
+  if (transmitTone && !receiveTone) {
+    return writeTransmitOnly();
+  }
+  if (transmitTone === receiveTone) {
+    // Same tone both ways: TSQL transmits it and squelches on it. A radio
+    // without TSQL - or one whose TSQL write does not take - still has to key
+    // the repeater, so it keeps the transmit half rather than the row losing
+    // the tone altogether.
+    return writeReceiveAsTsql() || writeTransmitOnly();
+  }
+
+  // A split pair - including receive-only, which is a split with an empty
+  // transmit half - is expressible only as Cross.
+  const crossMode = toneMode("Cross");
+  const crossValue = findEnumOption("CrossMode", [transmitTone ? "Tone->Tone" : "->Tone"], true);
+  if (crossMode && crossValue) {
+    // Both halves have to land before Cross is committed: a Cross row missing
+    // one of them encodes the fallback tone on that side, which is worse than
+    // falling back to the one side the radio can hold.
+    const transmitOk = !transmitTone || setRowValue(row, "rToneFreq", transmitTone);
+    if (transmitOk && setRowValue(row, "cToneFreq", receiveTone)) {
+      setRowValue(row, "Tone", crossMode);
+      setRowValue(row, "CrossMode", crossValue);
+      return true;
+    }
+  }
+  // Without Cross the row can hold one side, so keep the side that decides
+  // whether the channel works at all. With a transmit tone that is the access
+  // tone - drop it and the repeater never opens. With none, TSQL is the only
+  // way to get the advertised receive squelch; it also transmits the tone,
+  // which a repeater that asks for none ignores.
+  if (transmitTone) {
+    return writeTransmitOnly();
+  }
+  writeReceiveAsTsql();
+  return true;
+}
+
+function formatFrequencyMhz(value: unknown): string {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "";
+  }
+  return numeric.toFixed(6);
+}
+
+/** One <repeater> of an RXF response, its frequencies in MHz. */
+export interface PrzemiennikiRepeater {
+  qra: string;
+  mode: string;
+  qrgRx: number;
+  qrgTx: number;
+  qth: string;
+  remarks: string;
+  link: string;
+  ctcssRx: string;
+  ctcssTx: string;
+  /** NaN when the directory published no position. */
+  latitude: number;
+  longitude: number;
+}
+
+export function parsePrzemiennikiXml(xmlText: string): {
+  perspective: string;
+  countries: string[];
+  repeaters: PrzemiennikiRepeater[];
+} {
+  const xmlDoc = parseXmlDocument(xmlText);
+  const perspective = firstText(xmlDoc, "rxf > perspective").toLowerCase();
+  if (!perspective) {
+    throw new Error("RXF response is missing its frequency perspective.");
+  }
+  if (perspective !== "radio" && perspective !== "repeater") {
+    throw new Error(`RXF response has unsupported frequency perspective: ${perspective}`);
+  }
+
+  const countries = Array.from(
+    new Set(
+      Array.from(xmlDoc.querySelectorAll("repeaters > repeater > country"))
+        .map((node) => String(node.textContent || "").trim().toUpperCase())
+        .filter((code) => /^[A-Z]{2}$/.test(code)),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const repeaters = Array.from(xmlDoc.querySelectorAll("repeaters > repeater"))
+    .map((repeaterEl) => {
+      return {
+        qra: firstText(repeaterEl, "qra"),
+        mode: firstText(repeaterEl, "mode"),
+        qrgRx: parseQrgMhz(firstText(repeaterEl, 'qrg[type="rx"]')),
+        qrgTx: parseQrgMhz(firstText(repeaterEl, 'qrg[type="tx"]')),
+        qth: firstText(repeaterEl, "qth"),
+        remarks: firstText(repeaterEl, "remarks"),
+        link: firstText(repeaterEl, "link"),
+        ctcssRx: firstText(repeaterEl, 'ctcss[type="rx"]'),
+        ctcssTx: firstText(repeaterEl, 'ctcss[type="tx"]'),
+        latitude: Number(firstText(repeaterEl, "location > latitude") || NaN),
+        longitude: Number(firstText(repeaterEl, "location > longitude") || NaN),
+      };
+    });
+
+  return { perspective, countries, repeaters };
+}
+
+export function parsePrzemiennikiMetaJson(jsonText: string): {
+  countries: string[];
+  bands: string[];
+  modes: Array<{ value: string; label: string; title: string }>;
+} {
+  // JSON from the /meta endpoint: each list is checked before it is read.
+  let payload: { filters?: { country?: unknown; band?: unknown; mode?: unknown } } | null;
+  try {
+    payload = JSON.parse(String(jsonText || "{}"));
+  } catch (error) {
+    throw new Error(`Invalid meta JSON response: ${errorFields(error).message}`);
+  }
+  const filters = payload?.filters && typeof payload.filters === "object" ? payload.filters : {};
+
+  const countries: string[] = Array.isArray(filters.country)
+    ? filters.country
+      .map((value) => String(value || "").trim().toUpperCase())
+      .filter((value) => /^[A-Z]{2}$/.test(value))
+    : [];
+
+  const bands: string[] = Array.isArray(filters.band)
+    ? filters.band
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter((value) => value.length > 0)
+    : [];
+
+  const modes: Array<{ value: string; label: string; title: string }> = Array.isArray(filters.mode)
+    ? filters.mode
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter((value) => value.length > 0)
+      .map((value) => ({ value, label: value, title: value }))
+    : [];
+
+  return {
+    countries: Array.from(new Set(countries)).sort((a, b) => a.localeCompare(b)),
+    bands: Array.from(new Set(bands)).sort((a, b) => a.localeCompare(b)),
+    modes: Array.from(new Map(modes.map((entry) => [entry.value, entry])).values())
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  };
+}
+
+export function buildPmr446Rows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
+  return PMR446_FREQUENCIES_MHZ.map((frequency, idx) => {
+    const row = createBlankRow();
+    setRowValue(row, "Name", `PMR ${idx + 1}`);
+    setRowValue(row, "Frequency", frequency);
+    setRowValue(row, "Duplex", "");
+    setRowValue(row, "Offset", "0.000000");
+    setRowValue(row, "Tone", "");
+    setRowValue(row, "CrossMode", "Tone->Tone");
+    const modeValue = findEnumOption("Mode", ["NFM", "FMN", "FM"], false);
+    if (modeValue) {
+      setRowValue(row, "Mode", modeValue);
+    }
+    const powerValue = findEnumOption("Power", ["0.5W", "500mW", "Low"], false);
+    if (powerValue) {
+      setRowValue(row, "Power", powerValue);
+    }
+    return row;
+  });
+}
+
+export function buildFrsRows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
+  return FRS_FREQUENCIES_MHZ.map((frequency, idx) => {
+    const row = createBlankRow();
+    setRowValue(row, "Name", `FRS ${idx + 1}`);
+    setRowValue(row, "Frequency", frequency);
+    setRowValue(row, "Duplex", "");
+    setRowValue(row, "Offset", "0.000000");
+    setRowValue(row, "Tone", "");
+    setRowValue(row, "CrossMode", "Tone->Tone");
+    const modeValue = findEnumOption("Mode", ["NFM", "FMN", "FM"], false);
+    if (modeValue) {
+      setRowValue(row, "Mode", modeValue);
+    }
+    const powerValue = findEnumOption("Power", ["0.5W", "500mW", "Low"], false);
+    if (powerValue) {
+      setRowValue(row, "Power", powerValue);
+    }
+    return row;
+  });
+}
+
+function findBandwidthMode(findEnumOption: RowBuilderHooks["findEnumOption"], bandwidthKhz: number): string {
+  if (bandwidthKhz <= 12.5) {
+    return findEnumOption("Mode", ["NFM", "FMN", "Narrow", "N-FM", "FM"], true);
+  }
+  return findEnumOption("Mode", ["FM", "Wide", "WFM"], true);
+}
+
+function findPowerTier(findEnumOption: RowBuilderHooks["findEnumOption"], powerTier: string): string {
+  if (powerTier === "high") {
+    return highestPowerOption(findEnumOption);
+  }
+  return findEnumOption("Power", ["Low", "0.5W", "500mW", "2W", "2.0W", "5W", "5.0W"], true);
+}
+
+export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
+  return GMRS_CHANNELS.map((channel) => {
+    const row = createBlankRow();
+    setRowValue(row, "Name", channel.name);
+    setRowValue(row, "Frequency", channel.frequency);
+    setRowValue(row, "Duplex", channel.duplex);
+    setRowValue(row, "Offset", channel.offset);
+    setRowValue(row, "Tone", "");
+    setRowValue(row, "CrossMode", "Tone->Tone");
+    const modeValue = findBandwidthMode(findEnumOption, channel.bandwidthKhz);
+    if (modeValue) {
+      setRowValue(row, "Mode", modeValue);
+    }
+    const powerValue = findPowerTier(findEnumOption, channel.powerTier);
+    if (powerValue) {
+      setRowValue(row, "Power", powerValue);
+    }
+    return row;
+  });
+}
+
+// Returns `{ rows, skipped }`. A repeater the selected radio cannot express is
+// left out rather than written as something it is not, and `skipped` carries a
+// reason per record — "frequency" (outside the driver's valid_bands), "mode"
+// (the radio advertises no Mode the repeater can be worked in) or "tone" (the
+// radio's tone table has no such CTCSS access tone, so it could never open the
+// repeater) — so the caller can say which and why. Same contract as
+// buildRsgbRows in web/js/rsgb.ts.
+export function buildPrzemiennikiRows(
+  repeaters: readonly PrzemiennikiRepeater[],
+  { createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks,
+  { perspective = "repeater" }: { perspective?: string } = {},
+): RepeaterRowsResult {
+  const rows: ChannelRow[] = [];
+  const skipped: SkippedRepeater[] = [];
+  // RXF's <perspective> labels every rx/tx pair in the feed - frequencies and
+  // CTCSS alike - as either the user's radio's or the repeater's. Under
+  // "radio", rx is what the radio receives; under "repeater", rx is what the
+  // repeater receives, which is what the radio has to transmit.
+  const fromRadio = perspective === "radio";
+  for (const repeater of repeaters) {
+    const row = createBlankRow();
+    // Normalize the labelled pair into a CHIRP memory's receive/transmit pair.
+    const receiveFrequency = fromRadio
+      ? (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx)
+      : (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx);
+    const transmitFrequency = fromRadio
+      ? (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx)
+      : (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx);
+    // Tones carry the same perspective as the frequencies, so a repeater that
+    // publishes only an access tone (the tone the repeater receives) still has
+    // to reach the radio as a transmitted tone - map it to cToneFreq and the
+    // radio silently never sends it.
+    const transmitTone = parseCtcssFreq(fromRadio ? repeater.ctcssTx : repeater.ctcssRx);
+    const receiveTone = parseCtcssFreq(fromRadio ? repeater.ctcssRx : repeater.ctcssTx);
+
+    setRowValue(row, "Name", repeater.qra);
+    const commentParts = [repeater.qth, repeater.remarks, repeater.link].filter((part) => String(part || "").trim());
+    setRowValue(row, "Comment", commentParts.join(" | "));
+
+    if (Number.isFinite(receiveFrequency)) {
+      setRowValue(row, "Frequency", formatFrequencyMhz(receiveFrequency));
+    }
+    // setRowValue validates against the selected radio's own column metadata
+    // and keeps the previous value when a write falls outside valid_bands, so
+    // a 70cm repeater on a 2m-only radio would otherwise reach the grid with a
+    // blank Frequency and an accepted -7.6 MHz Offset (Offset is exempt from
+    // the band check). A blank Frequency is not merely a bad row: on upload
+    // _apply_rows_to_radio_instance reads it as "erase this memory".
+    if (!(Number.parseFloat(String(row.Frequency ?? "")) > 0)) {
+      skipped.push({ repeater: String(repeater.qra || "").trim(), reason: "frequency" });
+      continue;
+    }
+    if (Number.isFinite(receiveFrequency) && Number.isFinite(transmitFrequency)) {
+      const delta = transmitFrequency - receiveFrequency;
+      if (Math.abs(delta) < 0.0000005) {
+        setRowValue(row, "Duplex", "");
+        setRowValue(row, "Offset", "0.000000");
+      } else {
+        setRowValue(row, "Duplex", delta < 0 ? "-" : "+");
+        setRowValue(row, "Offset", formatFrequencyMhz(Math.abs(delta)));
+      }
+    }
+
+    if (!applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, receiveTone)) {
+      skipped.push({ repeater: String(repeater.qra || "").trim(), reason: "tone", tone: transmitTone });
+      continue;
+    }
+
+    const modeMappings: Readonly<Record<string, string[]>> = {
+      FM: ["FM", "NFM", "FMN"],
+      DSTAR: ["DV", "DSTAR", "D-STAR"],
+      ATV: ["ATV"],
+      ECHOLINK: ["ECHOLINK", "FM", "NFM", "FMN"],
+      DMR: ["DMR", "MOTOTRBO"],
+      MOTOTRBO: ["DMR", "MOTOTRBO"],
+      APCO25: ["P25", "APCO25", "APCO-25"],
+      C4FM: ["C4FM", "DN", "VW"],
+      FUSION: ["DN", "C4FM", "VW"],
+      FMLINK: ["FM", "NFM", "FMN"],
+      TETRA: ["TETRA"],
+      M17: ["M17"],
+    };
+    const mode = String(repeater.mode || "").trim().toUpperCase();
+    const mappedMode = findEnumOption("Mode", modeMappings[mode] || [mode], true);
+    if (!mappedMode) {
+      skipped.push({ repeater: String(repeater.qra || "").trim(), reason: "mode", mode });
+      continue;
+    }
+    setRowValue(row, "Mode", mappedMode);
+    // A repeater channel reaches for a distant machine, so it carries the
+    // driver's highest tier rather than whatever the blank row defaulted to -
+    // the same rule buildRsgbRows applies in web/js/rsgb.ts.
+    setHighestPower(row, { setRowValue, findEnumOption });
+    rows.push(row);
+  }
+  return { rows, skipped };
+}
+
+export {
+  DEFAULT_REPEATER_API_BASE,
+  buildRepeaterEndpoints,
+};

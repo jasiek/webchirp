@@ -1,7 +1,7 @@
 // Which CHIRP failures are bug reports and which are descriptions of the user's
 // own file, radio or cable.
 //
-// isIgnoredError in web/js/sentry.js drops the second kind, named class by
+// isIgnoredError in web/js/sentry.ts drops the second kind, named class by
 // class (IGNORED_CHIRP_ERRORS). That list is the whole of the boundary and it
 // is invisible from both sides: CHIRP does not know it exists, and in Sentry a
 // rule that quietly stops matching looks exactly like a failure that stopped
@@ -19,7 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { IGNORED_CHIRP_ERRORS, initOptions } from "../../web/js/sentry.js";
+import { IGNORED_CHIRP_ERRORS, initOptions } from "../../web/js/sentry.ts";
 import { repoRoot } from "../support/repo-paths.mjs";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 

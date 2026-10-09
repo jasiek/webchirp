@@ -11,7 +11,7 @@
       out in prose here -- build-dist rewrites every occurrence of one, comments
       included.
     -->
-    <script type="module" src="./js/sentry.js"></script>
+    <script type="module" src="./js/sentry.ts"></script>
     <!--
       Analytics. Everything with logic in it lives in the module below, shared
       with about.html: the production-host gate, the vendor loader it injects,
@@ -22,7 +22,7 @@
       the vendor at all. Do not spell asset paths out in prose here — build-dist
       rewrites every occurrence of one, comments included.
     -->
-    <script type="module" src="./js/analytics.js"></script>
+    <script type="module" src="./js/analytics.ts"></script>
     <!--
       Home-screen install. Cancels the browser's own install prompt and parks
       it for the toolbar button, which is the only way most Android users ever
@@ -32,7 +32,7 @@
       paths out in prose here -- build-dist rewrites every occurrence of one,
       comments included.
     -->
-    <script type="module" src="./js/install-prompt.js"></script>
+    <script type="module" src="./js/install-prompt.ts"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
       Base URL of the API that fronts przemienniki.net, repeaterbook.com and
@@ -134,7 +134,7 @@
           </div>
           <!--
             The only in-app link to the generated per-model pages
-            (web/radios/, built by scripts/build-model-pages.mjs). They exist to
+            (web/radios/, built by scripts/build-model-pages.ts). They exist to
             be found from search, but a set of pages nothing links to is one a
             crawler has to be told about twice; this is the path it follows
             from the page it already knows.
@@ -290,7 +290,7 @@
               </button>
               <!--
                 Bulk edit ships disabled and follows the grid selection
-                (web/js/ui/channel-bulk-edit.js). Labelled rather than
+                (web/js/ui/channel-bulk-edit.ts). Labelled rather than
                 icon-only: nothing about a pencil says it edits every selected
                 channel at once, and this is the toolbar's only action whose
                 scope is not obvious from the row it lands on.
@@ -511,7 +511,7 @@
     <!--
       Per-channel driver settings (CHIRP's Memory.extra): the editor behind the
       grid's Extra column. The grid is empty on purpose -- the fields depend on
-      the driver and on the channel, so web/js/ui/channel-extra.js builds them
+      the driver and on the channel, so web/js/ui/channel-extra.ts builds them
       from what the runtime reports when the modal opens.
     -->
     <div
@@ -540,7 +540,7 @@
       Bulk channel editor (issue #146): the modal behind the toolbar's "Edit in
       bulk" button. Both grids are empty on purpose -- the column list depends
       on the loaded schema and the extras on the driver, so
-      web/js/ui/channel-bulk-edit.js builds them when the modal opens.
+      web/js/ui/channel-bulk-edit.ts builds them when the modal opens.
     -->
     <div
       id="channel-bulk-edit-modal"
@@ -555,8 +555,8 @@
         unticked field would make the form invalid and suppress the submit
         event, so applying some other field would do nothing at all. Bounds are
         checked on the ticked fields only, in readSettingControl
-        (web/js/ui/setting-fields.js) and normalizeCellValue
-        (web/js/ui/channel-values.js), and reported on the field itself.
+        (web/js/ui/setting-fields.ts) and normalizeCellValue
+        (web/js/ui/channel-values.ts), and reported on the field itself.
       -->
       <form id="channel-bulk-edit-form" class="modal-card" novalidate>
         <h2 id="channel-bulk-edit-title">Edit selected channels</h2>
@@ -585,7 +585,7 @@
     <!--
       Single query modal shared by every repeater directory (przemienniki.net,
       RepeaterBook, IRTS, RSGB ETCC). The grid is empty on purpose: each field is
-      built per source by web/js/ui/query-fields.js when the modal opens.
+      built per source by web/js/ui/query-fields.ts when the modal opens.
     -->
     <div
       id="repeater-query-modal"
@@ -607,7 +607,7 @@
     <!--
       Static OSM context map for repeater channels that carry coordinates
       (issue #57). The tooltip is the desktop hover surface; the modal is the
-      touch-device tap surface. Both are populated by web/js/ui/repeater-map.js.
+      touch-device tap surface. Both are populated by web/js/ui/repeater-map.ts.
     -->
     <div id="repeater-map-tooltip" class="repeater-map-tooltip hidden" aria-hidden="true">
       <div id="repeater-map-tooltip-coords" class="repeater-map-coords"></div>
@@ -664,7 +664,7 @@
       web/python/webchirp_bridge/runtime_errors.py). Those messages are
       instructions, and Debug Output is the wrong surface for an instruction --
       it is folded away by default, and what it shows when it opens is a Python
-      traceback. Title and message are filled in by web/js/ui/notice-modal.js;
+      traceback. Title and message are filled in by web/js/ui/notice-modal.ts;
       the markup carries neither, because nothing here is specific to uploads.
     -->
     <div
@@ -764,7 +764,7 @@
     </div>
 
     <input id="codeplug-file" type="file" accept=".csv,.img" hidden />
-    <script type="module" src="./js/version-info.js"></script>
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./js/version-info.ts"></script>
+    <script type="module" src="./app.ts"></script>
   </body>
 </html>

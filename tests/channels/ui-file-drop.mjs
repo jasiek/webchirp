@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyLoadableFile } from "../../web/js/ui/codeplug-io.js";
+import { classifyLoadableFile } from "../../web/js/ui/codeplug-io.ts";
 import { closeVivifiedModals, flushMicrotasks, installFakeDom, selectRadioBySearch } from "../support/fake-dom.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
@@ -110,7 +110,7 @@ function dropEvent(files) {
 
 async function bootUi(options) {
   const { calls, api } = createRuntimeApi(options);
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   ui.setRuntimeApi(withRadioSessions(api));
   // init() leaves the editor empty, so every recorded parseCsv call below is

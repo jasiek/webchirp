@@ -6,7 +6,7 @@ import {
   createRuntimeBootstrap,
   isBootstrapFailure,
   markBootstrapFailure,
-} from "../../web/js/runtime-bootstrap.mjs";
+} from "../../web/js/runtime-bootstrap.ts";
 
 // Regression tests for issue #99: the RPC layer classified a runtime crash by
 // checking whether the pyodide handle was still unset, which misread an ordinary

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createProgress } from "../../web/js/ui/progress.js";
+import { createProgress } from "../../web/js/ui/progress.ts";
 import { importAllDriverModules, sharedHarness } from "../support/chirp.mjs";
 
 // The strip only ever reads/writes textContent, hidden and the <progress> value,

@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { FLOWS, OUTCOMES, recordFlow } from "../../web/js/ui/metrics.js";
-import { METRIC_ATTRIBUTES, initSentry, resetSentryForTests } from "../../web/js/sentry.js";
+import { FLOWS, OUTCOMES, recordFlow } from "../../web/js/ui/metrics.ts";
+import { METRIC_ATTRIBUTES, initSentry, resetSentryForTests } from "../../web/js/sentry.ts";
 import { makeWindow } from "../support/fake-window.mjs";
 import { callArgumentKeys, sourceFiles } from "../support/param-scanner.mjs";
 import { jsDir } from "../support/repo-paths.mjs";
 
-// The vocabulary the UI records flows in. web/js/sentry.js owns the vendor
+// The vocabulary the UI records flows in. web/js/sentry.ts owns the vendor
 // wiring and the redaction, and is covered in tests/channels/sentry.mjs; what
 // matters here is that the two questions these metrics exist to answer -- which
 // flows are broken, and which radios fail inside them -- stay answerable by a
@@ -132,7 +132,7 @@ test("every attribute the app records is on the allowlist", () => {
   assert.deepEqual(
     undeclared,
     [],
-    "these attributes are recorded but not in METRIC_ATTRIBUTES, so web/js/sentry.js drops them "
+    "these attributes are recorded but not in METRIC_ATTRIBUTES, so web/js/sentry.ts drops them "
       + `and the flow looks like it never ran: ${undeclared.join(", ")}`,
   );
 });

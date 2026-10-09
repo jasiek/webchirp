@@ -1,10 +1,14 @@
 // node-serialport wrapped to the serial transport contract
-// (web/js/serial-transport.mjs), so the agent CLI (scripts/radio-codeplug.mjs)
+// (web/js/serial-transport.ts), so the agent CLI (scripts/radio-codeplug.ts)
 // and the Pyodide suites drive a tty through the same SerialBridge
-// (web/js/serial-bridge.mjs) the browser uses. Lives with the harness because
+// (web/js/serial-bridge.ts) the browser uses. Lives with the harness because
 // it is Node-only: it imports serialport, which no browser module may.
 import { SerialPort } from "serialport";
-import { FRAMING_OPTIONS, createDisconnectNotifier } from "../../web/js/serial-transport.mjs";
+import { FRAMING_OPTIONS, createDisconnectNotifier } from "../../web/js/serial-transport.ts";
+
+/** @typedef {import("../../web/js/serial-transport.ts").SerialOpenOptions} SerialOpenOptions */
+/** @typedef {import("../../web/js/serial-transport.ts").SerialSignals} SerialSignals */
+/** @typedef {import("../../web/js/serial-transport.ts").SerialDisconnectPayload} SerialDisconnectPayload */
 
 // What node-serialport can do: the OS driver honours framing and DTR/RTS, and
 // settings change on the open handle (update() for the rate; framing by
@@ -17,13 +21,27 @@ export const NODE_SERIAL_CAPABILITIES = Object.freeze({
 });
 
 // Turn one of node-serialport's callback methods into a promise.
+/**
+ * @param {SerialPort} port
+ * @param {"open"|"close"|"write"|"drain"|"update"|"set"|"flush"} method
+ * @param {...unknown} args
+ * @returns {Promise<void>}
+ */
 function callPort(port, method, ...args) {
   return new Promise((resolve, reject) => {
-    port[method](...args, (error) => (error ? reject(error) : resolve(undefined)));
+    /** @type {(...args: unknown[]) => void} */ (port[method]).call(
+      port,
+      ...args,
+      /** @param {Error|null|undefined} error */ (error) => (error ? reject(error) : resolve(undefined)),
+    );
   });
 }
 
 // The constructor options node-serialport takes for a Web Serial option set.
+/**
+ * @param {string} path
+ * @param {Partial<SerialOpenOptions>} options
+ */
 function nodeOpenOptions(path, options) {
   return {
     path,
@@ -39,6 +57,10 @@ function nodeOpenOptions(path, options) {
 export class NodeSerialPort {
   // SerialPortClass lets a test substitute serialport's SerialPortMock, which
   // runs the real stream code over MockBinding instead of a device.
+  /**
+   * @param {string} path
+   * @param {{SerialPortClass?: typeof SerialPort}} [options]
+   */
   constructor(path, { SerialPortClass = SerialPort } = {}) {
     this.path = String(path || "");
     this._SerialPortClass = SerialPortClass;
@@ -50,8 +72,10 @@ export class NodeSerialPort {
     this._options = null;
     // Last DTR/RTS sent. node-serialport's set() writes every line on each
     // call, defaulting the unnamed ones, so one-line changes are merged here.
+    /** @type {{dtr: boolean, rts: boolean}|null} */
     this._lines = null;
     this._lossNotifier = createDisconnectNotifier(this);
+    /** @param {Buffer} chunk */
     this._onData = (chunk) => {
       if (chunk?.length && this._controller) {
         this._controller.enqueue(Uint8Array.from(chunk));
@@ -59,6 +83,7 @@ export class NodeSerialPort {
     };
     // A close carrying a DisconnectedError is the device going away; one
     // without is our own close().
+    /** @param {(Error & {disconnected?: boolean})|null|undefined} error */
     this._onClose = (error) => {
       if (error?.disconnected) {
         this._controller?.error(new Error(`Serial port ${this.path} disconnected.`));
@@ -90,6 +115,7 @@ export class NodeSerialPort {
   }
 
   // Contract: register a loss callback, get its unsubscribe back.
+  /** @param {(payload: SerialDisconnectPayload) => void} callback */
   onDisconnect(callback) {
     return this._lossNotifier.subscribe(callback);
   }
@@ -143,10 +169,13 @@ export class NodeSerialPort {
   // Change settings on the open port. A rate change is update() on the
   // handle; a framing change needs a new handle, opened under the same
   // streams, with the control lines put back because the reopen dropped them.
+  /** @param {Partial<SerialOpenOptions>} [options] */
   async reconfigure(options = {}) {
+    /** @type {Partial<SerialOpenOptions>} */
     const current = this._options || {};
     const framingChanged = [...FRAMING_OPTIONS, "flowControl"]
-      .some((key) => options[key] !== current[key]);
+      .some((key) => options[/** @type {keyof SerialOpenOptions} */ (key)]
+        !== current[/** @type {keyof SerialOpenOptions} */ (key)]);
     if (this.nodePort && !framingChanged) {
       if (Number(options.baudRate) !== Number(current.baudRate)) {
         await callPort(this.nodePort, "update", { baudRate: Number(options.baudRate) });
@@ -157,11 +186,13 @@ export class NodeSerialPort {
     await this._closeHandle();
     await this._openHandle(options);
     if (this._lines) {
-      await callPort(this.nodePort, "set", { ...this._lines });
+      // _openHandle() has just set nodePort, or thrown.
+      await callPort(/** @type {SerialPort} */ (this.nodePort), "set", { ...this._lines });
     }
   }
 
   // Merge the named lines into the last state sent and send both.
+  /** @param {SerialSignals} [signals] */
   async setSignals(signals = {}) {
     if (!this.nodePort) {
       throw new Error(`Serial port ${this.path} is not open.`);
@@ -186,6 +217,7 @@ export class NodeSerialPort {
   }
 
   // Construct and open a handle for options; on failure nothing is left held.
+  /** @param {Partial<SerialOpenOptions>} options */
   async _openHandle(options) {
     const port = new this._SerialPortClass(nodeOpenOptions(this.path, options));
     port.on("data", this._onData);

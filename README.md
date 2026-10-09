@@ -95,8 +95,8 @@ dispatched to a chip-specific driver:
   CDC-ACM.
 - Other vendor-specific UART bridges are **not supported** over WebUSB; they
   need chip-specific drivers that have not been written yet (see
-  `web/js/ftdi-webusb.js`, `web/js/pl2303-webusb.js`, `web/js/ch340-webusb.js`
-  and `web/js/cp2102-webusb.js` for the pattern) and still require native Web
+  `web/js/ftdi-webusb.ts`, `web/js/pl2303-webusb.ts`, `web/js/ch340-webusb.ts`
+  and `web/js/cp2102-webusb.ts` for the pattern) and still require native Web
   Serial on desktop.
 
 `npm run dev` serves with cross-origin isolation headers (`COOP`/`COEP`) so
@@ -168,20 +168,20 @@ wrong one still echoes perfectly. The same cases run against fake hardware in
 
 ## Architecture
 
-- Entry point / wiring: `web/app.js` connects the UI controller, runtime RPC
+- Entry point / wiring: `web/app.ts` connects the UI controller, runtime RPC
   client, and serial bridge.
-- UI controller: `web/js/ui.js` (channel table, settings editor, clipboard,
+- UI controller: `web/js/ui.ts` (channel table, settings editor, clipboard,
   status/debug panels).
-- Serial bridge: `web/js/serial.js` (native Web Serial) with WebUSB chip drivers
-  in `web/js/ftdi-webusb.js`, `web/js/pl2303-webusb.js`,
-  `web/js/ch340-webusb.js` and `web/js/cp2102-webusb.js`.
-- Main-thread runtime RPC client + Pyodide bootstrap: `web/js/runtime-rpc.js`
+- Serial bridge: `web/js/serial.ts` (native Web Serial) with WebUSB chip drivers
+  in `web/js/ftdi-webusb.ts`, `web/js/pl2303-webusb.ts`,
+  `web/js/ch340-webusb.ts` and `web/js/cp2102-webusb.ts`.
+- Main-thread runtime RPC client + Pyodide bootstrap: `web/js/runtime-rpc.ts`
   (runs on the main thread — there is no Web Worker).
-- Python source providers: `web/js/python-sources.mjs`.
+- Python source providers: `web/js/python-sources.ts`.
 - Versioned Python runtime code: the `web/python/webchirp_bridge/` package, executed
   into Pyodide's globals by the `web/python/runtime_bridge.py` entry point.
 - The browser runtime mounts the pinned CHIRP package into Pyodide as one archive
-  served from the app's own origin: `scripts/build-chirp-bundle.mjs` (`npm run
+  served from the app's own origin: `scripts/build-chirp-bundle.ts` (`npm run
   build:chirp`, run by `npm run dev` and `npm run build:dist`) zips `chirp/chirp` from
   the submodule -- without `wxui`, `cli`, `sources`, `locale`, `share` and
   `stock_configs`, which the runtime never imports -- into `web/chirp/chirp-<pin>.zip`
@@ -209,14 +209,14 @@ treat an untested radio as unverified.
 sequenceDiagram
   autonumber
   participant U as User
-  participant UI as ui.js
-  participant RPC as runtime-rpc.js
-  participant SRC as python-sources.mjs
+  participant UI as ui.ts
+  participant RPC as runtime-rpc.ts
+  participant SRC as python-sources.ts
   participant PY as webchirp_bridge<br/>(Pyodide)
   participant S as serial.js<br/>(Web Serial / WebUSB)
   participant R as Radio
 
-  Note over UI,S: app.js wires the UI controller, main-thread RPC client, and serial bridge
+  Note over UI,S: app.ts wires the UI controller, main-thread RPC client, and serial bridge
 
   U->>UI: Open page
   UI->>RPC: listRadios()

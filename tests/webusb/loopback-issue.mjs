@@ -9,7 +9,7 @@ import {
   buildLoopbackIssueTitle,
   buildLoopbackIssueUrl,
   detectPlatform,
-} from "../../web/js/loopback-issue.js";
+} from "../../web/js/loopback-issue.ts";
 
 // A pre-filled issue URL is only useful if GitHub serves the form: over-long
 // URLs come back as HTTP 414, and a field name the template does not declare is

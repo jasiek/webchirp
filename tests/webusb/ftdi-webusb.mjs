@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FtdiSerialPort } from "../../web/js/ftdi-webusb.js";
+import { FtdiSerialPort } from "../../web/js/ftdi-webusb.ts";
 import { makeFakeUsbDevice, okTransfer } from "../support/fake-usb.mjs";
 import { tick } from "../support/globals.mjs";
 import {

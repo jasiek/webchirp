@@ -11,7 +11,7 @@ import {
   initAnalytics,
   isAnalyticsHost,
   trackEvent,
-} from "../../web/js/analytics.js";
+} from "../../web/js/analytics.ts";
 import { makeWindow } from "../support/fake-window.mjs";
 import { htmlPages, repoRoot, webDir } from "../support/repo-paths.mjs";
 
@@ -22,7 +22,7 @@ import { htmlPages, repoRoot, webDir } from "../support/repo-paths.mjs";
 // hard: a dev server or a fork's Pages site reporting into the shared property
 // is silent when it happens and unfixable afterwards, since GA4 does not let
 // you delete events you wish you had not collected.
-const ANALYTICS_MODULE = fs.readFileSync(path.join(webDir, "js", "analytics.js"), "utf8");
+const ANALYTICS_MODULE = fs.readFileSync(path.join(webDir, "js", "analytics.ts"), "utf8");
 
 // dataLayer holds arguments objects, not arrays.
 function calls(win) {
@@ -172,7 +172,7 @@ test("an install prompt is measured without suppressing the browser's own", () =
   const [prompt] = eventsNamed(win, "pwa_install_prompt");
   assert.ok(prompt, "beforeinstallprompt sent no event");
   assert.equal(prompt[2].display_mode, "browser");
-  // Cancelling belongs to web/js/install-prompt.js, which index.html loads and
+  // Cancelling belongs to web/js/install-prompt.ts, which index.html loads and
   // about.html does not. If this module started cancelling too, about.html
   // would lose the browser's install UI with nothing to replace it.
   assert.equal(prevented, false);
@@ -221,7 +221,7 @@ test("every page loads analytics exactly once, and only through the module", () 
   for (const page of htmlPages) {
     const html = fs.readFileSync(path.join(webDir, page), "utf8");
 
-    const modules = html.match(/<script type="module" src="\.\/js\/analytics\.js"><\/script>/g) || [];
+    const modules = html.match(/<script type="module" src="\.\/js\/analytics\.ts"><\/script>/g) || [];
     assert.equal(modules.length, 1, `${page} should load the analytics module once`);
 
     // A static loader tag would fetch the vendor script on every fork and dev

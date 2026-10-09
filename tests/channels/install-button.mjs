@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { initAnalytics } from "../../web/js/analytics.js";
-import { bindInstallPrompt } from "../../web/js/install-prompt.js";
-import { createInstallButton } from "../../web/js/ui/install-button.js";
+import { initAnalytics } from "../../web/js/analytics.ts";
+import { bindInstallPrompt } from "../../web/js/install-prompt.ts";
+import { createInstallButton } from "../../web/js/ui/install-button.ts";
 import { FakeElement } from "../support/fake-dom.mjs";
 import { makeWindow } from "../support/fake-window.mjs";
 
@@ -13,7 +13,7 @@ import { makeWindow } from "../support/fake-window.mjs";
 // tapped. Neither shows up in a page load — beforeinstallprompt fires only on a
 // device the app is installable on — so it is pinned here.
 
-// The two members web/js/ui/install-button.js reads off ctx. A full UI harness
+// The two members web/js/ui/install-button.ts reads off ctx. A full UI harness
 // would only add the rest of the app to a module that touches one element.
 function makeContext() {
   const installAppEl = new FakeElement("button", null, "install-app");
@@ -91,7 +91,7 @@ test("a tap raises the prompt, reports the click and retires the button", async 
   await installAppEl.dispatch("click");
 
   // The click is this button's half of the funnel; the answer arrives
-  // separately as pwa_install_choice from web/js/analytics.js.
+  // separately as pwa_install_choice from web/js/analytics.ts.
   assert.equal(trackedEvents(win, "pwa_install_clicked").length, 1);
   // The event is spent, so the offer is gone: a still-visible button would do
   // nothing on a second tap.

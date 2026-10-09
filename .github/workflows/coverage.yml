@@ -145,7 +145,7 @@ jobs:
           # Invisible when the comment is rendered.
           MARKER: <!-- webchirp-coverage -->
         run: |
-          # coverage/ is created by coverage.mjs, which a failing check:syntax,
+          # coverage/ is created by scripts/coverage.ts, which a failing check:syntax,
           # check:types, check:js or check:python aborts before reaching -- and then this
           # redirect would fail and the fallback message never post.
           mkdir -p coverage

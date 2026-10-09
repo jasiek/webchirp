@@ -1,8 +1,8 @@
 """Loading CHIRP drivers and enumerating what they register.
 
 The whole pinned CHIRP package is on the Pyodide filesystem before this
-package loads: ``seedPyodideRuntime()`` (``web/js/python-sources.mjs``)
-unpacks the archive built by ``scripts/build-chirp-bundle.mjs`` under
+package loads: ``seedPyodideRuntime()`` (``web/js/python-sources.ts``)
+unpacks the archive built by ``scripts/build-chirp-bundle.ts`` under
 ``/webchirp_runtime``, so every ``chirp.*`` module -- the ~190 drivers
 included -- imports through Python's ordinary path finder, with no network
 and no interpreter suspension. The helpers here import drivers on demand or
@@ -115,7 +115,7 @@ async def list_registered_radios(module_short_names: Iterable[Any]) -> list[dict
     A coroutine for the same reason ``import_all_driver_modules`` is. When the
     static catalog is missing or was built for another CHIRP pin, the browser
     falls back to this sweep (``loadRadioCatalogFromSources()`` in
-    web/js/runtime-rpc.js), which imports the same ~190 modules with no
+    web/js/runtime-rpc.ts), which imports the same ~190 modules with no
     progress callback; a synchronous loop would hold the main thread for the
     whole of it. The imports go through ``_import_driver_modules`` so the
     event loop runs between them, and only the enumeration that follows is

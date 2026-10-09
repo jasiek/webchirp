@@ -8,7 +8,7 @@
 // The real script runs as a child process against a throwaway web/ tree, so
 // what is under test is exactly what CI runs: esbuild bundling the pages'
 // module scripts and stylesheets, plus the Python hashing and the page
-// rewrite scripts/build-dist.mjs does itself.
+// rewrite scripts/build-dist.ts does itself.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -25,10 +25,10 @@ import {
   DEFAULT_CHIRP_REVISION,
   EXTRA_DRIVER_RELATIVE_FILES,
   RUNTIME_PYTHON_FILES,
-} from "../../web/js/python-sources.mjs";
-import { RUNTIME_PYTHON_URLS } from "../../web/js/runtime-python-urls.js";
+} from "../../web/js/python-sources.ts";
+import { RUNTIME_PYTHON_URLS } from "../../web/js/runtime-python-urls.ts";
 
-const SCRIPT = path.join(repoRoot, "scripts", "build-dist.mjs");
+const SCRIPT = path.join(repoRoot, "scripts", "build-dist.ts");
 // esbuild's names (name.<8 base32>.js, .css, and .js.map beside each) and the
 // Python files' (name.<10 hex>.py), the two shapes build-dist.mjs emits.
 const HASHED_NAME_RE = /\.([A-Z2-7]{8}|[0-9a-f]{10})\.[a-z]+(?:\.map)?$/;
@@ -206,6 +206,27 @@ test("a module bundled into its importer renames the importer when it changes", 
   assert.notEqual(hashedNameOf(after, "js/app"), hashedNameOf(before, "js/app"));
 });
 
+// The sources are TypeScript: a page names its .ts entry, the entry imports
+// other .ts files by their .ts names, and what ships is JavaScript under a
+// hashed .js name with the page pointed at it.
+test("a TypeScript entry is bundled with its types stripped", async () => {
+  const emitted = await build({
+    "index.html": '<script type="module" src="./js/app.ts"></script>\n',
+    "js/app.ts":
+      'import { leaf } from "./leaf.ts";\n'
+      + 'import type { Leaf } from "./leaf.ts";\n'
+      + "export const value: Leaf = leaf;\n",
+    "js/leaf.ts": "export type Leaf = number;\nexport const leaf: Leaf = 41 + 1;\n",
+  });
+  const entry = hashedNameOf(emitted, "js/app");
+  assert.match(entry, /\.js$/);
+  const code = text(emitted, entry);
+  assert.match(code, /41 \+ 1/);
+  assert.doesNotMatch(code, /: Leaf|import type/);
+  assert.ok(text(emitted, "index.html").includes(`src="./${entry}"`));
+  assert.deepEqual([...emitted.keys()].filter((rel) => rel.endsWith(".ts")), [], "no .ts file ships");
+});
+
 test("no source module or stylesheet ships under its own name", async () => {
   const emitted = await build(appTree("export const leaf = 1;\n"));
   const unhashed = [...emitted.keys()].filter(
@@ -237,7 +258,7 @@ test("an unchanged tree builds to byte-identical assets", async () => {
 
 // The archive is immutable by pin, not by digest: it must reach dist/ under
 // its own name, unhashed, and be listed in the asset manifest so retention
-// (scripts/retain-deployed-assets.mjs) carries the previous pin forward. Every
+// (scripts/retain-deployed-assets.ts) carries the previous pin forward. Every
 // hashed output is listed the same way.
 test("the CHIRP archive and every hashed output are listed for retention", async () => {
   await withTempDir("build-dist-", async (dir) => {
@@ -384,16 +405,16 @@ test("CDN imports stay external and lazy ones stay dynamic", async () => {
 });
 
 // The runtime fetches its Python by URL, so the bundle has to name the hashed
-// copies: web/js/runtime-python-urls.js is replaced in the bundle by a literal
+// copies: web/js/runtime-python-urls.ts is replaced in the bundle by a literal
 // table of them, while the source keeps naming the unhashed files the dev
 // server serves.
 test("the bundle fetches each runtime Python file under its hashed name", async () => {
   const emitted = await build({
     ...appTree("export const leaf = 1;\n"),
     "js/app.js":
-      'import { RUNTIME_PYTHON_URLS } from "./runtime-python-urls.js";\n'
+      'import { RUNTIME_PYTHON_URLS } from "./runtime-python-urls.ts";\n'
       + "export const urls = RUNTIME_PYTHON_URLS;\n",
-    "js/runtime-python-urls.js":
+    "js/runtime-python-urls.ts":
       'export const RUNTIME_PYTHON_URLS = { "bridge.py": "./python/bridge.py" };\n',
     "python/pkg/module.py": "OTHER = 2\n",
   });
@@ -424,7 +445,7 @@ function pythonFiles(dir, base = dir) {
 
 // The build ships every .py under web/python and the browser fetches what
 // RUNTIME_PYTHON_FILES and EXTRA_DRIVER_RELATIVE_FILES list, by the URL
-// web/js/runtime-python-urls.js derives from them. The two sets have to be the
+// web/js/runtime-python-urls.ts derives from them. The two sets have to be the
 // same: a listed file that is not there 404s at boot, and a file that is not
 // listed is shipped and never loaded.
 test("every runtime Python file is listed, shipped and has a URL", () => {

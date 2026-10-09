@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { errorDetails, errorSummary } from "../../web/js/ui/format.js";
+import { errorDetails, errorSummary } from "../../web/js/ui/format.ts";
 
 test("a stack without a message preserves the Python traceback and JS frames", () => {
   const message = "Traceback (most recent call last):\n  File \"channel_rows.py\", line 105\nchirp.errors.InvalidDataError: No channels found";

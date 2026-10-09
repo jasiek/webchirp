@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CUSTOM_DIMENSIONS } from "../../web/js/analytics.js";
+import { CUSTOM_DIMENSIONS } from "../../web/js/analytics.ts";
 import {
   channelCountBucket,
   classifyErrorKind,
@@ -9,13 +9,13 @@ import {
   errorTypeName,
   firstIssueColumn,
   radioEventParams,
-} from "../../web/js/ui/analytics.js";
+} from "../../web/js/ui/analytics.ts";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
 // The parameters the UI attaches to its events. What these produce is what GA
 // stores forever, so the tests here are as much about what must never be sent —
 // a file name, a frequency, a raw error message — as about what must.
-// web/js/analytics.js owns the gtag side of it and is covered in
+// web/js/analytics.ts owns the gtag side of it and is covered in
 // tests/channels/analytics.mjs.
 
 // A runtime failure reaches the UI as the RuntimeCallError the dispatcher
@@ -63,7 +63,7 @@ test("Python traceback wrappers do not masquerade as the exception type", () => 
 });
 
 test("classifyErrorKind recognizes the geolocation failure sentences", () => {
-  // The sentences web/js/ui/repeater-query.js writes for GeolocationPositionError
+  // The sentences web/js/ui/repeater-query.ts writes for GeolocationPositionError
   // codes must land in the bucket the GA event promises, or a deny would read
   // as the catch-all "other" next to the ones that mapped.
   assert.equal(
@@ -135,14 +135,14 @@ test("errorTypeName reads the exception type from either error shape", () => {
 
 test("errorTypeName still reads a bootstrap failure that never crossed the dispatcher", () => {
   // A PythonError raised while seeding the runtime, before rpc_dispatch
-  // exists, is flattened into a fresh Error by web/js/runtime-rpc.js; the
+  // exists, is flattened into a fresh Error by web/js/runtime-rpc.ts; the
   // class is only in its text.
   const error = new Error([
     "PythonError: Traceback (most recent call last):",
     '  File "/webchirp_runtime/runtime_bridge.py", line 25, in <module>',
     "ModuleNotFoundError: No module named 'webchirp_bridge'",
   ].join("\n"));
-  error.stack = `Error: ${error.message}\n    at invokeRuntimeMethod (runtime-rpc.js:1:1)`;
+  error.stack = `Error: ${error.message}\n    at invokeRuntimeMethod (runtime-rpc.ts:1:1)`;
   assert.equal(errorTypeName(error), "ModuleNotFoundError");
 });
 

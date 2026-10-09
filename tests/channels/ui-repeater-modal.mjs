@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.js";
-import { createRepeaterQuery } from "../../web/js/ui/repeater-query.js";
+import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.ts";
+import { createRepeaterQuery } from "../../web/js/ui/repeater-query.ts";
 import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
 import { fakeXmlGlobals } from "../support/fake-xml.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
@@ -170,7 +170,7 @@ function buildHarness({
       insertRowsAtSelectionOrEnd: (rows, label) => table.inserted.push({ rows, label }),
       rowBuilderHooks: () => ({
         createBlankRow: () => Object.fromEntries(headers.map((column) => [column, ""])),
-        // Returns whether the write took, as channel-table.js's does.
+        // Returns whether the write took, as web/js/ui/channel-table.ts's does.
         setRowValue: (row, column, value) => {
           if (!headers.includes(column)) {
             return false;
@@ -191,7 +191,7 @@ function buildHarness({
           row[column] = String(value ?? "");
           return true;
         },
-        // Choice order decides, as channel-table.js's findEnumOption does, and
+        // Choice order decides, as web/js/ui/channel-table.ts's findEnumOption does, and
         // a radio that advertises none of the choices answers with "".
         findEnumOption: (column, choices) => {
           // Low first, as roughly half of CHIRP's drivers order them.
@@ -1084,7 +1084,7 @@ test("a directory still loading its options cannot replace the one opened after 
   assert.equal(log.statuses.at(-1), "Configure RSGB ETCC query.");
 });
 
-// The button is hidden by web/js/ui/repeater-query.js when a blank proxy base
+// The button is hidden by web/js/ui/repeater-query.ts when a blank proxy base
 // makes its source unavailable, which only works if the stylesheet lets it:
 // the toolbar's own display declaration outranks the browser's [hidden] rule,
 // so a visible button would sit there doing nothing when clicked.
@@ -1793,7 +1793,7 @@ const PREVIEW_LAT = 49.5;
 const PREVIEW_LON = 20.5;
 
 // The caption under the map preview, which is the field's own element rather
-// than anything web/js/ui/dom.js knows about.
+// than anything web/js/ui/dom.ts knows about.
 function previewCaption(dom) {
   const match = descendants(grid(dom)).find((el) => el.className === "modal-map-preview-count");
   assert.ok(match, "the map preview has a caption");

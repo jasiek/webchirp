@@ -1,8 +1,8 @@
-// The Node counterpart of createBrowserPythonSource (web/js/python-sources.mjs):
+// The Node counterpart of createBrowserPythonSource (web/js/python-sources.ts):
 // the same provider shape, fed from disk. The CHIRP archive is built
-// in-process from the submodule by scripts/build-chirp-bundle.mjs, the very
-// function the deploy runs, so the test harness, scripts/build-catalog.mjs
-// and scripts/radio-codeplug.mjs mount exactly what a browser would -- there
+// in-process from the submodule by scripts/build-chirp-bundle.ts, the very
+// function the deploy runs, so the test harness, scripts/build-catalog.ts
+// and scripts/radio-codeplug.ts mount exactly what a browser would -- there
 // is no second code path that reads chirp/ file by file and no fetch global
 // to fake.
 import fs from "node:fs/promises";
@@ -11,7 +11,7 @@ import path from "node:path";
 import {
   buildChirpBundle,
   resolveChirpPackageDir,
-} from "../../scripts/build-chirp-bundle.mjs";
+} from "../../scripts/build-chirp-bundle.ts";
 import {
   DEFAULT_CHIRP_REVISION,
   DEFAULT_DRIVER_SET,
@@ -19,13 +19,14 @@ import {
   normalizeDriverSet,
   QUANSHENG_UNOFFICIAL_DRIVER_MODULES,
   QUANSHENG_UNOFFICIAL_DRIVER_SET,
-} from "../../web/js/python-sources.mjs";
+} from "../../web/js/python-sources.ts";
 
 // One archive per package directory per process. Every harness in a test
 // file (and the isolated ones some tests ask for) mounts the same tree, and
 // deflating six megabytes of drivers is the slow part of a boot.
 const bundlesByDir = new Map();
 
+/** @param {string} chirpPackageDir */
 function bundleFor(chirpPackageDir) {
   if (!bundlesByDir.has(chirpPackageDir)) {
     bundlesByDir.set(
@@ -39,7 +40,7 @@ function bundleFor(chirpPackageDir) {
 // A provider over a CHIRP checkout (repo/chirp by default, or
 // WEBCHIRP_CHIRP_DIR / an explicit chirpDir) and the repo's web/python tree.
 /**
- * The same shape as web/js/python-sources.mjs's PythonSourceProvider.
+ * The same shape as web/js/python-sources.ts's PythonSourceProvider.
  * @param {{repoRoot?: string, chirpDir?: string, driverSet?: string}} [options]
  */
 export async function createLocalPythonSource({ repoRoot, chirpDir = "", driverSet } = {}) {
@@ -61,6 +62,7 @@ export async function createLocalPythonSource({ repoRoot, chirpDir = "", driverS
     async fetchChirpManifest() {
       return (await bundleFor(chirpPackageDir)).manifest;
     },
+    /** @param {string} relPath */
     async fetchRuntimeFile(relPath) {
       return fs.readFile(path.join(runtimePythonDir, ...relPath.split("/")), "utf8");
     },

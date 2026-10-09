@@ -10,8 +10,8 @@ import {
   detectPl2303Type,
   isProlificDevice,
   pickPl2303BaudRate,
-} from "../../web/js/pl2303-webusb.js";
-import { createWebUsbSerial } from "../../web/js/webusb-serial.js";
+} from "../../web/js/pl2303-webusb.ts";
+import { createWebUsbSerial } from "../../web/js/webusb-serial.ts";
 import {
   PL2303_HXN_DESCRIPTOR,
   PL2303_HX_DESCRIPTOR,

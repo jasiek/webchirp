@@ -6,8 +6,8 @@ import {
   ftdiConvertBaudrate,
   isFtdiDevice,
   stripFtdiStatusBytes,
-} from "../../web/js/ftdi-webusb.js";
-import { CdcSerialPort, createWebUsbSerial } from "../../web/js/webusb-serial.js";
+} from "../../web/js/ftdi-webusb.ts";
+import { CdcSerialPort, createWebUsbSerial } from "../../web/js/webusb-serial.ts";
 import { withNavigator } from "../support/globals.mjs";
 
 test("ftdiConvertBaudrate matches known libftdi divisor encodings", () => {

@@ -9,7 +9,7 @@
 // this module only seeds it and moves data across the JS boundary.
 //
 // node:test gives each test file its own process, and each process boots its
-// own Pyodide, so every one writes a fragment and scripts/coverage.mjs merges
+// own Pyodide, so every one writes a fragment and scripts/coverage.ts merges
 // them. Merging is a union of executed lines over a union of statements: a
 // module one process never imported still carries its full statement list from
 // that process's fragment, so nothing drops out of the denominator.
@@ -36,6 +36,7 @@ export function pythonCoverageDir() {
 // Turn a Pyodide filesystem path into the repo path the same file has on disk,
 // so a merged report and an lcov file both point at something a reader (or
 // GitHub's diff view) can open.
+/** @param {string} runtimePath */
 export function toRepoPath(runtimePath) {
   const text = String(runtimePath || "");
   return text.startsWith(RUNTIME_PREFIX) ? REPO_PREFIX + text.slice(RUNTIME_PREFIX.length) : text;
@@ -45,6 +46,7 @@ export function toRepoPath(runtimePath) {
 // tracing has to be running while webchirp_bridge is imported or the
 // module-level statements never register as executed. Returns whether it did
 // anything, so the caller can stay quiet when coverage is off.
+/** @param {import("pyodide").PyodideInterface} pyodide */
 export async function startPythonCoverage(pyodide) {
   const outputDir = pythonCoverageDir();
   if (!outputDir) {
@@ -67,7 +69,7 @@ export async function startPythonCoverage(pyodide) {
     } catch (error) {
       // A missing fragment understates coverage but must never fail a test
       // run that otherwise passed, so this reports rather than throws.
-      process.stderr.write(`python coverage fragment failed: ${error && error.message}\n`);
+      process.stderr.write(`python coverage fragment failed: ${error && /** @type {Error} */ (error).message}\n`);
     }
   });
   return true;
@@ -77,6 +79,10 @@ export async function startPythonCoverage(pyodide) {
 // file. Named by pid plus a counter because a single process can boot more
 // than one isolated harness.
 let fragmentSeq = 0;
+/**
+ * @param {import("pyodide").PyodideInterface} pyodide
+ * @param {string} outputDir
+ */
 export function writePythonCoverageFragment(pyodide, outputDir) {
   const json = pyodide.runPython("_webchirp_coverage_fragment()");
   const parsed = JSON.parse(json);

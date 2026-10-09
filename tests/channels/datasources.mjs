@@ -7,7 +7,7 @@ import {
   buildRepeaterEndpoints,
   fetchCitySuggestions,
   parseCitySuggestions,
-} from "../../web/js/datasources.js";
+} from "../../web/js/datasources.ts";
 import { makeRowHooks } from "../support/row-hooks.mjs";
 
 // toneModes/crossModes stand in for the driver's valid_tmodes and

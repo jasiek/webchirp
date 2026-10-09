@@ -10,7 +10,7 @@
 // builders, the power-level resolver -- already prefers the cached image. The
 // grid did not, so a downloaded RT98 channel carried a "High" its own dropdown
 // did not list, and re-selecting the radio blanked it as unsupported
-// (dropUnsupportedPowerValues in web/js/ui/channel-table.js). Issue #86.
+// (dropUnsupportedPowerValues in web/js/ui/channel-table.ts). Issue #86.
 //
 // The two tests here are the two halves of that: what the runtime reports for a
 // driver with an image cached, and whether the download path asks it again.
@@ -104,7 +104,7 @@ test("column metadata follows the cached image, not a blank driver instance", as
 
 test("a download re-reads the schema, so the levels it just read survive", async () => {
   const { document } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   const headers = ["Location", "Name", "Frequency", "Power"];
@@ -171,7 +171,7 @@ test("a download re-reads the schema, so the levels it just read survive", async
 
 test("an import whose schema refresh fails leaves the previous channels alone", async () => {
   const { document, window } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   const headers = ["Location", "Name", "Frequency", "Power"];

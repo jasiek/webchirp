@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSelectedDriverRuntime } from "../../web/js/selected-driver-runtime.mjs";
+import { createSelectedDriverRuntime } from "../../web/js/selected-driver-runtime.ts";
 
 test("isolated release changes discard old registry and clone cache", async () => {
   let boots = 0;

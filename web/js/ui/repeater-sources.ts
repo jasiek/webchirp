@@ -1,0 +1,873 @@
+import {
+  buildPrzemiennikiRows,
+  parsePrzemiennikiMetaJson,
+  parsePrzemiennikiXml,
+} from "../datasources.ts";
+import {
+  RSGB_BANDS,
+  RSGB_COUNTRY_CODE,
+  RSGB_COUNTRY_LABEL,
+  RSGB_DEFAULT_BANDS,
+  RSGB_DEFAULT_MODES,
+  RSGB_DEFAULT_RADIUS_KM,
+  RSGB_MODES,
+  buildRsgbRows,
+  dedupeRsgbRecords,
+  fetchRsgbRecords,
+  filterRsgbRecords,
+  haversineKm,
+  squaresForRadius,
+} from "../rsgb.ts";
+import { withRequestTimeout } from "../request-timeout.ts";
+import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from "./format.ts";
+import { trackEvent } from "./analytics.ts";
+import type { PrzemiennikiRepeater, RepeaterEndpoints } from "../datasources.ts";
+import type { RsgbRecord } from "../rsgb.ts";
+import type { UiContext } from "../types/ui-context.js";
+import type { FieldOption } from "./query-fields.ts";
+import type { MapMarker } from "./static-map-view.ts";
+import type { SkippedRepeater } from "../row-power.ts";
+import type { UiDom } from "./dom.ts";
+
+// Per-source configuration for the shared repeater-query modal
+// (web/js/ui/repeater-query.ts). Each source declares which fields its form contains,
+// how its filter options are obtained, and how a query actually runs — the
+// flows differ at the root and stay per-source here: przemienniki.net,
+// RepeaterBook and IRTS take the filter as query parameters (via the configured
+// API base) and hand back a filtered set, while RSGB filtering happens
+// client-side over a locator-square fan-out and needs no proxy. Only the form
+// UI is shared.
+//
+// Not a create<Area> sibling module: this is a helper imported solely by
+// repeater-query.js, which passes it the constructed ctx.
+// A query rejected by this module's own checks, before any request is made --
+// an unset location, a distance that is not a positive number. Marked as its
+// own type so the one catch in web/js/ui/repeater-query.ts can tell it from a
+// directory that is actually down: both reach the user the same way, but
+// counting form input the user can fix as a service failure inflates the rate
+// an alert would watch, and does it most on the sources with the most fields.
+//
+// A subclass rather than a flag on the error: nothing is added to the object,
+// so the marker cannot ride along into a Sentry payload the way a property
+// would, and instanceof survives the plain rethrow that carries it to the
+// caller.
+export class RepeaterInputError extends Error {}
+
+/** A position the form has validated. */
+export interface QueryPosition {
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * The query form's values by field key, as web/js/ui/repeater-query.ts reads
+ * them off the fields a source declares. Every source declares bands, modes,
+ * the only-working flag, a radius and a position; the remote directories add
+ * a country.
+ */
+export interface QueryValues {
+  country?: string;
+  bands: string[];
+  modes: string[];
+  only: boolean;
+  /** NaN when the field is blank. */
+  radius: number;
+  position: QueryPosition | null;
+  [key: string]: unknown;
+}
+
+/** What the preview map draws for a search, and the caption's counts. */
+export interface PreviewSummary {
+  points: MapMarker[];
+  truncated?: boolean;
+  /** Repeaters the query would insert that the map cannot place. */
+  unmapped?: number;
+  /** In-range repeaters the selected radio cannot express. */
+  unsupported?: number;
+}
+
+/** A filter requirement: any one of keys holding a value satisfies it. */
+export interface QueryRequirement {
+  keys: string[];
+  message: string;
+}
+
+/**
+ * One field of a source's form. city and position have fields of their own;
+ * every other kind is built by the factory web/js/ui/repeater-query.ts names
+ * for it from these same options, with options looked up by optionsKey when
+ * the source loads them.
+ */
+export type FieldConfig =
+  | { kind: "city"; key: string; label: string; placeholder: string }
+  | { kind: "position"; locatorPlaceholder: string }
+  | {
+    kind: "select" | "fixed" | "checkboxGroup" | "checkbox" | "number";
+    key: string;
+    label: string;
+    optionsKey?: string;
+    options?: FieldOption[];
+    [option: string]: unknown;
+  };
+
+/** The names of the dom members that are buttons, such as a source's toolbar button. */
+type ToolbarButtonName = { [K in keyof UiDom]: UiDom[K] extends HTMLButtonElement ? K : never }[keyof UiDom];
+
+/** A repeater directory the query modal can search. */
+export interface RepeaterSource {
+  key: string;
+  /** The toolbar button that opens this source's modal. */
+  toolbarButton: ToolbarButtonName;
+  /** False when the deployment configures no endpoint for it. */
+  available: boolean;
+  requires: QueryRequirement[];
+  title: string;
+  label: string;
+  actionLabel: string;
+  insertLabel: string;
+  fields: FieldConfig[];
+  /** The filter dictionaries, by optionsKey; null when every option is static. */
+  loadOptions: (() => Promise<Record<string, FieldOption[]>>) | null;
+  previewQuery: (values: QueryValues) => Promise<PreviewSummary | null>;
+  runQuery: (values: QueryValues) => Promise<void>;
+}
+
+// What a source says when the form has not narrowed the search enough to run
+// it. Exported because two places say each sentence: the shared modal
+// (web/js/ui/repeater-query.ts) puts it on the disabled Query API button
+// before the click, and the backstop check in runQuery throws it if a query
+// ever reaches there anyway. One sentence each, so the button's explanation
+// and the error can never drift apart.
+export const POSITION_REQUIRED_MESSAGE =
+  "Set a location first: use the \u{1F6F0}\u{FE0F} button or type a latitude and longitude.";
+export const COUNTRY_OR_POSITION_REQUIRED_MESSAGE =
+  "Choose a country or set a location: an unfiltered search downloads the whole directory.";
+
+// The first filter requirement the form has not met, as the sentence to show
+// for it, or "" when the query can run. Each requirement names the keys that
+// satisfy it together -- any one of them holding a value is enough -- because
+// the rule is not "fill in this field" but "narrow the search somehow".
+//
+// Any value counts, since every key this is used with is either a non-empty
+// string or a parsed position object; a filter whose unset state were the
+// number 0 would need its own test.
+export function unmetRequirement(
+  source: Pick<RepeaterSource, "requires"> | null | undefined,
+  values: Partial<QueryValues> | null | undefined,
+): string {
+  for (const requirement of source?.requires || []) {
+    if (!requirement.keys.some((key) => Boolean(values?.[key]))) {
+      return requirement.message;
+    }
+  }
+  return "";
+}
+
+export function createRepeaterSources(
+  ctx: UiContext,
+  { endpoints }: { endpoints: RepeaterEndpoints },
+): RepeaterSource[] {
+  const { log } = ctx;
+
+/** A remote directory's preview response, kept for reuse at smaller radii. */
+  interface RemotePreviewBody {
+    perspective: string;
+    plotted: Array<{ point: MapMarker; repeater: PrzemiennikiRepeater }>;
+    unmapped: PrzemiennikiRepeater[];
+    /** The radius the request covered. */
+    rangeKm: number;
+  }
+
+  function countryOptions(codes: Iterable<string> | null | undefined): FieldOption[] {
+    return Array.from(codes || [])
+      .map((code) => {
+        const name = countryDisplayName(code);
+        const flag = flagEmojiFromCountryCode(code);
+        return {
+          value: code,
+          label: `${flag} ${name}`.trim(),
+          title: name,
+        };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  function bandOptions(bands: Iterable<string> | null | undefined): FieldOption[] {
+    return Array.from(bands || [])
+      .map((band) => ({ value: band, label: band, title: band }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  }
+
+  // Both row builders return `skipped` entries tagged with why the selected
+  // radio could not express the repeater. One phrasing for both, so the status
+  // line reads the same whichever directory was queried.
+  function skippedDetail(skipped: readonly SkippedRepeater[]): string {
+    const counts = {
+      frequency: skipped.filter((entry) => entry.reason === "frequency").length,
+      mode: skipped.filter((entry) => entry.reason === "mode").length,
+      tone: skipped.filter((entry) => entry.reason === "tone").length,
+    };
+    return [
+      counts.frequency > 0 ? `${counts.frequency} outside its frequency range` : "",
+      counts.mode > 0 ? `${counts.mode} in a mode it cannot use` : "",
+      counts.tone > 0 ? `${counts.tone} needing a tone it cannot send` : "",
+    ].filter((part) => part.length > 0).join(", ");
+  }
+
+  // The debug line spells out what the status line only counts. Tone carries
+  // the frequency the directory published, because "141.3 not in the radio's
+  // tone table" is the whole diagnosis.
+  function skippedReason(entry: SkippedRepeater): string | undefined {
+    if (entry.reason === "frequency") {
+      return "frequency not supported by the selected radio";
+    }
+    if (entry.reason === "tone") {
+      return `${entry.tone || "access"} Hz tone not in the selected radio's tone table`;
+    }
+    // RSGB names no mode when none of a repeater's modes map, so the word
+    // "mode" stands in for the one the other sources report.
+    return `${entry.mode || entry.reason} not supported by the selected radio`;
+  }
+
+  // A preview repeats the query the Query API button would run, so the fetched
+  // bodies are cached per source and the common edits -- nudging the radius,
+  // dragging a little, ticking a band -- redraw from memory. Per source rather
+  // than per open, so a reopened modal reuses what the last one paid for.
+  const PREVIEW_CACHE_LIMIT = 24;
+
+  // Every position a preview can draw, whether or not the query would keep it.
+  // `inRange` is what the ring is for: a station just outside it is the answer
+  // to "would a wider search find me anything", which the numbers in the form
+  // cannot say on their own.
+  function previewPoint(
+    latitude: number,
+    longitude: number,
+    { inRange = true, approximate = false }: { inRange?: boolean; approximate?: boolean } = {},
+  ): MapMarker | null {
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+    return { latitude, longitude, inRange, approximate };
+  }
+
+  // The request identity minus its range, so one fetched body can answer every
+  // radius it covers. Everything else -- country, bands, modes, the only-working
+  // flag, the position -- still separates one cached answer from another.
+  function keyWithoutRange(url: URL): string {
+    const key = new URL(url.toString());
+    key.searchParams.delete("range");
+    return key.toString();
+  }
+
+  // Re-flag a point set against the radius now in the form. The cache is keyed
+  // without the range, so one body serves every radius it covers: only which
+  // side of the ring each station falls on is recomputed, and that is
+  // arithmetic rather than a request.
+  function markInRange(points: readonly MapMarker[], position: QueryPosition, radiusKm: number): MapMarker[] {
+    return points.map((point) => ({
+      ...point,
+      inRange: haversineKm(position.latitude, position.longitude, point.latitude, point.longitude) <= radiusKm,
+    }));
+  }
+
+  function normalized(values: Iterable<unknown> | null | undefined): string[] {
+    return Array.from(values || [])
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter((value) => value.length > 0);
+  }
+
+  // Modes a channel row can actually express. Everything else a directory
+  // dictionary advertises is shown disabled rather than hidden, so its
+  // absence reads as a decision and not a gap — the same presentation RSGB
+  // uses for dmr/p25/nxdn/m17. The tooltip is shared so every modal says
+  // the same thing.
+  const SUPPORTED_DIRECTORY_MODES = new Set(["fm", "dstar"]);
+  const UNSUPPORTED_MODE_TOOLTIP = "Only analogue modes and dstar are supported fully";
+
+  // Tag dictionary modes the import cannot offer. `parsed.modes` is already
+  // `{ value, label, title }` (web/js/datasources.ts); disabled ones keep
+  // their label and swap their title for the shared tooltip.
+  function markUnsupportedModes(modes: Iterable<FieldOption> | null | undefined): FieldOption[] {
+    return Array.from(modes || []).map((mode) => {
+      const value = String(mode.value || "").trim().toLowerCase();
+      if (SUPPORTED_DIRECTORY_MODES.has(value)) {
+        return mode;
+      }
+      return { ...mode, disabled: true, title: UNSUPPORTED_MODE_TOOLTIP };
+    });
+  }
+
+  // przemienniki.net, RepeaterBook and IRTS share everything but their labels
+  // and endpoints: same field set, same /meta dictionary shape, same
+  // query-parameter API, same XML response format.
+  function remoteDirectorySource({
+    key,
+    label,
+    actionLabel,
+    insertLabel,
+    toolbarButton,
+    sourceEndpoints,
+  }: {
+    key: string;
+    label: string;
+    actionLabel: string;
+    insertLabel: string;
+    toolbarButton: ToolbarButtonName;
+    sourceEndpoints: { apiUrl: string; metaUrl: string } | null | undefined;
+  }): RepeaterSource {
+    const apiUrl = sourceEndpoints?.apiUrl || "";
+    const metaUrl = sourceEndpoints?.metaUrl || "";
+
+    // The dictionary is fetched once and cached for the session; a failed
+    // fetch clears the cache so the next open retries instead of staying
+    // bricked behind a rejected promise.
+    let optionsPromise: Promise<Record<string, FieldOption[]>> | null = null;
+
+    // The query URL for one set of form values, with the range taken as an
+    // argument so the preview can ask for a wider area than the query will keep
+    // (see previewRemote).
+    function buildQueryUrl(values: QueryValues, rangeKm: number): URL {
+      const url = new URL(apiUrl);
+      const country = String(values.country || "").trim().toLowerCase();
+      if (country) {
+        url.searchParams.set("country", country);
+      }
+      const bands = normalized(values.bands);
+      if (bands.length > 0) {
+        url.searchParams.set("band", bands.join(","));
+      }
+      // An empty selection must not fall through to the directory's "any
+      // mode" behaviour: the form presents every digital mode as unavailable,
+      // and "any" would admit them on a radio that advertises DMR/DN. No
+      // selection means analogue only -- the same fallback the RSGB flow
+      // applies below. Several modes go as one comma-joined value, as bands
+      // already do: the API reads a single mode parameter, so repeated
+      // mode= keys would silently keep only the last one.
+      const modes = normalized(values.modes);
+      url.searchParams.set("mode", (modes.length > 0 ? modes : ["fm"]).join(","));
+      if (values.only) {
+        url.searchParams.set("onlyworking", "true");
+      }
+      // Only a validated position is sent — out-of-range coordinate text no
+      // longer leaks upstream as raw query parameters.
+      if (values.position) {
+        url.searchParams.set("latitude", String(values.position.latitude));
+        url.searchParams.set("longitude", String(values.position.longitude));
+      }
+      if (Number.isFinite(rangeKm)) {
+        url.searchParams.set("range", String(rangeKm));
+      }
+      return url;
+    }
+
+    const previewCache = new Map<string, RemotePreviewBody>();
+
+    // Turn a fetched body into what the caption needs. The map's numbers must
+    // agree with the button under it, and two things pull them apart: a
+    // repeater published without coordinates (inserted, not plottable) and one
+    // the selected radio cannot express (plottable, not inserted). Both are
+    // counted. Only in-range repeaters go through the row builder, which
+    // allocates rows but inserts nothing.
+    function summarizeRemote(body: RemotePreviewBody, position: QueryPosition, radiusKm: number): PreviewSummary {
+      // Each plotted entry carries the repeater it came from, because the point
+      // list is not index-aligned with the repeater list -- the unmapped ones
+      // have no point at all.
+      const points = markInRange(body.plotted.map((entry) => entry.point), position, radiusKm);
+      const importable = body.plotted
+        .filter((entry, index) => points[index].inRange)
+        .map((entry) => entry.repeater)
+        .concat(body.unmapped);
+      const { skipped } = buildPrzemiennikiRows(importable, ctx.table.rowBuilderHooks(), {
+        perspective: body.perspective,
+      });
+      return { points, unmapped: body.unmapped.length, unsupported: skipped.length };
+    }
+
+    // These directories filter by distance upstream, so a preview asking for
+    // exactly the chosen radius could only ever draw stations inside the ring —
+    // and the one thing the form cannot tell you is whether a slightly wider
+    // search would find anything. So the preview asks for half again the
+    // radius and dims what falls outside it. The extra ground costs one larger
+    // body on the same single request, not a second one.
+    const PREVIEW_RANGE_FACTOR = 1.5;
+
+    // What the current filters would return, as positions only. Never throws
+    // at the caller as a query failure would: a preview that cannot be drawn is
+    // a map without squares on it, not a reason to stop the user filling in the
+    // form. The shell reports the reason in the debug panel.
+    async function previewRemote(values: QueryValues): Promise<PreviewSummary | null> {
+      const radiusKm = Number(values.radius);
+      if (!values.position || !Number.isFinite(radiusKm) || radiusKm <= 0) {
+        return null;
+      }
+      const url = buildQueryUrl(values, radiusKm * PREVIEW_RANGE_FACTOR);
+      // Keyed without the range, since nudging the range is the commonest edit:
+      // a cached body serves any search whose widened area it covers, and only
+      // the in-range flags are recomputed. The test is against the widened
+      // area, not the radius -- a body fetched for 20 km reaches 30, and reused
+      // for a 30 km search it would have nothing beyond the ring to dim.
+      const key = keyWithoutRange(url);
+      const cached = previewCache.get(key);
+      if (cached && cached.rangeKm >= radiusKm * PREVIEW_RANGE_FACTOR) {
+        return summarizeRemote(cached, values.position, radiusKm);
+      }
+      const text = await withRequestTimeout(`${label} preview`, async (signal) => {
+        const response = await fetch(url.toString(), { signal });
+        if (!response.ok) {
+          throw new Error(`${actionLabel} preview failed: HTTP ${response.status}`);
+        }
+        return response.text();
+      });
+      const parsed = parsePrzemiennikiXml(text);
+      const plotted: Array<{ point: MapMarker; repeater: PrzemiennikiRepeater }> = [];
+      const unmapped: PrzemiennikiRepeater[] = [];
+      for (const repeater of parsed.repeaters) {
+        const point = previewPoint(repeater.latitude, repeater.longitude);
+        if (point) {
+          plotted.push({ point, repeater });
+        } else {
+          // The query inserts this one; only the map cannot place it. Counted
+          // rather than dropped, or the caption would undercount what pressing
+          // Query API is about to do.
+          unmapped.push(repeater);
+        }
+      }
+      // The radius this body actually covers, not the one asked for: a later,
+      // narrower search may reuse it, a wider one may not.
+      const body = {
+        perspective: parsed.perspective,
+        plotted,
+        unmapped,
+        rangeKm: radiusKm * PREVIEW_RANGE_FACTOR,
+      };
+      rememberBounded(previewCache, key, body, PREVIEW_CACHE_LIMIT);
+      return summarizeRemote(body, values.position, radiusKm);
+    }
+
+    return {
+      key,
+      toolbarButton,
+      // Proxy-dependent sources have null endpoints when the configured base
+      // is blank. IRTS always receives its default api.codeplug.org endpoints.
+      available: Boolean(apiUrl && metaUrl),
+      // These directories filter upstream and accept a country on its own, so
+      // a query with no position is a whole-country search rather than an
+      // unfilled form -- which is what the located dimension on repeater_import
+      // below measures. A query with neither is not a search at all: measured
+      // live, RepeaterBook answers one with its entire directory, 18.4 MB
+      // (see FINDINGS.md). Either filter clears the gate.
+      requires: [{
+        keys: ["country", "position"],
+        message: COUNTRY_OR_POSITION_REQUIRED_MESSAGE,
+      }],
+      title: `Query ${label}`,
+      label,
+      actionLabel,
+      insertLabel,
+      fields: [
+        { kind: "select", key: "country", label: "Country", placeholder: "Any country", optionsKey: "country" },
+        // The same starting selection as RSGB: the two bands a handheld can
+        // work, on FM. The values are the dictionary's own (lowercase); a
+        // dictionary that lacks one simply leaves it unticked.
+        { kind: "checkboxGroup", key: "bands", label: "Band", name: "band", optionsKey: "bands", defaults: ["2m", "70cm"] },
+        { kind: "checkboxGroup", key: "modes", label: "Mode", name: "mode", optionsKey: "modes", defaults: ["fm"] },
+        { kind: "checkbox", key: "only", label: "Only working", checked: true },
+        // Above the coordinates because it is how most people know where they
+        // are: picking a place fills latitude, longitude and the locator and
+        // recentres the preview, so the two rows below read as the result of
+        // this one rather than as something to fill in by hand.
+        { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Warszawa" },
+        { kind: "position", locatorPlaceholder: "e.g. JO91GG" },
+        { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30 },
+      ],
+      loadOptions: () => {
+        if (!optionsPromise) {
+          optionsPromise = (async () => {
+            // The whole exchange runs under one deadline, body read included:
+            // this fetch is what the modal blocks on while it opens, so a
+            // stalled proxy would otherwise leave the toolbar click doing nothing
+            // visible for minutes.
+            const text = await withRequestTimeout(`${label} dictionary request`, async (signal) => {
+              const response = await fetch(metaUrl, { signal });
+              if (!response.ok) {
+                throw new Error(`Dictionary request failed: HTTP ${response.status}`);
+              }
+              return response.text();
+            });
+            const parsed = parsePrzemiennikiMetaJson(text);
+            log.logDebug(`Loaded ${label} filter options from /meta.`);
+            return {
+              country: countryOptions(parsed.countries),
+              bands: bandOptions(parsed.bands),
+              modes: markUnsupportedModes(parsed.modes),
+            };
+          })().catch((error) => {
+            optionsPromise = null;
+            throw error;
+          });
+        }
+        return optionsPromise;
+      },
+      previewQuery: (values) => previewRemote(values),
+      runQuery: async (values) => {
+        const country = String(values.country || "").trim().toLowerCase();
+        // The backstop behind the modal's gate, and the one that matters most:
+        // a query with neither filter is answered in full, so reaching the
+        // network here costs the user an 18 MB download and a codeplug with
+        // every repeater on the continent in it.
+        if (!country && !values.position) {
+          throw new RepeaterInputError(COUNTRY_OR_POSITION_REQUIRED_MESSAGE);
+        }
+        const url = buildQueryUrl(values, values.radius);
+        log.setStatus(`Querying ${label}...`);
+        // Both the request and the body read sit inside the deadline: the
+        // error-path read of a failed response can stall exactly as the success
+        // path can, and either one strands the submit button on "Querying...".
+        const text = await withRequestTimeout(`${label} query`, async (signal) => {
+          const response = await fetch(url.toString(), { signal });
+          if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
+          }
+          return response.text();
+        });
+        const parsed = parsePrzemiennikiXml(text);
+        const { rows, skipped } = buildPrzemiennikiRows(
+          parsed.repeaters,
+          ctx.table.rowBuilderHooks(),
+          { perspective: parsed.perspective },
+        );
+        for (const entry of skipped) {
+          log.logDebug(`${actionLabel.toUpperCase()} SKIPPED ${entry.repeater} (${skippedReason(entry)})`);
+        }
+        ctx.table.insertRowsAtSelectionOrEnd(rows, insertLabel);
+        // result_count is the point of this event: a query that returns
+        // nothing means the filters or the proxy are wrong, and today that is
+        // invisible. The country code is a filter the user picked from a fixed
+        // list; the coordinates are never reported.
+        trackEvent("repeater_import", {
+          repeater_source: key,
+          country: country || "any",
+          located: values.position ? "yes" : "no",
+          result_count: parsed.repeaters.length,
+        });
+        log.logDebug(`${actionLabel.toUpperCase()} QUERY ${url.toString()}`);
+        log.logDebug(`${actionLabel.toUpperCase()} RESULTS ${parsed.repeaters.length} fetched, ${rows.length} inserted`);
+        if (skipped.length > 0) {
+          log.setStatus(`Inserted ${rows.length} channel(s); skipped ${skippedDetail(skipped)}.`);
+        }
+      },
+    };
+  }
+
+  // Display names follow the other sources' dictionary casing ("2m", "fm",
+  // "dstar"), so band and mode lists read the same in every modal; the values
+  // behind them stay the API's own flags and band codes.
+  const RSGB_MODE_LABELS: Readonly<Record<string, string>> = { A: "fm", D: "dstar" };
+
+  // Modes the directory carries but the import does not offer, because a
+  // channel row cannot express them usefully (see RSGB_MODES in web/js/rsgb.ts).
+  // Shown disabled rather than hidden, so their absence reads as a decision
+  // and not a gap; the values are the API's mode flags.
+  const RSGB_UNSUPPORTED_MODES = [
+    { value: "M", label: "dmr" },
+    { value: "P", label: "p25" },
+    { value: "N", label: "nxdn" },
+    { value: "7", label: "m17" },
+  ];
+
+  // RSGB/ETCC: the API only knows how to return a locator square, so distance,
+  // band and mode are all applied client-side after a square fan-out. It also
+  // needs no CORS proxy, so it stays available on deployments where the other
+  // two are disabled. Filter options are static — the API's documented flag
+  // table and its observed band values, not a dictionary endpoint (the API has
+  // none) — so the modal opens without a network round trip.
+  function rsgbSource(): RepeaterSource {
+    const actionLabel = "RSGB ETCC";
+    // Records keyed by locator square. RSGB costs one ~75 kB request per
+    // square and a radius spans several, so only stepping into a new square
+    // costs a request.
+    const squareCache = new Map<string, RsgbRecord[]>();
+
+    // Fetch only the squares not already held, then answer from the union.
+    //
+    // The cached squares are read out *before* the fetch is awaited. A second
+    // call can run during that await -- the submitted query starting while a
+    // superseded preview is still downloading -- and its eviction must not be
+    // able to empty a square this call has already classified as cached. With
+    // the records in hand up front, nothing that happens to the cache
+    // afterwards can change this plan's answer, so eviction needs no notion
+    // of in-flight plans.
+    //
+    // `onSquare` is called once per square of the plan, whether it was fetched
+    // now or served from the cache, and says which, so the debug panel keeps a
+    // line per square however little of the plan cost a request this time.
+    async function recordsForSquares(
+      squares: string[],
+      { onSquare }: { onSquare?: (square: { locator: string; count: number; cached: boolean }) => void } = {},
+    ) {
+      const held = new Map<string, RsgbRecord[]>();
+      const missing: string[] = [];
+      for (const locator of squares) {
+        const cached = squareCache.get(locator);
+        if (cached) {
+          held.set(locator, cached);
+        } else {
+          missing.push(locator);
+        }
+      }
+      if (missing.length > 0) {
+        const fetched = await fetchRsgbRecords({ squares: missing });
+        // fetchRsgbRecords returns one flat list, so the records are put back
+        // under the square they came from. A square that legitimately holds no
+        // repeaters caches as an empty list, which is what stops it being
+        // re-requested on every redraw. A record whose locator names a square
+        // outside the request is filed under the first square asked for rather
+        // than dropped on an assumption about the API nothing here verifies;
+        // it is outside the radius either way, so the distance filter drops it.
+        const buckets: Map<string, RsgbRecord[]> = new Map(missing.map((locator) => [locator, []]));
+        // missing is non-empty in this branch, so its first square has a bucket.
+        const firstBucket = buckets.get(missing[0]) as RsgbRecord[];
+        for (const record of fetched) {
+          const locator = String(record?.locator || "").slice(0, 4).toUpperCase();
+          (buckets.get(locator) || firstBucket).push(record);
+        }
+        for (const [locator, records] of buckets) {
+          held.set(locator, records);
+          rememberBounded(squareCache, locator, records, PREVIEW_CACHE_LIMIT);
+        }
+      }
+      if (typeof onSquare === "function") {
+        for (const locator of squares) {
+          onSquare({
+            locator,
+            // Every square asked for is held by now: cached, or filed above.
+            count: held.get(locator)?.length ?? 0,
+            cached: !missing.includes(locator),
+          });
+        }
+      }
+      return squares.flatMap((locator) => held.get(locator) ?? []);
+    }
+
+    // RSGB filters client-side, so the preview is the real filter run over the
+    // squares in reach -- no widened request needed. Everything the fan-out
+    // covers is offered to the map, with the ones the radius excludes dimmed.
+    async function previewRsgb(values: QueryValues): Promise<PreviewSummary | null> {
+      const position = values.position;
+      const radiusKm = Number(values.radius);
+      if (!position || !Number.isFinite(radiusKm) || radiusKm <= 0) {
+        return null;
+      }
+      const plan = squaresForRadius(position.latitude, position.longitude, radiusKm);
+      if (plan.squares.length === 0) {
+        return { points: [] };
+      }
+      const deduped = dedupeRsgbRecords(await recordsForSquares(plan.squares));
+      const modes = values.modes.length > 0 ? values.modes : ["A"];
+      // No radius: the distance filter is what the ring already draws, and
+      // applying it here would throw away the out-of-range stations that are
+      // the most useful thing on the map.
+      const entries = filterRsgbRecords(deduped, {
+        latitude: position.latitude,
+        longitude: position.longitude,
+        bands: values.bands,
+        modes,
+        onlyOperational: values.only,
+      });
+      const points = entries
+        .map((entry) => previewPoint(entry.latitude, entry.longitude, {
+          inRange: entry.distanceKm <= radiusKm,
+          // A 4-character locator is a box some 111 km across, so the position
+          // drawn is the middle of a guess. The map says so rather than
+          // presenting it as surveyed.
+          approximate: entry.approximate,
+        }))
+        .filter((point) => point !== null);
+      // What the radio cannot express, over the in-range entries only -- the
+      // ones beyond the ring are context for widening the search, not results
+      // the query would insert. Every RSGB position comes from a locator, so
+      // there is nothing unmapped here.
+      const { skipped } = buildRsgbRows(
+        entries.filter((entry) => entry.distanceKm <= radiusKm),
+        ctx.table.rowBuilderHooks(),
+        { modes },
+      );
+      return { points, truncated: plan.truncated, unmapped: 0, unsupported: skipped.length };
+    }
+
+    return {
+      key: "rsgb",
+      toolbarButton: "channelImportRsgbEl",
+      available: true,
+      // The one source with no second way to narrow a search: the fan-out is
+      // over the locator squares around a point, so with nothing to centre on
+      // there is no request to make. The shared modal
+      // (web/js/ui/repeater-query.ts) reads this and keeps Query API disabled
+      // until the form has one, which is why the guard in runQuery below is
+      // now only a backstop.
+      requires: [{ keys: ["position"], message: POSITION_REQUIRED_MESSAGE }],
+      title: "Query RSGB ETCC API",
+      label: "RSGB ETCC",
+      actionLabel,
+      insertLabel: "RSGB ETCC",
+      fields: [
+        // The directory is UK-only, so the country is fixed rather than
+        // chosen: a picker with one entry is a control that cannot do
+        // anything.
+        {
+          kind: "fixed",
+          key: "country",
+          label: "Country",
+          text: `${flagEmojiFromCountryCode(RSGB_COUNTRY_CODE)} ${RSGB_COUNTRY_LABEL}`,
+        },
+        {
+          kind: "checkboxGroup",
+          key: "bands",
+          label: "Band",
+          name: "band",
+          options: RSGB_BANDS.map((band) => ({ value: band, label: band.toLowerCase(), title: band.toLowerCase() })),
+          defaults: RSGB_DEFAULT_BANDS,
+        },
+        {
+          kind: "checkboxGroup",
+          key: "modes",
+          label: "Mode",
+          name: "mode",
+          options: [
+            ...RSGB_MODES.map((mode) => ({
+              value: mode.value,
+              label: RSGB_MODE_LABELS[mode.value] || mode.label,
+              title: `${mode.label} (${mode.value})`,
+            })),
+            ...RSGB_UNSUPPORTED_MODES.map((mode) => ({
+              ...mode,
+              disabled: true,
+              title: UNSUPPORTED_MODE_TOOLTIP,
+            })),
+          ],
+          defaults: RSGB_DEFAULT_MODES,
+        },
+        { kind: "checkbox", key: "only", label: "Only operational", checked: true },
+        // Above the coordinates because it is how most people know where they
+        // are: picking a place fills latitude, longitude and the locator and
+        // recentres the preview, so the two rows below read as the result of
+        // this one rather than as something to fill in by hand.
+        { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Manchester" },
+        { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
+        {
+          kind: "number",
+          key: "radius",
+          label: "Distance (km)",
+          min: 1,
+          max: 500,
+          step: 1,
+          value: RSGB_DEFAULT_RADIUS_KM,
+        },
+      ],
+      loadOptions: null,
+      previewQuery: (values) => previewRsgb(values),
+      runQuery: async (values) => {
+        const position = values.position;
+        if (!position) {
+          throw new RepeaterInputError(POSITION_REQUIRED_MESSAGE);
+        }
+        const radiusKm = values.radius;
+        if (!Number.isFinite(radiusKm) || radiusKm <= 0) {
+          throw new RepeaterInputError("Distance must be a positive number of kilometres.");
+        }
+
+        const plan = squaresForRadius(position.latitude, position.longitude, radiusKm);
+        if (plan.squares.length === 0) {
+          log.setStatus("No locator squares fall within that distance.");
+          return;
+        }
+        if (plan.truncated) {
+          // A clipped plan queries a subset of the area, so say so rather than
+          // letting a short result read as "that is everything nearby".
+          log.logDebug(`RSGB PLAN truncated to ${plan.squares.length} of ${plan.considered} squares`);
+          log.setStatus(`Distance spans ${plan.considered} squares; querying the ${plan.squares.length} nearest.`);
+        }
+
+        log.setStatus(`Querying RSGB ETCC for ${plan.squares.length} locator square(s)...`);
+        log.logDebug(`RSGB QUERY ${plan.squares.join(", ")} r=${radiusKm}km`);
+
+        // Through the cache the preview fills, so pressing Query API after
+        // watching the preview does not download every square a second time.
+        const records = await recordsForSquares(plan.squares, {
+          onSquare: ({ locator, count, cached }) => log.logDebug(
+            `RSGB SQUARE ${locator} -> ${count}${cached ? " (cached)" : ""}`,
+          ),
+        });
+        const deduped = dedupeRsgbRecords(records);
+        // An empty selection must not fall through to filterRsgbRecords()'s
+        // "any mode" convention: the form presents dmr/p25/nxdn/m17 as
+        // unavailable, and "any" would let those records through on a radio
+        // that advertises them. No selection means analogue only.
+        const modes = values.modes.length > 0 ? values.modes : ["A"];
+        const entries = filterRsgbRecords(deduped, {
+          latitude: position.latitude,
+          longitude: position.longitude,
+          radiusKm,
+          bands: values.bands,
+          modes,
+          onlyOperational: values.only,
+        });
+
+        log.logDebug(`RSGB RESULTS ${records.length} fetched, ${deduped.length} unique, ${entries.length} matched`);
+
+        // The mode selection goes to the builder as well as the filter, so a
+        // D-STAR query gets the DV side of a mixed-mode repeater, not its FM
+        // one.
+        const { rows, skipped } = buildRsgbRows(entries, ctx.table.rowBuilderHooks(), { modes });
+        // Repeaters the radio cannot express are dropped rather than written
+        // as something they are not; a shorter list than the match count needs
+        // saying out loud, or it reads as results going missing.
+        for (const entry of skipped) {
+          log.logDebug(`RSGB SKIPPED ${entry.repeater} (${skippedReason(entry)})`);
+        }
+        ctx.table.insertRowsAtSelectionOrEnd(rows, "RSGB ETCC");
+        // result_count is the point of this event: a query that returns
+        // nothing means the filters, the radius or the API are wrong, and that
+        // is invisible otherwise. The band and mode filters and the position
+        // are never reported.
+        trackEvent("repeater_import", {
+          repeater_source: "rsgb",
+          located: "yes",
+          result_count: rows.length,
+        });
+        if (skipped.length > 0) {
+          log.setStatus(`Inserted ${rows.length} channel(s); skipped ${skippedDetail(skipped)}.`);
+        }
+      },
+    };
+  }
+
+  return [
+    remoteDirectorySource({
+      key: "przemienniki",
+      label: "przemienniki.net",
+      actionLabel: "Przemienniki",
+      insertLabel: "przemienniki",
+      toolbarButton: "channelImportPrzemiennikiEl",
+      sourceEndpoints: endpoints?.przemienniki,
+    }),
+    remoteDirectorySource({
+      key: "repeaterbook",
+      label: "repeaterbook.com",
+      actionLabel: "RepeaterBook",
+      insertLabel: "repeaterbook",
+      toolbarButton: "channelImportRepeaterbookEl",
+      sourceEndpoints: endpoints?.repeaterbook,
+    }),
+    remoteDirectorySource({
+      key: "irts",
+      label: "IRTS",
+      actionLabel: "IRTS",
+      insertLabel: "IRTS",
+      toolbarButton: "channelImportIrtsEl",
+      sourceEndpoints: endpoints?.irts,
+    }),
+    rsgbSource(),
+  ];
+}

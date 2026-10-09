@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSerialRpcHandler } from "../../web/js/serial-globals.mjs";
+import { createSerialRpcHandler } from "../../web/js/serial-globals.ts";
 import { installFakeDom } from "../support/fake-dom.mjs";
 
 test("progress op forwards CHIRP status reports to onProgress", async () => {
@@ -42,7 +42,7 @@ function installProgressDom() {
 
 test("determinate-to-indeterminate transition clears the stale percentage", async () => {
   const { bar, label, percent } = installProgressDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   // A counted phase renders a determinate bar with a percentage.

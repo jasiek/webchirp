@@ -2,7 +2,7 @@
 //
 // CHIRP has no "no radio" state: an editor with nothing loaded is
 // generic_csv.CSVRadio, a real driver whose RadioFeatures are deliberately
-// permissive. This app follows it — loadEmptySchema (web/js/ui/codeplug-io.js)
+// permissive. This app follows it — loadEmptySchema (web/js/ui/codeplug-io.ts)
 // installs get_default_schema() (web/python/webchirp_bridge/column_metadata.py)
 // as state.radioMetadata — so the startup grid offers the same pickers,
 // validates through the same code path and imports through the same row
@@ -18,9 +18,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CSV_FORMAT_HEADERS } from "../../web/js/clipboard.js";
-import { buildPmr446Rows, buildPrzemiennikiRows } from "../../web/js/datasources.js";
-import { buildRsgbRows } from "../../web/js/rsgb.js";
+import { CSV_FORMAT_HEADERS } from "../../web/js/clipboard.ts";
+import { buildPmr446Rows, buildPrzemiennikiRows } from "../../web/js/datasources.ts";
+import { buildRsgbRows } from "../../web/js/rsgb.ts";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
 import {
   FakeElement,
@@ -35,7 +35,7 @@ import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 // the state before the startup schema has been fetched.
 async function tableWithMetadata(columns, rows = []) {
   installFakeDom();
-  const { createChannelTable } = await import("../../web/js/ui/channel-table.js");
+  const { createChannelTable } = await import("../../web/js/ui/channel-table.ts");
   const dom = {
     tableHead: new FakeElement("thead"),
     tableBody: new FakeElement("tbody"),
@@ -276,7 +276,7 @@ test("the startup schema imports every repeater a directory offers", async () =>
 
 test("loadEmptySchema installs the whole schema, not just its headers", async () => {
   const { document } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const schema = {
     headers: ["Location", "Name", "Frequency", "Mode"],
@@ -312,7 +312,7 @@ test("selecting a radio is what clears a power level it cannot hold", async () =
   // deleting that call would leave the fix out of the running app with every
   // test still green.
   const { document } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const headers = ["Location", "Name", "Frequency", "Power"];
 

@@ -2,8 +2,8 @@
 //
 // Two things depend on this. V8 coverage only reports files it actually
 // loaded, so a module no test touches is absent from the report rather than
-// listed at 0% -- before this test that quietly kept web/app.js,
-// web/js/runtime-rpc.js, web/js/tooltip.js and web/js/version-info.js (805
+// listed at 0% -- before this test that quietly kept web/app.ts,
+// web/js/runtime-rpc.ts, web/js/tooltip.ts and web/js/version-info.ts (805
 // lines) out of the denominator, and the headline percentage was measured
 // against a codebase smaller than the one that deploys. And an import is its
 // own assertion: a typo in a relative specifier, a module renamed without its
@@ -25,7 +25,7 @@ import "../support/register-cdn-imports.mjs";
 import { installFakeDom } from "../support/fake-dom.mjs";
 import { webDir } from "../support/repo-paths.mjs";
 
-// Every .js/.mjs under web/, repo-relative and sorted so the test order (and
+// Every .js/.mjs/.ts module under web/ (not a .d.ts, which only tsc reads), repo-relative and sorted so the test order (and
 // any failure) is stable across machines.
 function shippedModulePaths(dir = webDir) {
   const found = [];
@@ -33,7 +33,7 @@ function shippedModulePaths(dir = webDir) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       found.push(...shippedModulePaths(full));
-    } else if (/\.m?js$/.test(entry.name)) {
+    } else if (/(?<!\.d)\.(?:m?js|ts)$/.test(entry.name)) {
       found.push(full);
     }
   }
@@ -54,15 +54,15 @@ function installBrowserGlobals() {
     vivify: (selector) => selector.trim().match(/^([a-zA-Z][\w-]*)/)?.[1] || "div",
     navigator: {
       userAgent: "FakeBrowser/1.0",
-      // No serial or usb key at all. web/js/serial.js and
-      // web/js/serial-test-page.js test for support with the `in` operator, so
+      // No serial or usb key at all. web/js/serial.ts and
+      // web/js/serial-test-page.ts test for support with the `in` operator, so
       // a key present with the value undefined reads as supported -- the
-      // opposite of what is wanted here. web/app.js branches on that at import
+      // opposite of what is wanted here. web/app.ts branches on that at import
       // time and logs down either path; with both absent it takes the
       // unsupported branch, which is the one worth loading under a fake DOM.
     },
     globals: {
-      // web/js/version-info.js fetches ./version.json as it loads and swallows
+      // web/js/version-info.ts fetches ./version.json as it loads and swallows
       // any failure, so a rejecting fetch exercises its own error path.
       fetch: async () => {
         throw new Error("fetch is not available in the module-loading test");

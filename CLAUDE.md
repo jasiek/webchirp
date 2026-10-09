@@ -1,28 +1,28 @@
 This repository hosts a browser-based CHIRP interface (`web/`) that executes CHIRP Python code in Pyodide and communicates with radios via Web Serial.
 
 ## Core Architecture
-- `web/app.js`: Browser entry point: wires the UI, the runtime RPC client and
+- `web/app.ts`: Browser entry point: wires the UI, the runtime RPC client and
   the browser serial bridge together.
-- `web/js/runtime-rpc.js`: Main-thread runtime RPC layer and Pyodide bootstrap.
-- Serial layer: `web/js/serial-transport.mjs` declares the port contract every
+- `web/js/runtime-rpc.ts`: Main-thread runtime RPC layer and Pyodide bootstrap.
+- Serial layer: `web/js/serial-transport.ts` declares the port contract every
   transport satisfies (Web Serial's surface plus `transport`, `capabilities` --
   framing, signals, reopen-or-update reconfigure -- `usbDevice` and
   `onDisconnect`, which reports `{transport, port}` once per loss);
   `assertSerialTransport()` checks it at open. Implementations: the four WebUSB
-  chip drivers on `web/js/webusb-transport.js`, the CDC polyfill wrapper in
-  `web/js/webusb-serial.js`, `web/js/native-serial-port.js` (wraps, never
-  patches, native Web Serial), `web/js/webbluetooth-serial.js`, and
+  chip drivers on `web/js/webusb-transport.ts`, the CDC polyfill wrapper in
+  `web/js/webusb-serial.ts`, `web/js/native-serial-port.ts` (wraps, never
+  patches, native Web Serial), `web/js/webbluetooth-serial.ts`, and
   `tests/support/node-serial-port.mjs` for node-serialport. One `SerialBridge`
-  (`web/js/serial-bridge.mjs`, no DOM or navigator) owns buffering, clone
+  (`web/js/serial-bridge.ts`, no DOM or navigator) owns buffering, clone
   preparation, re-rating and reconfigure for both environments, given a
-  transport factory: `web/js/serial.js` adds the browser chooser,
-  `tests/support/radio-harness.mjs` the tty. `web/js/serial-globals.mjs`
+  transport factory: `web/js/serial.ts` adds the browser chooser,
+  `tests/support/radio-harness.mjs` the tty. `web/js/serial-globals.ts`
   installs the `serial_*` globals Python imports (declared in
   `web/python/typings/js.pyi`) for both. A transport that cannot do something
   declares it in `capabilities`; the bridge never probes.
   `tests/webusb/serial-transport-conformance.mjs` runs one set of cases against
   every implementation -- a new transport joins its table.
-- `web/js/ui.js`: Composes the UI modules and exposes `createUiController()`.
+- `web/js/ui.ts`: Composes the UI modules and exposes `createUiController()`.
 - `web/js/ui/`: One module per UI area — `channel-table`, `settings-panel`,
   `radio-catalog`, `radio-session`, `repeater-query`, `codeplug-io`,
   `serial-actions`, plus the shared `dom`, `state`, `debug-log`, `issue-report`,
@@ -34,20 +34,20 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   applied only while its handle is still `state.radioSession` -- identity, not
   a counter, is what discards a stale load. `repeater-query` is one modal shell for every
   repeater directory: its form is assembled per source from the field
-  components in `query-fields.js` (which build their own DOM), driven by the
-  per-source configs in `repeater-sources.js`.
+  components in `query-fields.ts` (which build their own DOM), driven by the
+  per-source configs in `repeater-sources.ts`.
 - `web/python/runtime_bridge.py`: Entry point of the Python runtime. It is executed (not
   imported) into Pyodide's globals and binds exactly one name there, `rpc_dispatch`
   (`web/python/webchirp_bridge/rpc.py`): the single callable JS uses, taking a method
   name, one JSON object of named parameters and an optional callback. It never raises
   an `Exception` back: it returns a JSON envelope, `{"ok": true, "result": ...}` or
   `{"ok": false, "error": {type, bases, module, message, traceback, js}}` built by
-  `rpc_error_envelope`. `web/js/rpc-dispatch.mjs` is the JS side of that contract and
+  `rpc_error_envelope`. `web/js/rpc-dispatch.ts` is the JS side of that contract and
   the only place that calls it; it throws a failed envelope as a `RuntimeCallError`
-  (`web/js/runtime-errors.mjs`) named after the Python class, with the message alone as
+  (`web/js/runtime-errors.ts`) named after the Python class, with the message alone as
   its message. Classify runtime failures by type with `isPythonError(error, "ClassName")`
   (which also matches subclasses), never by searching error text; print
-  `errorDetails()` (`web/js/ui/format.js`) to the debug panel, which carries the traceback.
+  `errorDetails()` (`web/js/ui/format.ts`) to the debug panel, which carries the traceback.
 - `web/python/webchirp_bridge/`: The runtime logic, one module per concern —
   `chirp_loader` (driver imports from the mounted CHIRP tree, driver enumeration), `serial_pipe`
   (pyserial stand-in over Web Serial), `session` (the `RadioSession` dataclass
@@ -66,11 +66,11 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   (the `RPC_METHODS` table and `rpc_dispatch`). `__init__.py` only installs
   the shims CHIRP needs before import. No embedded Python in JS files.
 - `chirp/`: Upstream CHIRP source as a git submodule. The runtime never reads it
-  file by file: `scripts/build-chirp-bundle.mjs` (`npm run build:chirp`, run by `dev`
+  file by file: `scripts/build-chirp-bundle.ts` (`npm run build:chirp`, run by `dev`
   and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,
   `sources`, `locale`, `share` and `stock_configs`, which nothing imports -- into the
   ignored `web/chirp/chirp-<pin>.zip` with a `chirp-<pin>.json` manifest (pin, driver
-  module list, sizes). `seedPyodideRuntime()` (`web/js/python-sources.mjs`) mounts it
+  module list, sizes). `seedPyodideRuntime()` (`web/js/python-sources.ts`) mounts it
   with `pyodide.unpackArchive` under `/webchirp_runtime`, so every `chirp.*` import is
   a plain file import that never suspends the interpreter; the driver list everywhere
   comes from the manifest. The Node harness (`tests/support/chirp-bundle-source.mjs`)
@@ -81,29 +81,40 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   runs (`rsgb-live` needs the network, `hw-radio` needs a radio on a serial
   port). `support` holds shared fixtures and the two harnesses, not tests.
 - `scripts/`: Build, coverage and CLI tooling only. No tests live here.
-- `scripts/build-dist.mjs` (`npm run build:dist`) builds the Pages tree. The
+- `scripts/build-dist.ts` (`npm run build:dist`) builds the Pages tree. The
   entry points are the module scripts and stylesheets the HTML pages load, and
   esbuild bundles them: ESM with code splitting, unminified, linked source maps,
   and every JS output in `dist/js/` named `name.<hash>.js`. Pages are pointed at
   their outputs through esbuild's metafile. Runtime Python files are copied as
   `name.<sha256:10>.py`, and the bundle gets their URLs from a generated
-  replacement for `web/js/runtime-python-urls.js`. The CHIRP archive pair and
+  replacement for `web/js/runtime-python-urls.ts`. The CHIRP archive pair and
   every other file are copied as they are. The jsDelivr modules (Pyodide,
-  Sentry, web-serial-polyfill) stay external. `scripts/retain-deployed-assets.mjs`
+  Sentry, web-serial-polyfill) stay external. `scripts/retain-deployed-assets.ts`
   knows both hashed name shapes.
+- The browser code and the tooling are TypeScript (`web/app.ts`,
+  `web/js/**/*.ts`, `scripts/*.ts`); `tests/` stays `.mjs` and imports the `.ts`
+  modules. Nothing compiles them: Node runs them by stripping the types, the
+  dev server (`scripts/dev-server.ts`, `npm run dev`) answers a request for a
+  `.ts` file with that file type-stripped by esbuild's transform API
+  (`text/javascript`, inline source map) and serves everything else static,
+  and `scripts/build-dist.ts` bundles them with esbuild. Pages load their `.ts`
+  entries by name (`<script type="module" src="./app.ts">`); no `.js` request
+  is mapped onto a `.ts` file.
 - `tsconfig.json` (browser code, lib.dom, no Node types) and
-  `scripts/tsconfig.json` (tooling, with `@types/node`) are the two projects
-  `npm run check:js` runs, both with `strictNullChecks` on (`strict` and
-  `noImplicitAny` are still off): a null-initialised variable carries its
-  `T|null` type, and a value that can be null is checked before use rather
-  than cast. `web/js/types/browser-globals.d.ts` declares the
+  `scripts/tsconfig.json` (tooling, with `@types/node`, plus `allowJs` for the
+  `tests/support` modules the scripts import) are the two projects
+  `npm run check:js` runs, both with `strict` on: every parameter is typed, a
+  null-initialised variable carries its `T|null` type, and a value that can be
+  null is checked before use rather than cast. A caught value is `unknown`;
+  read its fields through `errorFields()` (`web/js/error-details.ts`).
+  `web/js/types/browser-globals.d.ts` declares the
   browser APIs lib.dom lacks (Web Serial, WebUSB, Web Bluetooth, JSPI, gtag);
   `web/js/types/ui-context.d.ts` names every member of the UI `ctx`.
 
 ### Test conventions
 - Each suite is globbed, not listed: `npm run test:channels` runs
   `tests/channels/*.mjs`. **Adding a test is dropping a file into a suite
-  directory — never edit `package.json` for it.** `scripts/coverage.mjs`
+  directory — never edit `package.json` for it.** `scripts/coverage.ts`
   discovers the same directories, and fails if a suite exists that no npm
   script runs.
 - Name a test for what it covers, without a `test-` prefix; the directory
@@ -117,24 +128,24 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Each module is a `create<Area>(ctx)` factory. `ctx` carries `dom`, `state`,
   `log`, `actions` and every constructed sibling module.
 - Keep state private to the module that owns it; expose accessors instead.
-  `web/js/ui/state.js` is only for state that genuinely spans modules.
+  `web/js/ui/state.ts` is only for state that genuinely spans modules.
 - Call siblings through `ctx` (`ctx.table.render()`) or `ctx.actions`, never by
   importing them — that keeps the module graph free of cycles. Such calls must
   happen after construction, never in a factory body.
-- Modules bind their own DOM listeners in a `bindEvents()`; `ui.js` only binds
+- Modules bind their own DOM listeners in a `bindEvents()`; `ui.ts` only binds
   what no single module owns.
-- Query document elements in `web/js/ui/dom.js`, not in feature modules.
+- Query document elements in `web/js/ui/dom.ts`, not in feature modules.
 
 ## Rules for Agents
 - Keep Python and JavaScript separated. Put runtime Python code in
   `web/python/webchirp_bridge/*.py`; a new module must be listed in `RUNTIME_PYTHON_FILES`
-  (`web/js/python-sources.mjs`) so it is seeded into Pyodide; its URL follows from that
-  list (`web/js/runtime-python-urls.js`, which the dist build replaces with the hashed
+  (`web/js/python-sources.ts`) so it is seeded into Pyodide; its URL follows from that
+  list (`web/js/runtime-python-urls.ts`, which the dist build replaces with the hashed
   URLs). The module graph must stay acyclic; call across modules by importing, never
   through the globals.
 - A new RPC method is a function registered in `RPC_METHODS`
   (`web/python/webchirp_bridge/rpc.py`) and listed with its parameter names in
-  `RPC_METHODS` (`web/js/rpc-dispatch.mjs`); `tests/channels/rpc-contract.mjs` fails when
+  `RPC_METHODS` (`web/js/rpc-dispatch.ts`); `tests/channels/rpc-contract.mjs` fails when
   the two disagree. JS calls it by name with named parameters -- never by evaluating a
   Python expression string or writing an interpreter global. Nothing else in the package
   is callable from JS. Test snippets (`harness.runPython`) see the package flattened into
@@ -143,13 +154,20 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Do not reintroduce radio-specific RPC methods when generic selected-radio methods can be used.
 - Preserve debug visibility: full errors/tracebacks should be logged to the bottom debug panel.
 - Newly added functions need a comment as to what they do and why.
-- New exported JavaScript functions carry JSDoc types (`@param`, `@returns`)
-  that `npm run check:js` accepts. Sources stay plain `.js`/`.mjs`: no `.ts`.
+- Sources are TypeScript with erasable syntax only (`erasableSyntaxOnly`), so
+  Node and the dev server run them by stripping types: no `enum` (use an
+  `as const` object), no `namespace`, no constructor parameter properties, and
+  an import used only as a type is `import type` (`verbatimModuleSyntax`).
+  Relative imports name the `.ts` file (`import { x } from "./y.ts"`), because
+  Node resolves the specifier as written; `allowImportingTsExtensions` lets tsc
+  accept it. New exported functions have typed signatures (parameters and
+  return type). An explicit `any` belongs only where data arrives untyped --
+  JSON from Python, the network or a file, a Pyodide proxy -- with a comment
+  saying so; prefer a real type, then `unknown`.
 - Nothing in the dist build reads comments: esbuild resolves the imports and
   the page rewrite touches only the `src`/`href` of the tags that load a module
   or stylesheet. So the old rule about spelling module paths in comments (and
-  its test) is retired; see FINDINGS `build-dist-rewrites-are-textual`. A JSDoc
-  `import("./x.js")` type is a module specifier and stays relative.
+  its test) is retired; see FINDINGS `build-dist-rewrites-are-textual`.
 - Python functions must have type signatures.
 - An import used only in annotations goes under `if TYPE_CHECKING:` so it adds no
   runtime dependency; every module has `from __future__ import annotations`, which is
@@ -159,16 +177,16 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   - Use sub-agents to produce a summary for a commit message.
 - Whether a radio's firmware can be updated is not in the catalog and cannot be:
   no CHIRP driver knows it. `radio-firmware.json` (repo root) records it by hand,
-  keyed by vendor with `vendor|model` overrides, and `scripts/build-model-pages.mjs`
+  keyed by vendor with `vendor|model` overrides, and `scripts/build-model-pages.ts`
   turns it into a section on each model page. Never state a claim more strongly than
   its evidence: a vendor-level answer points at that vendor's download page, and only
   a model-level entry promises a download for that model. Record `unknown` rather than
   guessing; an unknown radio gets no section. Adding a vendor to the catalog without
   an answer fails `tests/build/radio-firmware.mjs`.
 - When you discover something new, or unexpected, put it in FINDINGS.md.
-- Analytics goes through `trackEvent` in `web/js/ui/analytics.js`; never reach
+- Analytics goes through `trackEvent` in `web/js/ui/analytics.ts`; never reach
   `gtag` directly. Every parameter an event sends must be declared in
-  `CUSTOM_DIMENSIONS` (`web/js/analytics.js`) or GA collects it and shows it
+  `CUSTOM_DIMENSIONS` (`web/js/analytics.ts`) or GA collects it and shows it
   nowhere, and never send user data — no file names, channel names, frequencies,
   search terms or coordinates.
 - When on a worktree other than the master branch run a dev server on a port other than 8000.
@@ -215,8 +233,9 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 
 ## Validation
 Before committing, run syntax checks, typechecking and all tests.
-`npm test` covers syntax, Python types (`check:types`, pyright), JavaScript
-types (`check:js`, tsc over the JSDoc with `strictNullChecks`) and the four
+`npm test` covers syntax (`check:syntax`, `node --check` over the `.mjs`
+tests; tsc parses the `.ts` sources), Python types (`check:types`, pyright),
+TypeScript types (`check:js`, tsc with `strict` over both projects) and the four
 automatic suites.
 
 

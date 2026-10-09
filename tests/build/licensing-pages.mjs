@@ -7,7 +7,7 @@ import path from "node:path";
 import { repoRoot } from "../support/repo-paths.mjs";
 import { withTempDir } from "../support/temp-dir.mjs";
 
-const SCRIPT = path.join(repoRoot, "scripts", "build-licensing-pages.mjs");
+const SCRIPT = path.join(repoRoot, "scripts", "build-licensing-pages.ts");
 
 // Stage the curated inputs and an existing sitemap, as the real page build does.
 async function withGuides(callback) {
@@ -49,7 +49,7 @@ test("one localized, cited guide is built for each named CSV location", async ()
         assert.ok(html.includes('data-licensing-language="native" aria-pressed="true"'), filename);
         assert.ok(html.includes('data-licensing-language="en" aria-pressed="false"'), filename);
         assert.ok(html.includes('data-licensing-panel="en"'), filename);
-        assert.ok(html.includes('src="../js/licensing-language.js"'), filename);
+        assert.ok(html.includes('src="../js/licensing-language.ts"'), filename);
       }
       const sourceIds = [...html.matchAll(/<li id="(source-(?:native|en)-\d+)">/g)]
         .map((match) => match[1]);

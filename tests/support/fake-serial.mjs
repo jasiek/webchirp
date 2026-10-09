@@ -1,13 +1,13 @@
 // Fake serial ports and transports for the serial bridge tests. The bridge
 // only ever sees a port through the transport contract
-// (web/js/serial-transport.mjs), so one recording port with a few knobs stands
+// (web/js/serial-transport.ts), so one recording port with a few knobs stands
 // in for every scenario the tests exercise: an adapter that disappears, a
 // mid-clone reopen, a refused open, a line that delivers bytes at a chosen
 // moment.
 //
 // The loopback fakes (createEchoPort, createChipLoopbackPort in
 // tests/support/loopback-harness.mjs) model a wire and stay separate on purpose.
-import { createDisconnectNotifier } from "../../web/js/serial-transport.mjs";
+import { createDisconnectNotifier } from "../../web/js/serial-transport.ts";
 import { tick } from "./globals.mjs";
 
 // A minimal EventTarget: what navigator.serial / navigator.usb look like to

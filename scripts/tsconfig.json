@@ -1,14 +1,19 @@
 {
   "//": [
     "The Node half of npm run check:js: build, coverage and CLI tooling, with",
-    "Node's types. Browser modules these import (web/js/python-sources.mjs, the",
+    "Node's types. Browser modules these import (web/js/python-sources.ts, the",
     "shared serial bridge) are checked again here, so they must type-check under",
-    "both projects. The strictness flags, strictNullChecks included, come from",
-    "the root config through extends."
+    "both projects. The strictness flags, strict included, come from the root",
+    "config through extends. allowJs and checkJs are here, not there, because",
+    "the scripts import tests/support modules, which stay JavaScript, and those",
+    "are checked from their JSDoc; nothing the browser project includes is",
+    "JavaScript any more."
   ],
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": true
   },
-  "include": ["./**/*.mjs", "../web/js/types/browser-globals.d.ts"]
+  "include": ["./**/*.ts", "../web/js/types/browser-globals.d.ts"]
 }

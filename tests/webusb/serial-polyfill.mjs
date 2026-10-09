@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BrowserSerialBridge } from "../../web/js/serial.js";
+import { BrowserSerialBridge } from "../../web/js/serial.ts";
 import { makeRecordingPort } from "../support/fake-serial.mjs";
 import { withNavigator } from "../support/globals.mjs";
 

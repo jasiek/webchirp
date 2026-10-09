@@ -220,7 +220,7 @@ body {
   font-weight: 600;
 }
 
-/* Static per-model pages (web/radios/, built by scripts/build-model-pages.mjs),
+/* Static per-model pages (web/radios/, built by scripts/build-model-pages.ts),
    which reuse the about-page shell above. Only the parts the about page has no
    equivalent for live here: the call to action into the app, the model list and
    the sibling-model footer. */
@@ -1248,7 +1248,7 @@ button:disabled {
 
 /* The display above is author-level, so it outranks the browser's own
    [hidden] rule. A repeater source that a blank proxy base makes unavailable
-   is hidden exactly that way (web/js/ui/repeater-query.js), and without this
+   is hidden exactly that way (web/js/ui/repeater-query.ts), and without this
    its button would stay on the toolbar doing nothing when clicked. */
 .channel-toolbar button[hidden] {
   display: none;
@@ -1580,7 +1580,7 @@ button:disabled {
   line-height: 1.3;
 }
 
-/* Drag-and-drop file loading (web/js/ui/codeplug-io.js). The whole page is the
+/* Drag-and-drop file loading (web/js/ui/codeplug-io.ts). The whole page is the
    drop target, so this only signals that a dragged file will be accepted.
    pointer-events stay off so the overlay appearing under the cursor cannot
    become the drag target and cancel the drag it is announcing. */
@@ -1850,7 +1850,7 @@ button:disabled {
   color: var(--error-text);
 }
 
-/* The bulk channel editor (web/js/ui/channel-bulk-edit.js). It shares the
+/* The bulk channel editor (web/js/ui/channel-bulk-edit.ts). It shares the
    extras editor's shape -- an unknown number of fields, so the card is capped
    at the viewport and the fields scroll inside it rather than the whole dialog
    scrolling in the overlay -- but scrolls a wrapper rather than one grid,
@@ -1956,7 +1956,7 @@ button:disabled {
 }
 
 /* Latitude and longitude on one row under a single "Coordinates" label
-   (web/js/ui/query-fields.js). Two equal tracks rather than auto: the boxes
+   (web/js/ui/query-fields.ts). Two equal tracks rather than auto: the boxes
    hold the same kind of value and their placeholders are near enough the same
    length, so an uneven split would only read as one of them mattering more.
    minmax(0, 1fr) for the reason .modal-grid gives -- a bare fr track floors at
@@ -1975,7 +1975,7 @@ button:disabled {
   line-height: 1;
 }
 
-/* The Place name autocomplete (web/js/ui/query-fields.js): a text box with
+/* The Place name autocomplete (web/js/ui/query-fields.ts): a text box with
    a suggestion list that overlays the fields under it. Positioned rather than
    in flow, so a list that appears on a keystroke does not shove Latitude,
    Longitude and the map down the card mid-type. */
@@ -2060,7 +2060,7 @@ button:disabled {
 }
 
 /* Static OSM preview of the coordinates the repeater-query modal currently
-   holds, with the search radius drawn on it (web/js/ui/query-fields.js). It
+   holds, with the search radius drawn on it (web/js/ui/query-fields.ts). It
    spans both grid columns and is pushed right, so it lines up under the values
    it previews rather than under their labels, and it carries no label of its
    own — the map is the label. */
@@ -2080,7 +2080,7 @@ button:disabled {
 }
 
 /* Square, so the range circle has the same room in both directions.
-   web/js/ui/query-fields.js measures the container and renders the tile grid
+   web/js/ui/query-fields.ts measures the container and renders the tile grid
    at that pixel size; the aspect ratio is what it measures against before the
    first render. The stand-in shown before a position is entered is the same
    square, so the block never changes size and the first render already
@@ -2261,7 +2261,7 @@ button:disabled {
    grid across the pane, and auto table layout hands that slack back to every
    column in proportion, which put it straight back between each value and the
    divider to its right -- the columns fitInputColumnWidths()
-   (web/js/ui/channel-table.js) had just measured. So the grid now ends where
+   (web/js/ui/channel-table.ts) had just measured. So the grid now ends where
    its contents end, and a window wider than the channel list simply shows
    page behind it. */
 #mem-table {
@@ -2332,7 +2332,7 @@ button:disabled {
    still scrolls inside the input.
 
    Note what this does *not* see: the grid is virtualized (see
-   web/js/ui/channel-table.js), so the browser is measuring the rows currently in
+   web/js/ui/channel-table.ts), so the browser is measuring the rows currently in
    the DOM, not the whole channel list. Columns therefore track what is on
    screen. */
 @supports (field-sizing: content) {
@@ -2377,7 +2377,7 @@ button:disabled {
    so they must ask for no more than their own contents: a select is already as
    wide as the widest option its driver publishes, and an input is sized by the
    size attribute columnCharBudget() derives from the column metadata in
-   web/js/ui/channel-table.js. A blanket min-width here flattened all of that to
+   web/js/ui/channel-table.ts. A blanket min-width here flattened all of that to
    one width, so a two-character Duplex or Skip column was as wide as a
    frequency and the desktop grid scrolled sideways for space it was not using.
    Keep the auto-indexed Location column compact. */
@@ -2417,7 +2417,7 @@ button:disabled {
 }
 
 /* The Extra column's cell: a button rather than an editor, because the fields
-   behind it are per-driver and per-channel (web/js/ui/channel-extra.js). Sized to its
+   behind it are per-driver and per-channel (web/js/ui/channel-extra.ts). Sized to its
    label so the column stays the narrowest one in the grid. */
 #mem-table .channel-extra-button {
   padding: 0.05rem 0.4rem;
@@ -2474,7 +2474,7 @@ button:disabled {
 /* Static OSM context map for repeater channels (issue #57): a channel named
    after a callsign marks its Location cell, hover looks the callsign up and
    shows the tooltip map on desktop, tap opens the modal map on touch devices
-   (web/js/ui/repeater-map.js). The mark says the cell is worth hovering, not
+   (web/js/ui/repeater-map.ts). The mark says the cell is worth hovering, not
    that a map exists -- only the lookup can answer that. */
 #mem-table .channel-location-button.has-callsign {
   text-decoration: underline dotted;
@@ -2537,10 +2537,10 @@ button:disabled {
 }
 
 /* The search radius a repeater query will use, drawn around the marker.
-   web/js/ui/static-map-view.js sizes it in pixels from the ground radius; the
+   web/js/ui/static-map-view.ts sizes it in pixels from the ground radius; the
    fill is faint enough to read the map through. */
 /* One repeater the current filters would return, on the query modal's preview
-   map (web/js/ui/static-map-view.js). A square, not a dot, because that is what
+   map (web/js/ui/static-map-view.ts). A square, not a dot, because that is what
    many of these positions honestly are: a directory that publishes only a
    4-character locator places a station within a box, and a dot would present
    that guess as a survey. Small enough that a dense city stays readable as a
@@ -2639,7 +2639,7 @@ button:disabled {
   aspect-ratio: 1 / 1;
 }
 
-/* Stand-ins for the rows the grid keeps out of the DOM (see channel-table.js):
+/* Stand-ins for the rows the grid keeps out of the DOM (see web/js/ui/channel-table.ts):
    pure height, no box of their own. */
 #mem-table tbody tr.mem-row-spacer td {
   padding: 0;
@@ -2876,7 +2876,7 @@ button:disabled {
   }
 }
 
-/* Custom tooltip bubble (web/js/tooltip.js): replaces native title tooltips
+/* Custom tooltip bubble (web/js/tooltip.ts): replaces native title tooltips
    so every tooltip appears after the same 400ms delay. Sits above modals. */
 .app-tooltip {
   position: fixed;

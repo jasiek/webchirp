@@ -1,4 +1,4 @@
-// Patch coverage (scripts/coverage-patch.mjs) is what a reviewer reads on a
+// Patch coverage (scripts/coverage-patch.ts) is what a reviewer reads on a
 // pull request, so its arithmetic has to be right in the cases that are easy to
 // get wrong: a hunk header with no line count, a pure deletion, a changed
 // comment inside untested code, and a run of uncovered lines that should read
@@ -6,16 +6,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isJsCodeLine } from "../../scripts/coverage-lcov.mjs";
+import { isJsCodeLine } from "../../scripts/coverage-lcov.ts";
 import {
   changedLinesFromDiff,
   classifyChangedLines,
   percent,
   renderMarkdown,
   toRanges,
-} from "../../scripts/coverage-patch.mjs";
+} from "../../scripts/coverage-patch.ts";
 
-// One lcov-shaped entry, as scripts/coverage-lcov.mjs would parse it.
+// One lcov-shaped entry, as scripts/coverage-lcov.ts would parse it.
 function coverageOf(entries) {
   return new Map(
     Object.entries(entries).map(([file, hits]) => [file, { lineHits: new Map(Object.entries(hits).map(([k, v]) => [Number(k), v])) }]),
@@ -106,7 +106,7 @@ test("a changed line the coverage data never mentions is ignored", () => {
 });
 
 test("a changed file with no coverage data at all is skipped", () => {
-  const changed = new Map([["scripts/build-dist.mjs", new Set([1, 2])]]);
+  const changed = new Map([["scripts/build-dist.ts", new Set([1, 2])]]);
 
   const result = classifyChangedLines(changed, new Map(), { filterComments: false });
   assert.deepEqual(result, { covered: [], uncovered: [] });

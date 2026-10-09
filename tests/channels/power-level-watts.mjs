@@ -81,7 +81,7 @@ function renderGridWithPowerColumn(columns) {
 }
 
 test("the grid spells out the driver's power table on hover", async () => {
-  const { createChannelTable } = await import("../../web/js/ui/channel-table.js");
+  const { createChannelTable } = await import("../../web/js/ui/channel-table.ts");
   const { dom, state } = renderGridWithPowerColumn({
     Power: {
       kind: "enum",
@@ -111,7 +111,7 @@ test("the grid spells out the driver's power table on hover", async () => {
 });
 
 test("no legend without wattages to show", async () => {
-  const { createChannelTable } = await import("../../web/js/ui/channel-table.js");
+  const { createChannelTable } = await import("../../web/js/ui/channel-table.ts");
   // 99 driver classes advertise no power levels at all; several more label them
   // in watts already, and _power_level_watts() omits those.
   const { dom, state } = renderGridWithPowerColumn({

@@ -10,7 +10,7 @@ import {
   buildRsgbRows,
   isRepeaterRecord,
   parseRsgbPayload,
-} from "../../web/js/rsgb.js";
+} from "../../web/js/rsgb.ts";
 import { makeRowHooks } from "../support/row-hooks.mjs";
 
 // Contract tests against the live RSGB/ETCC API. Deliberately NOT part of

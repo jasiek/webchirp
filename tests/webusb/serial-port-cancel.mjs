@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { BrowserSerialBridge } from "../../web/js/serial.js";
+import { BrowserSerialBridge } from "../../web/js/serial.ts";
 import {
   PORT_SELECTION_CANCELLED,
   PORT_SELECTION_CANCELLED_MESSAGE,
   isPortSelectionCancelled,
-} from "../../web/js/serial-errors.js";
-import { classifyErrorKind, errorTypeName } from "../../web/js/ui/analytics.js";
-import { createDebugLog } from "../../web/js/ui/debug-log.js";
+} from "../../web/js/serial-errors.ts";
+import { classifyErrorKind, errorTypeName } from "../../web/js/ui/analytics.ts";
+import { createDebugLog } from "../../web/js/ui/debug-log.ts";
 import { setNavigator } from "../support/globals.mjs";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
@@ -212,7 +212,7 @@ function makeSerialActionsContext(connectError) {
 
 test("connect reports a dismissed chooser as a cancellation, not a crash", async () => {
   setNavigator({ userAgent: "FakeBrowser/1.0", maxTouchPoints: 0 });
-  const { createSerialActions } = await import("../../web/js/ui/serial-actions.js");
+  const { createSerialActions } = await import("../../web/js/ui/serial-actions.ts");
 
   const cancelled = new Error(PORT_SELECTION_CANCELLED_MESSAGE);
   cancelled.name = PORT_SELECTION_CANCELLED;
@@ -237,7 +237,7 @@ test("connect reports a dismissed chooser as a cancellation, not a crash", async
 
 test("connect still reports a genuine open failure as an error", async () => {
   setNavigator({ userAgent: "FakeBrowser/1.0", maxTouchPoints: 0 });
-  const { createSerialActions } = await import("../../web/js/ui/serial-actions.js");
+  const { createSerialActions } = await import("../../web/js/ui/serial-actions.ts");
 
   const { ctx, calls } = makeSerialActionsContext(new Error("Failed to open serial port."));
   const serial = createSerialActions(ctx);

@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildPrzemiennikiRows } from "../../web/js/datasources.js";
-import { buildRsgbRows } from "../../web/js/rsgb.js";
+import { buildPrzemiennikiRows } from "../../web/js/datasources.ts";
+import { buildRsgbRows } from "../../web/js/rsgb.ts";
 import { makeRowHooks } from "../support/row-hooks.mjs";
 
 // Every repeater directory has to answer the Power column the same way: a
 // channel that reaches for a distant machine takes the driver's highest tier,
-// never the blank row's default. That rule lived only in web/js/rsgb.js for a
+// never the blank row's default. That rule lived only in web/js/rsgb.ts for a
 // while, so przemienniki.net, repeaterbook.com and IRTS imports (all of them
-// built by buildPrzemiennikiRows in web/js/datasources.js) arrived on whatever
+// built by buildPrzemiennikiRows in web/js/datasources.ts) arrived on whatever
 // the driver happened to list first. These cases pin it for both builders, so
 // a directory added later cannot quietly drop back to that.
 
@@ -55,7 +55,7 @@ test("a przemienniki-shaped repeater row carries the driver's highest power", ()
 });
 
 test("both repeater builders resolve the same driver's power to the same value", () => {
-  // The two directories share one ranked list (web/js/row-power.js). Drivers
+  // The two directories share one ranked list (web/js/row-power.ts). Drivers
   // spell the tiers differently enough that a second, drifting copy of it
   // would show up here as a disagreement.
   for (const powerOptions of [

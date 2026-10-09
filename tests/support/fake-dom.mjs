@@ -84,7 +84,7 @@ function parseCompound(compound) {
       continue;
     }
     // Attribute values may be quoted or bare -- input[type=checkbox] is what
-    // web/js/serial-test-page.js actually ships, and rejecting it made the
+    // web/js/serial-test-page.ts actually ships, and rejecting it made the
     // module impossible to import under this DOM.
     match = rest.match(/^\[([\w-]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\]]*)))?\]/);
     if (match) {
@@ -381,11 +381,11 @@ export class FakeElement {
   }
 }
 
-// Elements web/js/ui/dom.js requires that are stubbed with their real tag,
+// Elements web/js/ui/dom.ts requires that are stubbed with their real tag,
 // because the tag is load-bearing somewhere: sidebarControlEls filters on
 // BUTTON/INPUT, a <select> answers with its first option, a <progress>
 // reflects value to an attribute. Anything else the UI queries auto-vivifies
-// as a div. Every entry must be an element dom.js declares —
+// as a div. Every entry must be an element dom.ts declares —
 // test-ui-radio-loading.mjs pins that so a removed id fails loudly.
 export const UI_STUBBED_SELECTORS = new Map([
   ["#mem-table thead", "thead"],
@@ -442,7 +442,7 @@ export const UI_STUBBED_SELECTORS = new Map([
 ]);
 
 // Default vivification rule: index.html always provides every #id element
-// dom.js requires, so an unregistered id stands for markup the test does not
+// dom.ts requires, so an unregistered id stands for markup the test does not
 // care about, not a missing element. Anything that is not an id lookup (the
 // repeater-API meta tag, say) resolves to null unless the test registered it,
 // matching a genuinely absent element.
@@ -452,7 +452,7 @@ function vivifyIdsOnly(selector) {
 
 // Every modal overlay index.html ships carries the hidden class. The stub
 // vivifies elements with no classes at all, so a booted UI finds all of them
-// "open" -- and the global Escape handler in web/js/ui.js, which closes the
+// "open" -- and the global Escape handler in web/js/ui.ts, which closes the
 // topmost open surface and stops, then swallows the key before it reaches the
 // modal a test is actually driving. Listed here rather than in each boot helper
 // so that adding a modal to index.html does not break unrelated tests one at a
@@ -506,7 +506,7 @@ export class FakeDocument {
 
   // The id lookup, in terms of the selector lookup, so an element resolved
   // either way is the same object and the vivify rule applies to both.
-  // web/js/version-info.js and web/js/serial-test-page.js reach for the DOM
+  // web/js/version-info.ts and web/js/serial-test-page.ts reach for the DOM
   // this way rather than by selector.
   getElementById(id) {
     return this.querySelector(`#${id}`);

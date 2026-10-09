@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { runInNewContext } from "node:vm";
 
+import { transformSync } from "esbuild";
+
 import { repoRoot } from "../support/repo-paths.mjs";
 
 test("flag selection switches both views and the document language", async () => {
@@ -29,7 +31,10 @@ test("flag selection switches both views and the document language", async () =>
       return selector === "[data-licensing-language]" ? buttons : panels;
     },
   };
-  const script = await readFile(path.join(repoRoot, "web", "js", "licensing-language.js"), "utf8");
+  // The source is TypeScript; strip it the way the dev server does before
+  // running it as the classic script a vm context expects.
+  const source = await readFile(path.join(repoRoot, "web", "js", "licensing-language.ts"), "utf8");
+  const script = transformSync(source, { loader: "ts" }).code;
   runInNewContext(script, { document });
 
   buttons[1].click();

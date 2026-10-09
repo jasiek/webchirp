@@ -5,11 +5,11 @@ import {
   RepeaterInputError,
   createRepeaterSources,
   unmetRequirement,
-} from "../../web/js/ui/repeater-sources.js";
+} from "../../web/js/ui/repeater-sources.ts";
 
 // Telling a form the user can fix from a directory that is down. Both surface
 // the same way in the UI, so the distinction exists only for telemetry: the one
-// catch in web/js/ui/repeater-query.js records an input error as "blocked" and
+// catch in web/js/ui/repeater-query.ts records an input error as "blocked" and
 // everything else as "failed", and without the type they are the same string in
 // the same Error and every missing location inflates the service failure rate an
 // alert would watch.

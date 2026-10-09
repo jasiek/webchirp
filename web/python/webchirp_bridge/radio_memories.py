@@ -221,7 +221,7 @@ def _apply_rows_to_radio_instance(
         )
         if action == "skip":
             # The grid columns say nothing changed, but the extras editor
-            # (web/js/ui/channel-extra.js) writes only to the row's sidecar, so
+            # (web/js/ui/channel-extra.ts) writes only to the row's sidecar, so
             # a channel whose Busy Channel Lockout was just switched off looks
             # exactly like an untouched one here. Replay the sidecar against
             # the memory that was read a moment ago: it only writes when a

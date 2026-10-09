@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { findCatalogRadioForImageMetadata } from "../../web/js/image-metadata.mjs";
+import { findCatalogRadioForImageMetadata } from "../../web/js/image-metadata.ts";
 import {
   ensureModule,
   imageMetadata,

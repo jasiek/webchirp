@@ -1,5 +1,5 @@
 // Module-resolution hook that makes the browser's CDN imports resolvable under
-// node:test. web/js/runtime-rpc.js imports Pyodide straight from jsDelivr --
+// node:test. web/js/runtime-rpc.ts imports Pyodide straight from jsDelivr --
 // the browser has no bundler and no import map, so an absolute URL is the only
 // specifier that works there -- and Node cannot resolve an https: specifier at
 // all. That single line is why a 600-line core module was invisible to every

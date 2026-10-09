@@ -5,7 +5,7 @@
 // code needs more, rather than reaching for `any`.
 //
 // Read by tsc only (tsconfig.json includes web/js); nothing loads this file at
-// runtime and scripts/build-dist.mjs leaves *.d.ts out of dist/.
+// runtime and scripts/build-dist.ts leaves *.d.ts out of dist/.
 
 export {};
 
@@ -253,7 +253,7 @@ declare global {
 
   // ---------------------------------------------------------------------------
   // User-Agent Client Hints -- WICG, https://wicg.github.io/ua-client-hints/
-  // Chromium 90+. Read by the browser-brand detector in web/js/ui/format.js.
+  // Chromium 90+. Read by the browser-brand detector in web/js/ui/format.ts.
   // ---------------------------------------------------------------------------
 
   interface NavigatorUABrandVersion {
@@ -286,8 +286,8 @@ declare global {
   // ---------------------------------------------------------------------------
   // Web App Install -- the beforeinstallprompt event, a Chromium extension
   // described in https://wicg.github.io/manifest-incubations/ (not in the
-  // Manifest spec proper). Read by web/js/install-prompt.js and
-  // web/js/analytics.js.
+  // Manifest spec proper). Read by web/js/install-prompt.ts and
+  // web/js/analytics.ts.
   // ---------------------------------------------------------------------------
 
   interface BeforeInstallPromptEvent extends Event {
@@ -302,7 +302,7 @@ declare global {
   }
 
   // ---------------------------------------------------------------------------
-  // Google tag (gtag.js) -- injected by web/js/analytics.js on the production
+  // Google tag (gtag.js) -- injected by web/js/analytics.ts on the production
   // hosts only; https://developers.google.com/tag-platform/gtagjs/reference
   // ---------------------------------------------------------------------------
 
@@ -312,14 +312,24 @@ declare global {
   }
 
   // ---------------------------------------------------------------------------
+  // navigator.standalone -- Safari on iOS/iPadOS only, true when the page was
+  // launched from the home screen; web/js/analytics.ts reads it because iOS
+  // never matches the display-mode media query.
+  // ---------------------------------------------------------------------------
+
+  interface Navigator {
+    standalone?: boolean;
+  }
+
+  // ---------------------------------------------------------------------------
   // WebAssembly JavaScript Promise Integration (JSPI) -- W3C WebAssembly CG
   // proposal, https://github.com/WebAssembly/js-promise-integration ; Chrome
-  // 137+, Firefox 152+. Pyodide's run_sync needs it; web/app.js feature-tests
+  // 137+, Firefox 152+. Pyodide's run_sync needs it; web/app.ts feature-tests
   // it. Optional because browsers without JSPI simply lack the members.
   // ---------------------------------------------------------------------------
 
   namespace WebAssembly {
-    const Suspending: (new (fn: (...args: any[]) => Promise<unknown>) => object) | undefined;
-    const promising: ((fn: Function) => (...args: any[]) => Promise<unknown>) | undefined;
+    const Suspending: (new (fn: (...args: never[]) => Promise<unknown>) => object) | undefined;
+    const promising: ((fn: Function) => (...args: unknown[]) => Promise<unknown>) | undefined;
   }
 }

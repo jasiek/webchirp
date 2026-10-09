@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { SerialPortMock } from "serialport";
-import { NativeSerialPort } from "../../web/js/native-serial-port.js";
-import { SerialBridge } from "../../web/js/serial-bridge.mjs";
-import { assertSerialTransport } from "../../web/js/serial-transport.mjs";
-import { WebBluetoothSerialPort } from "../../web/js/webbluetooth-serial.js";
-import { CdcSerialPort } from "../../web/js/webusb-serial.js";
+import { NativeSerialPort } from "../../web/js/native-serial-port.ts";
+import { SerialBridge } from "../../web/js/serial-bridge.ts";
+import { assertSerialTransport } from "../../web/js/serial-transport.ts";
+import { WebBluetoothSerialPort } from "../../web/js/webbluetooth-serial.ts";
+import { CdcSerialPort } from "../../web/js/webusb-serial.ts";
 import { makeBluetoothDongle } from "../support/fake-bluetooth.mjs";
 import { makeEmitter } from "../support/fake-serial.mjs";
 import { tick } from "../support/globals.mjs";
@@ -13,7 +13,7 @@ import { CHIP_NAMES, createChipLoopbackPort, createEchoPort } from "../support/l
 import { NodeSerialPort } from "../support/node-serial-port.mjs";
 
 // One set of cases, run against every implementation of the serial transport
-// contract (web/js/serial-transport.mjs), each over the fake that stands in
+// contract (web/js/serial-transport.ts), each over the fake that stands in
 // for its hardware:
 //
 //   ftdi, pl2303, ch340, cp2102  the real chip drivers over a looped-back fake

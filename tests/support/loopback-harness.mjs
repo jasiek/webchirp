@@ -13,10 +13,10 @@
 // `faults` injects the defects the suite exists to catch, so the tests can
 // prove each case has teeth rather than assuming it does.
 
-import { Ch340SerialPort } from "../../web/js/ch340-webusb.js";
-import { Cp2102SerialPort } from "../../web/js/cp2102-webusb.js";
-import { FtdiSerialPort } from "../../web/js/ftdi-webusb.js";
-import { Pl2303SerialPort } from "../../web/js/pl2303-webusb.js";
+import { Ch340SerialPort } from "../../web/js/ch340-webusb.ts";
+import { Cp2102SerialPort } from "../../web/js/cp2102-webusb.ts";
+import { FtdiSerialPort } from "../../web/js/ftdi-webusb.ts";
+import { Pl2303SerialPort } from "../../web/js/pl2303-webusb.ts";
 import {
   PL2303_HX_DESCRIPTOR,
   cancelledTransfer,
