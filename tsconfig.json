@@ -27,8 +27,6 @@
     "can be thrown. The three flags below strict are checks it does not include."
   ],
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
