@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  An IRTS-shaped RXF answer, written for the repeater tests rather than copied
+  from the directory. Shapes taken from the live feed on 2026-10-09: radio
+  perspective, lower-case modes (fm, dstar, dmr, fusion, nxdn), a transmit
+  tone and no receive tone, integer tones ("77", "67"), a simplexer on 4m
+  whose two qrgs are equal, and the source page in <link>.
+-->
+<rxf version="1.0">
+  <generator>Irish Radio Transmitters Society (IRTS)</generator>
+  <perspective>radio</perspective>
+  <repeaters>
+    <repeater><qra>EI0TST</qra><id>ei0tst-29-68</id><status>working</status><mode>fm</mode><band>10m</band>
+      <qrg type="rx">29.68</qrg><qrg type="tx">29.58</qrg><country>ie</country><qth>Carndonagh, Co. Donegal</qth>
+      <location><locator>IO65JG</locator><latitude>55.270833</latitude><longitude>-7.208333</longitude></location>
+      <ctcss type="tx">67</ctcss><remarks>Channel: RH3 | EchoLink Node 29007</remarks>
+      <link>https://www.irts.ie/cgi/repeater.cgi</link></repeater>
+    <repeater><qra>EI4TST</qra><id>ei4tst-70-375</id><status>working</status><mode>fm</mode><band>4m</band>
+      <qrg type="rx">70.375</qrg><qrg type="tx">70.375</qrg><country>ie</country><qth>Seefin Mountain, North Cork</qth>
+      <location><locator>IO52MA</locator><latitude>52.020833</latitude><longitude>-8.958333</longitude></location>
+      <remarks>Simplexer</remarks><link>https://www.irts.ie/cgi/repeater.cgi</link></repeater>
+    <repeater><qra>EI2TST</qra><id>ei2tst-145-6</id><status>working</status><mode>fm</mode><band>2m</band>
+      <qrg type="rx">145.6</qrg><qrg type="tx">145.0</qrg><country>ie</country><qth>Three Rock, Co. Dublin</qth>
+      <location><locator>IO63VG</locator><latitude>53.229167</latitude><longitude>-6.208333</longitude></location>
+      <ctcss type="tx">77</ctcss><remarks>Channel: RV48 / (R0)</remarks><link>https://www.irts.ie/cgi/repeater.cgi</link></repeater>
+    <repeater><qra>EI7TST</qra><id>ei7tst-439-5</id><status>working</status><mode>fm</mode><band>70cm</band>
+      <qrg type="rx">439.5</qrg><qrg type="tx">430.5</qrg><country>ie</country><qth>Mullaghanish, Co. Cork</qth>
+      <location><locator>IO51MW</locator><latitude>51.9375</latitude><longitude>-9.041667</longitude></location>
+      <ctcss type="tx">103.5</ctcss><remarks>Channel: RB04</remarks><link>https://www.irts.ie/cgi/repeater.cgi</link></repeater>
+    <repeater><qra>EI7DST</qra><id>ei7dst-439-4</id><status>working</status><mode>dstar</mode><band>70cm</band>
+      <qrg type="rx">439.4</qrg><qrg type="tx">430.4</qrg><country>ie</country><qth>Cork City</qth>
+      <location><locator>IO51TV</locator><latitude>51.8958</latitude><longitude>-8.4708</longitude></location>
+      <remarks></remarks><link>https://www.irts.ie/cgi/repeater.cgi</link></repeater>
+    <repeater><qra>EI7DMR</qra><id>ei7dmr-439-6</id><status>working</status><mode>dmr</mode><band>70cm</band>
+      <qrg type="rx">439.6</qrg><qrg type="tx">430.6</qrg><country>ie</country><qth>Cork City</qth>
+      <location><locator>IO51TV</locator><latitude>51.8958</latitude><longitude>-8.4708</longitude></location>
+      <remarks>CC1</remarks><link>https://www.irts.ie/cgi/repeater.cgi</link></repeater>
+    <repeater><qra>EI7FUS</qra><id>ei7fus-439-7</id><status>working</status><mode>fusion</mode><band>70cm</band>
+      <qrg type="rx">439.7</qrg><qrg type="tx">430.7</qrg><country>ie</country><qth>Limerick</qth>
+      <location><locator>IO52PP</locator><latitude>52.6638</latitude><longitude>-8.6267</longitude></location>
+      <ctcss type="tx">110.9</ctcss><remarks></remarks><link>https://www.irts.ie/cgi/repeater.cgi</link></repeater>
+    <repeater><qra>GI4NX</qra><id>gi4nx-439-8</id><status>working</status><mode>nxdn</mode><band>70cm</band>
+      <qrg type="rx">439.8</qrg><qrg type="tx">430.8</qrg><country>gb</country><qth>Belfast</qth>
+      <location><locator>IO74AO</locator><latitude>54.597</latitude><longitude>-5.93</longitude></location>
+      <remarks>RAN 1</remarks><link>https://www.irts.ie/cgi/repeater.cgi</link></repeater>
+    <repeater><qra>EI23TST</qra><id>ei23tst-1297</id><status>working</status><mode>fm</mode><band>23cm</band>
+      <qrg type="rx">1297.375</qrg><qrg type="tx">1291.375</qrg><country>ie</country><qth>Kippure, Co. Wicklow</qth>
+      <location><locator>IO63UD</locator><latitude>53.177</latitude><longitude>-6.331</longitude></location>
+      <ctcss type="tx">110</ctcss><remarks></remarks><link>https://www.irts.ie/cgi/repeater.cgi</link></repeater>
+  </repeaters>
+</rxf>

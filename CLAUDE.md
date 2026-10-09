@@ -44,7 +44,19 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   column-metadata types. `repeater-query` is one modal shell for every
   repeater directory: its form is assembled per source from the field
   components in `query-fields.ts` (which build their own DOM), driven by the
-  per-source configs in `repeater-sources.ts`.
+  `RepeaterDirectoryAdapter`s registered in `createRepeaterAdapters`
+  (`repeater-sources.ts`). Every directory normalizes into one
+  `RepeaterRecord` (`web/js/repeater-record.ts`: integer-Hz output and
+  input, modes from a closed list, CTCSS/DCS tone per direction, position)
+  before anything else sees it; one parser per wire format feeds it (RXF:
+  `parseRxfRecords` in `web/js/rxf.ts`, also behind the hover map's callsign
+  lookup; RSGB JSON: `rsgbToRepeaterRecord` in `web/js/rsgb.ts`), and one
+  builder, `buildRepeaterRows` (`web/js/repeater-rows.ts`), makes every
+  directory's rows. **Adding a directory is writing a parser into
+  `RepeaterRecord` and registering an adapter** (its fields and a
+  `query(values, purpose)` returning records) -- never a row builder, and
+  never a second record shape; `tests/channels/repeater-adapters.mjs` holds
+  each adapter to the record invariants, so give the new one a fixture there.
 - `web/python/runtime_bridge.py`: Entry point of the Python runtime. It is executed (not
   imported) into Pyodide's globals and binds exactly one name there, `rpc_dispatch`
   (`web/python/webchirp_bridge/rpc.py`): the single callable JS uses, taking a method

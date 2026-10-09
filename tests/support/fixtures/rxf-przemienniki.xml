@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A przemienniki.net-shaped RXF answer, written for the repeater tests rather
+  than copied from the directory. Shapes taken from the live feed on
+  2026-10-09: repeater perspective, upper-case modes (FM, DSTAR, C4FM,
+  MOTOTRBO, APCO25, M17, TETRA, ATV), CTCSS with one decimal on either side,
+  an empty <locator>, entries without a position, and one at 0/0.
+-->
+<rxf version="1.0">
+  <generator>przemienniki.net v.0.1.0</generator>
+  <perspective>repeater</perspective>
+  <repeaters>
+    <repeater><qra>SR9TA</qra><id>-101</id><status>WORKING</status><mode>FM</mode><band>70CM</band>
+      <qrg type="rx">431.425</qrg><qrg type="tx">439.025</qrg><country>pl</country><qth>Krakow</qth>
+      <location><locator>KN09AX</locator><latitude>50.061430</latitude><longitude>19.936580</longitude></location>
+      <ctcss type="rx">141.3</ctcss><ctcss type="tx">141.3</ctcss><remarks></remarks>
+      <link>https://przemienniki.net/przemienniki/70cm/SR9TA</link></repeater>
+    <repeater><qra>SR9TB</qra><id>-102</id><status>WORKING</status><mode>FM</mode><band>2M</band>
+      <qrg type="rx">145.0125</qrg><qrg type="tx">145.6125</qrg><country>pl</country><qth>Wieliczka</qth>
+      <location><locator></locator><latitude>49.987</latitude><longitude>20.065</longitude></location>
+      <ctcss type="rx">88.5</ctcss><remarks>Echolink 12345</remarks><link></link></repeater>
+    <repeater><qra>SR9TC</qra><id>-103</id><status>WORKING</status><mode>FM</mode><band>2M</band>
+      <qrg type="rx">145.025</qrg><qrg type="tx">145.625</qrg><country>pl</country><qth>Myslenice</qth>
+      <location><latitude>49.834</latitude><longitude>19.94</longitude></location>
+      <ctcss type="tx">110.9</ctcss><remarks></remarks><link></link></repeater>
+    <repeater><qra>SR9TD</qra><id>-104</id><status>WORKING</status><mode>FM</mode><band>70CM</band>
+      <qrg type="rx">430.950</qrg><qrg type="tx">438.550</qrg><country>pl</country><qth>Bochnia</qth>
+      <location><latitude>49.969</latitude><longitude>20.43</longitude></location>
+      <ctcss type="rx">88.5</ctcss><ctcss type="tx">110.9</ctcss><remarks>split tones</remarks><link></link></repeater>
+    <repeater><qra>SR9DS</qra><id>-105</id><status>WORKING</status><mode>DSTAR</mode><band>70CM</band>
+      <qrg type="rx">431.000</qrg><qrg type="tx">438.600</qrg><country>pl</country><qth>Krakow</qth>
+      <location><latitude>50.05</latitude><longitude>19.95</longitude></location><remarks></remarks><link></link></repeater>
+    <repeater><qra>SR9YS</qra><id>-106</id><status>WORKING</status><mode>C4FM</mode><band>70CM</band>
+      <qrg type="rx">430.9375</qrg><qrg type="tx">438.5375</qrg><country>pl</country><qth>Tarnow</qth>
+      <location><latitude>50.012</latitude><longitude>20.985</longitude></location>
+      <ctcss type="rx">88.5</ctcss><remarks></remarks><link></link></repeater>
+    <repeater><qra>SR9DM</qra><id>-107</id><status>WORKING</status><mode>MOTOTRBO</mode><band>70CM</band>
+      <qrg type="rx">430.9125</qrg><qrg type="tx">438.5125</qrg><country>pl</country><qth>Krakow</qth>
+      <location><latitude>50.07</latitude><longitude>19.91</longitude></location><remarks>CC1</remarks><link></link></repeater>
+    <repeater><qra>SR9P</qra><id>-108</id><status>WORKING</status><mode>APCO25</mode><band>70CM</band>
+      <qrg type="rx">431.150</qrg><qrg type="tx">438.750</qrg><country>pl</country><qth>Katowice</qth>
+      <location><latitude>50.264</latitude><longitude>19.023</longitude></location><remarks></remarks><link></link></repeater>
+    <repeater><qra>SR9M</qra><id>-109</id><status>WORKING</status><mode>M17</mode><band>70CM</band>
+      <qrg type="rx">431.175</qrg><qrg type="tx">438.775</qrg><country>pl</country><qth>Gliwice</qth>
+      <location><latitude>50.294</latitude><longitude>18.665</longitude></location><remarks></remarks><link></link></repeater>
+    <repeater><qra>SR9TT</qra><id>-110</id><status>WORKING</status><mode>TETRA</mode><band>70CM</band>
+      <qrg type="rx">430.4</qrg><qrg type="tx">440.4</qrg><country>pl</country><qth>Opole</qth>
+      <location><latitude>50.675</latitude><longitude>17.921</longitude></location><remarks></remarks><link></link></repeater>
+    <repeater><qra>SR9AT</qra><id>-111</id><status>WORKING</status><mode>ATV</mode><band>23CM</band>
+      <qrg type="rx">1250.000</qrg><qrg type="tx">1280.000</qrg><country>pl</country><qth>Krakow</qth>
+      <location><latitude>50.08</latitude><longitude>19.92</longitude></location><remarks></remarks><link></link></repeater>
+    <repeater><qra>SR9TE</qra><id>-112</id><status>WORKING</status><mode>FM</mode><band>10M</band>
+      <qrg type="rx">29.560</qrg><qrg type="tx">29.660</qrg><country>pl</country><qth>Nowy Sacz</qth>
+      <location><latitude>49.62</latitude><longitude>20.69</longitude></location>
+      <ctcss type="rx">77.0</ctcss><remarks></remarks><link></link></repeater>
+    <repeater><qra>SR9TF</qra><id>-113</id><status>WORKING</status><mode>FM</mode><band>6M</band>
+      <qrg type="rx">51.310</qrg><qrg type="tx">51.810</qrg><country>pl</country><qth>Zakopane</qth>
+      <location><latitude>49.299</latitude><longitude>19.949</longitude></location><remarks></remarks><link></link></repeater>
+    <repeater><qra>SR9TG</qra><id>-114</id><status>WORKING</status><mode>FM</mode><band>2M</band>
+      <qrg type="rx">145.100</qrg><qrg type="tx">145.700</qrg><country>pl</country><qth>Oswiecim</qth>
+      <location><latitude></latitude><longitude></longitude></location>
+      <ctcss type="rx">94.8</ctcss><remarks>no published position</remarks><link></link></repeater>
+    <repeater><qra>SR9TH</qra><id>-115</id><status>WORKING</status><mode>FM</mode><band>2M</band>
+      <qrg type="tx">145.500</qrg><country>pl</country><qth>Chrzanow</qth>
+      <location><latitude>50.135</latitude><longitude>19.402</longitude></location><remarks>one qrg</remarks><link></link></repeater>
+    <repeater><qra>SR9TI</qra><id>-116</id><status>WORKING</status><mode>FM</mode><band>2M</band>
+      <country>pl</country><qth>Olkusz</qth>
+      <location><latitude>50.281</latitude><longitude>19.565</longitude></location><remarks>no qrg</remarks><link></link></repeater>
+    <repeater><qra>SR9TJ</qra><id>-117</id><status>WORKING</status><mode>FM</mode><band>4M</band>
+      <qrg type="rx">70.425</qrg><qrg type="tx">70.425</qrg><country>pl</country><qth>Rabka</qth>
+      <location><latitude>0.000000</latitude><longitude>0.000000</longitude></location><remarks>simplex</remarks><link></link></repeater>
+    <repeater><qra>SR9TK</qra><id>-118</id><status>WORKING</status><mode>FM</mode><band>70CM</band>
+      <qrg type="rx">431.575</qrg><qrg type="tx">439.175</qrg><country>pl</country><qth>Sucha</qth>
+      <location><latitude>49.74</latitude><longitude>19.59</longitude></location>
+      <ctcss type="rx">159.0</ctcss><remarks>tone no table carries</remarks><link></link></repeater>
+    <repeater><qra>SR9TL</qra><id>-119</id><status>WORKING</status><mode>DSTAR</mode><band>2M</band>
+      <qrg type="rx">145.2875</qrg><qrg type="tx">145.2875</qrg><country>pl</country><qth>Skawina</qth>
+      <location><latitude>49.975</latitude><longitude>19.828</longitude></location>
+      <ctcss type="rx">159.0</ctcss><remarks>mode and tone both unusable on an FM radio</remarks><link></link></repeater>
+  </repeaters>
+</rxf>

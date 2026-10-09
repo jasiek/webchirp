@@ -19,8 +19,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { CSV_FORMAT_HEADERS } from "../../web/js/clipboard.ts";
-import { buildPmr446Rows, buildPrzemiennikiRows } from "../../web/js/datasources.ts";
-import { buildRsgbRows } from "../../web/js/rsgb.ts";
+import { buildPmr446Rows } from "../../web/js/datasources.ts";
+import { rsgbRows, rxfRows } from "../support/repeater-rows.mjs";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
 import {
   FakeElement,
@@ -211,7 +211,7 @@ test("a repeater imported before a radio was picked passes that radio's prefligh
   const schema = await harness.runPythonJson("json.dumps(get_default_schema())");
   const table = await tableWithMetadata(schema.columns);
 
-  const { rows } = await table.buildRows((hooks) => buildRsgbRows(
+  const { rows } = await table.buildRows((hooks) => rsgbRows(
     [{
       record: {
         repeater: "GB3XP", tx: 145687500, rx: 145087500,
@@ -280,7 +280,7 @@ test("the startup schema imports every repeater a directory offers", async () =>
   const schema = await harness.runPythonJson("json.dumps(get_default_schema())");
   const table = await tableWithMetadata(schema.columns);
 
-  const { rows, skipped } = await table.buildRows((hooks) => buildPrzemiennikiRows([SR4X], hooks));
+  const { rows, skipped } = await table.buildRows((hooks) => rxfRows([SR4X], hooks));
 
   assert.deepEqual(skipped, []);
   assert.equal(rows[0].Frequency, "145.600000");
@@ -340,7 +340,7 @@ test("selecting a radio is what clears a power level it cannot hold", async () =
     }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     // The generic schema a channel is built under: its levels are the CSV
-    // driver's placeholders, and 50W is the one buildRsgbRows matches there.
+    // driver's placeholders, and 50W is the one the repeater row builder matches there.
     getDefaultSchema: async () => ({
       headers,
       columns: {
@@ -397,7 +397,7 @@ test("selecting a radio is what clears a power level it cannot hold", async () =
 test("a przemienniki query with no column metadata inserts its repeaters", async () => {
   const table = await tableWithMetadata();
 
-  const { rows, skipped } = await table.buildRows((hooks) => buildPrzemiennikiRows([SR4X], hooks));
+  const { rows, skipped } = await table.buildRows((hooks) => rxfRows([SR4X], hooks));
 
   assert.deepEqual(skipped, [], "nothing constrains the row, so nothing may be dropped");
   assert.equal(rows.length, 1);
@@ -413,7 +413,7 @@ test("a przemienniki query with no column metadata inserts its repeaters", async
 test("an RSGB query with no column metadata inserts its repeaters", async () => {
   const table = await tableWithMetadata();
 
-  const { rows, skipped } = await table.buildRows((hooks) => buildRsgbRows(
+  const { rows, skipped } = await table.buildRows((hooks) => rsgbRows(
     [{
       record: {
         repeater: "GB3XP", tx: 145687500, rx: 145087500,
@@ -430,7 +430,7 @@ test("an RSGB query with no column metadata inserts its repeaters", async () => 
   assert.equal(rows[0].Frequency, "145.687500");
   assert.equal(rows[0].Tone, "Tone");
   assert.equal(rows[0].rToneFreq, "77.0");
-  // The record carries no txbw, which findRsgbMode reads as narrow, so its
+  // The record carries no txbw, which rsgbToRepeaterRecord reads as narrow, so its
   // analogue ranking starts at NFM — the first choice, as everywhere else here.
   assert.equal(rows[0].Mode, "NFM");
 });
@@ -478,7 +478,7 @@ test("a selected radio still constrains what an import may write", async () => {
     Mode: { kind: "enum", editable: true, options: ["DV"] },
   }, [], runtimeApi);
 
-  const { rows, skipped } = await table.buildRows((hooks) => buildPrzemiennikiRows([SR4X], hooks));
+  const { rows, skipped } = await table.buildRows((hooks) => rxfRows([SR4X], hooks));
 
   assert.deepEqual(rows, []);
   assert.deepEqual(skipped, [{ repeater: "SR4X", reason: "tone", tone: "88.5" }]);

@@ -668,8 +668,8 @@ export function createChannelTable(ctx: UiContext) {
     };
   }
 
-  // Run a row builder (web/js/datasources.ts, web/js/rsgb.ts) against the
-  // runtime's rules. A builder decides as it writes -- a repeater whose access
+  // Run a row builder (web/js/repeater-rows.ts, web/js/datasources.ts) against
+  // the runtime's rules. A builder decides as it writes -- a repeater whose access
   // tone the radio cannot send is left out, a tone mode is committed only once
   // its tone was taken -- so it needs each write's verdict on the spot, and
   // those come from Python. So the builder is run, writes it has no verdict

@@ -3,11 +3,11 @@ import test from "node:test";
 
 import {
   DEFAULT_REPEATER_API_BASE,
-  buildPrzemiennikiRows,
   buildRepeaterEndpoints,
   fetchCitySuggestions,
   parseCitySuggestions,
 } from "../../web/js/datasources.ts";
+import { rxfRows } from "../support/repeater-rows.mjs";
 import { makeRowHooks } from "../support/row-hooks.mjs";
 
 // toneModes/crossModes stand in for the driver's valid_tmodes and
@@ -48,7 +48,7 @@ function rowHooks({
 // Build one repeater and hand back its row, so a tone case reads as its inputs
 // and its expectations rather than as scaffolding.
 function toneResult(repeater, { perspective = "repeater", ...hookOptions } = {}) {
-  return buildPrzemiennikiRows(
+  return rxfRows(
     [{ qra: "SRTEST", mode: "fm", qrgRx: 145.0, qrgTx: 145.6, ...repeater }],
     rowHooks(hookOptions),
     { perspective },
@@ -118,7 +118,7 @@ test("the default base points at the codeplug.org proxy", () => {
 });
 
 test("IRTS radio-perspective frequencies build a usable CHIRP channel", () => {
-  const { rows: [row], skipped } = buildPrzemiennikiRows([
+  const { rows: [row], skipped } = rxfRows([
     {
       qra: "EI2TRR",
       mode: "fm",
@@ -343,7 +343,7 @@ test("a one-sided entry falls back to its known frequency instead of inventing a
   // treated as a real 0 MHz frequency, so a lone 145.6 tx became Duplex "-"
   // with a 145.600000 offset (radio perspective lost the row outright).
   for (const perspective of ["repeater", "radio"]) {
-    const { rows: [row], skipped } = buildPrzemiennikiRows(
+    const { rows: [row], skipped } = rxfRows(
       [{ qra: "SRONE", mode: "fm", qrgRx: NaN, qrgTx: 145.6 }],
       rowHooks(),
       { perspective },
@@ -356,7 +356,7 @@ test("a one-sided entry falls back to its known frequency instead of inventing a
 });
 
 test("an entry with neither frequency is skipped rather than written as 0 MHz", () => {
-  const { rows, skipped } = buildPrzemiennikiRows(
+  const { rows, skipped } = rxfRows(
     [{ qra: "SRNONE", mode: "fm", qrgRx: NaN, qrgTx: NaN }],
     rowHooks(),
     { perspective: "radio" },
@@ -367,7 +367,7 @@ test("an entry with neither frequency is skipped rather than written as 0 MHz", 
 
 test("IRTS mode names map to CHIRP's DMR and Fusion values", () => {
   const base = { qra: "EI7TEST", qrgRx: 439.5, qrgTx: 430.5 };
-  const { rows, skipped } = buildPrzemiennikiRows(
+  const { rows, skipped } = rxfRows(
     [{ ...base, mode: "dmr" }, { ...base, mode: "fusion" }],
     rowHooks(),
     { perspective: "radio" },
@@ -378,7 +378,7 @@ test("IRTS mode names map to CHIRP's DMR and Fusion values", () => {
 
 test("unsupported digital modes are skipped instead of retaining FM or substituting DIG", () => {
   const base = { qra: "EI7TEST", qrgRx: 439.5, qrgTx: 430.5 };
-  const { rows, skipped } = buildPrzemiennikiRows(
+  const { rows, skipped } = rxfRows(
     [{ ...base, mode: "dmr" }, { ...base, qra: "EI7FUS", mode: "fusion" }],
     rowHooks({ modeOptions: ["FM", "DIG"] }),
     { perspective: "radio" },
@@ -391,7 +391,7 @@ test("unsupported digital modes are skipped instead of retaining FM or substitut
 });
 
 test("a repeater outside the radio's bands is skipped, not left as a blank frequency", () => {
-  const { rows, skipped } = buildPrzemiennikiRows(
+  const { rows, skipped } = rxfRows(
     [
       { qra: "SR2m", mode: "fm", qrgRx: 145.6, qrgTx: 145.0 },
       // 70cm on a 2m-only radio: the Frequency write is refused while the
@@ -408,7 +408,7 @@ test("a repeater outside the radio's bands is skipped, not left as a blank frequ
 });
 
 test("a repeater with no usable frequency at all is skipped", () => {
-  const { rows, skipped } = buildPrzemiennikiRows(
+  const { rows, skipped } = rxfRows(
     [{ qra: "SR0", mode: "fm" }],
     rowHooks(),
     { perspective: "radio" },
@@ -421,7 +421,7 @@ test("a repeater with no usable frequency at all is skipped", () => {
 test("an out-of-band repeater is reported as frequency, not as an unusable mode", () => {
   // The frequency guard runs before the mode lookup, so a row that fails both
   // is counted once and under the reason the user can act on.
-  const { rows, skipped } = buildPrzemiennikiRows(
+  const { rows, skipped } = rxfRows(
     [{ qra: "SRDMR", mode: "dmr", qrgRx: 1298.0, qrgTx: 1270.0 }],
     rowHooks({ modeOptions: ["FM"], maxFrequencyMhz: 470 }),
     { perspective: "radio" },

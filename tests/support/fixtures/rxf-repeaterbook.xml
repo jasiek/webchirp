@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A RepeaterBook-shaped RXF answer, written for the repeater tests rather than
+  copied from the directory. Shapes taken from the live feed on 2026-10-09:
+  radio perspective, lower-case modes (fm, dstar, dmr, fusion, p25, nxdn,
+  m17, tetra), ids like "6385-fm" (one per mode of a multi-mode machine),
+  CTCSS fields carrying CSQ, Restricted and DCS codes (D226), and two-decimal
+  tones such as 123.0.
+-->
+<rxf version="1.0">
+  <generator>RepeaterBook.com, used with permission</generator>
+  <perspective>radio</perspective>
+  <repeaters>
+    <repeater><qra>W1TST</qra><id>9001-fm</id><status>working</status><mode>fm</mode><band>70cm</band>
+      <qrg type="rx">447.27500</qrg><qrg type="tx">442.27500</qrg><country>us</country><qth>New Canaan, Connecticut, Fairfield</qth>
+      <location><locator></locator><latitude>41.14680099</latitude><longitude>-73.49490356</longitude></location>
+      <ctcss type="rx">123.0</ctcss><ctcss type="tx">123.0</ctcss><remarks>Use: OPEN | WIRES: 18572</remarks><link></link></repeater>
+    <repeater><qra>W1TST</qra><id>9001-fusion</id><status>working</status><mode>fusion</mode><band>70cm</band>
+      <qrg type="rx">447.27500</qrg><qrg type="tx">442.27500</qrg><country>us</country><qth>New Canaan, Connecticut, Fairfield</qth>
+      <location><latitude>41.14680099</latitude><longitude>-73.49490356</longitude></location>
+      <ctcss type="rx">123.0</ctcss><ctcss type="tx">123.0</ctcss><remarks>Use: OPEN</remarks><link></link></repeater>
+    <repeater><qra>W2TST</qra><id>9002-fm</id><status>working</status><mode>fm</mode><band>2m</band>
+      <qrg type="rx">146.94000</qrg><qrg type="tx">146.34000</qrg><country>us</country><qth>Manhattan, New York</qth>
+      <location><latitude>40.7484</latitude><longitude>-73.9857</longitude></location>
+      <ctcss type="rx">CSQ</ctcss><ctcss type="tx">136.5</ctcss><remarks>Use: OPEN</remarks><link></link></repeater>
+    <repeater><qra>W2TSU</qra><id>9003-fm</id><status>working</status><mode>fm</mode><band>70cm</band>
+      <qrg type="rx">443.20000</qrg><qrg type="tx">448.20000</qrg><country>us</country><qth>Brooklyn, New York</qth>
+      <location><latitude>40.6782</latitude><longitude>-73.9442</longitude></location>
+      <ctcss type="rx">D226</ctcss><ctcss type="tx">D226</ctcss><remarks>DCS only</remarks><link></link></repeater>
+    <repeater><qra>W2TSV</qra><id>9004-fm</id><status>working</status><mode>fm</mode><band>70cm</band>
+      <qrg type="rx">444.10000</qrg><qrg type="tx">449.10000</qrg><country>us</country><qth>Queens, New York</qth>
+      <location><latitude>40.7282</latitude><longitude>-73.7949</longitude></location>
+      <ctcss type="rx">Restricted</ctcss><ctcss type="tx">Restricted</ctcss><remarks>Use: CLOSED</remarks><link></link></repeater>
+    <repeater><qra>W2TSW</qra><id>9005-fm</id><status>working</status><mode>fm</mode><band>2m</band>
+      <qrg type="rx">147.30000</qrg><qrg type="tx">147.90000</qrg><country>us</country><qth>Newark, New Jersey</qth>
+      <location><latitude>40.7357</latitude><longitude>-74.1724</longitude></location>
+      <ctcss type="rx">151.4</ctcss><ctcss type="tx">D411</ctcss><remarks>mixed CTCSS and DCS</remarks><link></link></repeater>
+    <repeater><qra>W2DS</qra><id>9006-dstar</id><status>working</status><mode>dstar</mode><band>70cm</band>
+      <qrg type="rx">445.65000</qrg><qrg type="tx">440.65000</qrg><country>us</country><qth>Hoboken, New Jersey</qth>
+      <location><latitude>40.744</latitude><longitude>-74.0324</longitude></location><remarks></remarks><link></link></repeater>
+    <repeater><qra>W2DM</qra><id>9007-dmr</id><status>working</status><mode>dmr</mode><band>70cm</band>
+      <qrg type="rx">442.85000</qrg><qrg type="tx">447.85000</qrg><country>us</country><qth>Jersey City, New Jersey</qth>
+      <location><latitude>40.7178</latitude><longitude>-74.0431</longitude></location><remarks>CC1</remarks><link></link></repeater>
+    <repeater><qra>W2PT</qra><id>9008-p25</id><status>working</status><mode>p25</mode><band>2m</band>
+      <qrg type="rx">145.17000</qrg><qrg type="tx">144.57000</qrg><country>us</country><qth>Yonkers, New York</qth>
+      <location><latitude>40.9312</latitude><longitude>-73.8987</longitude></location><remarks>NAC 293</remarks><link></link></repeater>
+    <repeater><qra>W2NX</qra><id>9009-nxdn</id><status>working</status><mode>nxdn</mode><band>70cm</band>
+      <qrg type="rx">441.30000</qrg><qrg type="tx">446.30000</qrg><country>us</country><qth>Staten Island, New York</qth>
+      <location><latitude>40.5795</latitude><longitude>-74.1502</longitude></location><remarks>RAN 1</remarks><link></link></repeater>
+    <repeater><qra>W2MS</qra><id>9010-m17</id><status>working</status><mode>m17</mode><band>70cm</band>
+      <qrg type="rx">440.10000</qrg><qrg type="tx">445.10000</qrg><country>us</country><qth>Paterson, New Jersey</qth>
+      <location><latitude>40.9168</latitude><longitude>-74.1718</longitude></location><remarks></remarks><link></link></repeater>
+    <repeater><qra>W2OF</qra><id>9011-fm</id><status>offline</status><mode>fm</mode><band>1.25m</band>
+      <qrg type="rx">224.50000</qrg><qrg type="tx">222.90000</qrg><country>us</country><qth>White Plains, New York</qth>
+      <location><latitude>41.034</latitude><longitude>-73.7629</longitude></location>
+      <ctcss type="tx">114.8</ctcss><remarks>Use: OPEN</remarks><link></link></repeater>
+    <repeater><qra>W2SP</qra><id>9012-fm</id><status>working</status><mode>fm</mode><band>2m</band>
+      <qrg type="rx">146.52000</qrg><qrg type="tx">146.52000</qrg><country>us</country><qth>Fort Lee, New Jersey</qth>
+      <location><latitude>40.8509</latitude><longitude>-73.9701</longitude></location><remarks>simplex node</remarks><link></link></repeater>
+    <repeater><qra>W2SX</qra><id>9013-fm</id><status>working</status><mode>fm</mode><band>6m</band>
+      <qrg type="rx">53.25000</qrg><qrg type="tx">52.25000</qrg><country>us</country><qth>Stamford, Connecticut</qth>
+      <location><latitude>41.0534</latitude><longitude>-73.5387</longitude></location>
+      <ctcss type="tx">67.0</ctcss><remarks></remarks><link></link></repeater>
+    <repeater><qra>W2TE</qra><id>9014-tetra</id><status>working</status><mode>tetra</mode><band>70cm</band>
+      <qrg type="rx">439.00000</qrg><qrg type="tx">434.00000</qrg><country>us</country><qth>Bayonne, New Jersey</qth>
+      <location><latitude>40.6687</latitude><longitude>-74.1143</longitude></location><remarks></remarks><link></link></repeater>
+  </repeaters>
+</rxf>
