@@ -160,7 +160,6 @@ function writeLineOnlyLcov(targetPath: string, filesByPath: Map<string, PythonFi
 function runSuiteWithCoverage(testFiles: readonly string[]): void {
   const args = [
     "--test",
-    "--experimental-wasm-stack-switching",
     "--experimental-test-coverage",
     // Measure what ships, not the scripts that exercise it.
     "--test-coverage-include=web/**",

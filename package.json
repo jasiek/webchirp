@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm run build:version && npm run build:chirp && npm run build:pages && node scripts/dev-server.ts",
-    "build:catalog": "node --experimental-wasm-stack-switching scripts/build-catalog.ts",
+    "build:catalog": "node scripts/build-catalog.ts",
     "build:chirp": "node scripts/build-chirp-bundle.ts",
     "build:version": "node scripts/build-version.ts",
     "build:icons": "node scripts/build-icons.ts",
@@ -17,19 +17,19 @@
     "coverage:show": "node scripts/coverage-report.ts",
     "test:ci": "npm run check:syntax && npm run check:types && npm run check:js && npm run check:python && npm run coverage",
     "ga:dimensions": "node scripts/ga-dimensions.ts",
-    "radio:read": "node --experimental-wasm-stack-switching scripts/radio-codeplug.ts read",
-    "radio:write": "node --experimental-wasm-stack-switching scripts/radio-codeplug.ts write",
+    "radio:read": "node scripts/radio-codeplug.ts read",
+    "radio:write": "node scripts/radio-codeplug.ts write",
     "test": "npm run check:syntax && npm run check:types && npm run check:js && npm run test:channels && npm run test:webusb && npm run test:settings && npm run test:build",
     "check:syntax": "find web scripts tests -name '*.js' -o -name '*.mjs' | xargs -n1 node --check",
     "check:python": "python3 -m compileall -q web/python tests/support/python_coverage.py tests/support/bridge_namespace.py",
     "check:types": "pyright",
     "check:js": "tsc -p . && tsc -p scripts",
-    "test:channels": "node --test --experimental-wasm-stack-switching tests/channels/*.mjs",
+    "test:channels": "node --test tests/channels/*.mjs",
     "test:webusb": "node --test tests/webusb/*.mjs",
     "test:build": "node --test tests/build/*.mjs",
     "test:api": "node --test tests/manual/rsgb-live.mjs",
-    "test:hw": "node --experimental-wasm-stack-switching tests/manual/hw-radio.mjs",
-    "test:settings": "node --test --experimental-wasm-stack-switching tests/settings/*.mjs"
+    "test:hw": "node tests/manual/hw-radio.mjs",
+    "test:settings": "node --test tests/settings/*.mjs"
   },
   "dependencies": {
     "@sentry/browser": "^10.73.0",
