@@ -123,12 +123,15 @@ export interface DisconnectNotifier {
 }
 
 /** One member of the contract and the test a port's value for it must pass. */
+/** An object that claims to be a port: any member may be missing or wrong. */
+type PortUnderTest = Partial<SerialTransport>;
+
 export interface SerialTransportMember {
   name: string;
   /** What a passing value looks like, for the error. */
   expect: string;
   /** Given an object that claims to be a port, whatever it actually holds. */
-  check: (port: Partial<SerialTransport>) => boolean;
+  check: (port: PortUnderTest) => boolean;
 }
 
 // The transport names a port may declare.
@@ -177,27 +180,27 @@ export const SERIAL_TRANSPORT_MEMBERS: readonly Readonly<SerialTransportMember>[
   Object.freeze({
     name: "transport",
     expect: `one of ${SERIAL_TRANSPORT_NAMES.join(", ")}`,
-    check: (port) => SERIAL_TRANSPORT_NAMES.includes(port.transport as string),
+    check: (port: PortUnderTest) => SERIAL_TRANSPORT_NAMES.includes(port.transport as string),
   }),
   Object.freeze({
     name: "capabilities",
     expect: "{framing: boolean, signals: boolean, reconfigure: \"reopen\"|\"update\"}",
-    check: (port) => isCapabilities(port.capabilities),
+    check: (port: PortUnderTest) => isCapabilities(port.capabilities),
   }),
-  Object.freeze({ name: "open", expect: "a method", check: (port) => isFunction(port.open) }),
-  Object.freeze({ name: "close", expect: "a method", check: (port) => isFunction(port.close) }),
-  Object.freeze({ name: "readable", expect: "a member (null while closed)", check: (port) => "readable" in port }),
-  Object.freeze({ name: "writable", expect: "a member (null while closed)", check: (port) => "writable" in port }),
-  Object.freeze({ name: "setSignals", expect: "a method", check: (port) => isFunction(port.setSignals) }),
-  Object.freeze({ name: "getInfo", expect: "a method", check: (port) => isFunction(port.getInfo) }),
-  Object.freeze({ name: "usbDevice", expect: "a member (USBDevice or null)", check: (port) => "usbDevice" in port }),
-  Object.freeze({ name: "onDisconnect", expect: "a method", check: (port) => isFunction(port.onDisconnect) }),
+  Object.freeze({ name: "open", expect: "a method", check: (port: PortUnderTest) => isFunction(port.open) }),
+  Object.freeze({ name: "close", expect: "a method", check: (port: PortUnderTest) => isFunction(port.close) }),
+  Object.freeze({ name: "readable", expect: "a member (null while closed)", check: (port: PortUnderTest) => "readable" in port }),
+  Object.freeze({ name: "writable", expect: "a member (null while closed)", check: (port: PortUnderTest) => "writable" in port }),
+  Object.freeze({ name: "setSignals", expect: "a method", check: (port: PortUnderTest) => isFunction(port.setSignals) }),
+  Object.freeze({ name: "getInfo", expect: "a method", check: (port: PortUnderTest) => isFunction(port.getInfo) }),
+  Object.freeze({ name: "usbDevice", expect: "a member (USBDevice or null)", check: (port: PortUnderTest) => "usbDevice" in port }),
+  Object.freeze({ name: "onDisconnect", expect: "a method", check: (port: PortUnderTest) => isFunction(port.onDisconnect) }),
   Object.freeze({
     name: "reconfigure",
     expect: "a method, since capabilities.reconfigure is \"update\"",
-    check: (port) => port.capabilities?.reconfigure !== "update" || isFunction(port.reconfigure),
+    check: (port: PortUnderTest) => port.capabilities?.reconfigure !== "update" || isFunction(port.reconfigure),
   }),
-] satisfies Readonly<SerialTransportMember>[]);
+]);
 
 // Throw naming every member the port is missing or has in the wrong shape,
 // all at once, the way web/js/ui/dom.ts reports missing elements: a port that
