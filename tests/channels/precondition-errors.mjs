@@ -21,7 +21,7 @@ import { initOptions } from "../../web/js/sentry.ts";
 import { isPythonError, runtimeErrorSentence } from "../../web/js/runtime-errors.ts";
 import { createDebugLog } from "../../web/js/ui/debug-log.ts";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
-import { fakeDebugDom } from "../support/fake-dom.mjs";
+import { debugPanelElements } from "../support/ui-interactions.mjs";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
 const UPLOAD_SENTENCE = "No cached radio image for this model. Download from radio first, then upload.";
@@ -82,7 +82,7 @@ test("the sentence is the Python message, not the traceback that carries it", ()
 
 test("a precondition failure raises a notice instead of a bug report", () => {
   const shown = [];
-  const dom = fakeDebugDom();
+  const dom = debugPanelElements();
   const log = createDebugLog({ dom, notice: { show: (notice) => shown.push(notice) } });
 
   log.reportActionError("Upload", uploadPreconditionError());
@@ -102,7 +102,7 @@ test("a precondition failure raises a notice instead of a bug report", () => {
 
 test("an ordinary failure still opens the panel and raises no notice", () => {
   const shown = [];
-  const dom = fakeDebugDom();
+  const dom = debugPanelElements();
   const log = createDebugLog({ dom, notice: { show: (notice) => shown.push(notice) } });
 
   log.reportActionError("Upload", runtimeCallError("RadioError", "Radio did not respond"));

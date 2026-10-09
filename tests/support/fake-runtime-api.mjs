@@ -3,7 +3,7 @@
 // The UI opens a radio session for every selection (web/js/ui/radio-session.ts)
 // and names it by sessionId on every radio-bound call, so a stub of the
 // runtime API has to answer openRadioSession/closeRadioSession and read the
-// id back into the radio it stands for. The fake-DOM tests are about the
+// id back into the radio it stands for. The headless UI tests are about the
 // editor, not about session plumbing, and their stubs are written against
 // ({ module, className }) payloads; this wrapper keeps them that way. It
 // hands out ids, translates a call's sessionId back into the module and class
@@ -81,7 +81,7 @@ export function withRadioSessions(api) {
 }
 
 // A stand-in for the runtime's normalize_and_validate_rows
-// (web/python/webchirp_bridge/row_validation.py), for fake-DOM tests about
+// (web/python/webchirp_bridge/row_validation.py), for headless UI tests about
 // what the grid does with an answer rather than about the rules themselves,
 // which tests/channels/row-normalization.mjs pins against the real runtime.
 //

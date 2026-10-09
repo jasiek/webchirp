@@ -5,10 +5,10 @@ import "../support/register-cdn-imports.mjs";
 import { createDebugLog } from "../../web/js/ui/debug-log.ts";
 import { initOptions, initSentry, resetSentryForTests } from "../../web/js/sentry.ts";
 import { markBootstrapFailure } from "../../web/js/runtime-bootstrap.ts";
-import { fakeDebugDom } from "../support/fake-dom.mjs";
+import { debugPanelElements } from "../support/ui-interactions.mjs";
 
 test("debug output is folded initially and toggles both hidden regions together", () => {
-  const dom = fakeDebugDom();
+  const dom = debugPanelElements();
   const log = createDebugLog({ dom });
   log.bindEvents();
 
@@ -28,7 +28,7 @@ test("debug output is folded initially and toggles both hidden regions together"
 });
 
 test("routine logs stay folded but explicitly reported errors expand the panel", () => {
-  const dom = fakeDebugDom();
+  const dom = debugPanelElements();
   const log = createDebugLog({ dom });
   log.bindEvents();
 
@@ -48,10 +48,8 @@ test("routine logs stay folded but explicitly reported errors expand the panel",
 });
 
 test("a delayed clipboard failure reopens a panel collapsed while copying", async () => {
-  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: {
+  const dom = debugPanelElements({
+    navigator: {
       clipboard: {
         async writeText() {
           throw new Error("Clipboard permission denied");
@@ -59,28 +57,18 @@ test("a delayed clipboard failure reopens a panel collapsed while copying", asyn
       },
     },
   });
+  const log = createDebugLog({ dom });
+  log.bindEvents();
+  dom.debugToggleEl.click();
 
-  try {
-    const dom = fakeDebugDom();
-    const log = createDebugLog({ dom });
-    log.bindEvents();
-    dom.debugToggleEl.click();
+  const copying = log.copyToClipboard();
+  dom.debugToggleEl.click();
+  assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "false");
 
-    const copying = log.copyToClipboard();
-    dom.debugToggleEl.click();
-    assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "false");
-
-    await copying;
-    assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "true");
-    assert.match(dom.debugOutputEl.value, /DEBUG COPY ERROR/);
-    assert.match(dom.debugOutputEl.value, /Clipboard permission denied/);
-  } finally {
-    if (navigatorDescriptor) {
-      Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
-    } else {
-      delete globalThis.navigator;
-    }
-  }
+  await copying;
+  assert.equal(dom.debugToggleEl.getAttribute("aria-expanded"), "true");
+  assert.match(dom.debugOutputEl.value, /DEBUG COPY ERROR/);
+  assert.match(dom.debugOutputEl.value, /Clipboard permission denied/);
 });
 
 // One failure must produce one Sentry event. A failed runtime bootstrap is
@@ -117,7 +105,7 @@ test("a bootstrap failure returning through an action is captured only once", as
   const sdk = makeSentrySdk();
   await initSentry(makeSentryWindow(), { loadSdk: async () => sdk });
 
-  const log = createDebugLog({ dom: fakeDebugDom() });
+  const log = createDebugLog({ dom: debugPanelElements() });
 
   // What web/js/runtime-rpc.ts rethrows once it has already reported the crash.
   const crash = markBootstrapFailure(new Error("RuntimeError: seeding failed"));
@@ -134,7 +122,7 @@ test("an ordinary action failure is still captured by the action funnel", async 
   const sdk = makeSentrySdk();
   await initSentry(makeSentryWindow(), { loadSdk: async () => sdk });
 
-  const log = createDebugLog({ dom: fakeDebugDom() });
+  const log = createDebugLog({ dom: debugPanelElements() });
   log.reportActionError("Download", new Error("Failed to fetch"));
 
   assert.equal(sdk.captured.length, 1);
@@ -156,7 +144,7 @@ test("runtime errors keep their message through debug output and Sentry when sta
   t.after(resetSentryForTests);
   const sdk = makeSentrySdk();
   await initSentry(makeSentryWindow(), { loadSdk: async () => sdk });
-  const dom = fakeDebugDom();
+  const dom = debugPanelElements();
   const log = createDebugLog({ dom });
   const runtimeLines = [];
   const runtime = createRuntimeRpcClient({ logDebug: (line) => runtimeLines.push(line) });
@@ -186,7 +174,7 @@ test("input the form rejected is shown to the user and never captured", async ()
   await initSentry(makeSentryWindow(), { loadSdk: async () => sdk });
 
   const shown = [];
-  const dom = fakeDebugDom();
+  const dom = debugPanelElements();
   const log = createDebugLog({ dom, notice: { show: (options) => shown.push(options) } });
   log.reportActionRejected("RSGB ETCC query", new Error("Set a location first."));
 

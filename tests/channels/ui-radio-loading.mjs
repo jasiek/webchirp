@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { installIndexPage } from "../support/index-page.mjs";
 import {
-  UI_STUBBED_SELECTORS,
   createDeferred,
+  domEvent,
   flushMicrotasks,
-  installFakeDom,
   keydownEvent,
   selectRadioBySearch,
   typeRadioSearch,
-} from "../support/fake-dom.mjs";
+} from "../support/ui-interactions.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
-// Installs the shared fake DOM and picks out the radio-search elements these
-// tests read and drive.
-function installUiDom() {
-  const { document } = installFakeDom();
+// Loads index.html (at url, when a test needs a ?radio= link) and picks out
+// the radio-search elements these tests read and drive.
+function installUiDom(url = null) {
+  const { document } = installIndexPage({ url });
   return {
     document,
     radioSearchEl: document.querySelector("#radio-search"),
@@ -28,8 +28,8 @@ function installUiDom() {
 // Each suggestion renders as a name element plus, when the query hit an alias,
 // a second line naming it. Read them apart rather than as one blob of text.
 function suggestionLines(radioSearchResultsEl) {
-  return radioSearchResultsEl.children.map((li) =>
-    li.children.map((span) => span.textContent),
+  return Array.from(radioSearchResultsEl.children).map((li) =>
+    Array.from(li.children).map((span) => span.textContent),
   );
 }
 
@@ -120,20 +120,20 @@ test("search box shows narrowing make+model suggestions", async () => {
   typeRadioSearch(document, "acme");
   assert.equal(radioSearchResultsEl.hidden, false);
   assert.deepEqual(
-    radioSearchResultsEl.children.map((li) => li.textContent),
+    Array.from(radioSearchResultsEl.children).map((li) => li.textContent),
     ["Acme Alpha", "Acme Beta"],
   );
 
   // A model query narrows the list to the matching radio.
   typeRadioSearch(document, "uv-5r");
   assert.deepEqual(
-    radioSearchResultsEl.children.map((li) => li.textContent),
+    Array.from(radioSearchResultsEl.children).map((li) => li.textContent),
     ["Baofeng UV-5R"],
   );
 
   // No matches shows an inert placeholder row.
   typeRadioSearch(document, "nonesuch");
-  assert.deepEqual(radioSearchResultsEl.children.map((li) => li.textContent), ["No matching radios"]);
+  assert.deepEqual(Array.from(radioSearchResultsEl.children).map((li) => li.textContent), ["No matching radios"]);
   assert.ok(radioSearchResultsEl.children[0].classList.contains("radio-search-empty"));
 
   // The combobox points a screen reader at the highlighted suggestion, since
@@ -188,9 +188,9 @@ test("search suggestions disambiguate duplicates, cap results, and close on Esca
 
   // Duplicate "<Make> <Model>" labels are disambiguated by driver class.
   radioSearchEl.value = "twin";
-  radioSearchEl.dispatchEvent({ type: "input" });
+  radioSearchEl.dispatchEvent(domEvent({ type: "input" }));
   assert.deepEqual(
-    radioSearchResultsEl.children.map((li) => li.textContent),
+    Array.from(radioSearchResultsEl.children).map((li) => li.textContent),
     ["Acme Twin (TwinA)", "Acme Twin (TwinB)"],
   );
 
@@ -198,16 +198,16 @@ test("search suggestions disambiguate duplicates, cap results, and close on Esca
   // release-specific drivers with the same model remain distinguishable.
   typeRadioSearch(document, "v5.9.0");
   assert.deepEqual(
-    radioSearchResultsEl.children.map((li) => li.textContent),
+    Array.from(radioSearchResultsEl.children).map((li) => li.textContent),
     ["Acme Versioned — driver v5.9.0"],
   );
 
   // More than 50 matches: list is capped and a footer reports the overflow.
   radioSearchEl.value = "filler";
-  radioSearchEl.dispatchEvent({ type: "input" });
-  const optionItems = radioSearchResultsEl.querySelectorAll("li[role='option']");
+  radioSearchEl.dispatchEvent(domEvent({ type: "input" }));
+  const optionItems = Array.from(radioSearchResultsEl.querySelectorAll("li[role='option']"));
   assert.equal(optionItems.length, 50);
-  const footer = radioSearchResultsEl.children.at(-1);
+  const footer = Array.from(radioSearchResultsEl.children).at(-1);
   assert.ok(footer.classList.contains("radio-search-more"));
   assert.equal(footer.textContent, "10 more — keep typing to narrow down");
 
@@ -219,7 +219,7 @@ test("search suggestions disambiguate duplicates, cap results, and close on Esca
 
 function tableHeaderTexts(document) {
   const headerRow = document.querySelector("#mem-table thead").children[0];
-  return (headerRow?.children || []).map((th) => th.textContent);
+  return Array.from(headerRow?.children || [], (th) => th.textContent);
 }
 
 
@@ -280,7 +280,7 @@ test("release labels are searchable and displayed without changing native varian
   const control = document.querySelector("#settings-content").querySelector("input");
   assert.ok(control);
   control.value = "Unsaved edit";
-  control.dispatchEvent({ type: "change", target: control });
+  control.dispatchEvent(domEvent({ type: "change" }));
   selectRadioBySearch(document, "v5.9.0");
   await flushMicrotasks();
   assert.deepEqual(metadataCalls, ["release0"]);
@@ -332,11 +332,9 @@ test("returning to a loaded release while another release is pending requests th
 test("reselecting a release restored from a cookie or link preserves edits without loading again", async () => {
   const { createUiController } = await import("../../web/js/ui.ts");
   for (const source of ["cookie", "link"]) {
-    const { document } = installUiDom();
+    const { document } = installUiDom(source === "link" ? "?radio=release0%3ARadio" : null);
     if (source === "cookie") {
       document.cookie = `webchirp_last_radio=${encodeURIComponent(JSON.stringify({ make: "Quansheng", key: "release0:Radio" }))}`;
-    } else {
-      globalThis.window.location = { search: "?radio=release0%3ARadio" };
     }
     const ui = createUiController();
     const metadataCalls = [];
@@ -359,7 +357,7 @@ test("reselecting a release restored from a cookie or link preserves edits witho
     const control = document.querySelector("#settings-content").querySelector("input");
     assert.ok(control, `${source} should restore release settings`);
     control.value = "Startup edit";
-    control.dispatchEvent({ type: "change", target: control });
+    control.dispatchEvent(domEvent({ type: "change" }));
     selectRadioBySearch(document, "v5.9.0");
     await flushMicrotasks();
     assert.deepEqual(metadataCalls, ["release0"], source);
@@ -558,7 +556,7 @@ test("picking a search suggestion names the radio in the readout and loads it on
   typeRadioSearch(document, "co");
   assert.equal(metadataCalls.length, callsAfterInit);
   assert.deepEqual(
-    radioSearchResultsEl.children.map((li) => li.textContent),
+    Array.from(radioSearchResultsEl.children).map((li) => li.textContent),
     ["SlowCo Slow", "FastCo Fast"],
   );
 
@@ -578,7 +576,7 @@ test("picking a search suggestion names the radio in the readout and loads it on
   // Clicking a suggestion with the mouse selects it as well.
   typeRadioSearch(document, "slow");
   const slowItem = radioSearchResultsEl.children[0];
-  radioSearchResultsEl.dispatchEvent({ type: "mousedown", target: slowItem, preventDefault() {} });
+  slowItem.dispatchEvent(domEvent({ type: "mousedown" }));
   await flushMicrotasks();
 
   assert.equal(radioSelectionNameEl.textContent, "SlowCo Slow");
@@ -751,27 +749,4 @@ test("serial and clone actions stay disabled until a radio is selected", async (
   assert.equal(connectEl.disabled, false);
   // Clone still waits on an open port, but the radio is no longer the blocker.
   assert.equal(downloadEl.title, "Connect to a serial port first");
-});
-
-// The shared fake DOM (tests/support/fake-dom.mjs) stubs a page for the
-// UI to run against, so it can drift from the real page in a way index.html
-// cannot: a stub for a deleted element keeps every UI test green while
-// production has nothing there. It happened — the four #serial-transaction /
-// #tx-hex / #rx-bytes / #rx-timeout stubs outlived the debug panel ff5607a
-// removed, and nothing noticed. Pin the stub list to the element contract
-// instead, so a removed id fails here as well as in test-dom-selectors.mjs.
-test("every stubbed element is one dom.ts actually declares", async () => {
-  const { REQUIRED_ELEMENTS, ELEMENT_COLLECTIONS } = await import("../../web/js/ui/dom.ts");
-  const declared = new Set([
-    ...Object.values(REQUIRED_ELEMENTS),
-    ...Object.values(ELEMENT_COLLECTIONS),
-  ]);
-
-  const orphaned = [...UI_STUBBED_SELECTORS.keys()].filter((selector) => !declared.has(selector));
-  assert.deepEqual(
-    orphaned,
-    [],
-    "these selectors are stubbed but no longer required by the UI; the test is "
-      + "asserting against a page shape production cannot have",
-  );
 });

@@ -1524,8 +1524,11 @@ export function createChannelTable(ctx: UiContext) {
   function visibleRowRange() {
     const total = state.currentRows.length;
     const viewportHeight = dom.tableScrollEl.clientHeight;
-    // Headless callers (the tests' DOM stub) have no layout to virtualize
-    // against; render every row so assertions see the whole grid.
+    // Headless callers have no layout to virtualize against: the unit tests
+    // run on jsdom, which measures nothing, and tests/support/index-page.mjs
+    // leaves clientHeight unmeasured. Render every row so their assertions see
+    // the whole grid; the windowing below is covered by the browser tests in
+    // tests/e2e.
     if (!Number.isFinite(viewportHeight)) {
       return { start: 0, count: total };
     }

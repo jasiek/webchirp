@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSerialRpcHandler } from "../../web/js/serial-globals.ts";
-import { installFakeDom } from "../support/fake-dom.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
 
 test("progress op forwards CHIRP status reports to onProgress", async () => {
   const reports = [];
@@ -27,12 +27,11 @@ test("progress op is a no-op without an onProgress sink", async () => {
   assert.deepEqual(res, { reported: true });
 });
 
-// The shared fake DOM stands in for createUiController: every selector
-// resolves to an element, and #clone-progress-bar is stubbed as a <progress>,
-// whose fake mirrors the real element's value-attribute reflection so
-// indeterminate state (no value attribute) is observable.
+// index.html's clone progress elements. The bar is a real <progress>, which
+// reflects value to its value attribute, so the indeterminate state (no value
+// attribute) is observable.
 function installProgressDom() {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   return {
     bar: document.querySelector("#clone-progress-bar"),
     label: document.querySelector("#clone-progress-label"),

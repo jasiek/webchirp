@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { installFakeDom } from "../support/fake-dom.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // A ?radio= link is how a per-model page (web/radios/, built by
@@ -27,7 +27,7 @@ function stubRuntimeApi(ui) {
 }
 
 async function bootWith(search) {
-  const { document, restore } = installFakeDom({ window: { location: { search } } });
+  const { document, restore } = installIndexPage({ url: search });
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   stubRuntimeApi(ui);

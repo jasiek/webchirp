@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { FakeElement } from "../support/fake-dom.mjs";
+import { installIndexPage, pageElement } from "../support/index-page.mjs";
+import { dispatch } from "../support/ui-interactions.mjs";
 import { makeWindow } from "../support/fake-window.mjs";
 import { initSentry, resetSentryForTests } from "../../web/js/sentry.ts";
 import { createSerialUnsupportedError } from "../../web/js/serial-errors.ts";
@@ -11,19 +12,19 @@ import { createSerialUnsupportedError } from "../../web/js/serial-errors.ts";
 
 // Presses the connect toggle and waits for its click handler to finish.
 function pressConnectToggle(ctx) {
-  return ctx.dom.serialConnectToggleEl.dispatch("click");
+  return dispatch(ctx.dom.serialConnectToggleEl, "click");
 }
 
 // Build a serial action context with independently selectable connection results.
 function makeContext({ hasInvalidSettings = false, transport = "webserial" } = {}) {
   const dom = {
-    serialConnectToggleEl: new FakeElement(),
-    webusbConnectToggleEl: new FakeElement(),
-    webbluetoothConnectToggleEl: new FakeElement(),
-    radioDownloadEl: new FakeElement(),
-    radioUploadEl: new FakeElement(),
-    liveRadioSupportWarningEl: new FakeElement(),
-    unsupportedBrowserContinueEl: new FakeElement(),
+    serialConnectToggleEl: pageElement("serialConnectToggleEl"),
+    webusbConnectToggleEl: pageElement("webusbConnectToggleEl"),
+    webbluetoothConnectToggleEl: pageElement("webbluetoothConnectToggleEl"),
+    radioDownloadEl: pageElement("radioDownloadEl"),
+    radioUploadEl: pageElement("radioUploadEl"),
+    liveRadioSupportWarningEl: pageElement("liveRadioSupportWarningEl"),
+    unsupportedBrowserContinueEl: pageElement("unsupportedBrowserContinueEl"),
     sidebarControlEls: [],
   };
   dom.sidebarControlEls = [
@@ -56,10 +57,7 @@ function makeContext({ hasInvalidSettings = false, transport = "webserial" } = {
 
 // Set the platform before importing UI helpers so each case controls visibility.
 async function loadSerialActions(userAgent = "FakeBrowser/1.0") {
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: { userAgent, maxTouchPoints: 0 },
-  });
+  installIndexPage({ navigator: { userAgent, maxTouchPoints: 0 } });
   const { createSerialActions } = await import("../../web/js/ui/serial-actions.ts");
   return createSerialActions;
 }
@@ -257,13 +255,13 @@ test("each connected transport leaves exactly its own Disconnect button", async 
       webbluetooth: ctx.dom.webbluetoothConnectToggleEl,
     };
     const activeButton = buttons[transport];
-    await activeButton.dispatch("click");
+    await dispatch(activeButton, "click");
     assert.deepEqual(preferred, [transport === "webserial" ? "auto" : transport]);
     assert.deepEqual(Object.values(buttons).filter((button) => !button.hidden), [activeButton]);
     assert.equal(activeButton.textContent, "Disconnect");
     assert.equal(ctx.dom.radioDownloadEl.disabled, false);
 
-    await activeButton.dispatch("click");
+    await dispatch(activeButton, "click");
     assert.ok(Object.values(buttons).every((button) => !button.hidden));
     assert.equal(ctx.dom.webbluetoothConnectToggleEl.textContent, "Connect via WebBluetooth");
     assert.equal(ctx.dom.radioDownloadEl.disabled, true);
@@ -304,12 +302,12 @@ test("WebBluetooth follows selection, startup, busy and JSPI restrictions", asyn
   };
   serial.bindEvents();
   serial.setCloneSupported(false);
-  await button.dispatch("click");
+  await dispatch(button, "click");
   assert.equal(connectCalls, 0);
   assert.match(statuses.at(-1), /JSPI/);
 
   serial.setCloneSupported(true);
-  await button.dispatch("click");
+  await dispatch(button, "click");
   assert.equal(connectCalls, 1);
   assert.equal(button.disabled, true);
   assert.equal(ctx.dom.serialConnectToggleEl.disabled, true);

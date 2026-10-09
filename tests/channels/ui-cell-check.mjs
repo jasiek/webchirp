@@ -14,14 +14,15 @@ import test from "node:test";
 // tests/channels/row-normalization.mjs and tests/channels/row-edit-check.mjs;
 // here the runtime is a stand-in (fakeRowCheck) whose answers each test
 // controls, so what is tested is what the grid does with them.
+import { installIndexPage } from "../support/index-page.mjs";
 import {
   channelRows,
   clickLocationButton,
+  domEvent,
   flushMicrotasks,
   importSampleCsv,
-  installFakeDom,
   selectRadioBySearch,
-} from "../support/fake-dom.mjs";
+} from "../support/ui-interactions.mjs";
 import { fakeRowCheck, withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 const HEADERS = ["Location", "Name", "Frequency", "Power"];
@@ -56,7 +57,7 @@ function nameVerdict(column, value, _previous, { payload }) {
 }
 
 async function grid(rowCheckOptions = {}) {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const rowCheck = fakeRowCheck({ verdict: nameVerdict, ...rowCheckOptions });
@@ -85,9 +86,8 @@ function cell(document, rowIdx, column) {
 function commit(document, rowIdx, column, text) {
   const editor = cell(document, rowIdx, column).children[0];
   editor.value = text;
-  document.activeElement = editor;
-  document.querySelector("#mem-table tbody").dispatchEvent({ type: "focusout", target: editor });
-  document.activeElement = null;
+  editor.focus();
+  editor.blur();
 }
 
 test("a committed cell shows what was typed, pending, then what the runtime stored", async () => {
@@ -211,7 +211,7 @@ test("a paste is checked in one call, however many rows and cells it writes", as
     readText: async () => "Name\tFrequency\nCHARLIE\t145.100000\nDELTA\t145.200000\nECHO\t145.300000\n",
   };
 
-  document.querySelector("#channel-paste").dispatchEvent({ type: "click" });
+  document.querySelector("#channel-paste").dispatchEvent(domEvent({ type: "click" }));
   await flushMicrotasks();
 
   assert.equal(rowCheck.calls.length, 1);
@@ -238,7 +238,7 @@ test("a finding is on the editor the user hovers, ahead of the editor's own titl
   assert.match(select().title, /Driver power levels: High = 5\.0W, Low = 1\.0W/);
 
   select().value = "Low";
-  document.querySelector("#mem-table tbody").dispatchEvent({ type: "change", target: select() });
+  select().dispatchEvent(domEvent({ type: "change" }));
   await flushMicrotasks();
 
   assert.equal(cell(document, 0, "Power").classList.contains("is-invalid"), true);
@@ -248,7 +248,7 @@ test("a finding is on the editor the user hovers, ahead of the editor's own titl
   // A recycled editor must not carry the note to the next channel it shows,
   // and clearing the finding gives the editor back its own title.
   select().value = "High";
-  document.querySelector("#mem-table tbody").dispatchEvent({ type: "change", target: select() });
+  select().dispatchEvent(domEvent({ type: "change" }));
   await flushMicrotasks();
   assert.equal(select().title, "Driver power levels: High = 5.0W, Low = 1.0W");
   assert.equal(cell(document, 1, "Power").children[0].title, "Driver power levels: High = 5.0W, Low = 1.0W");
@@ -290,7 +290,7 @@ test("an answer for a row that moved to another memory is discarded and the edit
   assert.equal(rowCheck.calls[0].rows[0].row.Location, "0");
 
   clickLocationButton(document, 0);
-  document.querySelector("#channel-move-down").dispatchEvent({ type: "click" });
+  document.querySelector("#channel-move-down").dispatchEvent(domEvent({ type: "click" }));
   await flushMicrotasks();
 
   rowCheck.release(0);
@@ -314,7 +314,7 @@ test("a band plan built against a radio no longer selected is built again for th
   // and inserted rows normalized by the wrong driver.
   const { document, rowCheck } = await grid({ held: true });
 
-  document.querySelector("#channel-add-pmr446").dispatchEvent({ type: "click" });
+  document.querySelector("#channel-add-pmr446").dispatchEvent(domEvent({ type: "click" }));
   await flushMicrotasks();
   assert.equal(rowCheck.calls.length, 1);
   assert.equal(rowCheck.calls[0].module, "one");

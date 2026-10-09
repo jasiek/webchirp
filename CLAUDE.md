@@ -100,8 +100,8 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   comes from the manifest. The Node harness (`tests/support/chirp-bundle-source.mjs`)
   builds the same archive in-process from the submodule.
 - `tests/`: The node:test suite, one directory per suite — `channels` and
-  `settings` boot Pyodide and need `--experimental-wasm-stack-switching`,
-  `webusb` and `build` do not. `manual` holds the two tests npm test never
+  `settings` boot Pyodide (the clone tests use JSPI, which Node 25 has on by
+  default: no flag), `webusb` and `build` do not. `manual` holds the two tests npm test never
   runs (`rsgb-live` needs the network, `hw-radio` needs a radio on a serial
   port). `support` holds shared fixtures and the two harnesses, not tests.
 - `scripts/`: Build, coverage and CLI tooling only. No tests live here.
@@ -157,6 +157,20 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   a new one.
 - A file in a suite directory is executed by the runner, so a helper with no
   tests in it goes in `tests/support/`, not beside its callers.
+- UI tests run on the real page: `installIndexPage()`
+  (`tests/support/index-page.mjs`) loads `web/index.html` into jsdom once per
+  test file and resets it between tests, and installs `window`, `document`,
+  `navigator` and the DOM constructors as globals; options add window,
+  navigator or global stubs, a `url` (`?radio=`), or another page under
+  `web/`. Drive it like a user with `tests/support/ui-interactions.mjs`
+  (`dispatch`/`emit`, which also await async listeners, `selectRadioBySearch`,
+  `importSampleCsv`, `clickLocationButton`, `setLayout`, `setInputFiles`...).
+  Dispatch at the element a user would touch and let it bubble; never set an
+  event's `target`. A module handed a partial `ctx.dom` gets index.html's
+  elements through `pageElement(name)`; an element the page lacks is created
+  explicitly by the test, with a comment saying why. jsdom does no layout, so
+  the channel grid renders every row under test; windowing is covered by the
+  browser tests.
 
 ### UI module conventions
 - Each module is a `create<Area>(ctx)` factory. `ctx` carries `dom`, `state`,

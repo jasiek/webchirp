@@ -2,16 +2,23 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { classifyLoadableFile } from "../../web/js/ui/codeplug-io.ts";
-import { closeVivifiedModals, flushMicrotasks, installFakeDom, selectRadioBySearch } from "../support/fake-dom.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
+import {
+  dispatch,
+  domEvent,
+  emit,
+  flushMicrotasks,
+  selectRadioBySearch,
+  setInputFiles,
+} from "../support/ui-interactions.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // Drag-and-drop file loading is wired to window-level drag events, so these
-// tests lean on the shared FakeWindow, which records window listeners and
-// lets tests dispatch synthetic drag events at them with emit(). Everything
-// else is auto-vivified: these tests only assert on the drop overlay, the
-// status line and which runtime loader ran.
+// tests fire them at the page's window with emit(), which also reports
+// whether a listener cancelled the browser's own handling. These tests only
+// assert on the drop overlay, the status line and which runtime loader ran.
 function installUiDom() {
-  const { document, window } = installFakeDom();
+  const { document, window } = installIndexPage();
   return {
     window,
     dropOverlayEl: document.querySelector("#drop-overlay"),
@@ -129,15 +136,15 @@ test("Load picks CSV and IMG files through their existing loaders", async () => 
 
   loadEl.click();
   assert.equal(pickerOpens, 1);
-  fileInput.files = [fakeFile("channels.CSV", { text: "Location,Name\n0,A\n" })];
-  await fileInput.dispatch("change");
+  setInputFiles(fileInput, [fakeFile("channels.CSV", { text: "Location,Name\n0,A\n" })]);
+  await dispatch(fileInput, "change");
   assert.equal(calls.parseCsv.length, 1);
   assert.equal(fileInput.value, "");
 
   loadEl.click();
   assert.equal(pickerOpens, 2);
-  fileInput.files = [fakeFile("codeplug.IMG")];
-  await fileInput.dispatch("change");
+  setInputFiles(fileInput, [fakeFile("codeplug.IMG")]);
+  await dispatch(fileInput, "change");
   assert.equal(calls.loadImage.length, 1);
   assert.equal(fileInput.value, "");
 });
@@ -146,7 +153,6 @@ test("Export opens downward choices and runs the selected format", async () => {
   installUiDom();
   const { calls } = await bootUi();
   const document = globalThis.document;
-  closeVivifiedModals(document);
   const toggle = document.querySelector("#export-menu-toggle");
   const menu = document.querySelector("#export-menu");
   assert.equal(menu.hidden, true);
@@ -155,24 +161,24 @@ test("Export opens downward choices and runs the selected format", async () => {
   toggle.click();
   assert.equal(menu.hidden, false);
   assert.equal(toggle.getAttribute("aria-expanded"), "true");
-  await document.querySelector("#export-csv").dispatch("click");
+  await dispatch(document.querySelector("#export-csv"), "click");
   assert.equal(calls.normalizeRows.length, 1);
   assert.equal(menu.hidden, true);
 
   selectRadioBySearch(document, "Acme Alpha");
   await flushMicrotasks();
   toggle.click();
-  await document.querySelector("#export-binary").dispatch("click");
+  await dispatch(document.querySelector("#export-binary"), "click");
   assert.equal(calls.exportImage.length, 1);
   assert.equal(menu.hidden, true);
 
   toggle.click();
-  document.dispatchEvent({ type: "keydown", key: "Escape" });
+  document.dispatchEvent(domEvent({ type: "keydown", key: "Escape" }));
   assert.equal(menu.hidden, true);
-  assert.equal(toggle.focused, true);
+  assert.equal(document.activeElement, toggle);
 
   toggle.click();
-  document.dispatchEvent({ type: "click", target: document.querySelector("#radio-search") });
+  document.querySelector("#radio-search").dispatchEvent(domEvent({ type: "click" }));
   assert.equal(menu.hidden, true);
 });
 
@@ -180,7 +186,7 @@ test("dropping a CSV file loads its channels through the CSV parser", async () =
   const { window, debugOutputEl } = installUiDom();
   const { calls } = await bootUi();
 
-  await window.emit("drop", dropEvent([fakeFile("channels.csv", { text: "Location,Name\n0,A\n" })]));
+  await emit(window, "drop", dropEvent([fakeFile("channels.csv", { text: "Location,Name\n0,A\n" })]));
 
   assert.equal(calls.parseCsv.length, 1);
   assert.match(calls.parseCsv[0], /Location,Name/);
@@ -192,7 +198,7 @@ test("dropping an .img file loads it through the binary codeplug loader", async 
   const { window, debugOutputEl } = installUiDom();
   const { calls } = await bootUi();
 
-  await window.emit("drop", dropEvent([fakeFile("codeplug.img", { bytes: [0xff, 0x00, 0x42] })]));
+  await emit(window, "drop", dropEvent([fakeFile("codeplug.img", { bytes: [0xff, 0x00, 0x42] })]));
 
   assert.equal(calls.loadImage.length, 1);
   assert.equal(calls.parseCsv.length, 0);
@@ -218,7 +224,7 @@ test("an .img load enables the serial actions on a session with nothing selected
   assert.equal(connectEl.disabled, true);
   assert.equal(connectEl.title, "Search for and select a radio first");
 
-  await window.emit("drop", dropEvent([fakeFile("beta.img")]));
+  await emit(window, "drop", dropEvent([fakeFile("beta.img")]));
   await flushMicrotasks();
 
   assert.equal(
@@ -242,7 +248,7 @@ test("reselecting a radio after an .img load refreshes its schema and settings",
   assert.equal(selectionNameEl.textContent, "Acme Alpha");
 
   // Loading an image switches the UI to Beta and applies Beta's schema.
-  await window.emit("drop", dropEvent([fakeFile("beta.img")]));
+  await emit(window, "drop", dropEvent([fakeFile("beta.img")]));
   assert.equal(calls.loadImage.at(-1).module, "alpha");
   assert.equal(calls.loadImage.at(-1).className, "AlphaRadio");
   assert.equal(selectionNameEl.textContent, "Acme Beta");
@@ -276,17 +282,17 @@ test("a dropped CSV goes through the same replace-or-merge prompt as Load", asyn
   importChoiceModalEl.classList.add("hidden");
 
   // First drop fills the editor, so the second one has channels to displace.
-  await window.emit("drop", dropEvent([fakeFile("first.csv", { text: "Location,Name\n0,A\n" })]));
+  await emit(window, "drop", dropEvent([fakeFile("first.csv", { text: "Location,Name\n0,A\n" })]));
   assert.equal(importChoiceModalEl.classList.contains("hidden"), true);
 
-  const pending = window.emit("drop", dropEvent([fakeFile("second.csv", { text: "Location,Name\n0,B\n" })]));
+  const pending = emit(window, "drop", dropEvent([fakeFile("second.csv", { text: "Location,Name\n0,B\n" })]));
   await flushMicrotasks();
   assert.equal(
     importChoiceModalEl.classList.contains("hidden"),
     false,
     "a drop that would discard channels must ask first",
   );
-  importChoiceMergeEl.dispatchEvent({ type: "click" });
+  importChoiceMergeEl.dispatchEvent(domEvent({ type: "click" }));
   await pending;
 
   assert.match(debugOutputEl.value, /STATUS Merged 1 imported channel\(s\); 2 total/);
@@ -297,19 +303,19 @@ test("a drop is refused while an earlier load is still waiting on the prompt", a
   const { calls } = await bootUi();
   importChoiceModalEl.classList.add("hidden");
 
-  await window.emit("drop", dropEvent([fakeFile("first.csv", { text: "Location,Name\n0,A\n" })]));
-  const pending = window.emit("drop", dropEvent([fakeFile("second.csv", { text: "Location,Name\n0,B\n" })]));
+  await emit(window, "drop", dropEvent([fakeFile("first.csv", { text: "Location,Name\n0,A\n" })]));
+  const pending = emit(window, "drop", dropEvent([fakeFile("second.csv", { text: "Location,Name\n0,B\n" })]));
   await flushMicrotasks();
   assert.equal(importChoiceModalEl.classList.contains("hidden"), false);
 
   // Starting a third load here would overwrite second.csv's pending choice and
   // leave its promise unresolved forever.
-  await window.emit("drop", dropEvent([fakeFile("third.csv", { text: "Location,Name\n0,C\n" })]));
+  await emit(window, "drop", dropEvent([fakeFile("third.csv", { text: "Location,Name\n0,C\n" })]));
   assert.match(debugOutputEl.value, /STATUS A file is already loading/);
   assert.equal(calls.parseCsv.length, 2, "third.csv must not reach the parser");
 
   // The refused drop must not have disturbed the load it collided with.
-  importChoiceMergeEl.dispatchEvent({ type: "click" });
+  importChoiceMergeEl.dispatchEvent(domEvent({ type: "click" }));
   await pending;
   assert.match(debugOutputEl.value, /STATUS Merged 1 imported channel\(s\); 2 total/);
 });
@@ -318,7 +324,7 @@ test("dropping several files loads the first and records the rest as ignored", a
   const { window, debugOutputEl } = installUiDom();
   const { calls } = await bootUi();
 
-  await window.emit("drop", dropEvent([
+  await emit(window, "drop", dropEvent([
     fakeFile("first.csv", { text: "Location,Name\n0,A\n" }),
     fakeFile("second.csv", { text: "Location,Name\n0,B\n" }),
     fakeFile("third.img"),
@@ -337,20 +343,20 @@ test("file drags are claimed from the browser, other drags are not", async () =>
 
   // An unprevented dragover default means "not a drop target": the drop event
   // never fires and the browser navigates to the file instead.
-  assert.equal(await window.emit("dragover", fileDrag), true);
-  assert.equal(await window.emit("dragenter", fileDrag), true);
-  assert.equal(await window.emit("drop", dropEvent([fakeFile("channels.csv", { text: "Location\n0\n" })])), true);
+  assert.equal(await emit(window, "dragover", fileDrag), true);
+  assert.equal(await emit(window, "dragenter", fileDrag), true);
+  assert.equal(await emit(window, "drop", dropEvent([fakeFile("channels.csv", { text: "Location\n0\n" })])), true);
 
-  assert.equal(await window.emit("dragover", textDrag), false, "text drags must keep native behaviour");
-  assert.equal(await window.emit("dragenter", textDrag), false);
-  assert.equal(await window.emit("drop", { dataTransfer: { types: ["text/plain"], files: [] } }), false);
+  assert.equal(await emit(window, "dragover", textDrag), false, "text drags must keep native behaviour");
+  assert.equal(await emit(window, "dragenter", textDrag), false);
+  assert.equal(await emit(window, "drop", { dataTransfer: { types: ["text/plain"], files: [] } }), false);
 });
 
 test("dropping an unsupported file loads nothing and says what is accepted", async () => {
   const { window, debugOutputEl } = installUiDom();
   const { calls } = await bootUi();
 
-  await window.emit("drop", dropEvent([fakeFile("notes.txt", { text: "hello" })]));
+  await emit(window, "drop", dropEvent([fakeFile("notes.txt", { text: "hello" })]));
 
   assert.equal(calls.parseCsv.length, 0);
   assert.equal(calls.loadImage.length, 0);
@@ -370,17 +376,17 @@ test("the drop overlay follows the drag and clears on drop", async () => {
 
   // Nested enters (page, then a child element) must not require matching
   // leaves to be interleaved for the overlay to survive.
-  await window.emit("dragenter", { dataTransfer: { types: ["Files"] } });
-  await window.emit("dragenter", { dataTransfer: { types: ["Files"] } });
+  await emit(window, "dragenter", { dataTransfer: { types: ["Files"] } });
+  await emit(window, "dragenter", { dataTransfer: { types: ["Files"] } });
   assert.equal(overlayVisible(), true);
-  await window.emit("dragleave", { dataTransfer: { types: ["Files"] } });
+  await emit(window, "dragleave", { dataTransfer: { types: ["Files"] } });
   assert.equal(overlayVisible(), true, "leaving a child element must keep the overlay up");
-  await window.emit("dragleave", { dataTransfer: { types: ["Files"] } });
+  await emit(window, "dragleave", { dataTransfer: { types: ["Files"] } });
   assert.equal(overlayVisible(), false);
 
-  await window.emit("dragenter", { dataTransfer: { types: ["Files"] } });
+  await emit(window, "dragenter", { dataTransfer: { types: ["Files"] } });
   assert.equal(overlayVisible(), true);
-  await window.emit("drop", dropEvent([fakeFile("channels.csv", { text: "Location\n0\n" })]));
+  await emit(window, "drop", dropEvent([fakeFile("channels.csv", { text: "Location\n0\n" })]));
   assert.equal(overlayVisible(), false);
 });
 
@@ -389,10 +395,10 @@ test("a text-only drag is left to the browser", async () => {
   const { calls } = await bootUi();
   dropOverlayEl.classList.add("hidden");
 
-  await window.emit("dragenter", { dataTransfer: { types: ["text/plain"] } });
+  await emit(window, "dragenter", { dataTransfer: { types: ["text/plain"] } });
   assert.equal(dropOverlayEl.classList.contains("hidden"), true);
 
-  await window.emit("drop", { dataTransfer: { types: ["text/plain"], files: [] } });
+  await emit(window, "drop", { dataTransfer: { types: ["text/plain"], files: [] } });
   assert.equal(calls.parseCsv.length, 0);
   assert.equal(calls.loadImage.length, 0);
 });

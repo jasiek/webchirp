@@ -4,13 +4,15 @@ import path from "node:path";
 import test from "node:test";
 
 import { repoRoot } from "../support/repo-paths.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
 import {
   channelRows,
-  closeVivifiedModals,
+  dispatch,
+  domEvent,
   flushMicrotasks,
-  installFakeDom,
   keydownEvent,
-} from "../support/fake-dom.mjs";
+  setInputFiles,
+} from "../support/ui-interactions.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The grid's Extra column and the modal behind it (web/js/ui/channel-extra.ts).
@@ -76,7 +78,7 @@ const IMAGE_ROWS = [
 ];
 
 async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const calls = [];
@@ -105,18 +107,17 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
     },
   }));
   await ui.init(true);
-  closeVivifiedModals(document);
 
   // The binary import path, which is what a dropped or picked .img runs
   // through. Reusable: loading a second image is how the editor's rows get
   // replaced wholesale, which a modal left open has to survive.
   async function loadImage() {
     const imgInput = document.querySelector("#codeplug-file");
-    imgInput.files = [{
+    setInputFiles(imgInput, [{
       name: "codeplug.img",
       arrayBuffer: async () => Uint8Array.from([1, 2, 3, 4]).buffer,
-    }];
-    imgInput.dispatchEvent({ type: "change" });
+    }]);
+    imgInput.dispatchEvent(domEvent({ type: "change" }));
     await flushMicrotasks();
   }
   await loadImage();
@@ -126,22 +127,16 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
 }
 
 function headerLabels(document) {
-  return document.querySelector("#mem-table thead").children[0].children.map((th) => th.textContent);
+  return Array.from(document.querySelector("#mem-table thead").children[0].children).map((th) => th.textContent);
 }
 
-// Clicks a row's Extra button. Cell events are delegated to the tbody, so
-// dispatch there with the button as the target, as bubbling would.
+// Clicks a row's Extra button. The click bubbles to the tbody, where the grid
+// delegates cell events.
 async function openExtraModal(document, rowIdx) {
-  const tbody = document.querySelector("#mem-table tbody");
   const row = channelRows(document)[rowIdx];
   const button = row.querySelector(".channel-extra-button");
   assert.ok(button, `row ${rowIdx} has no Extra button`);
-  tbody.dispatchEvent({
-    type: "click",
-    target: button,
-    preventDefault() {},
-    stopPropagation() {},
-  });
+  button.dispatchEvent(domEvent({ type: "click" }));
   await flushMicrotasks();
   return button;
 }
@@ -155,7 +150,7 @@ function controlFor(document, name) {
 }
 
 async function submitModal(document) {
-  await document.querySelector("#channel-extra-form").dispatch("submit");
+  await dispatch(document.querySelector("#channel-extra-form"), "submit");
   await flushMicrotasks();
 }
 
@@ -356,11 +351,11 @@ test("focus enters the dialog on open and returns to the button on close", async
     getChannelExtra: async () => ({ available: false, message: "No extra settings.", fields: [] }),
   });
   const button = await openExtraModal(document, 0);
-  assert.equal(document.querySelector("#channel-extra-cancel").focused, true);
+  assert.equal(document.activeElement, document.querySelector("#channel-extra-cancel"));
 
-  button.focused = false;
-  document.querySelector("#channel-extra-cancel").dispatchEvent({ type: "click" });
-  assert.equal(button.focused, true, "focus should go back to the button that opened it");
+  assert.notEqual(document.activeElement, button, "focus has left the button for the dialog");
+  document.querySelector("#channel-extra-cancel").dispatchEvent(domEvent({ type: "click" }));
+  assert.equal(document.activeElement, button, "focus should go back to the button that opened it");
 });
 
 test("an out-of-range value is reported and blocks the save", async () => {
@@ -415,13 +410,13 @@ test("Escape closes the editor without touching the row", async () => {
   const { document, rows } = await boot();
   const button = await openExtraModal(document, 0);
   controlFor(document, "scode").value = "2";
-  button.focused = false;
+  assert.notEqual(document.activeElement, button, "focus has left the button for the dialog");
 
   document.dispatchEvent(keydownEvent("Escape"));
   assert.equal(modalIsOpen(document), false);
   assert.deepEqual(rows()[0].__extra, { bcl: false, scode: "3" });
   assert.equal(
-    button.focused,
+    document.activeElement === button,
     true,
     "Escape should hand the keyboard back to the button too",
   );
@@ -462,8 +457,8 @@ test("a response for a channel the user has left behind is discarded", async () 
   );
 });
 
-// Layout is the browser's own and cannot be checked headlessly -- the fake DOM
-// has no layout at all -- so what is asserted here is the stylesheet rule that
+// Layout is the browser's own and cannot be checked headlessly -- jsdom does
+// no layout at all -- so what is asserted here is the stylesheet rule that
 // produces it, in the same spirit as the sticky-header test in
 // tests/channels/ui-column-widths.mjs. This one earns its keep: Extra is the
 // eighteenth of eighteen columns, so without the pin it sits past the right

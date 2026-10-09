@@ -5,29 +5,20 @@ import test from "node:test";
 
 import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.ts";
 import { createRepeaterQuery } from "../../web/js/ui/repeater-query.ts";
-import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
-import { fakeXmlGlobals } from "../support/fake-xml.mjs";
+import { REQUIRED_ELEMENTS } from "../../web/js/ui/dom.ts";
+import { installIndexPage } from "../support/index-page.mjs";
+import { dispatch } from "../support/ui-interactions.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
 // The unified query modal is driven directly rather than through
 // createUiController, so each test can assert on exactly what it hands its
 // siblings — which URLs it fetched, which rows it inserted, what it logged.
-// Every field element is built by query-fields.js via document.createElement,
-// so the shared fake DOM needs no static markup: a real classList (the
-// modal's open/closed state lives there), a querySelectorAll that understands
-// `input[name="x"]:checked` and throws on any shape it cannot match, and
-// attribute get/set for the aria-label.
+// The modal shell, its buttons and the grid are index.html's own elements;
+// every field inside the grid is built by query-fields.ts.
 
+// Every element under root, in document order.
 function descendants(root) {
-  const found = [];
-  const walk = (node) => {
-    for (const child of node.children) {
-      found.push(child);
-      walk(child);
-    }
-  };
-  walk(root);
-  return found;
+  return Array.from(root.querySelectorAll("*"));
 }
 
 const DOM_KEYS = [
@@ -134,20 +125,18 @@ function buildHarness({
   // whose table is missing the directory's tone.
   toneOptions = null,
 } = {}) {
-  // parseRxfRecords reaches for DOMParser, so it is installed with the
-  // rest of the fake DOM globals.
-  const { document } = installFakeDom({ globals: fakeXmlGlobals() });
-  // The meta tag is registered only when a base is provided; an unregistered
-  // non-id selector resolves to null, as an absent tag would.
-  if (repeaterApiBase !== undefined) {
-    const meta = new FakeElement("meta", document);
+  const { document } = installIndexPage();
+  // index.html ships the meta tag; undefined stands for a deployment without
+  // one, so the tag is removed rather than blanked.
+  const meta = document.querySelector('meta[name="webchirp-repeater-api-base"]');
+  if (repeaterApiBase === undefined) {
+    meta.remove();
+  } else {
     meta.setAttribute("content", String(repeaterApiBase ?? ""));
-    document.register('meta[name="webchirp-repeater-api-base"]', meta);
   }
 
-  const dom = Object.fromEntries(DOM_KEYS.map((key) => [key, new FakeElement("div")]));
-  // The modal starts closed, exactly as index.html ships it.
-  dom.repeaterQueryModalEl.classList.add("hidden");
+  // index.html's own elements, which start closed exactly as the page ships.
+  const dom = Object.fromEntries(DOM_KEYS.map((key) => [key, document.querySelector(REQUIRED_ELEMENTS[key])]));
 
   const log = { statuses: [], debug: [], errors: [], rejected: [], cancelled: [] };
   const table = { inserted: [] };
@@ -262,10 +251,8 @@ function fieldByName(dom, name) {
 async function chooseCountry(dom, value) {
   const select = countrySelect(dom);
   select.value = value;
-  // Dispatched at the grid, which is where the shell delegates from: the fake
-  // DOM does not bubble, so an event fired at the select itself would reach no
-  // listener at all (see tests/support/fake-dom.mjs).
-  await grid(dom).dispatch("change", { target: select });
+  // The change bubbles to the grid, which is where the shell delegates from.
+  await dispatch(select, "change");
   return select;
 }
 
@@ -294,7 +281,7 @@ function previewCanvas(dom) {
 }
 
 function previewTiles(dom) {
-  return previewCanvas(dom).children.filter((child) => child.className === "repeater-map-tile");
+  return Array.from(previewCanvas(dom).children).filter((child) => child.className === "repeater-map-tile");
 }
 
 function queryUrl(calls) {
@@ -319,20 +306,20 @@ test("offline state disables every repeater query entry point until online", asy
   query.setOnline(false);
   assert.ok(sourceButtons.every((button) => button.disabled));
   assert.ok(sourceButtons.every((button) => /Reconnect/.test(button.title)));
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.deepEqual(calls, [], "a programmatic click cannot bypass the disabled button");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
 
   query.setOnline(true);
   assert.ok(sourceButtons.every((button) => !button.disabled));
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await chooseCountry(dom, "PL");
   assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
 
   query.setOnline(false);
   assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
   assert.match(dom.repeaterQuerySubmitEl.title, /Reconnect/);
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
   assert.equal(calls.length, 1, "offline submit does not start a directory query");
 
   query.setOnline(true);
@@ -344,7 +331,7 @@ test("opening przemienniki builds the form from the dictionary, once", async () 
   const { dom, log } = buildHarness();
   const calls = installFetch([{ match: "/przemienniki/meta", body: META_JSON }]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
 
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false);
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query przemienniki.net");
@@ -354,14 +341,14 @@ test("opening przemienniki builds the form from the dictionary, once", async () 
   assert.equal(select.children[0].value, "");
   assert.equal(select.children[0].textContent, "Any country");
   // Sorted by display name (Germany before Poland) and carrying the flag.
-  assert.deepEqual(select.children.slice(1).map((option) => option.value), ["DE", "PL"]);
-  assert.ok(select.children.slice(1).every((option) => option.textContent.includes(" ")));
+  assert.deepEqual(Array.from(select.children).slice(1).map((option) => option.value), ["DE", "PL"]);
+  assert.ok(Array.from(select.children).slice(1).every((option) => option.textContent.includes(" ")));
 
-  const bands = grid(dom).querySelectorAll('input[name="band"]');
+  const bands = Array.from(grid(dom).querySelectorAll('input[name="band"]'));
   assert.deepEqual(bands.map((el) => el.value), ["2m", "70cm"]);
   // 2m + 70cm on FM start ticked, the same defaults as RSGB.
   assert.deepEqual(bands.map((el) => el.checked), [true, true]);
-  const modes = grid(dom).querySelectorAll('input[name="mode"]');
+  const modes = Array.from(grid(dom).querySelectorAll('input[name="mode"]'));
   assert.deepEqual(modes.map((el) => `${el.value}${el.checked ? "*" : ""}`), ["dstar", "fm*"]);
   assert.equal(fieldByName(dom, "only").checked, true);
   assert.equal(fieldByName(dom, "radius").value, "30");
@@ -370,8 +357,8 @@ test("opening przemienniki builds the form from the dictionary, once", async () 
   assert.ok(log.statuses.includes("Configure przemienniki.net query."));
 
   // A second open reuses the cached dictionary.
-  await dom.repeaterQueryCancelEl.dispatch("click");
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(calls.length, 1);
 });
 
@@ -390,10 +377,10 @@ test("przemienniki digital modes are shown disabled, matching RSGB", async () =>
     }),
   }]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
 
   const [, modeBox] = descendants(grid(dom)).filter((el) => el.className === "modal-modes");
-  const modeInputs = grid(dom).querySelectorAll('input[name="mode"]');
+  const modeInputs = Array.from(grid(dom).querySelectorAll('input[name="mode"]'));
   // Dictionary order is label-sorted, so the digital names sit among fm/dstar
   // rather than after them the way RSGB appends its unsupported flags.
   assert.deepEqual(
@@ -409,7 +396,7 @@ test("przemienniki digital modes are shown disabled, matching RSGB", async () =>
     ["fm"],
   );
   assert.deepEqual(
-    modeBox.children
+    Array.from(modeBox.children)
       .filter((option) => option.title === "Only analogue modes and dstar are supported fully")
       .map((option) => option.children[1].textContent),
     ["apco25", "atv", "c4fm", "m17", "mototrbo", "tetra"],
@@ -430,12 +417,12 @@ test("a failed dictionary fetch reports the error and retries on the next open",
     },
   });
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
   assert.equal(log.errors.length, 1);
   assert.match(log.errors[0], /^Przemienniki modal: Dictionary request failed: HTTP 502/);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false);
   assert.equal(calls.length, 2);
 });
@@ -447,32 +434,32 @@ test("submitting sends the selected filters as URL parameters", async () => {
     { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   countrySelect(dom).value = "PL";
   // Start from a clean slate so the URL reflects exactly this test's picks,
   // not the 2m/70cm/fm defaults.
-  for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="band"]'))) {
     el.checked = false;
   }
-  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="mode"]'))) {
     el.checked = false;
   }
-  const band = grid(dom).querySelectorAll('input[name="band"]')[0];
+  const band = Array.from(grid(dom).querySelectorAll('input[name="band"]'))[0];
   band.checked = true;
   // Mode options come back label-sorted from the dictionary: dstar, fm.
   // Tick both: the union must go as one comma-joined value, not repeated
   // mode= keys of which the API would keep only the last.
-  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="mode"]'))) {
     el.checked = true;
   }
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "52.2297";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   const longitude = fieldByName(dom, "longitude");
   longitude.value = "21.0122";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
 
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   const url = queryUrl(calls);
   assert.equal(url.pathname, "/przemienniki");
@@ -496,25 +483,25 @@ test("blank optional filters are omitted from the query", async () => {
     { match: "/repeaterbook", body: "<rxf><perspective>repeater</perspective></rxf>" },
   ]);
 
-  await dom.channelImportRepeaterbookEl.dispatch("click");
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query repeaterbook.com");
   fieldByName(dom, "only").checked = false;
   // Untick the default band selection to make every optional filter blank.
   // The modes stay on their fm default: an empty mode selection is not blank,
   // it falls back (see the fallback test below).
-  for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="band"]'))) {
     el.checked = false;
   }
   // The country is left blank on purpose -- that is the parameter under test --
   // so the position is what lets the query run at all.
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "52.2297";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   const longitude = fieldByName(dom, "longitude");
   longitude.value = "21.0122";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
 
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   const url = queryUrl(calls);
   for (const param of ["country", "band", "onlyworking"]) {
@@ -533,12 +520,12 @@ test("an RXF query with no mode selected falls back to analogue only", async () 
     { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await chooseCountry(dom, "PL");
-  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="mode"]'))) {
     el.checked = false;
   }
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   const url = queryUrl(calls);
   assert.deepEqual(url.searchParams.getAll("mode"), ["fm"]);
@@ -562,12 +549,12 @@ test("IRTS loads its dictionary and submits through the shared RXF flow", async 
     },
   ]);
 
-  await dom.channelImportIrtsEl.dispatch("click");
+  await dispatch(dom.channelImportIrtsEl, "click");
 
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query IRTS");
-  assert.deepEqual(countrySelect(dom).children.slice(1).map((option) => option.value), ["IE", "GB"]);
-  assert.deepEqual(grid(dom).querySelectorAll('input[name="band"]').map((el) => el.value), ["10m", "2m", "4m", "70cm"]);
-  const irtsModes = grid(dom).querySelectorAll('input[name="mode"]');
+  assert.deepEqual(Array.from(countrySelect(dom).children).slice(1).map((option) => option.value), ["IE", "GB"]);
+  assert.deepEqual(Array.from(grid(dom).querySelectorAll('input[name="band"]')).map((el) => el.value), ["10m", "2m", "4m", "70cm"]);
+  const irtsModes = Array.from(grid(dom).querySelectorAll('input[name="mode"]'));
   assert.deepEqual(
     irtsModes.map((el) => el.value),
     ["dmr", "dstar", "fm", "fusion", "nxdn"],
@@ -578,7 +565,7 @@ test("IRTS loads its dictionary and submits through the shared RXF flow", async 
   );
 
   countrySelect(dom).value = "IE";
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   const url = queryUrl(calls);
   assert.equal(url.pathname, "/irts");
@@ -600,9 +587,9 @@ test("IRTS rejects an RXF response without a frequency perspective", async () =>
     { match: "/irts", body: "<rxf><repeaters></repeaters></rxf>" },
   ]);
 
-  await dom.channelImportIrtsEl.dispatch("click");
+  await dispatch(dom.channelImportIrtsEl, "click");
   await chooseCountry(dom, "IE");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.equal(table.inserted.length, 0);
   assert.match(log.errors.join("\n"), /^IRTS query: RXF response is missing its frequency perspective\./);
@@ -624,9 +611,9 @@ test("IRTS skips and reports a digital mode the selected radio cannot use", asyn
     },
   ]);
 
-  await dom.channelImportIrtsEl.dispatch("click");
+  await dispatch(dom.channelImportIrtsEl, "click");
   await chooseCountry(dom, "IE");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.equal(table.inserted.length, 1);
   assert.deepEqual(table.inserted[0].rows, []);
@@ -655,9 +642,9 @@ test("IRTS skips a repeater the selected radio cannot tune", async () => {
     },
   ]);
 
-  await dom.channelImportIrtsEl.dispatch("click");
+  await dispatch(dom.channelImportIrtsEl, "click");
   await chooseCountry(dom, "IE");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   // The 23cm repeater is above the harness radio's 470 MHz ceiling. Before the
   // frequency guard it arrived as a row with a blank Frequency and a -7.6 MHz
@@ -686,9 +673,9 @@ test("an RXF entry missing one qrg imports as simplex, not as a bogus split", as
     },
   ]);
 
-  await dom.channelImportIrtsEl.dispatch("click");
+  await dispatch(dom.channelImportIrtsEl, "click");
   await chooseCountry(dom, "IE");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   // An absent <qrg> used to parse as Number("") === 0, a finite value that
   // satisfied every downstream isFinite guard: this row arrived as a 0 MHz
@@ -707,9 +694,9 @@ test("a failed query reports the error and leaves the modal open", async () => {
     { match: "/przemienniki", ok: false, status: 503, body: "proxy down" },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await chooseCountry(dom, "PL");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.equal(log.errors.length, 1);
   assert.match(log.errors[0], /^Przemienniki query: Przemienniki query failed: HTTP 503/);
@@ -721,34 +708,34 @@ test("filters reset to source defaults on reopen while the position persists", a
   const { dom } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   countrySelect(dom).value = "PL";
   // Invert the default selection: bands off, dstar on instead of fm.
-  for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="band"]'))) {
     el.checked = false;
   }
-  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="mode"]'))) {
     el.checked = el.value === "dstar";
   }
   fieldByName(dom, "only").checked = false;
   fieldByName(dom, "radius").value = "120";
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "52.2297";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   const longitude = fieldByName(dom, "longitude");
   longitude.value = "21.0122";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
 
-  await dom.repeaterQueryCancelEl.dispatch("click");
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
 
   assert.equal(countrySelect(dom).value, "");
   assert.deepEqual(
-    grid(dom).querySelectorAll('input[name="band"]:checked').map((el) => el.value),
+    Array.from(grid(dom).querySelectorAll('input[name="band"]:checked')).map((el) => el.value),
     ["2m", "70cm"],
   );
   assert.deepEqual(
-    grid(dom).querySelectorAll('input[name="mode"]:checked').map((el) => el.value),
+    Array.from(grid(dom).querySelectorAll('input[name="mode"]:checked')).map((el) => el.value),
     ["fm"],
   );
   assert.equal(fieldByName(dom, "only").checked, true);
@@ -762,16 +749,16 @@ test("the position carries over when switching sources", async () => {
   const { dom } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "51.5";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   const longitude = fieldByName(dom, "longitude");
   longitude.value = "-0.12";
-  await longitude.dispatch("input");
-  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dispatch(longitude, "input");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
 
-  await dom.channelImportRepeaterbookEl.dispatch("click");
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query repeaterbook.com");
   assert.equal(fieldByName(dom, "latitude").value, "51.5");
   assert.equal(fieldByName(dom, "longitude").value, "-0.12");
@@ -782,22 +769,22 @@ test("opening the modal draws the coordinate preview for the persisted position"
   installFetch([{ match: "/meta", body: META_JSON }]);
 
   // A first open with nothing entered has nothing to draw.
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(previewCanvas(dom).hidden, true);
   assert.equal(previewTiles(dom).length, 0);
 
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "52.2297";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   const longitude = fieldByName(dom, "longitude");
   longitude.value = "21.0122";
-  await longitude.dispatch("input");
-  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dispatch(longitude, "input");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
 
   // Reopening rebuilds the field around the persisted position, and the shell
   // refreshes the preview once the overlay is visible — without waiting for
   // the typing debounce, which is what a rebuilt field would otherwise need.
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(previewCanvas(dom).hidden, false);
   assert.ok(previewTiles(dom).length >= 1);
 });
@@ -806,25 +793,25 @@ test("the preview draws the range filter's circle and follows edits to it", asyn
   const { dom } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "52";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   const longitude = fieldByName(dom, "longitude");
   longitude.value = "-2";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
   await new Promise((resolve) => setTimeout(resolve, 400));
 
   // The source's default range (30 km) is already applied when the form is
   // built, without the user touching the field.
-  const ring = () => previewCanvas(dom).children.find((el) => el.className === "repeater-map-range");
+  const ring = () => Array.from(previewCanvas(dom).children).find((el) => el.className === "repeater-map-range");
   assert.ok(ring(), "the default range is drawn on the preview");
   const zoomOf = () => Number(previewCanvas(dom).children[0].src.split("/")[3]);
   const defaultZoom = zoomOf();
 
   const range = fieldByName(dom, "radius");
   range.value = "300";
-  await range.dispatch("input");
+  await dispatch(range, "input");
   await new Promise((resolve) => setTimeout(resolve, 400));
   assert.ok(ring(), "the widened range is still drawn");
   assert.ok(zoomOf() < defaultZoom, "a wider range zooms the preview out");
@@ -835,16 +822,16 @@ test("clearing the location empties the persisted position too", async () => {
   installFetch([{ match: "/meta", body: META_JSON }]);
   installGeolocation({ coords: { latitude: 51.520833, longitude: -0.125 } });
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
-  await geolocateButton(dom).dispatch("click");
-  await clearLocationButton(dom).dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  await dispatch(geolocateButton(dom), "click");
+  await dispatch(clearLocationButton(dom), "click");
   assert.equal(fieldByName(dom, "latitude").value, "");
   assert.equal(fieldByName(dom, "longitude").value, "");
   assert.equal(fieldByName(dom, "locator").value, "");
 
   // The cleared position is what persists into the next open.
-  await dom.repeaterQueryCancelEl.dispatch("click");
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(fieldByName(dom, "latitude").value, "");
   assert.equal(fieldByName(dom, "locator").value, "");
 });
@@ -854,8 +841,8 @@ test("geolocate fills the position fields and reports the locator", async () => 
   installFetch([{ match: "/meta", body: META_JSON }]);
   installGeolocation({ coords: { latitude: 51.520833, longitude: -0.125 } });
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  await dispatch(geolocateButton(dom), "click");
 
   assert.equal(fieldByName(dom, "latitude").value, "51.520833");
   assert.equal(fieldByName(dom, "longitude").value, "-0.125000");
@@ -871,8 +858,8 @@ test("a denied geolocation prompt is reported like a cancellation, never filed a
   // GeolocationPositionError]". Code 1 is the user denying the prompt.
   installGeolocation(new PositionError(1));
 
-  await dom.channelImportRepeaterbookEl.dispatch("click");
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await dispatch(geolocateButton(dom), "click");
 
   assert.equal(fieldByName(dom, "latitude").value, "", "refusing permission sets no position");
   assert.equal(log.errors.length, 0, "a permission refusal is the user's call, not a Sentry-worthy defect");
@@ -888,8 +875,8 @@ test("a geolocation timeout maps to its code's sentence and stays a cancellation
   installFetch([{ match: "/meta", body: META_JSON }]);
   installGeolocation(new PositionError(3));
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  await dispatch(geolocateButton(dom), "click");
 
   assert.equal(log.errors.length, 0);
   assert.equal(log.cancelled.length, 1);
@@ -903,8 +890,8 @@ test("an unexpected geolocation result keeps the error funnel", async () => {
   // refusal the user chose, so the traceback keeps its Sentry capture.
   installGeolocation({ coords: { latitude: "nonsense", longitude: 0 } });
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  await dispatch(geolocateButton(dom), "click");
 
   assert.equal(fieldByName(dom, "latitude").value, "");
   assert.equal(log.cancelled.length, 0, "only the refusal codes are cancellations");
@@ -916,9 +903,9 @@ test("submitting without a channel schema fetches nothing", async () => {
   const { dom, log } = buildHarness({ headers: [] });
   const calls = installFetch([{ match: "/meta", body: META_JSON }]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await chooseCountry(dom, "PL");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.ok(log.statuses.includes("No channel schema loaded yet."));
   assert.equal(calls.length, 1, "only the dictionary was fetched");
@@ -929,10 +916,10 @@ test("backdrop clicks close the modal; clicks inside it do not", async () => {
   const { dom } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
-  await dom.repeaterQueryModalEl.dispatch("click", { target: dom.repeaterQueryFormEl });
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  await dispatch(dom.repeaterQueryFormEl, "click");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false);
-  await dom.repeaterQueryModalEl.dispatch("click", { target: dom.repeaterQueryModalEl });
+  await dispatch(dom.repeaterQueryModalEl, "click");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
 });
 
@@ -943,19 +930,19 @@ test("a blank API base hides proxy sources but leaves IRTS available", async () 
   assert.equal(dom.channelImportPrzemiennikiEl.hidden, true);
   assert.equal(dom.channelImportRepeaterbookEl.hidden, true);
   assert.equal(dom.channelImportIrtsEl.hidden, false);
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
   assert.equal(calls.length, 0);
 
   // IRTS remains visible on the default hosted endpoint and reports a service
   // failure when used instead of disappearing with the proxy-backed sources.
-  await dom.channelImportIrtsEl.dispatch("click");
+  await dispatch(dom.channelImportIrtsEl, "click");
   assert.deepEqual(calls.map((call) => call.url), ["https://api.codeplug.org/irts/meta"]);
   assert.match(log.errors.join("\n"), /^IRTS modal: Unrouted fetch:/);
 
   // RSGB needs no CORS proxy, so it stays available on such deployments.
   assert.equal(dom.channelImportRsgbEl.hidden, false);
-  await dom.channelImportRsgbEl.dispatch("click");
+  await dispatch(dom.channelImportRsgbEl, "click");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), false);
 });
 
@@ -1051,7 +1038,7 @@ function repeaterRecord(overrides = {}) {
 const LONDON = { coords: { latitude: 51.5072, longitude: -0.1276 } };
 
 async function openRsgb(dom) {
-  await dom.channelImportRsgbEl.dispatch("click");
+  await dispatch(dom.channelImportRsgbEl, "click");
 }
 
 // Every directory is one click from every other now that the toolbar carries
@@ -1064,10 +1051,10 @@ test("a directory still loading its options cannot replace the one opened after 
 
   // przemienniki has to fetch its filter dictionary; RSGB's options are
   // static, so the second click finishes while the first is still in flight.
-  const pending = dom.channelImportPrzemiennikiEl.dispatch("click");
+  const pending = dispatch(dom.channelImportPrzemiennikiEl, "click");
   await flush();
   assert.deepEqual(calls.map((call) => call.url), ["https://proxy.example.com/przemienniki/meta"]);
-  await dom.channelImportRsgbEl.dispatch("click");
+  await dispatch(dom.channelImportRsgbEl, "click");
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query RSGB ETCC API");
 
   release();
@@ -1082,7 +1069,7 @@ test("a directory still loading its options cannot replace the one opened after 
   );
   // The fields belong to RSGB too, not just the title: RSGB offers a locator,
   // which no przemienniki form does.
-  assert.ok(grid(dom).querySelectorAll('input[name="locator"]').length > 0);
+  assert.ok(Array.from(grid(dom).querySelectorAll('input[name="locator"]')).length > 0);
   assert.equal(log.statuses.at(-1), "Configure RSGB ETCC query.");
 });
 
@@ -1108,7 +1095,7 @@ test("the RSGB modal opens without a network round trip", async () => {
   assert.deepEqual(calls, [], "the static filter options need no dictionary fetch");
   // The first focusable control is the first band checkbox — the fixed
   // country row offers nothing to focus.
-  assert.equal(grid(dom).querySelectorAll('input[name="band"]')[0].focused, true);
+  assert.equal(document.activeElement, Array.from(grid(dom).querySelectorAll('input[name="band"]'))[0]);
 
   query.setModalOpen(false);
   assert.equal(query.isModalOpen(), false);
@@ -1118,8 +1105,8 @@ test("opening the RSGB modal preselects 2m, 70cm and analogue", async () => {
   const { dom } = buildHarness();
   await openRsgb(dom);
 
-  const checkedBands = grid(dom).querySelectorAll('input[name="band"]:checked');
-  const checkedModes = grid(dom).querySelectorAll('input[name="mode"]:checked');
+  const checkedBands = Array.from(grid(dom).querySelectorAll('input[name="band"]:checked'));
+  const checkedModes = Array.from(grid(dom).querySelectorAll('input[name="mode"]:checked'));
   assert.deepEqual(checkedBands.map((el) => el.value), ["70CM", "2M"]);
   assert.deepEqual(checkedModes.map((el) => el.value), ["A"]);
 });
@@ -1132,19 +1119,19 @@ test("RSGB band and mode labels match the other sources' casing, with unsupporte
   // Labels are display-only lowercase; the values behind them stay the API's
   // own band codes and mode flags.
   assert.deepEqual(
-    bandBox.children.map((option) => option.children[1].textContent),
+    Array.from(bandBox.children).map((option) => option.children[1].textContent),
     ["70cm", "2m", "23cm", "6m", "10m", "9cm", "3cm"],
   );
   assert.deepEqual(
-    modeBox.children.map((option) => option.children[1].textContent),
+    Array.from(modeBox.children).map((option) => option.children[1].textContent),
     ["fm", "dstar", "dmr", "p25", "nxdn", "m17"],
   );
 
-  const modeInputs = grid(dom).querySelectorAll('input[name="mode"]');
+  const modeInputs = Array.from(grid(dom).querySelectorAll('input[name="mode"]'));
   assert.deepEqual(modeInputs.map((el) => el.value), ["A", "D", "M", "P", "N", "7"]);
   assert.deepEqual(modeInputs.filter((el) => el.disabled).map((el) => el.value), ["M", "P", "N", "7"]);
   assert.deepEqual(
-    modeBox.children
+    Array.from(modeBox.children)
       .filter((option) => option.title === "Only analogue modes and dstar are supported fully")
       .map((option) => option.children[1].textContent),
     ["dmr", "p25", "nxdn", "m17"],
@@ -1155,7 +1142,7 @@ test("reopening the RSGB modal restores every default, not the last selection", 
   const { query, dom } = buildHarness();
   await openRsgb(dom);
 
-  for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="band"]'))) {
     el.checked = el.value === "23CM";
   }
   fieldByName(dom, "only").checked = false;
@@ -1164,7 +1151,7 @@ test("reopening the RSGB modal restores every default, not the last selection", 
   await openRsgb(dom);
 
   assert.deepEqual(
-    grid(dom).querySelectorAll('input[name="band"]:checked').map((el) => el.value),
+    Array.from(grid(dom).querySelectorAll('input[name="band"]:checked')).map((el) => el.value),
     ["70CM", "2M"],
   );
   assert.equal(fieldByName(dom, "only").checked, true);
@@ -1175,7 +1162,7 @@ test("an unavailable geolocation API is reported, not swallowed", async () => {
   const { dom, log } = buildHarness();
   installGeolocation(null);
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(geolocateButton(dom), "click");
   assert.equal(fieldByName(dom, "latitude").value, "");
   // The browser having no geolocation at all is a capability gap, not a
   // refusal by the user, so it keeps the error funnel rather than reading as
@@ -1193,18 +1180,18 @@ test("a coordinate-free or ill-formed RSGB query never reaches the network", asy
   // past the disabled button (a browser refuses both the click and the
   // implicit Enter submission while it is disabled). What it proves is that
   // the check inside runQuery is still there behind the gate.
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
   assert.match(log.rejected.join("\n"), /Set a location first/);
 
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "51.5072";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   const longitude = fieldByName(dom, "longitude");
   longitude.value = "-0.1276";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
   for (const radius of ["", "0", "-5"]) {
     fieldByName(dom, "radius").value = radius;
-    await dom.repeaterQueryFormEl.dispatch("submit");
+    await dispatch(dom.repeaterQueryFormEl, "submit");
   }
   assert.equal(log.rejected.filter((line) => /positive number of kilometres/.test(line)).length, 3);
 
@@ -1234,12 +1221,12 @@ test("RSGB cannot be queried until it has a location, and says so", async () => 
   // the map carries the reason where it can actually be read.
   assert.match(previewCaption(dom).textContent, /Set a location/);
 
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(geolocateButton(dom), "click");
   assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
   assert.equal(dom.repeaterQuerySubmitEl.title, "");
 
   // Clearing the location puts the gate back: the form is unfillable again.
-  await clearLocationButton(dom).dispatch("click");
+  await dispatch(clearLocationButton(dom), "click");
   assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
 });
 
@@ -1249,7 +1236,7 @@ test("a country-filtered directory takes either filter, but not neither", async 
     { match: "/przemienniki/meta", body: META_JSON },
     { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
   ]);
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
 
   // Neither filter is not a search: the directory answers it with everything
   // it has -- 18.4 MB from RepeaterBook, measured live -- so the query never
@@ -1268,7 +1255,7 @@ test("a country-filtered directory takes either filter, but not neither", async 
   // and not a complaint.
   assert.equal(previewCaption(dom).hidden, true);
 
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
   const url = queryUrl(calls);
   assert.equal(url.searchParams.get("country"), "pl");
   assert.equal(url.searchParams.get("latitude"), null, "no position was set");
@@ -1277,15 +1264,15 @@ test("a country-filtered directory takes either filter, but not neither", async 
 test("a country-filtered directory is also queryable on a location alone", async () => {
   const { dom } = buildHarness();
   installFetch([{ match: "/przemienniki/meta", body: META_JSON }]);
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(dom.repeaterQuerySubmitEl.disabled, true);
 
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "52.2297";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   const longitude = fieldByName(dom, "longitude");
   longitude.value = "21.0122";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
 
   // The range is what actually bounds the response -- measured live, adding a
   // country to a located RepeaterBook query returns a byte-identical body, so
@@ -1308,8 +1295,8 @@ test("an RSGB query fans out over the squares and inserts the matching repeaters
   });
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(geolocateButton(dom), "click");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.deepEqual(calls.map((call) => call.url).sort(), [
     "https://api-beta.rsgb.online/locator/IO91",
@@ -1345,12 +1332,12 @@ test("repeaters the radio cannot tune are reported, not silently missing", async
   });
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(geolocateButton(dom), "click");
   // Clear the band filter so the 23cm record is not excluded before the builder.
-  for (const el of grid(dom).querySelectorAll('input[name="band"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="band"]'))) {
     el.checked = false;
   }
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
   assert.ok(
@@ -1376,13 +1363,13 @@ test("a repeater in an unusable mode is reported separately from an untunable on
   });
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(geolocateButton(dom), "click");
   // Both modes selected, so the D-STAR record reaches the row builder — an
   // empty selection would fall back to analogue-only and filter it earlier.
-  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="mode"]'))) {
     el.checked = !el.disabled;
   }
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
   assert.ok(log.debug.some((line) => /SKIPPED GB7DS \(mode not supported/.test(line)));
@@ -1406,8 +1393,8 @@ test("a repeater whose tone the radio cannot send is reported, not written as 67
   });
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(geolocateButton(dom), "click");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
   assert.equal(table.inserted[0].rows[0].rToneFreq, "110.9");
@@ -1436,11 +1423,11 @@ test("an RSGB query with no mode selected falls back to analogue only", async ()
   });
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
-  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+  await dispatch(geolocateButton(dom), "click");
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="mode"]'))) {
     el.checked = false;
   }
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
 });
@@ -1456,16 +1443,16 @@ test("the RSGB band and mode checkboxes filter what is inserted", async () => {
   });
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(geolocateButton(dom), "click");
   // Defaults (2m + 70cm, analogue) keep only the analogue one.
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
   assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["GB3XP"]);
 
   await openRsgb(dom);
-  for (const el of grid(dom).querySelectorAll('input[name="mode"]')) {
+  for (const el of Array.from(grid(dom).querySelectorAll('input[name="mode"]'))) {
     el.checked = el.value === "D";
   }
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
   assert.deepEqual(table.inserted[1].rows.map((row) => row.Name), ["GB7DS"]);
 });
 
@@ -1477,15 +1464,15 @@ test("unticking 'only operational' admits the off-air repeaters", async () => {
   });
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(geolocateButton(dom), "click");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
   // The grid is handed the empty set rather than being skipped: it owns the
   // "no entries to insert" message.
   assert.deepEqual(table.inserted[0].rows, []);
 
   await openRsgb(dom);
   fieldByName(dom, "only").checked = false;
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
   assert.deepEqual(table.inserted[1].rows.map((row) => row.Name), ["GB3XP"]);
   assert.match(table.inserted[1].rows[0].Comment, /NOT OPERATIONAL$/);
 });
@@ -1499,8 +1486,8 @@ test("an RSGB transport failure is reported and leaves the modal open", async ()
   });
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(geolocateButton(dom), "click");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.match(log.errors.join("\n"), /^RSGB ETCC query: .*HTTP 503/m);
   assert.deepEqual(table.inserted, []);
@@ -1513,8 +1500,8 @@ test("an RSGB query with no channel schema loaded does nothing", async () => {
   const calls = installRsgbFetch({});
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(geolocateButton(dom), "click");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   assert.deepEqual(calls, []);
   assert.deepEqual(table.inserted, []);
@@ -1530,15 +1517,15 @@ test("a second submit while a query is in flight is ignored, not duplicated", as
   });
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(geolocateButton(dom), "click");
 
   // Not awaited: the query is suspended on the gated fetch, exactly as it is
   // suspended on a real fan-out that takes seconds.
-  const first = dom.repeaterQueryFormEl.dispatch("submit");
+  const first = dispatch(dom.repeaterQueryFormEl, "submit");
   assert.equal(dom.repeaterQuerySubmitEl.disabled, true, "the button says the query is running");
   assert.equal(dom.repeaterQuerySubmitEl.textContent, "Querying...");
 
-  const second = dom.repeaterQueryFormEl.dispatch("submit");
+  const second = dispatch(dom.repeaterQueryFormEl, "submit");
   release();
   await Promise.all([first, second]);
 
@@ -1566,8 +1553,8 @@ test("a stalled RSGB request times out and reports a readable error", async (t) 
   const calls = installStalledFetch([{ match: "api-beta.rsgb.online", stall: true }]);
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
-  const pending = dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(geolocateButton(dom), "click");
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
   await flush();
 
   assert.ok(calls.length > 0, "the squares are actually in flight");
@@ -1595,7 +1582,7 @@ test("a stalled dictionary request times out instead of leaving the modal openin
   const { dom, log } = buildHarness();
   installStalledFetch([{ match: "/meta", stall: true }]);
 
-  const pending = dom.channelImportPrzemiennikiEl.dispatch("click");
+  const pending = dispatch(dom.channelImportPrzemiennikiEl, "click");
   await flush();
   assert.deepEqual(log.errors, []);
 
@@ -1616,11 +1603,11 @@ test("a stalled przemienniki query times out with the dictionary already loaded"
     { match: "", stall: true },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await chooseCountry(dom, "PL");
   assert.deepEqual(log.errors, [], "the dictionary fetch is well inside the deadline");
 
-  const pending = dom.repeaterQueryFormEl.dispatch("submit");
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
   await flush();
   t.mock.timers.tick(REPEATER_REQUEST_TIMEOUT_MS);
   await pending;
@@ -1651,9 +1638,9 @@ test("a request answering inside the deadline is unaffected by it", async (t) =>
     },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await chooseCountry(dom, "PL");
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
   t.mock.timers.tick(REPEATER_REQUEST_TIMEOUT_MS * 2);
 
   assert.deepEqual(log.errors, []);
@@ -1681,9 +1668,9 @@ const KRAKOW_JSON = JSON.stringify({
 async function pickCity(dom, text) {
   const city = fieldByName(dom, "city");
   city.value = text;
-  await city.dispatch("input");
+  await dispatch(city, "input");
   await new Promise((resolve) => setTimeout(resolve, 0));
-  await city.dispatch("blur");
+  await dispatch(city, "blur");
   return city;
 }
 
@@ -1691,7 +1678,7 @@ test("a chosen city fills the position, the locator and the box itself", async (
   const { dom } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   const city = await pickCity(dom, "krak");
 
   assert.equal(city.value, "Kraków, Lesser Poland, Poland");
@@ -1704,20 +1691,20 @@ test("the chosen city persists across a reopen and a source switch", async () =>
   const { dom } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await pickCity(dom, "krak");
-  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
 
   // Same source again: the name is back in the box, in step with the
   // coordinates the position field restores beside it.
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(fieldByName(dom, "city").value, "Kraków, Lesser Poland, Poland");
   assert.equal(fieldByName(dom, "latitude").value, "50.061430");
-  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
 
   // A different directory is still the same place, so the name carries over
   // exactly as the coordinates already did.
-  await dom.channelImportRepeaterbookEl.dispatch("click");
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
   assert.equal(fieldByName(dom, "city").value, "Kraków, Lesser Poland, Poland");
   assert.equal(fieldByName(dom, "latitude").value, "50.061430");
 });
@@ -1729,11 +1716,11 @@ test("restoring a city costs no lookup", async () => {
     { match: "/cities", body: KRAKOW_JSON },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await pickCity(dom, "krak");
   const afterPick = calls.filter((call) => call.url.includes("/cities")).length;
-  await dom.repeaterQueryCancelEl.dispatch("click");
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
 
   // The coordinates the name produced are already in the form; asking the
   // gazetteer to rediscover them would be a request whose answer is on screen.
@@ -1744,17 +1731,17 @@ test("moving the position by hand drops the city name it no longer describes", a
   const { dom } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await pickCity(dom, "krak");
 
   const latitude = fieldByName(dom, "latitude");
   latitude.value = "51.5";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
 
   // The box would otherwise still claim these coordinates are Kraków.
   assert.equal(fieldByName(dom, "city").value, "");
-  await dom.repeaterQueryCancelEl.dispatch("click");
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(fieldByName(dom, "city").value, "", "and it stays dropped on reopen");
   assert.equal(fieldByName(dom, "latitude").value, "51.5");
 });
@@ -1810,23 +1797,20 @@ function previewCalls(calls, match) {
 
 // Edit one control the way a browser reports it. The fields' own listeners sit
 // on the control, while the preview listens once on the grid and relies on the
-// event bubbling there -- and the fake DOM has no bubbling, so the dispatch is
-// repeated at the delegating element with `target` set, which is exactly what a
-// real browser hands that listener.
+// event bubbling there.
 async function editField(dom, name, value) {
   const field = fieldByName(dom, name);
   field.value = String(value);
-  await field.dispatch("input");
-  await grid(dom).dispatch("input", { target: field });
+  await dispatch(field, "input");
 }
 
 async function setPreviewPosition(dom) {
   const latitude = fieldByName(dom, "latitude");
   latitude.value = String(PREVIEW_LAT);
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   const longitude = fieldByName(dom, "longitude");
   longitude.value = String(PREVIEW_LON);
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
 }
 
 test("setting a position previews what the filters would return", async () => {
@@ -1836,7 +1820,7 @@ test("setting a position previews what the filters would return", async () => {
     { match: "/przemienniki", body: PREVIEW_RXF },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await setPreviewPosition(dom);
   await afterPreviewQuery();
 
@@ -1856,7 +1840,7 @@ test("a burst of edits costs one preview, not one per keystroke", async () => {
     { match: "/przemienniki", body: PREVIEW_RXF },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await setPreviewPosition(dom);
   for (const value of ["40", "50", "60"]) {
     await editField(dom, "radius", value);
@@ -1876,15 +1860,15 @@ test("an unchanged search redraws from cache instead of asking again", async () 
     { match: "/przemienniki", body: PREVIEW_RXF },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await setPreviewPosition(dom);
   await afterPreviewQuery();
   const first = previewCalls(calls, "/przemienniki").length;
 
   // Close and reopen on the same position and filters: the request would be
   // byte for byte the one already answered.
-  await dom.repeaterQueryCancelEl.dispatch("click");
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await afterPreviewQuery();
 
   assert.equal(previewCalls(calls, "/przemienniki").length, first);
@@ -1897,7 +1881,7 @@ test("a preview is never issued for a form with no position", async () => {
     { match: "/przemienniki", body: PREVIEW_RXF },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await editField(dom, "radius", "50");
   await afterPreviewQuery();
 
@@ -1911,7 +1895,7 @@ test("a directory that refuses a preview leaves the form usable", async () => {
     { match: "/przemienniki", ok: false, status: 503, body: "down" },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await setPreviewPosition(dom);
   await afterPreviewQuery();
 
@@ -1930,10 +1914,10 @@ test("closing the modal abandons a preview still in flight", async () => {
     { match: "/przemienniki", body: PREVIEW_RXF },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await setPreviewPosition(dom);
   // Inside the debounce window, so the request has not gone out yet.
-  await dom.repeaterQueryCancelEl.dispatch("click");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
   await afterPreviewQuery();
 
   // Nothing to assert on the map — the point is that no error and no stray
@@ -1950,7 +1934,7 @@ test("an invalid radius is an inactive preview, not an empty one", async () => {
     { match: "/przemienniki", body: PREVIEW_RXF },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await setPreviewPosition(dom);
   await editField(dom, "radius", "");
   await afterPreviewQuery();
@@ -1977,10 +1961,10 @@ test("a failed city lookup puts the whole error in the debug panel", async (t) =
     return fetchResponse(url, init);
   });
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   const city = fieldByName(dom, "city");
   city.value = "krak";
-  await city.dispatch("input");
+  await dispatch(city, "input");
   await new Promise((resolve) => setTimeout(resolve, 50));
 
   assert.ok(
@@ -2005,13 +1989,13 @@ test("the submitted RSGB query reuses what the preview already downloaded", asyn
   });
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(geolocateButton(dom), "click");
   // Long enough for the automatic preview to run its fan-out.
   await afterPreviewQuery();
   const afterPreview = calls.length;
   assert.ok(afterPreview > 0, "the preview fanned out");
 
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   // The normal workflow is to pause long enough to see the preview and then
   // press Query API. Fetching again here downloaded every square a second
@@ -2040,7 +2024,7 @@ test("making room in the square cache never drops a square the search needs", as
   installGeolocation(LONDON);
 
   await openRsgb(dom);
-  await geolocateButton(dom).dispatch("click");
+  await dispatch(geolocateButton(dom), "click");
   // A wide search first, to fill the cache, then back to a narrow one whose
   // squares the wide one already holds.
   await editField(dom, "radius", "500");
@@ -2048,7 +2032,7 @@ test("making room in the square cache never drops a square the search needs", as
   await editField(dom, "radius", "30");
   await afterPreviewQuery();
 
-  await dom.repeaterQueryFormEl.dispatch("submit");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
 
   // Evicting before reading would hand back an empty list for a square just
   // fetched, and the query would quietly omit its repeaters.
@@ -2066,7 +2050,7 @@ test("no radio loaded means no preview and a caption saying why", async () => {
     { match: "/przemienniki", body: PREVIEW_RXF },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await setPreviewPosition(dom);
   await afterPreviewQuery();
 
@@ -2084,7 +2068,7 @@ test("nudging the radius reuses the body already fetched", async () => {
     { match: "/przemienniki", body: PREVIEW_RXF },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await setPreviewPosition(dom);
   await afterPreviewQuery();
   assert.equal(previewCalls(calls, "/przemienniki").length, 1);
@@ -2119,7 +2103,7 @@ test("a preview failure reaches the debug panel with its stack", async (t) => {
     return fetchResponse(url, init);
   });
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await setPreviewPosition(dom);
   await afterPreviewQuery();
 
@@ -2166,7 +2150,7 @@ test("a cached body is only reused when it covers the widened area too", async (
     { match: "range=45", body: previewRxf(NEAR_11KM, NEAR_21KM, NEAR_32KM) },
   ]);
 
-  await dom.channelImportPrzemiennikiEl.dispatch("click");
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
   await setPreviewPosition(dom);
   await editField(dom, "radius", "20");
   await afterPreviewQuery();
