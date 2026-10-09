@@ -3,9 +3,9 @@
 // keys, serial connection flags) stays private to that module and is reached
 // through its accessors.
 
-/** @typedef {import("../runtime-rpc.js").RuntimeApi} RuntimeApi */
-/** @typedef {import("../runtime-rpc.js").CatalogRadio} CatalogRadio */
-/** @typedef {import("../python-sources.mjs").RuntimeInfo} RuntimeInfo */
+/** @typedef {import("../runtime-rpc.ts").RuntimeApi} RuntimeApi */
+/** @typedef {import("../runtime-rpc.ts").CatalogRadio} CatalogRadio */
+/** @typedef {import("../python-sources.ts").RuntimeInfo} RuntimeInfo */
 /** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
 /** @typedef {import("./channel-values.js").RadioMetadata} RadioMetadata */
 

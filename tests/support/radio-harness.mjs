@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
-import { seedPyodideRuntime } from "../../web/js/python-sources.mjs";
-import { rpcDispatcherFor } from "../../web/js/rpc-dispatch.mjs";
+import { seedPyodideRuntime } from "../../web/js/python-sources.ts";
+import { rpcDispatcherFor } from "../../web/js/rpc-dispatch.ts";
 import { SerialBridge } from "../../web/js/serial-bridge.mjs";
 import {
   createSerialRpcHandler,
@@ -201,7 +201,7 @@ export class TestRadioHarness {
 
   // Call one runtime method the way the browser does: through rpc_dispatch
   // (web/python/webchirp_bridge/rpc.py) with named parameters checked
-  // against RPC_METHODS (web/js/rpc-dispatch.mjs). The harness's own
+  // against RPC_METHODS (web/js/rpc-dispatch.ts). The harness's own
   // codeplug methods below go this way, so a test that uses them exercises
   // the production contract rather than a snippet of its own.
   async rpc(name, params = {}) {

@@ -4,7 +4,7 @@ import "../support/register-cdn-imports.mjs";
 
 import { createDebugLog } from "../../web/js/ui/debug-log.js";
 import { initOptions, initSentry, resetSentryForTests } from "../../web/js/sentry.js";
-import { markBootstrapFailure } from "../../web/js/runtime-bootstrap.mjs";
+import { markBootstrapFailure } from "../../web/js/runtime-bootstrap.ts";
 import { fakeDebugDom } from "../support/fake-dom.mjs";
 
 test("debug output is folded initially and toggles both hidden regions together", () => {
@@ -84,7 +84,7 @@ test("a delayed clipboard failure reopens a panel collapsed while copying", asyn
 });
 
 // One failure must produce one Sentry event. A failed runtime bootstrap is
-// reported as a runtime crash by runtime-rpc.js and then returns through
+// reported as a runtime crash by web/js/runtime-rpc.ts and then returns through
 // whichever action was in flight, so reportActionError sees it a second time.
 
 function makeSentrySdk() {
@@ -119,7 +119,7 @@ test("a bootstrap failure returning through an action is captured only once", as
 
   const log = createDebugLog({ dom: fakeDebugDom() });
 
-  // What runtime-rpc.js rethrows once it has already reported the crash.
+  // What web/js/runtime-rpc.ts rethrows once it has already reported the crash.
   const crash = markBootstrapFailure(new Error("RuntimeError: seeding failed"));
   log.reportActionError("Download", crash);
 
@@ -143,7 +143,7 @@ test("an ordinary action failure is still captured by the action funnel", async 
 });
 
 test("runtime errors keep their message through debug output and Sentry when stacks omit it", async (t) => {
-  const { createRuntimeRpcClient } = await import("../../web/js/runtime-rpc.js?error-reporting-test");
+  const { createRuntimeRpcClient } = await import("../../web/js/runtime-rpc.ts?error-reporting-test");
   const original = new Error("Traceback (most recent call last):\nchirp.errors.InvalidDataError: No channels found");
   original.name = "PythonError";
   original.stack = "new_error@pyodide.asm.js:10:10028\n307@wasm-function[307]";

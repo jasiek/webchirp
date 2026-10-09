@@ -1,7 +1,7 @@
 // Owns the one-time Pyodide bootstrap: memoizes the in-flight attempt, keeps the
 // runtime handle hidden until the whole sequence has succeeded, and marks the
 // errors it raises so callers can tell a broken runtime from an ordinary
-// failure. Split out of runtime-rpc.js because that module imports Pyodide from
+// failure. Split out of web/js/runtime-rpc.ts because that module imports Pyodide from
 // a CDN at load time and so cannot be imported by the Node test suite.
 
 // Errors raised while bootstrapping are recorded here. The RPC layer used to
@@ -15,11 +15,7 @@ const bootstrapFailures = new WeakSet();
 
 // True when the error came out of the bootstrap sequence itself, so a caller can
 // report a genuine runtime crash and stay quiet about everything else.
-/**
- * @param {unknown} error
- * @returns {boolean}
- */
-export function isBootstrapFailure(error) {
+export function isBootstrapFailure(error: unknown): boolean {
   return typeof error === "object" && error !== null && bootstrapFailures.has(error);
 }
 
@@ -28,10 +24,9 @@ export function isBootstrapFailure(error) {
 // that identity when rethrowing, so downstream action handling can avoid
 // capturing the same bootstrap failure a second time.
 /**
- * @param {unknown} error
- * @returns {Error}  The error itself, or an Error wrapping a non-Error throw.
+ * @returns The error itself, or an Error wrapping a non-Error throw.
  */
-export function markBootstrapFailure(error) {
+export function markBootstrapFailure(error: unknown): Error {
   const marked = error instanceof Error ? error : new Error(String(error));
   bootstrapFailures.add(marked);
   return marked;
@@ -52,17 +47,16 @@ export function markBootstrapFailure(error) {
 // says whether this failure has been reported at all, now or earlier, so the
 // caller can stop the action-level funnel capturing the same crash twice.
 /**
- * @param {(detail: string) => void} reportCrash  Told the failure's detail once.
- * @returns {(error: unknown, detail: string) => boolean}
+ * @param reportCrash Told the failure's detail once.
+ * @returns 
  *   Whether the error is a bootstrap failure (and so has been reported).
  */
-export function createBootstrapCrashReporter(reportCrash) {
+export function createBootstrapCrashReporter(reportCrash: (detail: string) => void): (error: unknown, detail: string) => boolean {
   if (typeof reportCrash !== "function") {
     throw new Error("createBootstrapCrashReporter requires a reportCrash() function");
   }
 
-  /** @type {unknown} */
-  let lastReported = null;
+  let lastReported: unknown = null;
 
   return function reportBootstrapCrash(error, detail) {
     if (!isBootstrapFailure(error)) {
@@ -79,28 +73,21 @@ export function createBootstrapCrashReporter(reportCrash) {
 
 // Build the bootstrap gate around a caller-supplied loadRuntime(), which must
 // resolve to a fully seeded runtime and reject if any step of that fails.
-/**
- * @template T
- * @typedef {Object} RuntimeBootstrap
- * @property {() => Promise<T>} ensure  The seeded runtime, booting it if needed.
- * @property {() => T|null} getRuntime  The seeded runtime, or null before boot.
- */
-/**
- * @template T
- * @param {{loadRuntime?: () => Promise<T>}} [options]
- * @returns {RuntimeBootstrap<T>}
- */
-export function createRuntimeBootstrap({ loadRuntime } = {}) {
+export interface RuntimeBootstrap<T> {
+  /** The seeded runtime, booting it if needed. */
+  ensure: () => Promise<T>;
+  /** The seeded runtime, or null before boot. */
+  getRuntime: () => T | null;
+}
+export function createRuntimeBootstrap<T>({ loadRuntime }: { loadRuntime?: () => Promise<T> } = {}): RuntimeBootstrap<T> {
   if (typeof loadRuntime !== "function") {
     throw new Error("createRuntimeBootstrap requires a loadRuntime() function");
   }
 
   // Bound after the check above so the closures below see a function.
   const load = loadRuntime;
-  /** @type {T|null} */
-  let runtime = null;
-  /** @type {Promise<T>|null} */
-  let attempt = null;
+  let runtime: T | null = null;
+  let attempt: Promise<T> | null = null;
 
   // Resolve the runtime, starting the bootstrap at most once per outstanding
   // attempt. A rejected attempt is dropped instead of cached: memoizing the

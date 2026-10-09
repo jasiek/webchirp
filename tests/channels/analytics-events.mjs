@@ -135,14 +135,14 @@ test("errorTypeName reads the exception type from either error shape", () => {
 
 test("errorTypeName still reads a bootstrap failure that never crossed the dispatcher", () => {
   // A PythonError raised while seeding the runtime, before rpc_dispatch
-  // exists, is flattened into a fresh Error by web/js/runtime-rpc.js; the
+  // exists, is flattened into a fresh Error by web/js/runtime-rpc.ts; the
   // class is only in its text.
   const error = new Error([
     "PythonError: Traceback (most recent call last):",
     '  File "/webchirp_runtime/runtime_bridge.py", line 25, in <module>',
     "ModuleNotFoundError: No module named 'webchirp_bridge'",
   ].join("\n"));
-  error.stack = `Error: ${error.message}\n    at invokeRuntimeMethod (runtime-rpc.js:1:1)`;
+  error.stack = `Error: ${error.message}\n    at invokeRuntimeMethod (runtime-rpc.ts:1:1)`;
   assert.equal(errorTypeName(error), "ModuleNotFoundError");
 });
 

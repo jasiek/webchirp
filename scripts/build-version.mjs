@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { DEFAULT_CHIRP_REVISION } from "../web/js/python-sources.mjs";
+import { DEFAULT_CHIRP_REVISION } from "../web/js/python-sources.ts";
 
 const ROOT = process.cwd();
 const RELEASE_NOTES = path.join(ROOT, "RELEASE_NOTES.md");

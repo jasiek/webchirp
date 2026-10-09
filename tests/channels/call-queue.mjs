@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createCallQueue } from "../../web/js/call-queue.mjs";
+import { createCallQueue } from "../../web/js/call-queue.ts";
 
 test("createCallQueue runs tasks strictly one at a time in FIFO order", async () => {
   const enqueue = createCallQueue();

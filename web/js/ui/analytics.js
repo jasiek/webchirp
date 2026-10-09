@@ -18,7 +18,7 @@
 //     nowhere; tests/channels/ga-dimensions.mjs fails the build if it is not.
 
 import { errorDetails } from "./format.js";
-import { isRuntimeCallError, jsErrorName } from "../runtime-errors.mjs";
+import { isRuntimeCallError, jsErrorName } from "../runtime-errors.ts";
 import { isPortSelectionCancelled } from "../serial-errors.js";
 
 export { trackEvent } from "../analytics.js";
@@ -78,7 +78,7 @@ export function codeplugParams(state) {
 // Failure causes the browser names with a JS error name. The port chooser and
 // the serial transport report through DOMException names, so these are read
 // off the error -- or, for a failure that came back through Python, off the JS
-// error the JsException carried (jsErrorName, web/js/runtime-errors.mjs) --
+// error the JsException carried (jsErrorName, web/js/runtime-errors.ts) --
 // rather than searched for in text. A dismissed chooser is the bridge's named
 // cancellation once translated and a raw NotFoundError before it is.
 const JS_ERROR_KINDS = new Map([
@@ -150,7 +150,7 @@ export function classifyErrorKind(error) {
 // A runtime failure names its Python class and a JS error its own name. The
 // one text fallback is for a Python failure that never crossed rpc_dispatch: a
 // PythonError raised while seeding the runtime, before the dispatcher exists,
-// reaches here as the original PythonError (web/js/runtime-rpc.js) whose text
+// reaches here as the original PythonError (web/js/runtime-rpc.ts) whose text
 // names the exception on the traceback's last line.
 export function errorTypeName(error) {
   if (isRuntimeCallError(error)) {

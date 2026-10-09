@@ -1,3 +1,5 @@
+import type { PyodideInterface } from "pyodide";
+
 // Single source of truth for the CHIRP revision the app runs against. The
 // chirp/ submodule, the committed web/radio-catalog.json and the CHIRP archive
 // (web/chirp/chirp-<pin>.zip, built by scripts/build-chirp-bundle.mjs) must
@@ -49,7 +51,7 @@ export const QUANSHENG_UNOFFICIAL_DRIVER_MODULES = Object.freeze(
 // is executed rather than written: it is the one file whose names land in
 // Pyodide's globals, and rpc_dispatch (web/python/webchirp_bridge/rpc.py) is
 // the only one JS reads back. Where the browser fetches each file from is the caller's
-// business (RUNTIME_PYTHON_URLS in web/js/runtime-python-urls.js, which
+// business (RUNTIME_PYTHON_URLS in web/js/runtime-python-urls.ts, which
 // scripts/build-dist.mjs replaces in the bundle with the hashed URLs), so a
 // URL written here would name the unhashed file, which dist/ does not have.
 export const RUNTIME_BRIDGE_ENTRY = "runtime_bridge.py";
@@ -83,10 +85,9 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
 // they can be spelled here and resolved against the page's own origin.
 export const CHIRP_BUNDLE_DIR = "chirp";
 /**
- * @param {string} chirpRevision  A full 40-hex git sha; anything else throws.
- * @returns {Readonly<{archive: string, manifest: string}>}
+ * @param chirpRevision A full 40-hex git sha; anything else throws.
  */
-export function chirpBundleFileNames(chirpRevision) {
+export function chirpBundleFileNames(chirpRevision: string): Readonly<{ archive: string; manifest: string }> {
   const pin = String(chirpRevision || "");
   if (!/^[0-9a-f]{40}$/.test(pin)) {
     throw new Error(`chirpBundleFileNames: not a full git sha: ${pin}`);
@@ -103,20 +104,15 @@ export function chirpBundleFileNames(chirpRevision) {
 export const RUNTIME_MOUNT_DIR = "/webchirp_runtime";
 
 // Resolve a URL value to one of the two supported driver collections.
-/**
- * @param {unknown} value
- * @returns {string}
- */
-export function normalizeDriverSet(value) {
+export function normalizeDriverSet(value: unknown): string {
   return DRIVER_SETS.includes(String(value || "")) ? String(value) : DEFAULT_DRIVER_SET;
 }
 
 // Read the driver collection from a query string, defaulting to upstream CHIRP.
 /**
- * @param {string|null|undefined} search  A location.search string.
- * @returns {string}
+ * @param search A location.search string.
  */
-export function driverSetFromSearch(search) {
+export function driverSetFromSearch(search: string | null | undefined): string {
   return normalizeDriverSet(new URLSearchParams(String(search || "")).get("drivers"));
 }
 
@@ -152,11 +148,10 @@ async function fetchBytes(url) {
 // the catalog the user picked from. Exported so the Node provider
 // (tests/support/chirp-bundle-source.mjs) applies the same check.
 /**
- * @param {{chirpRevision?: string, drivers?: unknown[]}|null|undefined} manifest
- * @param {string} chirpRevision  The pin the runtime expects.
- * @returns {string[]}  The driver module names, sorted.
+ * @param chirpRevision The pin the runtime expects.
+ * @returns The driver module names, sorted.
  */
-export function driverModulesFromManifest(manifest, chirpRevision) {
+export function driverModulesFromManifest(manifest: { chirpRevision?: string; drivers?: unknown[] } | null | undefined, chirpRevision: string): string[] {
   if (manifest?.chirpRevision !== chirpRevision) {
     throw new Error(
       `CHIRP bundle manifest is for revision ${manifest?.chirpRevision || "unknown"}, `
@@ -174,44 +169,46 @@ export function driverModulesFromManifest(manifest, chirpRevision) {
 // scripts/build-chirp-bundle.mjs) and the bridge package and bundled drivers
 // from runtimeFileUrls. tests/support/chirp-bundle-source.mjs is the Node
 // counterpart with the same shape, building the archive from the submodule.
-/**
- * What the runtime reports about the Python it was seeded with.
- * @typedef {Object} RuntimeInfo
- * @property {string} chirpRevision  The CHIRP pin.
- * @property {string} chirpSourceKind  "bundle" in the browser.
- * @property {string} [chirpBundleUrl]  Where the archive was fetched from.
- * @property {string} driverSet  DEFAULT_DRIVER_SET or QUANSHENG_UNOFFICIAL_DRIVER_SET.
- */
+/** What the runtime reports about the Python it was seeded with. */
+export interface RuntimeInfo {
+  /** The CHIRP pin. */
+  chirpRevision: string;
+  /** "bundle" in the browser. */
+  chirpSourceKind: string;
+  /** Where the archive was fetched from. */
+  chirpBundleUrl?: string;
+  /** DEFAULT_DRIVER_SET or QUANSHENG_UNOFFICIAL_DRIVER_SET. */
+  driverSet: string;
+}
 
 /**
  * Where seedPyodideRuntime() gets every Python file from. The browser builds
  * one with createBrowserPythonSource(); tests/support/chirp-bundle-source.mjs
  * builds the Node one.
- * @typedef {Object} PythonSourceProvider
- * @property {() => Promise<Uint8Array>} fetchChirpArchive  The CHIRP zip.
- * @property {() => Promise<any>} [fetchChirpManifest]  Its JSON manifest.
- * @property {(relPath: string) => Promise<string>} fetchRuntimeFile
- *   One file named the way RUNTIME_PYTHON_FILES names it.
- * @property {() => Promise<string[]>} listDriverModules
- * @property {() => RuntimeInfo} getRuntimeInfo
  */
+export interface PythonSourceProvider {
+  /** The CHIRP zip. */
+  fetchChirpArchive: () => Promise<Uint8Array>;
+  /** Its JSON manifest. */
+  fetchChirpManifest?: () => Promise<any>;
+  /** One file named the way RUNTIME_PYTHON_FILES names it. */
+  fetchRuntimeFile: (relPath: string) => Promise<string>;
+  listDriverModules: () => Promise<string[]>;
+  getRuntimeInfo: () => RuntimeInfo;
+}
 
-/**
- * @typedef {Object} BrowserPythonSourceOptions
- * @property {string} [chirpRevision]
- * @property {string} [driverSet]
- * @property {Readonly<Record<string, string>>} runtimeFileUrls
- *   The URL of every runtime file, keyed like RUNTIME_PYTHON_FILES.
- * @property {URL|string} chirpBundleBaseUrl  The directory holding the archive.
- * @property {(url: string) => Promise<string>} [fetchTextImpl]
- * @property {(url: string) => Promise<any>} [fetchJsonImpl]
- * @property {(url: string) => Promise<Uint8Array>} [fetchBytesImpl]
- */
+export interface BrowserPythonSourceOptions {
+  chirpRevision?: string;
+  driverSet?: string;
+  /** The URL of every runtime file, keyed like RUNTIME_PYTHON_FILES. */
+  runtimeFileUrls: Readonly<Record<string, string>>;
+  /** The directory holding the archive. */
+  chirpBundleBaseUrl: URL | string;
+  fetchTextImpl?: (url: string) => Promise<string>;
+  fetchJsonImpl?: (url: string) => Promise<any>;
+  fetchBytesImpl?: (url: string) => Promise<Uint8Array>;
+}
 
-/**
- * @param {BrowserPythonSourceOptions} options
- * @returns {PythonSourceProvider}
- */
 export function createBrowserPythonSource({
   chirpRevision = DEFAULT_CHIRP_REVISION,
   driverSet = DEFAULT_DRIVER_SET,
@@ -220,7 +217,7 @@ export function createBrowserPythonSource({
   fetchTextImpl = fetchText,
   fetchJsonImpl = fetchJson,
   fetchBytesImpl = fetchBytes,
-}) {
+}: BrowserPythonSourceOptions): PythonSourceProvider {
   const selectedDriverSet = normalizeDriverSet(driverSet);
   // Checked up front rather than at fetch time so a declared local Python
   // source without a URL fails construction loudly, not the first user who
@@ -238,8 +235,7 @@ export function createBrowserPythonSource({
   }
   const bundleNames = chirpBundleFileNames(chirpRevision);
   const bundleUrl = (name) => new URL(name, chirpBundleBaseUrl).href;
-  /** @type {Promise<any>|null} */
-  let manifestPromise = null;
+  let manifestPromise: Promise<any> | null = null;
 
   // Fetched once per page: the manifest is read before the all-drivers sweep
   // and again by the catalog fallback, and it never changes under a pinned
@@ -304,11 +300,9 @@ async function mkdirp(pyodide, dir) {
 // every chirp.* module is a file on the mounted tree, so imports resolve
 // through Python's ordinary path finder and never suspend the interpreter.
 /**
- * @param {import("pyodide").PyodideInterface} pyodide  A freshly loaded interpreter.
- * @param {PythonSourceProvider} sourceProvider
- * @returns {Promise<void>}
+ * @param pyodide A freshly loaded interpreter.
  */
-export async function seedPyodideRuntime(pyodide, sourceProvider) {
+export async function seedPyodideRuntime(pyodide: PyodideInterface, sourceProvider: PythonSourceProvider): Promise<void> {
   ensureProvider(sourceProvider);
   await mkdirp(pyodide, RUNTIME_MOUNT_DIR);
 
@@ -348,11 +342,7 @@ export async function seedPyodideRuntime(pyodide, sourceProvider) {
 }
 
 // Every driver module the provider's archive (or driver set) offers.
-/**
- * @param {PythonSourceProvider} sourceProvider
- * @returns {Promise<string[]>}
- */
-export async function listDriverModules(sourceProvider) {
+export async function listDriverModules(sourceProvider: PythonSourceProvider): Promise<string[]> {
   ensureProvider(sourceProvider);
   return sourceProvider.listDriverModules();
 }

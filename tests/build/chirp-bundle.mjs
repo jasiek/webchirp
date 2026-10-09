@@ -21,7 +21,7 @@ import {
 import {
   chirpBundleFileNames,
   DEFAULT_CHIRP_REVISION,
-} from "../../web/js/python-sources.mjs";
+} from "../../web/js/python-sources.ts";
 import { repoRoot } from "../support/repo-paths.mjs";
 
 const chirpPackageDir = await resolveChirpPackageDir(

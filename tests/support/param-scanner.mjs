@@ -73,7 +73,7 @@ export function callArgumentKeys(source, name) {
   return names;
 }
 
-// Every JavaScript source under a directory, recursively. The coverage checks
+// Every JavaScript or TypeScript source under a directory, recursively. The coverage checks
 // have to see all of them because a call site can be added in any module, and
 // web/js is nested -- a flat listing would quietly stop covering web/js/ui,
 // which is where most of them are.
@@ -83,6 +83,6 @@ export function sourceFiles(dir) {
     if (entry.isDirectory()) {
       return sourceFiles(full);
     }
-    return /\.m?js$/.test(entry.name) ? [full] : [];
+    return /(?<!\.d)\.(?:m?js|ts)$/.test(entry.name) ? [full] : [];
   });
 }

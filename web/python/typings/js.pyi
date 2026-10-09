@@ -2,7 +2,7 @@
 
 These are not Python functions: each is a JS function installed on
 ``globalThis`` by ``installSerialBridgeGlobals()`` in ``web/js/serial-globals.mjs``
-before the runtime boots -- by ``web/js/runtime-rpc.js`` in the browser and by
+before the runtime boots -- by ``web/js/runtime-rpc.ts`` in the browser and by
 ``tests/support/radio-harness.mjs`` under Node, so both environments define the
 same functions with the same argument handling -- and reached through
 Pyodide's ``js`` proxy module. Pyright cannot see across that boundary, so the

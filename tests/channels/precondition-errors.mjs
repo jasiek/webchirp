@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { initOptions } from "../../web/js/sentry.js";
-import { isPythonError, runtimeErrorSentence } from "../../web/js/runtime-errors.mjs";
+import { isPythonError, runtimeErrorSentence } from "../../web/js/runtime-errors.ts";
 import { createDebugLog } from "../../web/js/ui/debug-log.js";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
 import { fakeDebugDom } from "../support/fake-dom.mjs";

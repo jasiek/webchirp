@@ -1,14 +1,11 @@
-import { createRuntimeBootstrap } from "./runtime-bootstrap.mjs";
+import { createRuntimeBootstrap } from "./runtime-bootstrap.ts";
 
 // Keep conflicting driver releases in separate interpreters. Calls are serialized
 // by the RPC queue; ordinary CHIRP mode continues sharing one interpreter.
 /**
- * @template T
- * @param {{loadRuntime: () => Promise<T>, isolated?: boolean}} options
- *   isolated: boot a fresh runtime whenever a different module is selected.
- * @returns {{ensure: () => Promise<T>, select: (moduleName: string) => Promise<T>}}
+ * @param options isolated: boot a fresh runtime whenever a different module is selected.
  */
-export function createSelectedDriverRuntime({ loadRuntime, isolated = false }) {
+export function createSelectedDriverRuntime<T>({ loadRuntime, isolated = false }: { loadRuntime: () => Promise<T>; isolated?: boolean }): { ensure: () => Promise<T>; select: (moduleName: string) => Promise<T> } {
   let bootstrap = createRuntimeBootstrap({ loadRuntime });
   let selectedModule = "";
 

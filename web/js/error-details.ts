@@ -1,10 +1,9 @@
 // Preserve exception messages as well as frames: some browsers omit the
 // message from Error.stack, and Pyodide stores its Python traceback in message.
 /**
- * @param {any} error  Anything thrown: an Error, a string, a plain object.
- * @returns {string}
+ * @param error Anything thrown: an Error, a string, a plain object.
  */
-export function errorDetails(error) {
+export function errorDetails(error: any): string {
   if (!error) {
     return "Unknown error";
   }

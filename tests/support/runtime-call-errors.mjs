@@ -2,12 +2,12 @@
 // Pyodide.
 //
 // rpc_dispatch (web/python/webchirp_bridge/rpc.py) answers a failed call with
-// an error envelope, and unwrapRpcEnvelope (web/js/rpc-dispatch.mjs) turns it
+// an error envelope, and unwrapRpcEnvelope (web/js/rpc-dispatch.ts) turns it
 // into a RuntimeCallError. The helpers here go through that same unwrap, so a
 // fake-DOM or classifier test holds exactly the error the real dispatcher
 // would have thrown -- and a change to the envelope's shape breaks them too.
 
-import { unwrapRpcEnvelope } from "../../web/js/rpc-dispatch.mjs";
+import { unwrapRpcEnvelope } from "../../web/js/rpc-dispatch.ts";
 
 // The bases rpc_error_envelope sends for the classes the tests use, nearest
 // first, as Python's MRO lists them (object left out). The chirp.errors ones

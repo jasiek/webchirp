@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { listDriverModules } from "../../web/js/python-sources.mjs";
+import { listDriverModules } from "../../web/js/python-sources.ts";
 import { listRegisteredRadios, sharedHarness } from "../support/chirp.mjs";
 
 function parseFlagValue(flagName, argv = process.argv.slice(2)) {

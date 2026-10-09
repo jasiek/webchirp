@@ -1,8 +1,8 @@
 import { errorDetails } from "./format.js";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
 import { captureError } from "../sentry.js";
-import { isBootstrapFailure } from "../runtime-bootstrap.mjs";
-import { isUserPreconditionFailure, runtimeErrorSentence } from "../runtime-errors.mjs";
+import { isBootstrapFailure } from "../runtime-bootstrap.ts";
+import { isUserPreconditionFailure, runtimeErrorSentence } from "../runtime-errors.ts";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 

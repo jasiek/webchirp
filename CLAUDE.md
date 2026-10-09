@@ -3,7 +3,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 ## Core Architecture
 - `web/app.js`: Browser entry point: wires the UI, the runtime RPC client and
   the browser serial bridge together.
-- `web/js/runtime-rpc.js`: Main-thread runtime RPC layer and Pyodide bootstrap.
+- `web/js/runtime-rpc.ts`: Main-thread runtime RPC layer and Pyodide bootstrap.
 - Serial layer: `web/js/serial-transport.mjs` declares the port contract every
   transport satisfies (Web Serial's surface plus `transport`, `capabilities` --
   framing, signals, reopen-or-update reconfigure -- `usbDevice` and
@@ -42,9 +42,9 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   name, one JSON object of named parameters and an optional callback. It never raises
   an `Exception` back: it returns a JSON envelope, `{"ok": true, "result": ...}` or
   `{"ok": false, "error": {type, bases, module, message, traceback, js}}` built by
-  `rpc_error_envelope`. `web/js/rpc-dispatch.mjs` is the JS side of that contract and
+  `rpc_error_envelope`. `web/js/rpc-dispatch.ts` is the JS side of that contract and
   the only place that calls it; it throws a failed envelope as a `RuntimeCallError`
-  (`web/js/runtime-errors.mjs`) named after the Python class, with the message alone as
+  (`web/js/runtime-errors.ts`) named after the Python class, with the message alone as
   its message. Classify runtime failures by type with `isPythonError(error, "ClassName")`
   (which also matches subclasses), never by searching error text; print
   `errorDetails()` (`web/js/ui/format.js`) to the debug panel, which carries the traceback.
@@ -70,7 +70,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,
   `sources`, `locale`, `share` and `stock_configs`, which nothing imports -- into the
   ignored `web/chirp/chirp-<pin>.zip` with a `chirp-<pin>.json` manifest (pin, driver
-  module list, sizes). `seedPyodideRuntime()` (`web/js/python-sources.mjs`) mounts it
+  module list, sizes). `seedPyodideRuntime()` (`web/js/python-sources.ts`) mounts it
   with `pyodide.unpackArchive` under `/webchirp_runtime`, so every `chirp.*` import is
   a plain file import that never suspends the interpreter; the driver list everywhere
   comes from the manifest. The Node harness (`tests/support/chirp-bundle-source.mjs`)
@@ -87,7 +87,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   and every JS output in `dist/js/` named `name.<hash>.js`. Pages are pointed at
   their outputs through esbuild's metafile. Runtime Python files are copied as
   `name.<sha256:10>.py`, and the bundle gets their URLs from a generated
-  replacement for `web/js/runtime-python-urls.js`. The CHIRP archive pair and
+  replacement for `web/js/runtime-python-urls.ts`. The CHIRP archive pair and
   every other file are copied as they are. The jsDelivr modules (Pyodide,
   Sentry, web-serial-polyfill) stay external. `scripts/retain-deployed-assets.mjs`
   knows both hashed name shapes.
@@ -128,13 +128,13 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 ## Rules for Agents
 - Keep Python and JavaScript separated. Put runtime Python code in
   `web/python/webchirp_bridge/*.py`; a new module must be listed in `RUNTIME_PYTHON_FILES`
-  (`web/js/python-sources.mjs`) so it is seeded into Pyodide; its URL follows from that
-  list (`web/js/runtime-python-urls.js`, which the dist build replaces with the hashed
+  (`web/js/python-sources.ts`) so it is seeded into Pyodide; its URL follows from that
+  list (`web/js/runtime-python-urls.ts`, which the dist build replaces with the hashed
   URLs). The module graph must stay acyclic; call across modules by importing, never
   through the globals.
 - A new RPC method is a function registered in `RPC_METHODS`
   (`web/python/webchirp_bridge/rpc.py`) and listed with its parameter names in
-  `RPC_METHODS` (`web/js/rpc-dispatch.mjs`); `tests/channels/rpc-contract.mjs` fails when
+  `RPC_METHODS` (`web/js/rpc-dispatch.ts`); `tests/channels/rpc-contract.mjs` fails when
   the two disagree. JS calls it by name with named parameters -- never by evaluating a
   Python expression string or writing an interpreter global. Nothing else in the package
   is callable from JS. Test snippets (`harness.runPython`) see the package flattened into

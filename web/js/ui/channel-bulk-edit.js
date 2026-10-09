@@ -7,7 +7,7 @@ import { requireRuntimeApi } from "./state.js";
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 /** @typedef {import("./channel-values.js").ColumnMeta} ColumnMeta */
 /** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
-/** @typedef {import("../runtime-rpc.js").RuntimeApi} RuntimeApi */
+/** @typedef {import("../runtime-rpc.ts").RuntimeApi} RuntimeApi */
 
 // The bulk channel editor: one modal that writes the same value to every
 // selected channel (issue #146).

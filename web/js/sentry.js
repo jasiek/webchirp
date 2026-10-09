@@ -17,7 +17,7 @@
 // in package.json to pin the version of record, and shipped from the CDN URL
 // below. tests/channels/sentry.mjs fails the build if the two drift apart.
 
-import { isPythonError, isRuntimeCallError } from "./runtime-errors.mjs";
+import { isPythonError, isRuntimeCallError } from "./runtime-errors.ts";
 import { isSerialUnsupported } from "./serial-errors.js";
 
 // The SDK's namespace as the CDN's +esm build exports it, typed from the npm
@@ -104,7 +104,7 @@ export const IGNORED_CHIRP_ERRORS = Object.freeze([
 // Whether a failure is one this app never reports: the runtime's own "you have
 // not done X yet" guard, or a CHIRP error from the list above. Both are this
 // app, and CHIRP, working as designed. Read off the RuntimeCallError the
-// dispatcher throws (web/js/runtime-errors.mjs), which beforeSend receives as
+// dispatcher throws (web/js/runtime-errors.ts), which beforeSend receives as
 // the hint's originalException -- for a capture from the one funnel and for an
 // unhandled rejection through the SDK's global handlers alike.
 //

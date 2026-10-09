@@ -16,7 +16,7 @@
 //   * The runtime Python files (web/python/**/*.py) are fetched by URL, not
 //     imported. Each is copied under name.<10 hex>.py, the hex being its
 //     SHA-256, and the bundle learns those URLs from a generated module:
-//     web/js/runtime-python-urls.js is replaced wholesale with a literal table
+//     web/js/runtime-python-urls.ts is replaced wholesale with a literal table
 //     of the hashed URLs (pythonUrlsPlugin below), so the source keeps
 //     deriving the unhashed URLs the dev server serves.
 //   * The CHIRP archive and manifest (web/chirp/, scripts/build-chirp-bundle.mjs)
@@ -41,7 +41,7 @@ import {
   CHIRP_BUNDLE_DIR,
   chirpBundleFileNames,
   DEFAULT_CHIRP_REVISION,
-} from "../web/js/python-sources.mjs";
+} from "../web/js/python-sources.ts";
 
 const ROOT = process.cwd();
 const DIST_DIR = path.join(ROOT, "dist");
@@ -49,14 +49,14 @@ const WEB_DIR = path.join(ROOT, "web");
 const PYTHON_DIR = path.join(WEB_DIR, "python");
 // The module whose source names every runtime Python file by its unhashed URL,
 // and which the bundle gets in a generated form naming the hashed copies.
-const PYTHON_URLS_MODULE = path.join(WEB_DIR, "js", "runtime-python-urls.js");
+const PYTHON_URLS_MODULE = path.join(WEB_DIR, "js", "runtime-python-urls.ts");
 // Every bundled JS output lands in this one directory, entries and chunks
 // alike, at the depth web/js/ has in the source. A module that resolves a URL
-// against import.meta.url (web/js/runtime-rpc.js reads "../radio-catalog.json"
+// against import.meta.url (web/js/runtime-rpc.ts reads "../radio-catalog.json"
 // that way) then resolves it the same way in whichever chunk it ends up in.
 const JS_OUT_DIR = "js";
 // The three CDN modules, all on jsDelivr: Pyodide's loader (a static import in
-// web/js/runtime-rpc.js), the Sentry SDK (web/js/sentry.js) and the
+// web/js/runtime-rpc.ts), the Sentry SDK (web/js/sentry.js) and the
 // web-serial polyfill (web/js/webusb-serial.js), the last two lazy.
 const EXTERNAL_URLS = ["https://cdn.jsdelivr.net/*"];
 // The CHIRP archive and manifest for the pinned revision. Immutable by name like
@@ -251,7 +251,7 @@ function pageAssetRefs(html, pageRel) {
 
 // Copy every runtime Python file under its content hash and return the URL
 // table the bundle gets, keyed by path under web/python/ the way
-// RUNTIME_PYTHON_FILES (web/js/python-sources.mjs) names them.
+// RUNTIME_PYTHON_FILES (web/js/python-sources.ts) names them.
 async function emitPythonFiles() {
   const urls = {};
   const emitted = [];
@@ -276,7 +276,7 @@ async function emitPythonFiles() {
   return { urls, emitted };
 }
 
-// Give the bundle web/js/runtime-python-urls.js as a literal table of the
+// Give the bundle web/js/runtime-python-urls.ts as a literal table of the
 // hashed URLs, in place of the source that derives the unhashed ones. The
 // whole module is replaced, never edited, so nothing depends on how the
 // source spells it.
@@ -290,7 +290,7 @@ function pythonUrlsPlugin(urls) {
   return {
     name: "runtime-python-urls",
     setup(build) {
-      build.onLoad({ filter: /runtime-python-urls\.js$/ }, (args) => (
+      build.onLoad({ filter: /runtime-python-urls\.ts$/ }, (args) => (
         path.resolve(args.path) === PYTHON_URLS_MODULE
           ? { contents, loader: "js", resolveDir: path.dirname(PYTHON_URLS_MODULE) }
           : undefined

@@ -13,7 +13,7 @@
 // Nothing here knows about uploads or radios. It is handed a title and a
 // sentence, which is all a notice ever is; web/js/ui/debug-log.js decides which
 // failures get one (RuntimePreconditionError, recognised by
-// web/js/runtime-errors.mjs).
+// web/js/runtime-errors.ts).
 /**
  * @param {Pick<UiContext, "dom">} ctx
  */

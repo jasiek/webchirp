@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     # keyed by CSV header name (``CSV_HEADERS`` below, from
     # ``chirp_common.Memory.CSV_FORMAT``) with text values — "Location": "25",
     # "Frequency": "443.000000", "Duplex": "+". It is the grid's row, serialized by
-    # ``setRowsJsonGlobal()`` in ``web/js/runtime-rpc.js`` and parsed here with
+    # ``setRowsJsonGlobal()`` in ``web/js/runtime-rpc.ts`` and parsed here with
     # ``json.loads``, so every value a header names is a string.
     #
     # The value type is ``Any`` rather than ``str`` because a row may also carry

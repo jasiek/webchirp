@@ -175,9 +175,9 @@ wrong one still echoes perfectly. The same cases run against fake hardware in
 - Serial bridge: `web/js/serial.js` (native Web Serial) with WebUSB chip drivers
   in `web/js/ftdi-webusb.js`, `web/js/pl2303-webusb.js`,
   `web/js/ch340-webusb.js` and `web/js/cp2102-webusb.js`.
-- Main-thread runtime RPC client + Pyodide bootstrap: `web/js/runtime-rpc.js`
+- Main-thread runtime RPC client + Pyodide bootstrap: `web/js/runtime-rpc.ts`
   (runs on the main thread — there is no Web Worker).
-- Python source providers: `web/js/python-sources.mjs`.
+- Python source providers: `web/js/python-sources.ts`.
 - Versioned Python runtime code: the `web/python/webchirp_bridge/` package, executed
   into Pyodide's globals by the `web/python/runtime_bridge.py` entry point.
 - The browser runtime mounts the pinned CHIRP package into Pyodide as one archive
@@ -210,8 +210,8 @@ sequenceDiagram
   autonumber
   participant U as User
   participant UI as ui.js
-  participant RPC as runtime-rpc.js
-  participant SRC as python-sources.mjs
+  participant RPC as runtime-rpc.ts
+  participant SRC as python-sources.ts
   participant PY as webchirp_bridge<br/>(Pyodide)
   participant S as serial.js<br/>(Web Serial / WebUSB)
   participant R as Radio

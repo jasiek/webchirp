@@ -36,7 +36,7 @@ import {
   CHIRP_BUNDLE_DIR,
   chirpBundleFileNames,
   DEFAULT_CHIRP_REVISION,
-} from "../web/js/python-sources.mjs";
+} from "../web/js/python-sources.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -177,7 +177,7 @@ async function main() {
   if (checkedOut !== "local" && checkedOut !== DEFAULT_CHIRP_REVISION) {
     throw new Error(
       `CHIRP source is at revision ${checkedOut} but the runtime pin `
-      + `(DEFAULT_CHIRP_REVISION in web/js/python-sources.mjs) is ${DEFAULT_CHIRP_REVISION}. `
+      + `(DEFAULT_CHIRP_REVISION in web/js/python-sources.ts) is ${DEFAULT_CHIRP_REVISION}. `
       + "Check out the pinned revision in chirp/ or update the pin first.",
     );
   }

@@ -3,9 +3,9 @@
 They all derive from ``chirp.errors.RadioError`` so that every caller treats
 them like any other radio failure, while the class names stay distinct enough
 to be matched on. The JS side sees each one as a ``RuntimeCallError``
-(``web/js/runtime-errors.mjs``) carrying the class name and its bases, as
+(``web/js/runtime-errors.ts``) carrying the class name and its bases, as
 ``rpc_error_envelope`` (``web/python/webchirp_bridge/rpc.py``) sends them, and
-tests it with ``isPythonError`` -- ``web/js/image-metadata.mjs`` retries on
+tests it with ``isPythonError`` -- ``web/js/image-metadata.ts`` retries on
 ``ImageDetectionError`` that way. A subclass therefore still matches its base.
 """
 
@@ -23,7 +23,7 @@ class ImageDetectionError(RuntimeUnsupportedError):
 
     Split out from the generic error because it is the *only* image failure the
     all-drivers sweep can fix, and the browser gates its retry on this class
-    (`isImageDetectionFailure`, `web/js/image-metadata.mjs`). Renaming it
+    (`isImageDetectionFailure`, `web/js/image-metadata.ts`). Renaming it
     without updating that predicate silently disables the backstop, so
     `tests/channels/metadataless-image-load.mjs` pins the two together.
     """

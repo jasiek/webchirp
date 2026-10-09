@@ -1,4 +1,4 @@
-// The Node counterpart of createBrowserPythonSource (web/js/python-sources.mjs):
+// The Node counterpart of createBrowserPythonSource (web/js/python-sources.ts):
 // the same provider shape, fed from disk. The CHIRP archive is built
 // in-process from the submodule by scripts/build-chirp-bundle.mjs, the very
 // function the deploy runs, so the test harness, scripts/build-catalog.mjs
@@ -19,7 +19,7 @@ import {
   normalizeDriverSet,
   QUANSHENG_UNOFFICIAL_DRIVER_MODULES,
   QUANSHENG_UNOFFICIAL_DRIVER_SET,
-} from "../../web/js/python-sources.mjs";
+} from "../../web/js/python-sources.ts";
 
 // One archive per package directory per process. Every harness in a test
 // file (and the isolated ones some tests ask for) mounts the same tree, and
@@ -39,7 +39,7 @@ function bundleFor(chirpPackageDir) {
 // A provider over a CHIRP checkout (repo/chirp by default, or
 // WEBCHIRP_CHIRP_DIR / an explicit chirpDir) and the repo's web/python tree.
 /**
- * The same shape as web/js/python-sources.mjs's PythonSourceProvider.
+ * The same shape as web/js/python-sources.ts's PythonSourceProvider.
  * @param {{repoRoot?: string, chirpDir?: string, driverSet?: string}} [options]
  */
 export async function createLocalPythonSource({ repoRoot, chirpDir = "", driverSet } = {}) {

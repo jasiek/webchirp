@@ -16,7 +16,7 @@ import {
   QUANSHENG_UNOFFICIAL_DRIVER_MODULES,
   QUANSHENG_UNOFFICIAL_DRIVER_SET,
   RUNTIME_PYTHON_FILES,
-} from "../../web/js/python-sources.mjs";
+} from "../../web/js/python-sources.ts";
 import { listRegisteredRadios, sharedHarness } from "../support/chirp.mjs";
 import { webDir } from "../support/repo-paths.mjs";
 

@@ -3,8 +3,8 @@
 // rpc_dispatch (web/python/webchirp_bridge/rpc.py) answers a failed call with
 // an envelope naming the exception's class, bases, module, message, traceback
 // and -- for a JsException -- the JS error underneath; unwrapRpcEnvelope
-// (web/js/rpc-dispatch.mjs) throws it as a RuntimeCallError
-// (web/js/runtime-errors.mjs). Every UI classifier tests those fields instead
+// (web/js/rpc-dispatch.ts) throws it as a RuntimeCallError
+// (web/js/runtime-errors.ts). Every UI classifier tests those fields instead
 // of searching traceback text, so these tests drive real failures through the
 // real dispatcher -- the same one the browser uses, reached through the Node
 // harness -- and check each classifier on what comes out.
@@ -12,13 +12,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadImageWithDriverFallback } from "../../web/js/image-metadata.mjs";
+import { loadImageWithDriverFallback } from "../../web/js/image-metadata.ts";
 import {
   RuntimeCallError,
   isPythonError,
   isUserPreconditionFailure,
   runtimeErrorSentence,
-} from "../../web/js/runtime-errors.mjs";
+} from "../../web/js/runtime-errors.ts";
 import {
   PORT_SELECTION_CANCELLED,
   PORT_SELECTION_CANCELLED_MESSAGE,
@@ -134,7 +134,7 @@ test("a generic exception carries its traceback to the debug log", async () => {
   assert.match(panel, /File "[^"]*webchirp_bridge\/rpc\.py", line \d+, in rpc_dispatch/);
   assert.match(panel, /\nModuleNotFoundError: No module named /);
   // Followed by the JS frames of the call that asked for it.
-  assert.match(panel, /\n\s+at .*rpc-dispatch\.mjs/);
+  assert.match(panel, /\n\s+at .*rpc-dispatch\.ts/);
   // And the one-line summary is the cause, not the traceback banner.
   assert.match(errorSummary(error), /^ModuleNotFoundError: No module named /);
   assert.match(log.getLastErrorSummary(), /^OPEN RADIO ERROR ModuleNotFoundError: /);
@@ -203,7 +203,7 @@ json.dumps(_envelope)
   assert.equal(envelope.message, "Failed to read block at 0x0040");
   assert.deepEqual(envelope.causes, [{ type: "RadioError", message: "Block failed checksum!" }]);
 
-  const { unwrapRpcEnvelope } = await import("../../web/js/rpc-dispatch.mjs");
+  const { unwrapRpcEnvelope } = await import("../../web/js/rpc-dispatch.ts");
   const error = await failure(Promise.resolve().then(() => unwrapRpcEnvelope("download", { ok: false, error: envelope })));
   assert.deepEqual(error.pythonCauses, [{ type: "RadioError", message: "Block failed checksum!" }]);
   assert.equal(classifyErrorKind(error), "checksum");
@@ -223,7 +223,7 @@ test("a dismissed port chooser is still classified port_not_selected after cross
 });
 
 test("a reply that is not an envelope fails loudly instead of passing as a result", async () => {
-  const { unwrapRpcEnvelope } = await import("../../web/js/rpc-dispatch.mjs");
+  const { unwrapRpcEnvelope } = await import("../../web/js/rpc-dispatch.ts");
   assert.deepEqual(unwrapRpcEnvelope("get_default_schema", { ok: true, result: { a: 1 } }), { a: 1 });
   assert.throws(
     () => unwrapRpcEnvelope("get_default_schema", { columns: [] }),

@@ -5,7 +5,7 @@ import { requireRuntimeApi } from "./state.js";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 /** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
-/** @typedef {import("../runtime-rpc.js").RuntimeApi} RuntimeApi */
+/** @typedef {import("../runtime-rpc.ts").RuntimeApi} RuntimeApi */
 
 // The per-channel extras editor: the modal behind the grid's Extra column.
 //

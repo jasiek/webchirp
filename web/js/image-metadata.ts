@@ -9,7 +9,7 @@
 // runs — which compares VENDOR/MODEL/VARIANT across `rclass.ALIASES + [rclass]`
 // (chirp/chirp/directory.py) — and must report ambiguity rather than guessing.
 
-import { isPythonError } from "./runtime-errors.mjs";
+import { isPythonError } from "./runtime-errors.ts";
 
 function identitiesFor(radio) {
   if (Array.isArray(radio.aliases) && radio.aliases.length > 0) {
@@ -90,7 +90,7 @@ export function findCatalogRadioForImageMetadata(radioCatalog, metadata) {
 // up while reading memories) is about the image itself and would still fail
 // after the sweep — so retrying would just cost ~20 s in the browser before
 // surfacing the same error. The class is read off the RuntimeCallError the
-// dispatcher throws (web/js/runtime-errors.mjs), so the class name is the
+// dispatcher throws (web/js/runtime-errors.ts), so the class name is the
 // contract; see the Python docstring.
 export function isImageDetectionFailure(error) {
   return isPythonError(error, "ImageDetectionError");

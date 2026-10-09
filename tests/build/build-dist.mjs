@@ -25,8 +25,8 @@ import {
   DEFAULT_CHIRP_REVISION,
   EXTRA_DRIVER_RELATIVE_FILES,
   RUNTIME_PYTHON_FILES,
-} from "../../web/js/python-sources.mjs";
-import { RUNTIME_PYTHON_URLS } from "../../web/js/runtime-python-urls.js";
+} from "../../web/js/python-sources.ts";
+import { RUNTIME_PYTHON_URLS } from "../../web/js/runtime-python-urls.ts";
 
 const SCRIPT = path.join(repoRoot, "scripts", "build-dist.mjs");
 // esbuild's names (name.<8 base32>.js, .css, and .js.map beside each) and the
@@ -384,16 +384,16 @@ test("CDN imports stay external and lazy ones stay dynamic", async () => {
 });
 
 // The runtime fetches its Python by URL, so the bundle has to name the hashed
-// copies: web/js/runtime-python-urls.js is replaced in the bundle by a literal
+// copies: web/js/runtime-python-urls.ts is replaced in the bundle by a literal
 // table of them, while the source keeps naming the unhashed files the dev
 // server serves.
 test("the bundle fetches each runtime Python file under its hashed name", async () => {
   const emitted = await build({
     ...appTree("export const leaf = 1;\n"),
     "js/app.js":
-      'import { RUNTIME_PYTHON_URLS } from "./runtime-python-urls.js";\n'
+      'import { RUNTIME_PYTHON_URLS } from "./runtime-python-urls.ts";\n'
       + "export const urls = RUNTIME_PYTHON_URLS;\n",
-    "js/runtime-python-urls.js":
+    "js/runtime-python-urls.ts":
       'export const RUNTIME_PYTHON_URLS = { "bridge.py": "./python/bridge.py" };\n',
     "python/pkg/module.py": "OTHER = 2\n",
   });
@@ -424,7 +424,7 @@ function pythonFiles(dir, base = dir) {
 
 // The build ships every .py under web/python and the browser fetches what
 // RUNTIME_PYTHON_FILES and EXTRA_DRIVER_RELATIVE_FILES list, by the URL
-// web/js/runtime-python-urls.js derives from them. The two sets have to be the
+// web/js/runtime-python-urls.ts derives from them. The two sets have to be the
 // same: a listed file that is not there 404s at boot, and a file that is not
 // listed is shipped and never loaded.
 test("every runtime Python file is listed, shipped and has a URL", () => {

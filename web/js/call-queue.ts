@@ -8,19 +8,13 @@
 // registration ("Duplicate radio driver id"). Serializing the calls removes
 // the overlap entirely.
 /**
- * @returns {<T>(task: () => T|Promise<T>) => Promise<T>}  Runs task once every
+ * @returns Runs task once every
  *   task enqueued before it has settled, and settles as task does.
  */
-export function createCallQueue() {
-  /** @type {Promise<unknown>} */
-  let chain = Promise.resolve();
+export function createCallQueue(): <T>(task: () => T | Promise<T>) => Promise<T> {
+  let chain: Promise<unknown> = Promise.resolve();
 
-  /**
-   * @template T
-   * @param {() => T|Promise<T>} task
-   * @returns {Promise<T>}
-   */
-  return function enqueue(task) {
+  return function enqueue<T>(task: () => T | Promise<T>): Promise<T> {
     const result = chain.then(() => task());
     // Keep the chain alive after failures; the caller still sees the rejection.
     chain = result.then(

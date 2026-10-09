@@ -14,7 +14,7 @@
 // own, so a test about the session calls can still observe them.
 
 // Every runtime method that names a session. Kept in step with RUNTIME_METHODS
-// in web/js/runtime-rpc.js.
+// in web/js/runtime-rpc.ts.
 const SESSION_BOUND_METHODS = [
   "normalizeRows",
   "validateRowsForUpload",

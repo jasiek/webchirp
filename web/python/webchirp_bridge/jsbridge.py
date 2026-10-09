@@ -1,6 +1,6 @@
 """The seam between Python and the JS half of the bridge.
 
-Everything that crosses into ``web/js/runtime-rpc.js`` from CHIRP-facing code
+Everything that crosses into ``web/js/runtime-rpc.ts`` from CHIRP-facing code
 passes through here: converting ``JsProxy`` values, waiting synchronously on
 a JS promise (CHIRP's clone loops are blocking), and the two channels the app
 shows the user -- the debug panel (``_log_debug``) and the progress strip

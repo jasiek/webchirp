@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { findCatalogRadioForImageMetadata } from "../../web/js/image-metadata.mjs";
+import { findCatalogRadioForImageMetadata } from "../../web/js/image-metadata.ts";
 import { createTestRadioHarness } from "./radio-harness.mjs";
 import { chirpImagesDir, repoRoot, webDir } from "./repo-paths.mjs";
 

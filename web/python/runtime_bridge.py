@@ -1,11 +1,11 @@
 """Entry point of the webchirp Python runtime, executed into Pyodide's globals.
 
-``seedPyodideRuntime()`` in ``web/js/python-sources.mjs`` writes the
+``seedPyodideRuntime()`` in ``web/js/python-sources.ts`` writes the
 ``webchirp_bridge`` package into the Pyodide filesystem and then runs this file
 with ``runPythonAsync`` -- it is executed, not imported, so every name it binds
 lands in the interpreter's globals namespace. It binds exactly one that JS
 uses: ``rpc_dispatch``, the single callable through which
-``web/js/rpc-dispatch.mjs`` reaches every runtime function listed in
+``web/js/rpc-dispatch.ts`` reaches every runtime function listed in
 ``RPC_METHODS`` (``web/python/webchirp_bridge/rpc.py``). The runtime logic
 itself lives in the package modules, one per concern; this file only puts the
 interpreter in the state they expect and imports the dispatcher. Nothing else

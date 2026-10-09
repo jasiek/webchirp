@@ -127,7 +127,7 @@ export function createUiController() {
     ...radioEventParams(state.selectedRadio),
   }));
 
-  /** @param {import("./runtime-rpc.js").RuntimeApi} api */
+  /** @param {import("./runtime-rpc.ts").RuntimeApi} api */
   function setRuntimeApi(api) {
     state.runtimeApi = api;
   }

@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RUNTIME_MOUNT_DIR } from "../../web/js/python-sources.mjs";
+import { RUNTIME_MOUNT_DIR } from "../../web/js/python-sources.ts";
 import { importAllDriverModules, listRegisteredRadios, sharedHarness } from "../support/chirp.mjs";
 
 // A driver that was never among the files seeded ahead of the old import hook,
@@ -105,7 +105,7 @@ test("the all-drivers sweep yields to the event loop between imports", async () 
 test("the catalog fallback enumeration yields to the event loop between imports", async () => {
   // When radio-catalog.json is missing or built for another pin, the browser
   // enumerates the drivers live (loadRadioCatalogFromSources() in
-  // web/js/runtime-rpc.js) through list_registered_radios. That sweep
+  // web/js/runtime-rpc.ts) through list_registered_radios. That sweep
   // imports the same ~190 modules as the all-drivers one and has no
   // progress callback, so the only thing keeping the page responsive is that
   // it yields between imports the same way. A fresh runtime, so every module

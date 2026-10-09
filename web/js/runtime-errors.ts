@@ -3,43 +3,53 @@
 //
 // rpc_dispatch (web/python/webchirp_bridge/rpc.py) never raises across the
 // boundary; a failed call comes back as an envelope of fields describing the
-// Python exception, and web/js/rpc-dispatch.mjs turns that envelope into the
+// Python exception, and web/js/rpc-dispatch.ts turns that envelope into the
 // RuntimeCallError below. Every classifier here tests those fields, so the
 // Python class names are the contract and they are stated once, in this module,
 // rather than at each call site.
 
-import { errorDetails } from "./error-details.mjs";
+import { errorDetails } from "./error-details.ts";
 
 /**
  * One exception the failed call was chained from (`__cause__`/`__context__`),
  * nearest first.
- * @typedef {Object} PythonCause
- * @property {string} type  The exception's class name.
- * @property {string} message  `str(exc)`.
  */
+export interface PythonCause {
+  /** The exception's class name. */
+  type: string;
+  /** `str(exc)`. */
+  message: string;
+}
 
 /**
  * The JS error under a Python `JsException`: what a rejected JS call raised
  * inside Python, by its own name and message.
- * @typedef {Object} JsCause
- * @property {string} name
- * @property {string} message
  */
+export interface JsCause {
+  name: string;
+  message: string;
+}
 
 /**
  * The `error` half of a failed envelope, as `rpc_error_envelope`
  * (web/python/webchirp_bridge/rpc.py) builds it. Every field is optional here
  * because the constructor below tolerates a partial one (tests build them by
  * hand), not because Python ever leaves one out.
- * @typedef {Object} RpcErrorFields
- * @property {string} [type]  The Python class name.
- * @property {string[]} [bases]  Every class above it, up to BaseException.
- * @property {string} [module]  The module that defines the class.
- * @property {string} [message]  `str(exc)` alone.
- * @property {string} [traceback]  The full formatted traceback.
- * @property {Partial<PythonCause>[]} [causes]
- * @property {Partial<JsCause>|null} [js]
  */
+export interface RpcErrorFields {
+  /** The Python class name. */
+  type?: string;
+  /** Every class above it, up to BaseException. */
+  bases?: string[];
+  /** The module that defines the class. */
+  module?: string;
+  /** `str(exc)` alone. */
+  message?: string;
+  /** The full formatted traceback. */
+  traceback?: string;
+  causes?: Partial<PythonCause>[];
+  js?: Partial<JsCause> | null;
+}
 
 // A Python exception that crossed rpc_dispatch, as a JS Error. name is the
 // Python class name, so Sentry titles and groups the event by it and a stack
@@ -51,31 +61,32 @@ import { errorDetails } from "./error-details.mjs";
 // message} of the JS error behind a JsException, or null) and the rpcMethod
 // that failed.
 export class RuntimeCallError extends Error {
+  pythonType: string;
+  pythonBases: readonly string[];
+  pythonModule: string;
+  pythonTraceback: string;
+  pythonCauses: readonly Readonly<PythonCause>[];
+  jsCause: Readonly<JsCause> | null;
+  rpcMethod: string;
+
   /**
-   * @param {RpcErrorFields} [envelope]  A failed envelope's `error` object.
-   * @param {{method?: string}} [options]  `method`: the RPC method that failed.
+   * @param envelope A failed envelope's `error` object.
+   * @param options `method`: the RPC method that failed.
    */
-  constructor(envelope = {}, { method = "" } = {}) {
+  constructor(envelope: RpcErrorFields = {}, { method = "" }: { method?: string } = {}) {
     super(String(envelope.message ?? ""));
     this.name = String(envelope.type || "RuntimeCallError");
-    /** @type {string} */
     this.pythonType = String(envelope.type || "");
-    /** @type {readonly string[]} */
     this.pythonBases = Object.freeze((envelope.bases || []).map(String));
-    /** @type {string} */
     this.pythonModule = String(envelope.module || "");
-    /** @type {string} */
     this.pythonTraceback = String(envelope.traceback || "");
-    /** @type {readonly Readonly<PythonCause>[]} */
     this.pythonCauses = Object.freeze((envelope.causes || []).map((cause) => Object.freeze({
       type: String(cause?.type || ""),
       message: String(cause?.message || ""),
     })));
-    /** @type {Readonly<JsCause>|null} */
     this.jsCause = envelope.js
       ? Object.freeze({ name: String(envelope.js.name || ""), message: String(envelope.js.message || "") })
       : null;
-    /** @type {string} */
     this.rpcMethod = String(method || "");
   }
 }
@@ -84,11 +95,7 @@ export class RuntimeCallError extends Error {
 // by its fields rather than instanceof: the fields are what every classifier
 // below reads, and they survive a caller that copies the error onto a plain
 // object.
-/**
- * @param {any} error
- * @returns {error is RuntimeCallError}
- */
-export function isRuntimeCallError(error) {
+export function isRuntimeCallError(error: any): error is RuntimeCallError {
   return typeof error?.pythonType === "string" && error.pythonType !== ""
     && Array.isArray(error?.pythonBases);
 }
@@ -98,11 +105,9 @@ export function isRuntimeCallError(error) {
 // This is the whole replacement for the regexes that used to look for a class
 // name somewhere in a traceback's text.
 /**
- * @param {any} error
- * @param {string} typeName  A Python class name, e.g. "RadioError".
- * @returns {error is RuntimeCallError}
+ * @param typeName A Python class name, e.g. "RadioError".
  */
-export function isPythonError(error, typeName) {
+export function isPythonError(error: any, typeName: string): error is RuntimeCallError {
   if (!isRuntimeCallError(error)) {
     return false;
   }
@@ -114,11 +119,7 @@ export function isPythonError(error, typeName) {
 // never crossed the runtime, its own name. The port chooser and the serial
 // transport report what happened through DOMException names, so this is what
 // a classifier reads to recognise them wherever they surfaced.
-/**
- * @param {any} error
- * @returns {string}
- */
-export function jsErrorName(error) {
+export function jsErrorName(error: any): string {
   if (isRuntimeCallError(error)) {
     return error.jsCause?.name || "";
   }
@@ -131,11 +132,7 @@ export function jsErrorName(error) {
 // UI answers with a modal (web/js/ui/notice-modal.js) instead of a traceback in
 // the debug panel, and why the event never reaches Sentry (isIgnoredError,
 // web/js/sentry.js). A subclass of RuntimePreconditionError is one too.
-/**
- * @param {any} error
- * @returns {error is RuntimeCallError}
- */
-export function isUserPreconditionFailure(error) {
+export function isUserPreconditionFailure(error: any): error is RuntimeCallError {
   return isPythonError(error, "RuntimePreconditionError");
 }
 
@@ -146,11 +143,7 @@ export function isUserPreconditionFailure(error) {
 // an exception raised with no message falls back to its class name. Anything
 // else -- a JS Error, a bare string -- is its own first line, so a caller never
 // has to ask which kind of failure it is holding.
-/**
- * @param {any} error
- * @returns {string}
- */
-export function runtimeErrorSentence(error) {
+export function runtimeErrorSentence(error: any): string {
   if (isRuntimeCallError(error)) {
     return error.message.trim() || error.pythonType;
   }
@@ -175,11 +168,7 @@ const JS_STACK_FRAME = /^\s+at\s|@(?:\S+:\d+:\d+|\[native code\])$/;
 // web/js/ui/debug-log.js) gets the cause rather than "Traceback (most recent
 // call last):", which is what they got while the traceback was the message.
 // CLAUDE.md requires the whole of it to reach the panel.
-/**
- * @param {any} error
- * @returns {string}
- */
-export function runtimeErrorDetail(error) {
+export function runtimeErrorDetail(error: any): string {
   if (isRuntimeCallError(error)) {
     const jsFrames = String(error.stack || "")
       .split("\n")

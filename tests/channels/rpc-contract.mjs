@@ -3,7 +3,7 @@
 // JS reaches the Python runtime through one callable, rpc_dispatch
 // (web/python/webchirp_bridge/rpc.py), by method name and named parameters.
 // The names live in two tables that must agree: RPC_METHODS in
-// web/js/rpc-dispatch.mjs (what JS may ask for, and with which parameters)
+// web/js/rpc-dispatch.ts (what JS may ask for, and with which parameters)
 // and RPC_METHODS in web/python/webchirp_bridge/rpc.py (which function
 // answers). Nothing at runtime compares them -- a method added on one side
 // only fails the first time it is called -- so this test does, and it also
@@ -20,7 +20,7 @@ import {
   RPC_CALLBACK_PARAM,
   RPC_METHODS,
   prepareRpcCall,
-} from "../../web/js/rpc-dispatch.mjs";
+} from "../../web/js/rpc-dispatch.ts";
 import { sharedHarness } from "../support/chirp.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
@@ -47,7 +47,7 @@ function sourceFiles(dirs) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (/\.m?js$/.test(entry.name)) {
+      } else if (/(?<!\.d)\.(?:m?js|ts)$/.test(entry.name)) {
         found.push(full);
       }
     }
@@ -66,7 +66,7 @@ test("the JS and Python RPC tables name the same methods with the same parameter
   assert.deepEqual(
     Object.keys(RPC_METHODS).sort(),
     Object.keys(python.methods).sort(),
-    "RPC_METHODS in web/js/rpc-dispatch.mjs and web/python/webchirp_bridge/rpc.py differ",
+    "RPC_METHODS in web/js/rpc-dispatch.ts and web/python/webchirp_bridge/rpc.py differ",
   );
   for (const [name, params] of Object.entries(RPC_METHODS)) {
     assert.deepEqual(
@@ -124,7 +124,7 @@ test("every RPC method has a JS caller outside the table that declares it", () =
     path.join(repoRoot, "web", "js"),
     path.join(repoRoot, "tests", "support"),
     path.join(repoRoot, "scripts"),
-  ]).filter((file) => !file.endsWith("rpc-dispatch.mjs"));
+  ]).filter((file) => !file.endsWith("rpc-dispatch.ts"));
   const sources = files.map((file) => fs.readFileSync(file, "utf8")).join("\n");
   const unused = Object.keys(RPC_METHODS).filter((name) => !sources.includes(`"${name}"`));
   assert.deepEqual(unused, [], "RPC methods nothing calls; delete them or call them");
@@ -164,9 +164,9 @@ test("a dispatched call leaves nothing behind in the interpreter globals", async
 });
 
 test("the browser runtime client writes no argument globals and evaluates no expression strings", () => {
-  const source = fs.readFileSync(path.join(repoRoot, "web", "js", "runtime-rpc.js"), "utf8");
-  assert.equal(source.includes("globals.set("), false, "runtime-rpc.js sets an interpreter global");
-  assert.equal(source.includes("runPython"), false, "runtime-rpc.js evaluates a Python string");
+  const source = fs.readFileSync(path.join(repoRoot, "web", "js", "runtime-rpc.ts"), "utf8");
+  assert.equal(source.includes("globals.set("), false, "runtime-rpc.ts sets an interpreter global");
+  assert.equal(source.includes("runPython"), false, "runtime-rpc.ts evaluates a Python string");
 });
 
 test("a call that does not match the contract is refused before it crosses", async () => {

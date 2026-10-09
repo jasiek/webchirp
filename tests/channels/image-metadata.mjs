@@ -5,7 +5,7 @@ import {
   findCatalogRadioForImageMetadata,
   isImageDetectionFailure,
   loadImageWithDriverFallback,
-} from "../../web/js/image-metadata.mjs";
+} from "../../web/js/image-metadata.ts";
 import { ensureModule, imageMetadata, sharedHarness } from "../support/chirp.mjs";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 

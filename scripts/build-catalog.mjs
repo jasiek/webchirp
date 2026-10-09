@@ -7,7 +7,7 @@ import {
   DEFAULT_CHIRP_REVISION,
   QUANSHENG_UNOFFICIAL_DRIVER_SET,
   QUANSHENG_UNOFFICIAL_DRIVERS,
-} from "../web/js/python-sources.mjs";
+} from "../web/js/python-sources.ts";
 import { createTestRadioHarness } from "../tests/support/radio-harness.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -26,7 +26,7 @@ const QUANSHENG_OUTPUT_PATH = path.join(
 // per-radio capabilities live here instead of being folded into it.
 const FEATURES_PATH = path.join(REPO_ROOT, "radio-features.json");
 
-// Match the catalog ordering used by the browser runtime (runtime-rpc.js).
+// Match the catalog ordering used by the browser runtime (web/js/runtime-rpc.ts).
 function sortRadioCatalog(radios) {
   return radios.slice().sort((a, b) => {
     const av = `${a.vendor}\u0000${a.model}`;
@@ -138,7 +138,7 @@ async function main() {
   if (chirpCatalog.chirpRevision !== DEFAULT_CHIRP_REVISION) {
     throw new Error(
       `CHIRP source is at revision ${chirpCatalog.chirpRevision} but the runtime pin `
-      + `(DEFAULT_CHIRP_REVISION in web/js/python-sources.mjs) is ${DEFAULT_CHIRP_REVISION}. `
+      + `(DEFAULT_CHIRP_REVISION in web/js/python-sources.ts) is ${DEFAULT_CHIRP_REVISION}. `
       + "Check out the pinned revision in chirp/ or update the pin first.",
     );
   }

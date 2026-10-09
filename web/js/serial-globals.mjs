@@ -1,5 +1,5 @@
 // The serial_* functions CHIRP's Python imports from the js module, defined
-// once for the browser (web/js/runtime-rpc.js) and the Node harness
+// once for the browser (web/js/runtime-rpc.ts) and the Node harness
 // (tests/support/radio-harness.mjs). web/python/typings/js.pyi declares the
 // same names from the Python side; tests/webusb/serial-globals.mjs fails when
 // the two lists disagree.

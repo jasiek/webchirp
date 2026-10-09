@@ -1,13 +1,13 @@
 """The RPC contract between the JS runtime client and the Python runtime.
 
-``web/js/rpc-dispatch.mjs`` calls exactly one Python callable, ``rpc_dispatch``,
+``web/js/rpc-dispatch.ts`` calls exactly one Python callable, ``rpc_dispatch``,
 with a method name, one JSON object of named parameters and an optional JS
 callback. ``RPC_METHODS`` is the whole surface that call can reach: a name per
 runtime function, imported from the module that owns it. Nothing else in the
 Pyodide globals is callable from JS, so a runtime function is reachable from
 the browser if and only if it is listed here -- which is what makes the
 listing greppable and lets ``tests/channels/rpc-contract.mjs`` prove that the
-JS table (``RPC_METHODS`` in ``web/js/rpc-dispatch.mjs``) names the same
+JS table (``RPC_METHODS`` in ``web/js/rpc-dispatch.ts``) names the same
 methods with the same parameters.
 
 Keys are the functions' own names so that a search for ``parse_csv`` finds the
@@ -20,8 +20,8 @@ reply is always an envelope, ``{"ok": true, "result": ...}`` or ``{"ok": false,
 fields -- the class, its bases, its module, its message, its traceback and the
 JS error underneath a ``JsException`` -- rather than as one Pyodide
 ``PythonError`` whose message is the whole traceback text. The JS half
-(``web/js/rpc-dispatch.mjs``) turns a failed envelope into a
-``RuntimeCallError`` (``web/js/runtime-errors.mjs``), which is what every
+(``web/js/rpc-dispatch.ts``) turns a failed envelope into a
+``RuntimeCallError`` (``web/js/runtime-errors.ts``), which is what every
 classifier in the UI tests by type.
 """
 

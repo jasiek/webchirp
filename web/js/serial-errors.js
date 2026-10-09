@@ -8,10 +8,10 @@
 //
 // This module is the one place that names that outcome, shared by the serial
 // bridge that raises it and the UI that reports it. It is deliberately tiny,
-// depending only on the equally dependency-free web/js/runtime-errors.mjs, so
+// depending only on the equally dependency-free web/js/runtime-errors.ts, so
 // the UI can import it without pulling in the whole serial stack.
 
-import { jsErrorName } from "./runtime-errors.mjs";
+import { jsErrorName } from "./runtime-errors.ts";
 
 // Carried on the Error object while it stays inside one JS realm (the bridge's
 // own callers, the CLI, tests).
@@ -55,7 +55,7 @@ export function createPortSelectionCancelledError() {
 // the name itself; one that went through Python -- webserial_connect awaits
 // the bridge, so the rejection becomes a JsException -- arrives as a
 // RuntimeCallError whose jsCause names the JS error underneath, which
-// jsErrorName (web/js/runtime-errors.mjs) reads for either shape.
+// jsErrorName (web/js/runtime-errors.ts) reads for either shape.
 export function isPortSelectionCancelled(error) {
   return jsErrorName(error) === PORT_SELECTION_CANCELLED;
 }
