@@ -11,8 +11,8 @@ test's header. Prose is kept for what no test can assert: upstream defects we ro
 API behaviour, browser and platform constraints, and rules about work not yet done.
 
 Corpus counts (images, drivers, classes) are measurements against one CHIRP pin and drift on the
-next bump; the method is the durable part. The pin is CHIRP `29592824` (2026-09-29): 558 radios from
-195 driver modules, plus 3 drivers in the `drivers=quansheng-unofficial` catalog. Since this pin,
+next bump; the method is the durable part. The pin is CHIRP `7a4123ad` (2026-10-07): 558 radios from
+195 driver modules, plus 3 drivers in the `drivers=quansheng-unofficial` catalog. Since CHIRP 29592824,
 upstream `CloneModeRadio.match_model()` returns False by default, so a metadata-less image opens
 only through a driver that opts in to legacy or external-format detection. Counts dated before
 2026-10-03 were measured at an earlier pin.
