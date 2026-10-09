@@ -13,13 +13,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { suitesRunByNpmTest, testFiles } from "../../scripts/coverage.ts";
+import { NON_SUITE_DIRS, suitesRunByNpmTest, testFiles } from "../../scripts/coverage.ts";
 import { repoRoot } from "../support/repo-paths.mjs";
 
 const TESTS_DIR = path.join(repoRoot, "tests");
-// support/ holds fixtures rather than tests; manual/ is deliberately excluded
-// from npm test (one file needs the network, the other a radio on a port).
-const NON_SUITE_DIRS = new Set(["support", "manual"]);
+// NON_SUITE_DIRS (scripts/coverage.ts) says why each is left out: support/
+// holds fixtures, manual/ needs the network or a radio, and e2e/ is the
+// Playwright browser suite with a script and a CI job of its own.
 
 const pkgPath = path.join(repoRoot, "package.json");
 
@@ -41,6 +41,19 @@ test("every suite directory is reachable from npm test", () => {
   const gated = suitesRunByNpmTest(JSON.parse(readFileSync(pkgPath, "utf8")));
   const unrun = suiteDirs().filter((name) => !gated.has(name));
   assert.deepEqual(unrun, [], `suite directories npm test never reaches: ${unrun.join(", ")}`);
+});
+
+test("the browser suite has its own script and stays out of npm test", () => {
+  // Left out of npm test on purpose (see NON_SUITE_DIRS), which makes it the
+  // one suite nothing above would notice going unrun: its script must exist
+  // and run Playwright, whose config must point at tests/e2e.
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  assert.match(pkg.scripts["test:e2e"] || "", /^playwright test\b/);
+  assert.equal(suitesRunByNpmTest(pkg).has("e2e"), false, "npm test must not need a browser or the network");
+  const config = readFileSync(path.join(repoRoot, "playwright.config.mjs"), "utf8");
+  assert.match(config, /testDir: "tests\/e2e"/);
+  const files = readdirSync(path.join(TESTS_DIR, "e2e")).filter((name) => name.endsWith(".mjs"));
+  assert.ok(files.length > 0, "tests/e2e has no test files");
 });
 
 test("suites are globbed, never listed file by file", () => {

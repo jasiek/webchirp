@@ -29,6 +29,7 @@
     "check:js": "tsc -p . && tsc -p scripts",
     "test:channels": "node --test tests/channels/*.mjs",
     "test:webusb": "node --test tests/webusb/*.mjs",
+    "test:e2e": "playwright test",
     "test:build": "node --test tests/build/*.mjs",
     "test:api": "node --test tests/manual/rsgb-live.mjs",
     "test:hw": "node tests/manual/hw-radio.mjs",
@@ -40,6 +41,7 @@
     "serialport": "^13.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "25.9.9",
     "esbuild": "0.28.2",
     "fflate": "^0.8.3",

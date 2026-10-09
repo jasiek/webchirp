@@ -43,10 +43,16 @@ const COVERAGE_DIR = path.join(repoRoot, "coverage");
 const FRAGMENT_DIR = path.join(COVERAGE_DIR, "python-fragments");
 const FLOORS_PATH = path.join(repoRoot, "coverage-floors.json");
 
-// Directories under tests/ that are not suites: support/ holds shared fixtures
-// rather than tests, and manual/ is excluded on purpose -- one of its files
-// calls a live third-party API, the other needs a radio on a serial port.
-const NON_SUITE_DIRS = new Set(["support", "manual"]);
+// Directories under tests/ that are not node:test suites: support/ holds shared
+// fixtures rather than tests, and manual/ is excluded on purpose -- one of its
+// files calls a live third-party API, the other needs a radio on a serial port.
+// e2e/ is the Playwright browser suite (npm run test:e2e, run by its own CI
+// job): it needs a browser download and the network, because the app loads
+// Pyodide from jsDelivr, so npm test leaves it out to keep a CDN outage from
+// failing the unit suites -- and its files are not node:test files, and the
+// code they exercise runs in the browser, where this script's V8 coverage of
+// the Node process cannot see it.
+export const NON_SUITE_DIRS = new Set(["support", "manual", "e2e"]);
 
 /** One Python module's statements and the ones a test executed. */
 interface PythonFileCoverage {

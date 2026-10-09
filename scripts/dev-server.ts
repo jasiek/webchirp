@@ -8,6 +8,11 @@
 // the URL a browser asks for is always the file on disk: nothing maps a .js
 // request onto a .ts file. scripts/build-dist.ts reads the same script tags
 // and hands the same entries to esbuild for dist/.
+//
+// The same server also serves the built site for the browser tests
+// (tests/e2e): WEB_ROOT=dist serves that directory instead of web/, and
+// SERVE_AS=pages leaves out the isolation headers, because GitHub Pages
+// cannot send them and the tests should see the site as Pages serves it.
 import fs from "node:fs";
 import path from "node:path";
 import { createServer } from "node:http";
@@ -15,9 +20,10 @@ import type { ServerResponse } from "node:http";
 
 import * as esbuild from "esbuild";
 
-const webRootDir = path.resolve(process.cwd(), "web");
+const webRootDir = path.resolve(process.cwd(), process.env.WEB_ROOT || "web");
 const port = Number.parseInt(process.env.PORT || "8000", 10);
 const host = process.env.HOST || "127.0.0.1";
+const servesAsPages = process.env.SERVE_AS === "pages";
 
 const MIME_BY_EXT: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
@@ -79,6 +85,9 @@ async function transformTypeScript(filePath: string, stat: fs.Stats): Promise<st
 }
 
 function applyIsolationHeaders(res: ServerResponse): void {
+  if (servesAsPages) {
+    return;
+  }
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
@@ -158,5 +167,5 @@ const server = createServer((req, res) => {
 
 server.listen(port, host, () => {
   // eslint-disable-next-line no-console
-  console.log(`webchirp dev server listening at http://${host}:${port}/`);
+  console.log(`webchirp dev server serving ${path.relative(process.cwd(), webRootDir) || "."} at http://${host}:${port}/`);
 });

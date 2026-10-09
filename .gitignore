@@ -64,3 +64,8 @@ TODO.md
 
 # Coverage artifacts (npm run coverage)
 coverage/
+
+# Playwright output (npm run test:e2e)
+/test-results/
+/playwright-report/
+/blob-report/
