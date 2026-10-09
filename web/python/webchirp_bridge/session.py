@@ -101,6 +101,9 @@ class RadioSession:
     image: Optional[bytes] = None
     image_origin: ImageOrigin = ImageOrigin.NONE
     unreadable_channels: set[int] = field(default_factory=set)
+    # Values derived from the image, kept until the image changes; see image_memo.
+    _image_memos: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
+    _image_memo_key: tuple[Any, ...] = field(default=(), repr=False, compare=False)
 
     @classmethod
     def for_driver(cls, module_name: str, class_name: str) -> RadioSession:
@@ -226,6 +229,27 @@ class RadioSession:
                 continue
         return None
 
+    def image_memo(self, name: str, build: Callable[[], Any]) -> Any:
+        """Build a value from this session's image once, until the image changes.
+
+        For the grid's per-edit check (``normalize_and_validate_rows`` in
+        web/python/webchirp_bridge/row_validation.py), which runs on every
+        committed cell: parsing an image or building a clone-mode radio from
+        zeroes costs some 40 ms, every time, and the answer only changes when
+        the image does. The key is the image object itself (``record_image``
+        always stores a new one), its origin and the class that parsed it, so a
+        download, an image load or a detected variant drops every memo.
+        Callers must treat what they get as read-only: the value is shared by
+        every later call until the image changes.
+        """
+        key = (id(self.image), self.image, self.image_origin, self.image_cls)
+        if self._image_memo_key != key:
+            self._image_memos = {}
+            self._image_memo_key = key
+        if name not in self._image_memos:
+            self._image_memos[name] = build()
+        return self._image_memos[name]
+
     def features(self) -> Optional[chirp_common.RadioFeatures]:
         """This driver's RadioFeatures, read from its image when it has one, else None."""
         radio = self.describing_instance()
@@ -332,8 +356,9 @@ def resolve_session(session_id: str) -> RadioSession:
 def resolve_optional_session(session_id: str) -> Optional[RadioSession]:
     """Like ``resolve_session`` but an empty id means "no radio selected".
 
-    For the two methods that work without a radio -- CSV export and the row
-    preflight fall back to CHIRP's generic CSV driver -- so that a blank id is
+    For the methods that work without a radio -- CSV export, the row
+    preflight and the grid's per-edit check fall back to CHIRP's generic CSV
+    driver -- so that a blank id is
     a choice and only an id that names a closed session is an error.
     """
     if not str(session_id or "").strip():

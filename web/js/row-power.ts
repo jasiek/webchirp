@@ -16,12 +16,18 @@ import type { ChannelRow } from "./ui/channel-values.ts";
 
 /**
  * The grid's row-building calls a directory importer is handed
- * (rowBuilderHooks() in web/js/ui/channel-table.ts).
+ * (buildRows() in web/js/ui/channel-table.ts, which answers each write with
+ * the runtime's verdict and so runs a builder until it asks nothing new: a
+ * builder must be a pure function of its input and these hooks).
  */
 export interface RowBuilderHooks {
   /** A blank row for the selected radio, every column at its default. */
   createBlankRow: () => ChannelRow;
-  /** A validating write; returns whether the row now holds the value. */
+  /**
+   * A write checked by the radio's own rules (normalize_cell in
+   * web/python/webchirp_bridge/row_normalization.py); returns whether the row
+   * now holds the value.
+   */
   setRowValue: (row: ChannelRow, column: string, value: unknown) => boolean;
   /**
    * The first of a ranked list of choices the column offers, or "" when it

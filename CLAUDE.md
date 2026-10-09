@@ -32,7 +32,16 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   hands over the session the runtime opened for the image's driver, and every
   radio-bound runtime call carries the session's id. A load's response is
   applied only while its handle is still `state.radioSession` -- identity, not
-  a counter, is what discards a stale load. `repeater-query` is one modal shell for every
+  a counter, is what discards a stale load. The grid applies no column rules
+  of its own: every value written into a row -- a committed cell, a paste, a
+  bulk edit, a row builder's write -- goes to the `normalize_and_validate_rows`
+  RPC, one call per batch, which stores it by the radio's rules and runs the
+  driver's per-row check (`submitRowEdits`, `previewRowEdits` and `buildRows`
+  in `channel-table`). A committed cell shows the typed value marked
+  `is-pending` until the answer arrives, and an answer is applied only while
+  the row is at the version it was sent at and its session is still
+  `state.radioSession`. `channel-values` holds only the row and
+  column-metadata types. `repeater-query` is one modal shell for every
   repeater directory: its form is assembled per source from the field
   components in `query-fields.ts` (which build their own DOM), driven by the
   per-source configs in `repeater-sources.ts`.
@@ -61,7 +70,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   one back with `record_radio()`), `clone` (download/upload over the serial
   port), `radio_files` (the file detour CHIRP needs to parse or serialize an
   image, and the blank constructor), `channel_rows`, `power_levels`,
-  `row_validation`, `radio_memories`, `radio_settings`, `column_metadata`,
+  `row_normalization` (the one implementation of the grid's column rules,
+  `normalize_cell`), `row_validation` (the upload preflight and the per-edit
+  `normalize_and_validate_rows`, which share the per-row `_row_findings`),
+  `radio_memories`, `radio_settings`, `column_metadata`,
   `images`, plus `jsbridge` (JS-boundary helpers), `runtime_errors` and `rpc`
   (the `RPC_METHODS` table and `rpc_dispatch`). `__init__.py` only installs
   the shims CHIRP needs before import. No embedded Python in JS files.

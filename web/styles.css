@@ -2326,7 +2326,7 @@ button:disabled {
    paragraph, not a working limit: it only ever binds on a free-text column,
    because a name is bounded by the driver's own valid_name_length (16
    characters at the most, across every real driver) and a frequency by the ten
-   digits normalizeValue() writes. So it is set well clear of what the repeater
+   digits a CHIRP frequency is written with. So it is set well clear of what the repeater
    directories actually produce -- an RSGB query returns comments like
    "KIDDERMINSTER | IO82 | ~3.6 km", 23 to 32 characters -- and a value past it
    still scrolls inside the input.
@@ -2654,6 +2654,15 @@ button:disabled {
 
 #mem-table td.is-invalid {
   background: var(--error-bg);
+}
+
+/* A committed value the runtime has not answered for yet (submitRowEdits in
+   web/js/ui/channel-table.ts): shown as typed, dimmed and italic until the
+   radio's rules have been applied to it. The editor stays usable. */
+#mem-table td.is-pending input,
+#mem-table td.is-pending select {
+  font-style: italic;
+  opacity: 0.6;
 }
 
 #mem-table td input:focus {

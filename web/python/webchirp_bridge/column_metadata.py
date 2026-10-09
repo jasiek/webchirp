@@ -8,6 +8,7 @@ ever runs.
 
 from __future__ import annotations
 
+import functools
 from typing import TYPE_CHECKING
 
 
@@ -20,6 +21,7 @@ from webchirp_bridge.session import resolve_session
 
 if TYPE_CHECKING:
     from typing import Any, Callable, Iterable, Optional
+    from webchirp_bridge.session import RadioSession
 
 DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
 
@@ -208,7 +210,18 @@ def get_radio_column_metadata(session_id: str) -> dict[str, Any]:
     not list, and re-selecting the radio silently blanked it
     (dropUnsupportedPowerValues in web/js/ui/channel-table.ts).
     """
-    session = resolve_session(session_id)
+    return _column_metadata_for_session(resolve_session(session_id))
+
+
+def _column_metadata_for_session(session: Optional[RadioSession]) -> dict[str, Any]:
+    """The grid schema for a session, or the default schema for no session.
+
+    Shared by the RPC above and by the edit check in
+    web/python/webchirp_bridge/row_validation.py, which has to apply exactly
+    the rules the grid was built from.
+    """
+    if session is None:
+        return get_default_schema()
     radio = session.describing_instance()
     if radio is None:
         # Nothing instantiable: go through the blank builder so the driver's
@@ -216,6 +229,17 @@ def get_radio_column_metadata(session_id: str) -> dict[str, Any]:
         # a schema the grid would treat as this radio's real one.
         radio = _blank_radio_instance(session.radio_cls)
     return _column_metadata_for_radio(radio)
+
+
+def _cached_column_metadata(session: Optional[RadioSession]) -> dict[str, Any]:
+    """``_column_metadata_for_session``, built once per image; read-only for the caller.
+
+    The grid's per-edit check asks for the schema on every committed cell, and
+    for an image-backed session that is an image parse each time.
+    """
+    if session is None:
+        return _default_schema()
+    return session.image_memo("column_metadata", lambda: _column_metadata_for_session(session))
 
 
 def get_default_schema() -> dict[str, Any]:
@@ -230,3 +254,9 @@ def get_default_schema() -> dict[str, Any]:
     the same code path a selected radio uses.
     """
     return _column_metadata_for_radio(_blank_csv_radio())
+
+
+@functools.cache
+def _default_schema() -> dict[str, Any]:
+    """``get_default_schema()``, built once: CHIRP's CSV driver never changes. Read-only."""
+    return get_default_schema()

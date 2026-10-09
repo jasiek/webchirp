@@ -84,6 +84,7 @@ export const RPC_METHODS = Object.freeze({
   normalize_rows: Object.freeze(["rows", "session_id"]),
   // web/python/webchirp_bridge/row_validation.py
   validate_rows_for_upload: Object.freeze(["rows", "session_id"]),
+  normalize_and_validate_rows: Object.freeze(["session_id", "rows"]),
   // web/python/webchirp_bridge/channel_extra.py
   get_channel_extra: Object.freeze(["session_id", "location"]),
   // web/python/webchirp_bridge/radio_settings.py

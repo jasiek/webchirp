@@ -15,7 +15,7 @@ import {
   selectRadioBySearch,
   tableNames,
 } from "../support/fake-dom.mjs";
-import { withRadioSessions } from "../support/fake-runtime-api.mjs";
+import { fakeRowCheck, withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The bulk channel editor (web/js/ui/channel-bulk-edit.ts): the toolbar control
 // that follows the grid selection, and the modal behind it.
@@ -126,12 +126,37 @@ const IMAGE_ROWS = [
   },
 ];
 
-async function boot({ rows = IMAGE_ROWS, getChannelExtra, radios = [RADIO], uploadIssues = [] } = {}) {
+// The runtime's answer for this driver's Frequency column: a frequency outside
+// its bands keeps the previous value and is refused. The rule is the
+// runtime's own (tests/channels/row-normalization.mjs); this gives its answer.
+function frequencyVerdict(column, value, previous) {
+  if (column === "Frequency") {
+    const hz = Math.round(Number.parseFloat(value) * 1_000_000);
+    if (!COLUMNS.Frequency.bands.some(([lo, hi]) => hz >= lo && hz < hi)) {
+      return { value: String(previous ?? ""), accepted: false };
+    }
+  }
+  return { value, accepted: true };
+}
+
+// rowFindings(row) is what the driver says about a row once the bulk edit's
+// values are in it, as the runtime's per-row check would report it.
+// heldRowChecks holds every row check until the test calls rowCheck.release().
+async function boot({
+  rows = IMAGE_ROWS,
+  getChannelExtra,
+  radios = [RADIO],
+  uploadIssues = [],
+  rowFindings = () => ({ issues: [], warnings: [] }),
+  heldRowChecks = false,
+} = {}) {
   const { document } = installFakeDom();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const extraCalls = [];
+  const rowCheck = fakeRowCheck({ verdict: frequencyVerdict, findings: rowFindings, held: heldRowChecks });
   ui.setRuntimeApi(withRadioSessions({
+    normalizeAndValidateRows: rowCheck.normalizeAndValidateRows,
     listRadios: async () => ({ radios }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: HEADERS }),
@@ -196,7 +221,7 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra, radios = [RADIO], uplo
     document.querySelector("#radio-upload").dispatchEvent({ type: "click" });
     await flushMicrotasks();
   }
-  return { document, extraCalls, rows: () => loadedRows, loadImage, runBlockedUpload };
+  return { document, extraCalls, rowCheck, rows: () => loadedRows, loadImage, runBlockedUpload };
 }
 
 // Which channel cells are currently marked by the preflight, as
@@ -311,7 +336,7 @@ test("a column the selection disagrees about is marked, one it agrees on is not"
 });
 
 test("applying writes the ticked columns to every selected channel", async () => {
-  const { document, rows } = await boot();
+  const { document, rows, rowCheck } = await boot();
   await openBulkEditor(document, [0, 2]);
 
   setField(columnField(document, "Mode"), "NFM");
@@ -319,6 +344,13 @@ test("applying writes the ticked columns to every selected channel", async () =>
   await applyModal(document);
 
   assert.equal(modalIsOpen(document), false, "a successful apply closes the modal");
+  // Every selected channel's writes were checked by the runtime in one call,
+  // not one per cell or per channel.
+  assert.equal(rowCheck.calls.length, 1);
+  assert.deepEqual(
+    rowCheck.calls[0].rows.map(({ edits }) => edits.map(({ column, value }) => `${column}=${value}`)),
+    [["Mode=NFM", "Power=Low"], ["Mode=NFM", "Power=Low"]],
+  );
   const all = rows();
   assert.deepEqual(
     all.map((row) => [row.Location, row.Mode, row.Power]),
@@ -664,6 +696,13 @@ test("a bulk edit clears the highlights on the cells it rewrote, and only those"
       { rowIndex: 0, column: "Name", message: "bad name" },
       { rowIndex: 2, column: "Name", message: "bad name" },
     ],
+    // The rewritten rows are checked again, by the same per-row code the
+    // upload ran, so the driver repeats what it still objects to: the Name it
+    // never saw change. Its Mode objection went with the old Mode.
+    rowFindings: (row) => ({
+      issues: row.Name === "ALPHA" ? [{ column: "Name", message: "bad name" }] : [],
+      warnings: [],
+    }),
   });
   await runBlockedUpload();
   assert.deepEqual(markedCells(document), ["0:Name", "0:Mode", "2:Name"]);
@@ -692,4 +731,33 @@ test("a bulk edit of extras alone leaves every highlight in place", async () => 
   await applyModal(document);
 
   assert.deepEqual(markedCells(document), ["1:Mode"]);
+});
+
+// Review of #224: the driver judges a channel with its extras, so a cell
+// check still in flight when a bulk edit rewrites the row's extras answers for
+// a row that no longer exists. It must be dropped and the edit checked again
+// with the new extras, rather than its findings landing on the rewritten row.
+test("a bulk edit of extras makes a cell check in flight for those rows stale", async () => {
+  const { document, rowCheck, rows } = await boot({ heldRowChecks: true });
+  const nameEditor = channelRows(document)[0].children[HEADERS.indexOf("Name")].children[0];
+  nameEditor.value = "ZULU";
+  document.querySelector("#mem-table tbody").dispatchEvent({ type: "focusout", target: nameEditor });
+  await flushMicrotasks();
+  assert.equal(rowCheck.calls.length, 1);
+
+  await openBulkEditor(document, [0, 1]);
+  setField(extraField(document, "scode"), "2");
+  await applyModal(document);
+  assert.equal(modalIsOpen(document), false);
+
+  rowCheck.release(0);
+  await flushMicrotasks();
+  assert.equal(rowCheck.calls.length, 2, "the pending edit is checked again");
+  const resent = rowCheck.calls[1].rows[0];
+  assert.deepEqual(resent.edits, [{ column: "Name", value: "ZULU" }]);
+  assert.equal(resent.row.__extra.scode, "2", "with the extras the row now carries");
+
+  rowCheck.release();
+  await flushMicrotasks();
+  assert.equal(rows()[0].Name, "ZULU");
 });

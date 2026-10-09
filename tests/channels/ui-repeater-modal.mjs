@@ -168,7 +168,9 @@ function buildHarness({
     },
     table: {
       insertRowsAtSelectionOrEnd: (rows, label) => table.inserted.push({ rows, label }),
-      rowBuilderHooks: () => ({
+      // web/js/ui/channel-table.ts runs a builder against the runtime's
+      // verdicts; this one runs it once against the stand-in radio below.
+      buildRows: async (build) => build({
         createBlankRow: () => Object.fromEntries(headers.map((column) => [column, ""])),
         // Returns whether the write took, as web/js/ui/channel-table.ts's does.
         setRowValue: (row, column, value) => {

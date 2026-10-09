@@ -149,6 +149,54 @@ export interface RowsValidationResult {
   warnings: RowIssue[];
 }
 
+/**
+ * One write the grid makes to a row, as normalize_and_validate_rows
+ * (web/python/webchirp_bridge/row_validation.py) applies it: the column, the
+ * text as typed, and whether a column the grid renders read-only may take it
+ * (row builders and paste fill those; a cell edit does not).
+ */
+export interface RowEdit {
+  column: string;
+  value: string;
+  allowReadOnly?: boolean;
+}
+
+/** One row to check: the row as stored, and the edits to apply to it in order. */
+export interface RowEditRequest {
+  row: ChannelRow;
+  edits: RowEdit[];
+}
+
+/** What one edit stored, and whether that is what was asked for. */
+export interface CellOutcome {
+  column: string;
+  /** The value the cell now holds. */
+  value: string;
+  /** False when value is a fallback or a clamp, not the caller's value. */
+  accepted: boolean;
+  /** What happened, in a few words, or "" when the value was stored as typed. */
+  note: string;
+}
+
+/** One finding on one cell of a checked row. */
+export interface CellFinding {
+  column: string;
+  message: string;
+}
+
+/** One checked row: its edits' outcomes, then what the driver said about the row. */
+export interface RowEditResult {
+  cells: CellOutcome[];
+  /** Errors: the radio will refuse this row as it stands. */
+  issues: CellFinding[];
+  warnings: CellFinding[];
+}
+
+/** normalize_and_validate_rows: one result per request, in request order. */
+export interface RowEditsResult {
+  rows: RowEditResult[];
+}
+
 /** parse_csv: the rows CHIRP's CSV driver read, and its complaints. */
 export interface ParsedCsv {
   headers: string[];
@@ -531,8 +579,8 @@ function sessionRpc<T>(sessionId: string | undefined, name: RpcMethodName, param
   return rpcOn<T>(runtimeForSession(sessionId), name, { session_id: String(sessionId), ...params });
 }
 
-// The two methods that work without a radio (CSV export and the row
-// preflight): with a session they route to its interpreter, without one they
+// The methods that work without a radio (CSV export, the row preflight and
+// the per-edit row check): with a session they route to its interpreter, without one they
 // run on the current interpreter with an empty id, which the Python side
 // reads as "no radio selected".
 async function optionalSessionRpc<T>(
@@ -620,6 +668,21 @@ async function handleNormalizeRows(payload: RowsPayload = {}): Promise<string> {
  */
 async function handleValidateRowsForUpload(payload: RowsPayload = {}): Promise<RowsValidationResult> {
   return optionalSessionRpc<RowsValidationResult>(payload.sessionId, "validate_rows_for_upload", {
+    rows: payload.rows || [],
+  });
+}
+
+// Apply the grid's edits to rows by the radio's own column rules and check
+// each resulting row the way the upload preflight does, so a cell shows the
+// value the radio will hold and the driver's objection as soon as it is
+// committed. Without a session the default schema's rules apply.
+/**
+ * @returns One result per request, in request order.
+ */
+async function handleNormalizeAndValidateRows(
+  payload: SessionPayload & { rows?: RowEditRequest[] } = {},
+): Promise<RowEditsResult> {
+  return optionalSessionRpc<RowEditsResult>(payload.sessionId, "normalize_and_validate_rows", {
     rows: payload.rows || [],
   });
 }
@@ -790,6 +853,7 @@ export const RUNTIME_METHODS = Object.freeze({
   closeRadioSession: handleCloseRadioSession,
   normalizeRows: handleNormalizeRows,
   validateRowsForUpload: handleValidateRowsForUpload,
+  normalizeAndValidateRows: handleNormalizeAndValidateRows,
   exportImage: handleExportImage,
   loadImage: handleLoadImage,
   serialConnect: handleSerialConnect,

@@ -21,7 +21,7 @@ function stubContext() {
   return {
     log: { setStatus() {}, logDebug() {} },
     state: {},
-    table: { rowBuilderHooks: () => ({}), insertRowsAtSelectionOrEnd() {} },
+    table: { buildRows: async (build) => build({}), insertRowsAtSelectionOrEnd() {} },
   };
 }
 
