@@ -141,9 +141,7 @@ async function main() {
     // Node defines both exactly when the process was spawned with an IPC channel.
     const send = process.send?.bind(process);
     const disconnect = process.disconnect?.bind(process);
-    if (!send || !disconnect || !QUANSHENG_UNOFFICIAL_DRIVERS.some((
-      driver,
-    ) => driver.module === moduleName)) {
+    if (!send || !disconnect || !QUANSHENG_UNOFFICIAL_DRIVERS.some((driver) => driver.module === moduleName)) {
       throw new Error("The isolated catalog worker requires a known bundled driver and IPC");
     }
     const { harness: _harness, ...catalog } = await buildDriverCatalog(

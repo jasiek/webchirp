@@ -1204,9 +1204,7 @@ async function main() {
     + `across ${vendorNames.length} vendors, ${hubVendors.length} of which got a hub, `
     + `${answered} of which answer whether their firmware can be updated, `
     + `${specified} of which list researched hardware specs`
-    + `${merged.length ? `, merging ${merged.length} model(s) whose drivers share one name: ${merged.map((
-      radio,
-    ) => radio.variants.map((variant) => variant.key).join(" + ")).join("; ")}` : ""}`
+    + `${merged.length ? `, merging ${merged.length} model(s) whose drivers share one name: ${merged.map((radio) => radio.variants.map((variant) => variant.key).join(" + ")).join("; ")}` : ""}`
     + `${skipped.length ? `, skipping ${skipped.length} radio(s) that describe themselves too thinly: ${skipped.join(", ")}` : ""}.`,
   );
 }

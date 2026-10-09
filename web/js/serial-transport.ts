@@ -183,17 +183,11 @@ export const SERIAL_TRANSPORT_MEMBERS: readonly Readonly<SerialTransportMember>[
   }),
   Object.freeze({ name: "open", expect: "a method", check: (port) => isFunction(port.open) }),
   Object.freeze({ name: "close", expect: "a method", check: (port) => isFunction(port.close) }),
-  Object.freeze({ name: "readable", expect: "a member (null while closed)", check: (
-    port,
-  ) => "readable" in port }),
-  Object.freeze({ name: "writable", expect: "a member (null while closed)", check: (
-    port,
-  ) => "writable" in port }),
+  Object.freeze({ name: "readable", expect: "a member (null while closed)", check: (port) => "readable" in port }),
+  Object.freeze({ name: "writable", expect: "a member (null while closed)", check: (port) => "writable" in port }),
   Object.freeze({ name: "setSignals", expect: "a method", check: (port) => isFunction(port.setSignals) }),
   Object.freeze({ name: "getInfo", expect: "a method", check: (port) => isFunction(port.getInfo) }),
-  Object.freeze({ name: "usbDevice", expect: "a member (USBDevice or null)", check: (
-    port,
-  ) => "usbDevice" in port }),
+  Object.freeze({ name: "usbDevice", expect: "a member (USBDevice or null)", check: (port) => "usbDevice" in port }),
   Object.freeze({ name: "onDisconnect", expect: "a method", check: (port) => isFunction(port.onDisconnect) }),
   Object.freeze({
     name: "reconfigure",

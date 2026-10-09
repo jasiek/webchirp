@@ -246,17 +246,11 @@ function renderMarkdown(summary, jsFiles, pythonFiles, floors, failures, baselin
     "| --- | ---: | ---: | ---: | ---: |",
     `| JavaScript (\`web/**\`) `
       + `| ${js.lines.percent.toFixed(2)}%${delta(baseline, (b) => b.js?.lines?.percent, js.lines.percent)} `
-      + `| ${js.branches.percent.toFixed(2)}%${delta(baseline, (
-        b,
-      ) => b.js?.branches?.percent, js.branches.percent)} `
-      + `| ${js.functions.percent.toFixed(2)}%${delta(baseline, (
-        b,
-      ) => b.js?.functions?.percent, js.functions.percent)} `
+      + `| ${js.branches.percent.toFixed(2)}%${delta(baseline, (b) => b.js?.branches?.percent, js.branches.percent)} `
+      + `| ${js.functions.percent.toFixed(2)}%${delta(baseline, (b) => b.js?.functions?.percent, js.functions.percent)} `
       + `| ${js.files} |`,
     `| Python (\`webchirp_bridge\`) `
-      + `| ${python.lines.percent.toFixed(2)}%${delta(baseline, (
-        b,
-      ) => b.python?.lines?.percent, python.lines.percent)} `
+      + `| ${python.lines.percent.toFixed(2)}%${delta(baseline, (b) => b.python?.lines?.percent, python.lines.percent)} `
       + `| — | — | ${python.files} |`,
     "",
     `Floors: JS lines ${floors.js.lines}%, JS branches ${floors.js.branches}%, `

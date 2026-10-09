@@ -120,14 +120,10 @@ function renderLanguagePanel(record, guide, copy, language, cept, sources) {
     return `${escapeHtml(translated[fact])}${citations(claim)}`;
   }
   const stepsHtml = guide.steps?.length
-    ? `<ol class="licensing-steps">${guide.steps.map((
-      step,
-    ) => `<li>${escapeHtml(step[key])} <a href="${escapeHtml(step.url)}" rel="nofollow noopener">${escapeHtml((english ? step.linkLabelEn : step.linkLabelLocal) || copy.officialInstructions)}</a>${citations(step)}</li>`).join("")}</ol>${guide.procedureStatus === "partial" ? `<p class="licensing-gap">${escapeHtml(copy.unverifiedSteps)}</p>` : ""}`
+    ? `<ol class="licensing-steps">${guide.steps.map((step) => `<li>${escapeHtml(step[key])} <a href="${escapeHtml(step.url)}" rel="nofollow noopener">${escapeHtml((english ? step.linkLabelEn : step.linkLabelLocal) || copy.officialInstructions)}</a>${citations(step)}</li>`).join("")}</ol>${guide.procedureStatus === "partial" ? `<p class="licensing-gap">${escapeHtml(copy.unverifiedSteps)}</p>` : ""}`
     : `<p>${escapeHtml(copy.unverifiedSteps)} <a href="${escapeHtml(record.authority.url)}" rel="nofollow noopener">${escapeHtml(copy.officialInstructions)}</a>.</p>`;
   const requirementsHtml = guide.requirements?.length
-    ? `<ul>${guide.requirements.map((
-      item,
-    ) => `<li>${escapeHtml(item[key])}${citations(item)}</li>`).join("")}</ul>`
+    ? `<ul>${guide.requirements.map((item) => `<li>${escapeHtml(item[key])}${citations(item)}</li>`).join("")}</ul>`
     : escapeHtml(copy.unverifiedRequirements);
   const timeHtml = guide.time?.official || guide.time?.forum
     ? [guide.time?.official && `<p><strong>${escapeHtml(copy.officialTime)}:</strong> ${escapeHtml(guide.time.official[key])}${citations(guide.time.official)}</p>`,
@@ -153,10 +149,7 @@ function renderLanguagePanel(record, guide, copy, language, cept, sources) {
           <div><dt>${escapeHtml(copy.society)}</dt><dd><a href="${escapeHtml(record.society.url)}" rel="nofollow noopener">${escapeHtml(societyName)}</a></dd></div>
         </dl>
         <section><h2>${escapeHtml(copy.cept)}</h2><p>${escapeHtml(ceptStatus(record, cept, copy))}${citation(cept.members.includes(record.slug) ? cept.membershipSource : cept.implementationSource)}${citation(cept.recommendationSource)}${cept.suspended.includes(record.slug) ? citation(cept.suspensionSource) : ""}</p></section>
-        <section><h2>${escapeHtml(copy.sources)}</h2><ol class="licensing-sources">${sources.map((
-          source,
-          index,
-        ) =>
+        <section><h2>${escapeHtml(copy.sources)}</h2><ol class="licensing-sources">${sources.map((source, index) =>
           `<li id="${citationPrefix}-${index + 1}"><a href="${escapeHtml(source.url)}" rel="nofollow noopener">${escapeHtml((english ? source.enName : source.localName) || source.name)}</a></li>`).join("")}</ol></section>
       </div>`;
 }
@@ -176,17 +169,12 @@ function renderCountry(record, guide, local, english, cept, baseUrl) {
   const englishComment = [
     "English translation of visible guide:",
     `Title: ${english.how}: ${record.name}`,
-    `Procedure: ${guide?.steps?.length ? guide.steps.map((
-      step,
-      index,
-    ) => `${index + 1}. ${step.en} (${step.url})`).join(" ") : en.process}${guide.procedureStatus === "partial" ? ` ${english.unverifiedSteps}` : ""}`,
+    `Procedure: ${guide?.steps?.length ? guide.steps.map((step, index) => `${index + 1}. ${step.en} (${step.url})`).join(" ") : en.process}${guide.procedureStatus === "partial" ? ` ${english.unverifiedSteps}` : ""}`,
     `Licensing authority: ${record.authority.enName || record.authority.name}`,
     `Cost: ${en.cost}`,
     `Official processing time: ${guide?.time?.official?.en || english.unknownTime}`,
     `Recent applicant report: ${guide?.time?.forum?.en || english.noRecentReport}`,
-    `Additional requirements: ${guide?.requirements?.length ? guide.requirements.map((
-      item,
-    ) => item.en).join(" ") : en.requirements}`,
+    `Additional requirements: ${guide?.requirements?.length ? guide.requirements.map((item) => item.en).join(" ") : en.requirements}`,
     `CEPT status: ${ceptEnglish}`,
     `National amateur radio organization: ${record.society.enName || record.society.name}`,
     `Sources: ${sources.map((link) => `${link.name} (${link.url})`).join("; ")}`,
@@ -281,16 +269,8 @@ ${rows.join("\n")}
 
 ## Coverage
 
-- Sourced steps: ${found((
-  guide,
-) => guide?.steps?.length)} of ${sorted.length}; full procedure not verified for ${found((
-  guide,
-) => guide?.procedureStatus === "partial")}.
-- Sourced cost: ${found((
-  guide,
-) => guide?.cost)} of ${sorted.length}; ${found((
-  guide,
-) => guide?.costStatus === "partial")} have only a component or variable total.
+- Sourced steps: ${found((guide) => guide?.steps?.length)} of ${sorted.length}; full procedure not verified for ${found((guide) => guide?.procedureStatus === "partial")}.
+- Sourced cost: ${found((guide) => guide?.cost)} of ${sorted.length}; ${found((guide) => guide?.costStatus === "partial")} have only a component or variable total.
 - Official processing or exam timeline: ${found((guide) => guide?.time?.official)} of ${sorted.length}.
 - Applicant processing reports dated 2025 onward: ${found((guide) => guide?.time?.forum)} of ${sorted.length}.
 - Official additional requirements: ${found((guide) => guide?.requirements?.length)} of ${sorted.length}.

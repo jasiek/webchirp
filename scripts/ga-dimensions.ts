@@ -110,9 +110,7 @@ export function validateDeclarations(declarations: readonly GaDimension[]): stri
 // Diff declarations against what the property already has. Never decides to
 // archive on its own: extras are reported and the caller opts in.
 export function planSync(declarations: readonly GaDimension[], existing: readonly GaDimension[]) {
-  const byKey = new Map(existing.map((
-    dimension,
-  ) => [`${dimension.scope}:${dimension.parameterName}`, dimension]));
+  const byKey = new Map(existing.map((dimension) => [`${dimension.scope}:${dimension.parameterName}`, dimension]));
   const plan: { create: Array<Record<string, any>>; update: Array<Record<string, any>>; unchanged: Array<Record<string, any>>; conflicts: Array<Record<string, any>>; extra: Array<Record<string, any>> } = { create: [], update: [], unchanged: [], conflicts: [], extra: [] };
 
   for (const declared of declarations) {
@@ -147,9 +145,7 @@ export function planSync(declarations: readonly GaDimension[], existing: readonl
     }
   }
 
-  const declaredKeys = new Set(declarations.map((
-    dimension,
-  ) => `${dimension.scope}:${dimension.parameterName}`));
+  const declaredKeys = new Set(declarations.map((dimension) => `${dimension.scope}:${dimension.parameterName}`));
   for (const dimension of existing) {
     if (!declaredKeys.has(`${dimension.scope}:${dimension.parameterName}`)) {
       plan.extra.push(dimension);

@@ -622,9 +622,7 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
           key: "bands",
           label: "Band",
           name: "band",
-          options: RSGB_BANDS.map((
-            band,
-          ) => ({ value: band, label: band.toLowerCase(), title: band.toLowerCase() })),
+          options: RSGB_BANDS.map((band) => ({ value: band, label: band.toLowerCase(), title: band.toLowerCase() })),
           defaults: RSGB_DEFAULT_BANDS,
         },
         {

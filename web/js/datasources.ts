@@ -550,9 +550,7 @@ export function buildPrzemiennikiRows(
     const receiveTone = parseCtcssFreq(fromRadio ? repeater.ctcssRx : repeater.ctcssTx);
 
     setRowValue(row, "Name", repeater.qra);
-    const commentParts = [repeater.qth, repeater.remarks, repeater.link].filter((
-      part,
-    ) => String(part || "").trim());
+    const commentParts = [repeater.qth, repeater.remarks, repeater.link].filter((part) => String(part || "").trim());
     setRowValue(row, "Comment", commentParts.join(" | "));
 
     if (Number.isFinite(receiveFrequency)) {
