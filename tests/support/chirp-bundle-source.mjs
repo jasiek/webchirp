@@ -43,6 +43,9 @@ function bundleFor(chirpPackageDir) {
  * @param {{repoRoot?: string, chirpDir?: string, driverSet?: string}} [options]
  */
 export async function createLocalPythonSource({ repoRoot, chirpDir = "", driverSet } = {}) {
+  if (!repoRoot) {
+    throw new Error("createLocalPythonSource requires repoRoot");
+  }
   const selectedDriverSet = normalizeDriverSet(driverSet || DEFAULT_DRIVER_SET);
   const chirpInputDir =
     chirpDir || process.env.WEBCHIRP_CHIRP_DIR || path.join(repoRoot, "chirp");

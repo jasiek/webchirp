@@ -312,16 +312,20 @@ async function bundle(entries, options) {
     return { entryOutputs: new Map(), outputs: [], inputs: [] };
   }
   const result = await esbuild.build({ ...COMMON_BUILD_OPTIONS, ...options, entryPoints: entries });
+  const { metafile } = result;
+  if (!metafile) {
+    throw new Error("esbuild returned no metafile; COMMON_BUILD_OPTIONS must keep metafile: true");
+  }
   const entryOutputs = new Map();
-  for (const [outPath, output] of Object.entries(result.metafile.outputs)) {
+  for (const [outPath, output] of Object.entries(metafile.outputs)) {
     if (output.entryPoint) {
       entryOutputs.set(path.resolve(ROOT, output.entryPoint), path.resolve(ROOT, outPath));
     }
   }
   return {
     entryOutputs,
-    outputs: Object.keys(result.metafile.outputs).map((outPath) => path.resolve(ROOT, outPath)),
-    inputs: Object.keys(result.metafile.inputs).map((inPath) => path.resolve(ROOT, inPath)),
+    outputs: Object.keys(metafile.outputs).map((outPath) => path.resolve(ROOT, outPath)),
+    inputs: Object.keys(metafile.inputs).map((inPath) => path.resolve(ROOT, inPath)),
   };
 }
 

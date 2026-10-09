@@ -11,6 +11,10 @@
 // line of the file, for Python only the executable statements.
 export function parseLcov(text) {
   const files = new Map();
+  /**
+   * @type {{lines: number, linesHit: number, branches: number, branchesHit: number,
+   *   functions: number, functionsHit: number, lineHits: Map<number, number>}|null}
+   */
   let current = null;
   for (const line of String(text).split("\n")) {
     const separator = line.indexOf(":");

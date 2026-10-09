@@ -47,7 +47,12 @@ async function resolveChirpRevision(chirpPackageDir) {
 // Import one configured driver collection and return its catalog and failures.
 async function buildDriverCatalog(driverSet, selectedModules) {
   const harness = await createTestRadioHarness({ repoRoot: REPO_ROOT, driverSet });
-  const modules = selectedModules || await harness.pythonSource.listDriverModules();
+  // init() sets it before the harness is handed out.
+  const { pythonSource } = harness;
+  if (!pythonSource) {
+    throw new Error("The radio harness booted without a Python source");
+  }
+  const modules = selectedModules || await pythonSource.listDriverModules();
   const radios = await harness.rpc("list_registered_radios", {
     module_short_names: modules,
   });
@@ -63,7 +68,7 @@ async function buildDriverCatalog(driverSet, selectedModules) {
   }
 
   const sorted = sortRadioCatalog(radios);
-  const chirpRevision = await resolveChirpRevision(harness.pythonSource.getRuntimeInfo().chirpPackageDir);
+  const chirpRevision = await resolveChirpRevision(pythonSource.getRuntimeInfo().chirpPackageDir);
   return { harness, modules, radios: sorted, chirpRevision, importFailures };
 }
 
@@ -111,15 +116,19 @@ async function buildUnofficialCatalog() {
 async function main() {
   if (process.argv[2] === "--driver-module") {
     const moduleName = process.argv[3];
-    if (!process.send || !QUANSHENG_UNOFFICIAL_DRIVERS.some((driver) => driver.module === moduleName)) {
+    // Bound here because the check below has to hold after the build awaits.
+    // Node defines both exactly when the process was spawned with an IPC channel.
+    const send = process.send?.bind(process);
+    const disconnect = process.disconnect?.bind(process);
+    if (!send || !disconnect || !QUANSHENG_UNOFFICIAL_DRIVERS.some((driver) => driver.module === moduleName)) {
       throw new Error("The isolated catalog worker requires a known bundled driver and IPC");
     }
     const { harness: _harness, ...catalog } = await buildDriverCatalog(
       QUANSHENG_UNOFFICIAL_DRIVER_SET,
       [moduleName],
     );
-    process.send(catalog);
-    process.disconnect();
+    send(catalog);
+    disconnect();
     return;
   }
   const chirpCatalog = await buildDriverCatalog("chirp");

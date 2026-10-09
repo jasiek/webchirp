@@ -100,6 +100,11 @@ export function validateDeclarations(declarations) {
 // archive on its own: extras are reported and the caller opts in.
 export function planSync(declarations, existing) {
   const byKey = new Map(existing.map((dimension) => [`${dimension.scope}:${dimension.parameterName}`, dimension]));
+  /**
+   * @type {{create: Array<Record<string, any>>, update: Array<Record<string, any>>,
+   *   unchanged: Array<Record<string, any>>, conflicts: Array<Record<string, any>>,
+   *   extra: Array<Record<string, any>>}}
+   */
   const plan = { create: [], update: [], unchanged: [], conflicts: [], extra: [] };
 
   for (const declared of declarations) {

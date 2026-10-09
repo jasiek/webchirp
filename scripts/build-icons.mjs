@@ -58,7 +58,8 @@ function findChromeBinary() {
     "/opt/pw-browsers/chromium",
   ].filter(Boolean);
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+    // filter(Boolean) dropped an unset CHROME_BIN, but does not narrow the type.
+    if (candidate && fs.existsSync(candidate)) {
       return candidate;
     }
   }

@@ -110,7 +110,8 @@ function findChromeBinary() {
     "/usr/bin/chromium-browser",
   ].filter(Boolean);
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+    // filter(Boolean) dropped an unset CHROME_BIN, but does not narrow the type.
+    if (candidate && fs.existsSync(candidate)) {
       return candidate;
     }
   }
