@@ -1,11 +1,11 @@
 import { radioEventParams, trackEvent } from "./analytics.ts";
-import { rowExtras, setRowExtras } from "../row-extra.js";
-import { createSettingControl, readSettingControl } from "./setting-fields.js";
+import { rowExtras, setRowExtras } from "../row-extra.ts";
+import { createSettingControl, readSettingControl } from "./setting-fields.ts";
+import type { ExtraField } from "./setting-fields.ts";
 import { requireRuntimeApi } from "./state.ts";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
-/** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
-/** @typedef {import("../runtime-rpc.ts").RuntimeApi} RuntimeApi */
+import type { RuntimeApi } from "../runtime-rpc.ts";
+import type { UiContext } from "../types/ui-context.js";
+import type { ChannelRow } from "./channel-values.ts";
 
 // The per-channel extras editor: the modal behind the grid's Extra column.
 //
@@ -16,27 +16,22 @@ import { requireRuntimeApi } from "./state.ts";
 // number of columns.
 //
 // The values live on the row itself, under the sidecar key in
-// web/js/row-extra.js, which is the only thing the upload path reads
+// web/js/row-extra.ts, which is the only thing the upload path reads
 // (_apply_row_extras in web/python/webchirp_bridge/channel_extra.py). Their
 // *schema* -- type, options, bounds -- can only come from the driver, so it is
 // fetched per open from the memory the row occupies. Overlaying the row's
 // stored values on that schema is what makes a moved or edited channel show its
 // own settings rather than the ones sitting in the slot it now occupies.
-/**
- * @param {UiContext} ctx
- */
-export function createChannelExtra(ctx) {
+export function createChannelExtra(ctx: UiContext) {
   const { dom, state, log } = ctx;
 
   // The row currently being edited, and one entry per rendered field. Both are
   // dropped on close, which is also what makes a late response harmless: it
   // finds a different row (or none) and returns.
-  /** @type {ChannelRow|null} */
-  let editedRow = null;
-  let fieldControls = [];
+  let editedRow: ChannelRow | null = null;
+  let fieldControls: ReturnType<typeof appendField>[] = [];
   // The grid button the open came from, refocused when the modal closes.
-  /** @type {HTMLElement|null} */
-  let triggerElement = null;
+  let triggerElement: HTMLElement | null = null;
   // Bumped on every open so the response to a superseded open cannot render
   // over the one the user is looking at.
   let openToken = 0;
@@ -72,7 +67,7 @@ export function createChannelExtra(ctx) {
   // One label cell and one control cell per field, filling the modal's
   // two-column grid. Returns the entry the save path reads the field back
   // through.
-  function appendField(field, current) {
+  function appendField(field: ExtraField, current: unknown) {
     const controlId = `${FIELD_ID_PREFIX}${field.name}`;
     const labelCell = document.createElement("div");
     labelCell.className = "channel-extra-label";
@@ -146,11 +141,7 @@ export function createChannelExtra(ctx) {
   // asked anything, so a slow first call (this can be the one that boots
   // Pyodide) shows a dialog that is loading rather than a click that did
   // nothing.
-  /**
-   * @param {number} rowIdx
-   * @param {HTMLElement|null} [trigger]
-   */
-  async function openForRow(rowIdx, trigger = null) {
+  async function openForRow(rowIdx: number, trigger: HTMLElement | null = null) {
     const row = state.currentRows[rowIdx];
     if (!row) {
       return;
@@ -183,8 +174,7 @@ export function createChannelExtra(ctx) {
       return;
     }
 
-    /** @type {Awaited<ReturnType<RuntimeApi["getChannelExtra"]>>|null} */
-    let payload = null;
+    let payload: Awaited<ReturnType<RuntimeApi["getChannelExtra"]>> | null = null;
     try {
       payload = await requireRuntimeApi(state).getChannelExtra({
         sessionId: await ctx.session.currentId(),
@@ -241,7 +231,7 @@ export function createChannelExtra(ctx) {
       log.setStatus("The channel list changed while the extra settings were open; nothing was saved.");
       return;
     }
-    const values = {};
+    const values: Record<string, unknown> = {};
     let invalid = 0;
     for (const entry of fieldControls) {
       const { value, error } = readSettingControl(entry.field, entry.control);

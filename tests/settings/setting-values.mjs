@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeSettingValue } from "../../web/js/ui/setting-values.js";
+import { normalizeSettingValue } from "../../web/js/ui/setting-values.ts";
 
 // The value metadata the Python runtime reports for a CHIRP RadioSetting,
 // trimmed to what each case needs. Squelch Level on the iRadio UV-5118 is the

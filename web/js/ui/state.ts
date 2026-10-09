@@ -1,6 +1,6 @@
 import type { RuntimeInfo } from "../python-sources.ts";
 import type { CatalogRadio, RuntimeApi } from "../runtime-rpc.ts";
-import type { ChannelRow, RadioMetadata } from "./channel-values.js";
+import type { ChannelRow, RadioMetadata } from "./channel-values.ts";
 
 // Cross-module UI state. Only state that genuinely spans several UI modules
 // lives here; state used by a single module (row selection, settings validation

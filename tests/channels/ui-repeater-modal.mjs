@@ -170,7 +170,7 @@ function buildHarness({
       insertRowsAtSelectionOrEnd: (rows, label) => table.inserted.push({ rows, label }),
       rowBuilderHooks: () => ({
         createBlankRow: () => Object.fromEntries(headers.map((column) => [column, ""])),
-        // Returns whether the write took, as channel-table.js's does.
+        // Returns whether the write took, as web/js/ui/channel-table.ts's does.
         setRowValue: (row, column, value) => {
           if (!headers.includes(column)) {
             return false;
@@ -191,7 +191,7 @@ function buildHarness({
           row[column] = String(value ?? "");
           return true;
         },
-        // Choice order decides, as channel-table.js's findEnumOption does, and
+        // Choice order decides, as web/js/ui/channel-table.ts's findEnumOption does, and
         // a radio that advertises none of the choices answers with "".
         findEnumOption: (column, choices) => {
           // Low first, as roughly half of CHIRP's drivers order them.

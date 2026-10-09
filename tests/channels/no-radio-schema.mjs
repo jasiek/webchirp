@@ -18,7 +18,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CSV_FORMAT_HEADERS } from "../../web/js/clipboard.js";
+import { CSV_FORMAT_HEADERS } from "../../web/js/clipboard.ts";
 import { buildPmr446Rows, buildPrzemiennikiRows } from "../../web/js/datasources.js";
 import { buildRsgbRows } from "../../web/js/rsgb.js";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
@@ -35,7 +35,7 @@ import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 // the state before the startup schema has been fetched.
 async function tableWithMetadata(columns, rows = []) {
   installFakeDom();
-  const { createChannelTable } = await import("../../web/js/ui/channel-table.js");
+  const { createChannelTable } = await import("../../web/js/ui/channel-table.ts");
   const dom = {
     tableHead: new FakeElement("thead"),
     tableBody: new FakeElement("tbody"),

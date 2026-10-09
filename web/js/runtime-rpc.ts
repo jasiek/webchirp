@@ -30,7 +30,7 @@ import {
 import type { RuntimeInfo } from "./python-sources.ts";
 import type { RpcMethodName, RpcParams } from "./rpc-dispatch.ts";
 import type { SerialRpcHandler } from "./serial-globals.ts";
-import type { RadioMetadata } from "./ui/channel-values.js";
+import type { RadioMetadata } from "./ui/channel-values.ts";
 import type { PyodideInterface } from "pyodide";
 
 /**

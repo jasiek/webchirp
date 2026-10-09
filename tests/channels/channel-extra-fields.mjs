@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { loadImageFor, readCatalog, sharedHarness } from "../support/chirp.mjs";
 
-// The editor behind the grid's Extra column (web/js/ui/channel-extra.js) needs
+// The editor behind the grid's Extra column (web/js/ui/channel-extra.ts) needs
 // two things the row sidecar cannot give it: what type each driver extra is,
 // and what else it would accept. get_channel_extra answers that by reading the
 // memory the row occupies and serializing the driver's own setting objects.

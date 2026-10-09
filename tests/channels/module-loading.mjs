@@ -3,7 +3,7 @@
 // Two things depend on this. V8 coverage only reports files it actually
 // loaded, so a module no test touches is absent from the report rather than
 // listed at 0% -- before this test that quietly kept web/app.js,
-// web/js/runtime-rpc.ts, web/js/tooltip.js and web/js/version-info.js (805
+// web/js/runtime-rpc.ts, web/js/tooltip.ts and web/js/version-info.js (805
 // lines) out of the denominator, and the headline percentage was measured
 // against a codebase smaller than the one that deploys. And an import is its
 // own assertion: a typo in a relative specifier, a module renamed without its

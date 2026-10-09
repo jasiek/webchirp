@@ -13,8 +13,7 @@ export function installTooltips({ delayMs = TOOLTIP_DELAY_MS } = {}) {
   bubble.hidden = true;
   document.body.appendChild(bubble);
 
-  /** @type {HTMLElement|SVGElement|null} */
-  let activeEl = null;
+  let activeEl: HTMLElement | SVGElement | null = null;
   let showTimer = 0;
   let pointerX = 0;
   let pointerY = 0;
@@ -76,7 +75,7 @@ export function installTooltips({ delayMs = TOOLTIP_DELAY_MS } = {}) {
     pointerY = event.clientY;
     // Titled elements in this app are HTML or SVG, both of which have dataset.
     const el = event.target instanceof Element
-      ? /** @type {HTMLElement|SVGElement|null} */ (event.target.closest("[title], [data-tooltip]"))
+      ? (event.target.closest("[title], [data-tooltip]") as HTMLElement | SVGElement | null)
       : null;
     if (el === activeEl) {
       return;

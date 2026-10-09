@@ -10,7 +10,7 @@
 // standing in.
 
 import { REPEATER_REQUEST_TIMEOUT_MS, withRequestTimeout } from "./request-timeout.ts";
-import { setHighestPower } from "./row-power.js";
+import { setHighestPower } from "./row-power.ts";
 
 // No CORS proxy is involved: the API sends Access-Control-Allow-Origin: * on
 // every response, unlike przemienniki.net and repeaterbook.com. The request
@@ -583,7 +583,7 @@ export function buildRsgbRows(entries, { createBlankRow, setRowValue, findEnumOp
 
     // These are repeater channels, so the radio is reaching for a distant
     // machine: the highest tier the driver advertises is the only sensible
-    // default. The ranking lives in web/js/row-power.js because every repeater
+    // default. The ranking lives in web/js/row-power.ts because every repeater
     // directory needs the same answer.
     setHighestPower(row, { setRowValue, findEnumOption });
 

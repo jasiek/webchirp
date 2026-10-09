@@ -10,7 +10,7 @@
 // builders, the power-level resolver -- already prefers the cached image. The
 // grid did not, so a downloaded RT98 channel carried a "High" its own dropdown
 // did not list, and re-selecting the radio blanked it as unsupported
-// (dropUnsupportedPowerValues in web/js/ui/channel-table.js). Issue #86.
+// (dropUnsupportedPowerValues in web/js/ui/channel-table.ts). Issue #86.
 //
 // The two tests here are the two halves of that: what the runtime reports for a
 // driver with an image cached, and whether the download path asks it again.

@@ -1850,7 +1850,7 @@ button:disabled {
   color: var(--error-text);
 }
 
-/* The bulk channel editor (web/js/ui/channel-bulk-edit.js). It shares the
+/* The bulk channel editor (web/js/ui/channel-bulk-edit.ts). It shares the
    extras editor's shape -- an unknown number of fields, so the card is capped
    at the viewport and the fields scroll inside it rather than the whole dialog
    scrolling in the overlay -- but scrolls a wrapper rather than one grid,
@@ -2261,7 +2261,7 @@ button:disabled {
    grid across the pane, and auto table layout hands that slack back to every
    column in proportion, which put it straight back between each value and the
    divider to its right -- the columns fitInputColumnWidths()
-   (web/js/ui/channel-table.js) had just measured. So the grid now ends where
+   (web/js/ui/channel-table.ts) had just measured. So the grid now ends where
    its contents end, and a window wider than the channel list simply shows
    page behind it. */
 #mem-table {
@@ -2332,7 +2332,7 @@ button:disabled {
    still scrolls inside the input.
 
    Note what this does *not* see: the grid is virtualized (see
-   web/js/ui/channel-table.js), so the browser is measuring the rows currently in
+   web/js/ui/channel-table.ts), so the browser is measuring the rows currently in
    the DOM, not the whole channel list. Columns therefore track what is on
    screen. */
 @supports (field-sizing: content) {
@@ -2377,7 +2377,7 @@ button:disabled {
    so they must ask for no more than their own contents: a select is already as
    wide as the widest option its driver publishes, and an input is sized by the
    size attribute columnCharBudget() derives from the column metadata in
-   web/js/ui/channel-table.js. A blanket min-width here flattened all of that to
+   web/js/ui/channel-table.ts. A blanket min-width here flattened all of that to
    one width, so a two-character Duplex or Skip column was as wide as a
    frequency and the desktop grid scrolled sideways for space it was not using.
    Keep the auto-indexed Location column compact. */
@@ -2417,7 +2417,7 @@ button:disabled {
 }
 
 /* The Extra column's cell: a button rather than an editor, because the fields
-   behind it are per-driver and per-channel (web/js/ui/channel-extra.js). Sized to its
+   behind it are per-driver and per-channel (web/js/ui/channel-extra.ts). Sized to its
    label so the column stays the narrowest one in the grid. */
 #mem-table .channel-extra-button {
   padding: 0.05rem 0.4rem;
@@ -2639,7 +2639,7 @@ button:disabled {
   aspect-ratio: 1 / 1;
 }
 
-/* Stand-ins for the rows the grid keeps out of the DOM (see channel-table.js):
+/* Stand-ins for the rows the grid keeps out of the DOM (see web/js/ui/channel-table.ts):
    pure height, no box of their own. */
 #mem-table tbody tr.mem-row-spacer td {
   padding: 0;
@@ -2876,7 +2876,7 @@ button:disabled {
   }
 }
 
-/* Custom tooltip bubble (web/js/tooltip.js): replaces native title tooltips
+/* Custom tooltip bubble (web/js/tooltip.ts): replaces native title tooltips
    so every tooltip appears after the same 400ms delay. Sits above modals. */
 .app-tooltip {
   position: fixed;

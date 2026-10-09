@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     #
     # The value type is ``Any`` rather than ``str`` because a row may also carry
     # non-header keys the editor rides along on it — currently the ``__extra``
-    # sidecar (``web/js/row-extra.js``), an object, which is why the type cannot
+    # sidecar (``web/js/row-extra.ts``), an object, which is why the type cannot
     # promise ``str`` for arbitrary keys. Every consumer projects a row through
     # ``CSV_HEADERS`` and ignores the rest, which is what keeps the sidecar out
     # of a codeplug.

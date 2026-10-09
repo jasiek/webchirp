@@ -3,6 +3,7 @@
 // tab-separated values with the canonical CSV header row, so copied channels
 // paste straight into Google Sheets/Excel (and back), other webchirp tabs,
 // and desktop CHIRP itself.
+import type { ChannelRow } from "./ui/channel-values.ts";
 
 // Canonical CHIRP CSV column order; must match Memory.CSV_FORMAT in
 // chirp/chirp/chirp_common.py.
@@ -34,7 +35,7 @@ const HEADER_BY_LOWERCASE = new Map(
   CSV_FORMAT_HEADERS.map((header) => [header.toLowerCase(), header]),
 );
 
-function escapeTsvField(value) {
+function escapeTsvField(value: unknown): string {
   const text = String(value ?? "");
   if (/[\t"\r\n]/.test(text)) {
     return `"${text.replaceAll('"', '""')}"`;
@@ -45,7 +46,7 @@ function escapeTsvField(value) {
 // Serialize rows (objects keyed by header name) to spreadsheet-compatible
 // TSV: header line + one line per row, always emitting all canonical columns
 // (blank for columns the current radio does not expose, e.g. DV-only ones).
-export function serializeRowsToTsv(rows) {
+export function serializeRowsToTsv(rows: readonly (ChannelRow | null | undefined)[]): string {
   const lines = [CSV_FORMAT_HEADERS.join("\t")];
   for (const row of rows) {
     lines.push(
@@ -57,9 +58,9 @@ export function serializeRowsToTsv(rows) {
 
 // Minimal RFC-4180-style parser with a tab delimiter: quoted fields may
 // contain tabs/newlines, doubled quotes escape a quote, CRLF/LF both accepted.
-export function parseTsv(text) {
-  const records = [];
-  let record = [];
+export function parseTsv(text: string): string[][] {
+  const records: string[][] = [];
+  let record: string[] = [];
   let field = "";
   let inQuotes = false;
   const source = String(text ?? "");
@@ -110,11 +111,11 @@ export function parseTsv(text) {
 // Desktop CHIRP uses a ">10 tabs" heuristic to tell grid pastes apart from
 // single-cell text; webchirp's paste handler never fires while a cell editor
 // is focused, so any tab at all signals tabular channel data.
-export function looksLikeChannelTsv(text) {
+export function looksLikeChannelTsv(text: unknown): boolean {
   return String(text ?? "").includes("\t");
 }
 
-function recordIsBlank(record) {
+function recordIsBlank(record: string[]): boolean {
   return record.every((field) => field.trim() === "");
 }
 
@@ -123,7 +124,13 @@ function recordIsBlank(record) {
 // CSV_FORMAT order (same behavior as desktop's mems_from_clipboard, which
 // prepends the default header). Location is skipped: rows are renumbered by
 // the caller. Unknown columns no-op via the injected setRowValue.
-export function buildRowsFromClipboardText(text, { createBlankRow, setRowValue }) {
+export function buildRowsFromClipboardText(
+  text: string,
+  { createBlankRow, setRowValue }: {
+    createBlankRow: () => ChannelRow;
+    setRowValue: (row: ChannelRow, header: string, value: string) => unknown;
+  },
+): { rows: ChannelRow[]; usedHeader: boolean } | null {
   if (!looksLikeChannelTsv(text)) {
     return null;
   }
@@ -163,7 +170,7 @@ export function buildRowsFromClipboardText(text, { createBlankRow, setRowValue }
 
 // A row counts as non-empty (for the paste-overwrite confirmation) when it
 // has a usable frequency or a name.
-export function rowLooksNonEmpty(row) {
+export function rowLooksNonEmpty(row: ChannelRow | null | undefined): boolean {
   const frequency = Number.parseFloat(String(row?.Frequency ?? ""));
   if (Number.isFinite(frequency) && frequency > 0) {
     return true;
@@ -176,12 +183,16 @@ export function rowLooksNonEmpty(row) {
 // order; rows blocked by the edge (or by an already-clamped selected
 // neighbor) stay put. Returns the new order (new index -> old index), the
 // selected indexes after the move, and whether anything actually moved.
-export function computeMovedRowOrder(rowCount, selectedIndexes, direction) {
+export function computeMovedRowOrder(
+  rowCount: number,
+  selectedIndexes: Iterable<number>,
+  direction: number,
+): { order: number[]; selected: number[]; moved: boolean } {
   const order = Array.from({ length: rowCount }, (_, idx) => idx);
   const selected = [...selectedIndexes]
     .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < rowCount)
     .sort((a, b) => a - b);
-  const nextSelected = [];
+  const nextSelected: number[] = [];
   let moved = false;
   if (direction < 0) {
     let limit = 0;

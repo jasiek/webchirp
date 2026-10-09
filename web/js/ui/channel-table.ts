@@ -9,29 +9,22 @@ import {
   looksLikeChannelTsv,
   rowLooksNonEmpty,
   serializeRowsToTsv,
-} from "../clipboard.js";
-import { normalizeCellValue, normalizeValue } from "./channel-values.js";
-import { rowExtras } from "../row-extra.js";
+} from "../clipboard.ts";
+import { normalizeCellValue, normalizeValue } from "./channel-values.ts";
+import { rowExtras } from "../row-extra.ts";
 import { callsignFromName } from "../callsign-lookup.js";
 import { radioEventParams, trackEvent } from "./analytics.ts";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
-/** @typedef {import("./channel-values.js").ColumnMeta} ColumnMeta */
-/** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
-/** @typedef {import("./channel-values.js").RadioMetadata} RadioMetadata */
+import type { UiContext } from "../types/ui-context.js";
+import type { ChannelRow, ColumnMeta, RadioMetadata } from "./channel-values.ts";
 
 // The editable channel grid: rendering, row selection, the row operations
 // (insert/remove/move/copy/cut/paste), the band-plan presets, and the
 // invalid-cell highlighting the upload preflight drives. Owns the selection
 // and invalid-cell state; the rows themselves live in the shared state so
 // export, upload and import paths can read them.
-/**
- * @param {UiContext} ctx
- */
-export function createChannelTable({ dom, state, log, actions }) {
-  let selectedRowIndexes = new Set();
-  /** @type {number|null} */
-  let selectionAnchorIndex = null;
+export function createChannelTable({ dom, state, log, actions }: UiContext) {
+  let selectedRowIndexes = new Set<number>();
+  let selectionAnchorIndex: number | null = null;
   const invalidCellKeys = new Set();
 
   // --- Grid rendering -----------------------------------------------------
@@ -63,7 +56,7 @@ export function createChannelTable({ dom, state, log, actions }) {
 
   // The grid's one synthetic column, appended after Comment: driver-specific
   // per-channel settings have no CSV header and no fixed shape, so the cell
-  // holds a button that opens the editor (web/js/ui/channel-extra.js) rather
+  // holds a button that opens the editor (web/js/ui/channel-extra.ts) rather
   // than a value. It is not part of state.currentHeaders, which stays CHIRP's
   // own column list -- everything that serializes a row reads that, and a
   // header no CSV knows would have to be filtered back out everywhere.
@@ -90,14 +83,12 @@ export function createChannelTable({ dom, state, log, actions }) {
 
   // The schema the current row elements were built for; a change to either
   // invalidates every editor.
-  let renderedColumns = [];
-  /** @type {RadioMetadata|null} */
-  let renderedMetadata = null;
+  let renderedColumns: string[] = [];
+  let renderedMetadata: RadioMetadata | null = null;
   let locationColumnIndex = -1;
   // The window: rowElements[i] shows channel windowStart + i.
-  let rowElements = [];
-  /** @type {{above: SpacerRow, below: SpacerRow}|null} */
-  let spacers = null;
+  let rowElements: HTMLTableRowElement[] = [];
+  let spacers: { above: SpacerRow; below: SpacerRow } | null = null;
   let windowStart = 0;
   let measuredRowHeight = 0;
   let windowUpdateHandle = 0;
@@ -157,7 +148,7 @@ export function createChannelTable({ dom, state, log, actions }) {
 
   // Drop the preflight highlight from the given columns of the given rows and
   // leave every other flagged cell marked. For a caller that rewrites part of
-  // the grid rather than replacing it: the bulk editor (web/js/ui/channel-bulk-edit.js)
+  // the grid rather than replacing it: the bulk editor (web/js/ui/channel-bulk-edit.ts)
   // writes a few columns across a selection, and clearing the whole set there
   // would take the markers off cells whose values it never touched, leaving
   // them invalid but no longer visibly so until the next upload attempt.
@@ -195,7 +186,7 @@ export function createChannelTable({ dom, state, log, actions }) {
   function selectRowRange(fromIdx, toIdx, addToExisting) {
     const start = Math.max(0, Math.min(fromIdx, toIdx));
     const end = Math.min(state.currentRows.length - 1, Math.max(fromIdx, toIdx));
-    const next = addToExisting ? new Set(selectedRowIndexes) : new Set();
+    const next = addToExisting ? new Set(selectedRowIndexes) : new Set<number>();
     for (let idx = start; idx <= end; idx += 1) {
       next.add(idx);
     }
@@ -228,8 +219,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (column === "Location") {
       return "";
     }
-    /** @type {Partial<ColumnMeta>} */
-    const meta = state.radioMetadata.columns?.[column] || {};
+    const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[column] || {};
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
       // CHIRP's own starting value for the column when the driver offers it
       // (get_radio_column_metadata publishes it from chirp_common.Memory()),
@@ -250,8 +240,7 @@ export function createChannelTable({ dom, state, log, actions }) {
   // 0 floor. With no radio selected (the generic-CSV schema) there are no
   // bounds and 0.. applies.
   function locationBounds() {
-    /** @type {Partial<ColumnMeta>} */
-    const meta = state.radioMetadata.columns?.Location || {};
+    const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.Location || {};
     return {
       lo: Number.isFinite(meta.min) ? Number(meta.min) : 0,
       hi: Number.isFinite(meta.max) ? Number(meta.max) : Number.POSITIVE_INFINITY,
@@ -277,8 +266,8 @@ export function createChannelTable({ dom, state, log, actions }) {
       return;
     }
     const { lo, hi } = locationBounds();
-    const claimed = new Set();
-    const needsSlot = [];
+    const claimed = new Set<number>();
+    const needsSlot: ChannelRow[] = [];
     for (const row of state.currentRows) {
       const location = parsedLocation(row);
       if (location === null || location < lo || location > hi || claimed.has(location)) {
@@ -352,8 +341,8 @@ export function createChannelTable({ dom, state, log, actions }) {
     return indexes;
   }
 
-  function createBlankChannelRow() {
-    const row = {};
+  function createBlankChannelRow(): ChannelRow {
+    const row: ChannelRow = {};
     for (const column of state.currentHeaders) {
       row[column] = defaultValueForColumn(column);
     }
@@ -370,8 +359,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (!state.currentHeaders.includes(column)) {
       return false;
     }
-    /** @type {Partial<ColumnMeta>} */
-    const meta = state.radioMetadata.columns?.[column] || {};
+    const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[column] || {};
     const result = normalizeCellValue(column, value, meta, row[column], { allowReadOnly: true });
     row[column] = result.value;
     return result.accepted;
@@ -750,7 +738,7 @@ export function createChannelTable({ dom, state, log, actions }) {
       const location = anchorLocation + offset;
       return location <= hi ? location : null;
     });
-    const overwriteLocations = [];
+    const overwriteLocations: string[] = [];
     targetLocations.forEach((location) => {
       if (location === null) {
         return;
@@ -842,8 +830,7 @@ export function createChannelTable({ dom, state, log, actions }) {
   // (vx6's 220MHz list) advertises only one of the two wattages — so this describes
   // the levels the driver offers, not what a given channel transmits.
   function columnLegend(column) {
-    /** @type {Partial<ColumnMeta>} */
-    const meta = state.radioMetadata.columns?.[column] || {};
+    const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[column] || {};
     const watts = meta.optionWatts;
     if (!watts || typeof watts !== "object") {
       return "";
@@ -859,8 +846,7 @@ export function createChannelTable({ dom, state, log, actions }) {
   // never on a row — so the element stays valid for any row until the schema
   // changes. bindCellEditor() is what puts a row's data into it.
   function createCellEditor(column) {
-    /** @type {Partial<ColumnMeta>} */
-    const meta = state.radioMetadata.columns?.[column] || {};
+    const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[column] || {};
     const readOnly = column === "Location" || meta.editable === false;
 
     // Grey out read-only cells and explain why; Location is excluded because
@@ -998,7 +984,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     }
   }
 
-  function locationButtonIn(tr) {
+  function locationButtonIn(tr: HTMLTableRowElement): Element | null {
     if (locationColumnIndex < 0) {
       return null;
     }
@@ -1016,9 +1002,8 @@ export function createChannelTable({ dom, state, log, actions }) {
 
   // A spacer row stands in for the rows kept out of the DOM, so the scrollbar
   // and the scroll position match the full channel list.
-  /** @typedef {{tr: HTMLTableRowElement, cell: HTMLTableCellElement}} SpacerRow */
-  /** @returns {SpacerRow} */
-  function createSpacerRow() {
+  type SpacerRow = { tr: HTMLTableRowElement; cell: HTMLTableCellElement };
+  function createSpacerRow(): SpacerRow {
     const tr = document.createElement("tr");
     tr.className = "mem-row-spacer";
     tr.setAttribute("aria-hidden", "true");
@@ -1047,8 +1032,7 @@ export function createChannelTable({ dom, state, log, actions }) {
       th.textContent = label;
       // Mirror the cell treatment: grey + tooltip on headers of columns the
       // selected radio marks read-only (Location stays the selection handle).
-      /** @type {Partial<ColumnMeta>} */
-      const meta = state.radioMetadata.columns?.[column] || {};
+      const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[column] || {};
       const legend = columnLegend(column);
       if (legend) {
         th.title = legend;
@@ -1106,7 +1090,7 @@ export function createChannelTable({ dom, state, log, actions }) {
 
   // Grow or shrink the pool of row elements. Elements that survive are put back
   // in place rather than rebuilt, so only the size change costs anything.
-  function syncRowElementCount(count) {
+  function syncRowElementCount(count: number): void {
     if (rowElements.length === count && spacers) {
       return;
     }
@@ -1171,15 +1155,15 @@ export function createChannelTable({ dom, state, log, actions }) {
       return null;
     }
     // Narrowed by the tagName test above.
-    const editor = /** @type {HTMLInputElement|HTMLSelectElement} */ (active);
+    const editor = active as HTMLInputElement | HTMLSelectElement;
     return {
       ...cell,
       // Only a text editor carries an uncommitted draft; a select commits on
       // change, so there is nothing of its own to put back.
       draft: active.tagName === "INPUT" ? String(editor.value ?? "") : null,
       // A select has no caret: these read undefined there, as they always did.
-      selectionStart: /** @type {HTMLInputElement} */ (editor).selectionStart,
-      selectionEnd: /** @type {HTMLInputElement} */ (editor).selectionEnd,
+      selectionStart: (editor as HTMLInputElement).selectionStart,
+      selectionEnd: (editor as HTMLInputElement).selectionEnd,
     };
   }
 
@@ -1189,7 +1173,9 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (!captured) {
       return;
     }
-    const editor = cellElement(captured.rowIdx, captured.column)?.children[0];
+    // A cell's first child is the editor createCellEditor() built for it: a
+    // text input, or a select, which has no caret to restore.
+    const editor = cellElement(captured.rowIdx, captured.column)?.children[0] as HTMLInputElement | undefined;
     if (!editor) {
       // The channel being edited fell out of the rendered window, so there is
       // no element left to hold the draft. Commit it as a blur would rather
@@ -1321,8 +1307,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (!row) {
       return null;
     }
-    /** @type {Partial<ColumnMeta>} */
-    const meta = state.radioMetadata.columns?.[column] || {};
+    const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[column] || {};
     const next = normalizeValue(column, text, meta, row[column]);
     row[column] = next;
     return next;
@@ -1340,8 +1325,8 @@ export function createChannelTable({ dom, state, log, actions }) {
   // that fired it -- a cell editor or one of the row's buttons.
   function bindGridEvents() {
     dom.tableBody.addEventListener("click", (event) => {
-      const target = /** @type {HTMLElement} */ (event.target);
-      const extraButton = /** @type {HTMLButtonElement|null} */ (target?.closest?.(".channel-extra-button"));
+      const target = event.target as HTMLElement;
+      const extraButton = target?.closest?.(".channel-extra-button") as HTMLButtonElement | null;
       const extraCell = extraButton && cellReferenceFor(extraButton);
       if (extraCell) {
         // The button travels with the call so the editor can hand the keyboard
@@ -1357,7 +1342,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     });
 
     dom.tableBody.addEventListener("input", (event) => {
-      const target = /** @type {HTMLElement} */ (event.target);
+      const target = event.target as HTMLElement;
       const cell = cellReferenceFor(target);
       if (cell) {
         clearInvalidCell(cell.rowIdx, cell.column);
@@ -1365,7 +1350,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     });
 
     dom.tableBody.addEventListener("change", (event) => {
-      const target = /** @type {HTMLElement} */ (event.target);
+      const target = event.target as HTMLElement;
       if (target?.tagName !== "SELECT") {
         return;
       }
@@ -1379,7 +1364,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     // Text cells normalize when they lose focus. blur does not bubble, so the
     // delegated equivalent is focusout.
     dom.tableBody.addEventListener("focusout", (event) => {
-      const target = /** @type {HTMLElement} */ (event.target);
+      const target = event.target as HTMLElement;
       if (target?.tagName !== "INPUT") {
         return;
       }

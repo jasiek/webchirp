@@ -3,7 +3,7 @@
 // from web/js/ui/settings-panel.js so the rules can be exercised without a DOM
 // or a loaded image. denotesInteger is exported because the per-channel extras
 // read integers from their own controls (readSettingControl in
-// web/js/ui/setting-fields.js) and the rule has to be one rule: it was written
+// web/js/ui/setting-fields.ts) and the rule has to be one rule: it was written
 // twice before, and the second copy kept the defect the first had shed.
 
 // A decimal literal, split so the digits can be read without converting: sign,
@@ -49,7 +49,7 @@ export function denotesInteger(text) {
 // is 0, and the Number.isInteger check still stands behind denotesInteger to
 // catch a literal that overflows to Infinity ("1e400"). The per-channel driver
 // settings reached the same conclusion for their own controls -- see
-// readSettingControl in web/js/ui/setting-fields.js.
+// readSettingControl in web/js/ui/setting-fields.ts.
 function parseIntegerInput(rawValue) {
   const text = String(rawValue ?? "").trim();
   if (!text || !denotesInteger(text)) {

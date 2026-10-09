@@ -1,5 +1,5 @@
 import { withRequestTimeout } from "./request-timeout.ts";
-import { highestPowerOption, setHighestPower } from "./row-power.js";
+import { highestPowerOption, setHighestPower } from "./row-power.ts";
 import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.js";
 
 const PMR446_FREQUENCIES_MHZ = Array.from(

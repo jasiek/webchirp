@@ -1,4 +1,4 @@
-// Row hooks matching channel-table.js's rowBuilderHooks(), for tests that
+// Row hooks matching web/js/ui/channel-table.ts's rowBuilderHooks(), for tests that
 // drive a repeater-directory row builder without a grid. Every builder test
 // needs the same three callbacks — a blank row, a guarded column write, and an
 // enum lookup that treats the caller's choices as a priority ranking — and
@@ -17,7 +17,7 @@ export const REPEATER_COLUMNS = [
 //   optionsByColumn - enum options per column, e.g. { Mode: ["FM", "NFM"] }.
 //                     A column not listed offers nothing, so every lookup
 //                     against it returns "".
-//   caseInsensitive - match options ignoring case. channel-table.js does; a
+//   caseInsensitive - match options ignoring case. web/js/ui/channel-table.ts does; a
 //                     test that wants to pin the exact strings a driver
 //                     advertises leaves this off, so it is an explicit choice.
 //   maxFrequencyMhz - reject Frequency writes above this, the way
@@ -25,7 +25,7 @@ export const REPEATER_COLUMNS = [
 //                     falls outside valid_bands (Offset is exempt from that
 //                     check, which is the asymmetry some builders must notice).
 //
-// setRowValue reports acceptance exactly as channel-table.js's does: false when
+// setRowValue reports acceptance exactly as web/js/ui/channel-table.ts's does: false when
 // the column is absent, the frequency is out of band, or the value is not one
 // of the column's options. A column with no options listed is not an enum, so
 // anything can be written to it — matching normalizeValue, which only validates
@@ -60,7 +60,7 @@ export function makeRowHooks({
       row[column] = String(value ?? "");
       return true;
     },
-    // Choice order decides, exactly as channel-table.js's findEnumOption does:
+    // Choice order decides, exactly as web/js/ui/channel-table.ts's findEnumOption does:
     // the first choice the column offers wins, whatever its position there.
     findEnumOption: (column, choices) => {
       const options = optionsByColumn[column] || [];

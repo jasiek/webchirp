@@ -68,7 +68,7 @@ function installMapDom({ hoverCapable = false } = {}) {
 }
 
 // Channel rows rendered as Location buttons inside table rows, the shape
-// channel-table.js produces. Each row's Name is what the hover looks up.
+// web/js/ui/channel-table.ts produces. Each row's Name is what the hover looks up.
 function buildFixture(rows) {
   const dom = {};
   for (const key of [

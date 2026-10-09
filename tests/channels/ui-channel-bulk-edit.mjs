@@ -17,7 +17,7 @@ import {
 } from "../support/fake-dom.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
-// The bulk channel editor (web/js/ui/channel-bulk-edit.js): the toolbar control
+// The bulk channel editor (web/js/ui/channel-bulk-edit.ts): the toolbar control
 // that follows the grid selection, and the modal behind it.
 //
 // Driven through createUiController rather than the module alone, because the

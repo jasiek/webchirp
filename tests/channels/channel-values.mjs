@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeCellValue, normalizeValue, parseFreqToHz } from "../../web/js/ui/channel-values.js";
+import { normalizeCellValue, normalizeValue, parseFreqToHz } from "../../web/js/ui/channel-values.ts";
 
 // The column metadata the Python runtime reports, trimmed to what each case
 // needs. CTCSS tables are the interesting enums: every driver publishes its

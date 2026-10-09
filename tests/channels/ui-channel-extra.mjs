@@ -13,7 +13,7 @@ import {
 } from "../support/fake-dom.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
-// The grid's Extra column and the modal behind it (web/js/ui/channel-extra.js).
+// The grid's Extra column and the modal behind it (web/js/ui/channel-extra.ts).
 // Driven through createUiController rather than the module alone, because the
 // column only exists when the loaded rows carry driver extras, and that is the
 // grid's decision, not the modal's.
@@ -330,7 +330,7 @@ test("a fraction that rounds to a whole number is rejected too", async () => {
   // a genuine 1 and "1.0000000000000000001" as the same. An isInteger check on
   // that result accepts both, and the channel silently takes a VOX level the
   // user did not type. The rule has to read the digits instead
-  // (denotesInteger, web/js/ui/setting-values.js).
+  // (denotesInteger, web/js/ui/setting-values.ts).
   for (const typed of [".99999999999999999", "1.0000000000000000001"]) {
     const { document, rows } = await boot({
       getChannelExtra: async () => ({

@@ -1,13 +1,12 @@
-import { normalizeCellValue } from "./channel-values.js";
-import { rowExtras, setRowExtras } from "../row-extra.js";
-import { createSettingControl, readSettingControl } from "./setting-fields.js";
+import { normalizeCellValue } from "./channel-values.ts";
+import { rowExtras, setRowExtras } from "../row-extra.ts";
+import { createSettingControl, readSettingControl } from "./setting-fields.ts";
+import type { ExtraField } from "./setting-fields.ts";
 import { radioEventParams, trackEvent } from "./analytics.ts";
 import { requireRuntimeApi } from "./state.ts";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
-/** @typedef {import("./channel-values.js").ColumnMeta} ColumnMeta */
-/** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
-/** @typedef {import("../runtime-rpc.ts").RuntimeApi} RuntimeApi */
+import type { RuntimeApi } from "../runtime-rpc.ts";
+import type { UiContext } from "../types/ui-context.js";
+import type { ChannelRow, ColumnMeta } from "./channel-values.ts";
 
 // The bulk channel editor: one modal that writes the same value to every
 // selected channel (issue #146).
@@ -31,24 +30,19 @@ import { requireRuntimeApi } from "./state.ts";
 // rather than a thing the user has to arrange: a bulk edit opened on twenty
 // channels that disagree about Mode must not quietly give all twenty the first
 // one's Mode just because the control had to show something.
-/**
- * @param {UiContext} ctx
- */
-export function createChannelBulkEdit(ctx) {
+export function createChannelBulkEdit(ctx: UiContext) {
   const { dom, state, log } = ctx;
 
   // The rows the modal opened on, and one entry per rendered field. All three
   // are dropped on close, which is also what makes a late extras response
   // harmless: it finds a closed modal and returns.
-  let editedRows = [];
-  let columnFields = [];
-  let extraFields = [];
+  let editedRows: ChannelRow[] = [];
+  let columnFields: Array<ReturnType<typeof appendField> & { column: string }> = [];
+  let extraFields: Array<ReturnType<typeof appendField> & { field: ExtraField }> = [];
   // What the fields were built from, checked again on apply. See schemaSnapshot.
-  /** @type {ReturnType<typeof schemaSnapshot>|null} */
-  let editedSchema = null;
+  let editedSchema: ReturnType<typeof schemaSnapshot> | null = null;
   // The toolbar button the open came from, refocused when the modal closes.
-  /** @type {HTMLElement|null} */
-  let triggerElement = null;
+  let triggerElement: HTMLElement | null = null;
   // Bumped on every open so the response to a superseded open cannot render
   // over the one the user is looking at.
   let openToken = 0;
@@ -133,7 +127,7 @@ export function createChannelBulkEdit(ctx) {
       // No metadata at all is an unconstrained column, not an unsupported one:
       // until a radio is selected the grid runs on the generic-CSV schema and
       // writes anything through. See findEnumOption in
-      // web/js/ui/channel-table.js, which reads an absent option list the same
+      // web/js/ui/channel-table.ts, which reads an absent option list the same
       // way.
       return !meta || meta.editable !== false;
     });
@@ -153,10 +147,9 @@ export function createChannelBulkEdit(ctx) {
 
   // The control for one grid column, built from the same CHIRP column metadata
   // the grid's own cell editors are built from (createCellEditor in
-  // web/js/ui/channel-table.js).
+  // web/js/ui/channel-table.ts).
   function createColumnControl(column, initial) {
-    /** @type {Partial<ColumnMeta>} */
-    const meta = state.radioMetadata.columns?.[column] || {};
+    const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[column] || {};
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
       const select = document.createElement("select");
       const options = meta.options.map(String);
@@ -209,11 +202,12 @@ export function createChannelBulkEdit(ctx) {
   // and its error slot. Returns the entry the apply path reads the field back
   // through.
   /**
-   * @param {HTMLElement} grid
-   * @param {{id: string, name: string, label: string, doc?: string, mixed: boolean,
-   *   control: HTMLInputElement|HTMLSelectElement}} field  doc: the driver's help text.
+   * @param field doc: the driver's help text.
    */
-  function appendField(grid, { id, name, label, doc, mixed, control }) {
+  function appendField(
+    grid: HTMLElement,
+    { id, name, label, doc, mixed, control }: { id: string; name: string; label: string; doc?: string; mixed: boolean; control: HTMLInputElement | HTMLSelectElement },
+  ) {
     const labelCell = document.createElement("div");
     labelCell.className = "bulk-edit-label";
     // The checkbox sits inside the label, so the field's name is its own click
@@ -348,8 +342,7 @@ export function createChannelBulkEdit(ctx) {
     }
     const location = String(rows[0]?.Location ?? "").trim();
     setExtraMessage("Reading the driver's per-channel settings...");
-    /** @type {Awaited<ReturnType<RuntimeApi["getChannelExtra"]>>|null} */
-    let payload = null;
+    let payload: Awaited<ReturnType<RuntimeApi["getChannelExtra"]>> | null = null;
     try {
       payload = await requireRuntimeApi(state).getChannelExtra({
         sessionId: await ctx.session.currentId(),
@@ -390,8 +383,7 @@ export function createChannelBulkEdit(ctx) {
   // they need nothing but the schema the grid already has — while the extras
   // are fetched, so a slow first call (this can be the one that boots Pyodide)
   // leaves a usable dialog rather than an empty one.
-  /** @param {HTMLElement|null} [trigger] */
-  function open(trigger = null) {
+  function open(trigger: HTMLElement | null = null) {
     const rows = ctx.table.selectedChannelRows();
     if (rows.length === 0) {
       log.setStatus("Select one or more channels to edit them in bulk.");
@@ -434,7 +426,7 @@ export function createChannelBulkEdit(ctx) {
   // up half way would leave the selection in two states with nothing to say
   // which channels took the value, and the grid's own per-cell rejection is
   // invisible in a row (see normalizeCellValue in
-  // web/js/ui/channel-values.js) -- a tone the radio's table lacks becomes
+  // web/js/ui/channel-values.ts) -- a tone the radio's table lacks becomes
   // 67.0 Hz rather than an error. So a value this radio will not take stops the
   // whole apply and is reported on its own field.
   function apply() {
@@ -462,8 +454,8 @@ export function createChannelBulkEdit(ctx) {
       return;
     }
 
-    const columnWrites = [];
-    const extraWrites = {};
+    const columnWrites: Array<{ column: string; value: string }> = [];
+    const extraWrites: Record<string, unknown> = {};
     let invalid = 0;
     for (const entry of columnFields) {
       entry.setError("");
@@ -471,8 +463,7 @@ export function createChannelBulkEdit(ctx) {
         continue;
       }
       const value = String(entry.control.value ?? "");
-      /** @type {Partial<ColumnMeta>} */
-      const meta = state.radioMetadata.columns?.[entry.column] || {};
+      const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[entry.column] || {};
       // Checked against a blank previous value on purpose: what matters is
       // whether the column can hold this value at all, not what it held before.
       const check = normalizeCellValue(entry.column, value, meta, "", { allowReadOnly: true });

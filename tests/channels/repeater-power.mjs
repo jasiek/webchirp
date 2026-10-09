@@ -55,7 +55,7 @@ test("a przemienniki-shaped repeater row carries the driver's highest power", ()
 });
 
 test("both repeater builders resolve the same driver's power to the same value", () => {
-  // The two directories share one ranked list (web/js/row-power.js). Drivers
+  // The two directories share one ranked list (web/js/row-power.ts). Drivers
   // spell the tiers differently enough that a second, drifting copy of it
   // would show up here as a disagreement.
   for (const powerOptions of [

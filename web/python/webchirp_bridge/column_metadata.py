@@ -206,7 +206,7 @@ def get_radio_column_metadata(session_id: str) -> dict[str, Any]:
     (web/python/webchirp_bridge/power_levels.py) all read the loaded image's
     Low/Mid/High. So a downloaded channel carried a level its own dropdown did
     not list, and re-selecting the radio silently blanked it
-    (dropUnsupportedPowerValues in web/js/ui/channel-table.js).
+    (dropUnsupportedPowerValues in web/js/ui/channel-table.ts).
     """
     session = resolve_session(session_id)
     radio = session.describing_instance()

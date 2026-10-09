@@ -1,4 +1,4 @@
-import { denotesInteger } from "./setting-values.js";
+import { denotesInteger } from "./setting-values.ts";
 
 // Controls for the driver-described settings the Python runtime reports as
 // value metadata -- a type, an option list, bounds, a character set -- built by
@@ -7,15 +7,60 @@ import { denotesInteger } from "./setting-values.js";
 // (web/python/webchirp_bridge/channel_extra.py).
 //
 // Two editors render exactly those shapes: the per-channel extras modal
-// (web/js/ui/channel-extra.js) and the bulk channel editor
-// (web/js/ui/channel-bulk-edit.js). Building a control for one field and
+// (web/js/ui/channel-extra.ts) and the bulk channel editor
+// (web/js/ui/channel-bulk-edit.ts). Building a control for one field and
 // reading it back as the typed value the driver expects is the same work in
 // both, so it lives here rather than in either of them.
+
+/**
+ * One setting value as the runtime describes it (_serialize_setting_value in
+ * web/python/webchirp_bridge/radio_settings.py). type decides which of the
+ * other fields apply; a value class the runtime does not know arrives under
+ * its own class name.
+ */
+export interface SettingValueMeta {
+  type: "boolean" | "enum" | "integer" | "float" | "string" | (string & {});
+  mutable?: boolean;
+  initialized?: boolean;
+  current?: unknown;
+  /** enum: the choices, as strings. */
+  options?: string[];
+  mapped?: boolean;
+  /** integer and float bounds. */
+  min?: number;
+  max?: number;
+  step?: number;
+  /** string: length bounds and every character the driver accepts. */
+  minLength?: number;
+  maxLength?: number;
+  charset?: string;
+  autopad?: boolean;
+}
+
+/**
+ * A driver's per-channel extra setting (web/python/webchirp_bridge/channel_extra.py):
+ * a setting value under its own name.
+ */
+export interface ExtraField extends SettingValueMeta {
+  name: string;
+  label?: string;
+  doc?: string;
+}
+
+/** The control createSettingControl() builds for a field. */
+export type SettingControl = HTMLInputElement | HTMLSelectElement;
+
+/** A control read back: the typed value, or why it cannot be saved. */
+export interface SettingReading {
+  value: unknown;
+  /** "" when the value is acceptable. */
+  error: string;
+}
 
 // Build the control for one field. Structure and constraints only -- validation
 // happens on save, through readSettingControl below, so a control here needs no
 // change listener of its own.
-export function createSettingControl(field, current) {
+export function createSettingControl(field: SettingValueMeta, current: unknown): SettingControl {
   const immutable = field.mutable === false;
   if (field.type === "boolean") {
     const control = document.createElement("input");
@@ -62,7 +107,7 @@ export function createSettingControl(field, current) {
   if (Number.isFinite(field.maxLength)) {
     control.maxLength = Number(field.maxLength);
   }
-  control.value = current ?? "";
+  control.value = String(current ?? "");
   control.readOnly = immutable;
   control.disabled = immutable;
   return control;
@@ -75,9 +120,13 @@ export function createSettingControl(field, current) {
 //
 // rejectUnlistedValue is for a caller that copies the value somewhere else: see
 // the enum branch.
-export function readSettingControl(field, control, { rejectUnlistedValue = false } = {}) {
+export function readSettingControl(
+  field: SettingValueMeta,
+  control: SettingControl,
+  { rejectUnlistedValue = false }: { rejectUnlistedValue?: boolean } = {},
+): SettingReading {
   if (field.type === "boolean") {
-    return { value: Boolean(control.checked), error: "" };
+    return { value: "checked" in control && Boolean(control.checked), error: "" };
   }
   if (field.type === "enum") {
     const value = String(control.value ?? "");
