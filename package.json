@@ -40,6 +40,7 @@
     "@types/node": "25.9.9",
     "esbuild": "0.28.2",
     "fflate": "^0.8.3",
+    "jsdom": "29.1.1",
     "pyright": "1.1.413",
     "typescript": "7.0.2"
   }

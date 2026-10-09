@@ -4,17 +4,19 @@ import path from "node:path";
 import test from "node:test";
 
 import { repoRoot } from "../support/repo-paths.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
 import {
   channelRows,
-  closeVivifiedModals,
   clickLocationButton,
   createDeferred,
+  dispatch,
+  domEvent,
   flushMicrotasks,
-  installFakeDom,
   keydownEvent,
   selectRadioBySearch,
+  setInputFiles,
   tableNames,
-} from "../support/fake-dom.mjs";
+} from "../support/ui-interactions.mjs";
 import { fakeRowCheck, withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The bulk channel editor (web/js/ui/channel-bulk-edit.ts): the toolbar control
@@ -150,7 +152,7 @@ async function boot({
   rowFindings = () => ({ issues: [], warnings: [] }),
   heldRowChecks = false,
 } = {}) {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const extraCalls = [];
@@ -189,7 +191,6 @@ async function boot({
     },
   }));
   await ui.init(true);
-  closeVivifiedModals(document);
 
   // Every row the grid holds, captured at load time. The controller only
   // exposes selectedRowsForOperations(), which answers with the selection once
@@ -205,11 +206,11 @@ async function boot({
   // replaced wholesale, which a modal left open has to survive.
   async function loadImage() {
     const imgInput = document.querySelector("#codeplug-file");
-    imgInput.files = [{
+    setInputFiles(imgInput, [{
       name: "codeplug.img",
       arrayBuffer: async () => Uint8Array.from([1, 2, 3, 4]).buffer,
-    }];
-    imgInput.dispatchEvent({ type: "change" });
+    }]);
+    imgInput.dispatchEvent(domEvent({ type: "change" }));
     await flushMicrotasks();
     loadedRows = ui.selectedRowsForOperations();
   }
@@ -218,7 +219,7 @@ async function boot({
   // Runs the upload far enough to highlight what the preflight rejected. It
   // stops there: an upload with issues returns before it touches the radio.
   async function runBlockedUpload() {
-    document.querySelector("#radio-upload").dispatchEvent({ type: "click" });
+    document.querySelector("#radio-upload").dispatchEvent(domEvent({ type: "click" }));
     await flushMicrotasks();
   }
   return { document, extraCalls, rowCheck, rows: () => loadedRows, loadImage, runBlockedUpload };
@@ -227,7 +228,7 @@ async function boot({
 // Which channel cells are currently marked by the preflight, as
 // "<row index>:<column>".
 function markedCells(document) {
-  return channelRows(document).flatMap((tr) => tr.children
+  return channelRows(document).flatMap((tr) => Array.from(tr.children)
     .map((td, index) => (td.classList.contains("is-invalid") ? `${tr.dataset.rowIdx}:${HEADERS[index]}` : null))
     .filter(Boolean));
 }
@@ -274,18 +275,18 @@ function extraField(document, name) {
 // event would: the modal arms a field the moment its control is touched.
 function setField({ control }, value) {
   control.value = String(value);
-  control.dispatchEvent({ type: "change", target: control });
+  control.dispatchEvent(domEvent({ type: "change" }));
 }
 
 async function applyModal(document) {
-  await document.querySelector("#channel-bulk-edit-form").dispatch("submit");
+  await dispatch(document.querySelector("#channel-bulk-edit-form"), "submit");
   await flushMicrotasks();
 }
 
 function columnLabels(document) {
-  return document
+  return Array.from(document
     .querySelector("#channel-bulk-edit-grid")
-    .querySelectorAll("[name]")
+    .querySelectorAll("[name]"))
     .filter((control) => !control.name.endsWith("__apply"))
     .map((control) => control.name);
 }
@@ -326,7 +327,7 @@ test("a column the selection disagrees about is marked, one it agrees on is not"
   // Rows 0 and 1 share Power "High" but differ on Mode.
   await openBulkEditor(document, [0, 1]);
 
-  const labels = document.querySelector("#channel-bulk-edit-grid").querySelectorAll(".bulk-edit-mixed");
+  const labels = Array.from(document.querySelector("#channel-bulk-edit-grid").querySelectorAll(".bulk-edit-mixed"));
   assert.deepEqual(
     labels.map((el) => el.parentNode.textContent.replace("multiple values", "")),
     ["Name", "Frequency", "Mode"],
@@ -616,14 +617,14 @@ test("Escape closes the editor without touching the selection", async () => {
   const { document, rows } = await boot();
   await openBulkEditor(document, [0, 1]);
   setField(columnField(document, "Mode"), "NFM");
-  bulkButton(document).focused = false;
+  document.body.focus();
 
   document.dispatchEvent(keydownEvent("Escape"));
 
   assert.equal(modalIsOpen(document), false);
   assert.deepEqual(rows().map((row) => row.Mode), ["FM", "NFM", "FM"]);
   assert.equal(
-    bulkButton(document).focused,
+    document.activeElement === bulkButton(document),
     true,
     "Escape should hand the keyboard back to the toolbar button",
   );
@@ -636,7 +637,7 @@ test("the grid's shortcuts stand down while the bulk editor is open", async () =
   const { document } = await boot();
   await openBulkEditor(document, [0]);
 
-  document.dispatchEvent({ ...keydownEvent("ArrowDown"), altKey: true });
+  document.dispatchEvent(keydownEvent("ArrowDown", { altKey: true }));
 
   // Read off the grid rather than the row objects: a reorder replaces the row
   // array wholesale, which a capture taken before it would not show.
@@ -741,7 +742,7 @@ test("a bulk edit of extras makes a cell check in flight for those rows stale", 
   const { document, rowCheck, rows } = await boot({ heldRowChecks: true });
   const nameEditor = channelRows(document)[0].children[HEADERS.indexOf("Name")].children[0];
   nameEditor.value = "ZULU";
-  document.querySelector("#mem-table tbody").dispatchEvent({ type: "focusout", target: nameEditor });
+  nameEditor.dispatchEvent(domEvent({ type: "focusout" }));
   await flushMicrotasks();
   assert.equal(rowCheck.calls.length, 1);
 
