@@ -87,7 +87,7 @@ class RadioSession:
     clone's ``detect_from_serial`` or an image's metadata resolves that
     selection to a variant subclass with a different codeplug layout: the
     cached bytes belong to that class and must be re-parsed by it, never by
-    the parent the user picked (FINDINGS: detection-is-part-of-the-clone).
+    the parent the user picked.
     ``unreadable_channels`` are the numbers ``get_memory`` raised on when the
     image was read; they were never in the grid, so their absence from the
     rows is not a deletion and the upload path must not erase them.

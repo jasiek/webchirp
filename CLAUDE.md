@@ -215,7 +215,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Nothing in the dist build reads comments: esbuild resolves the imports and
   the page rewrite touches only the `src`/`href` of the tags that load a module
   or stylesheet. So the old rule about spelling module paths in comments (and
-  its test) is retired; see FINDINGS `build-dist-rewrites-are-textual`.
+  its test) is retired.
 - Python functions must have type signatures.
 - An import used only in annotations goes under `if TYPE_CHECKING:` so it adds no
   runtime dependency; every module has `from __future__ import annotations`, which is

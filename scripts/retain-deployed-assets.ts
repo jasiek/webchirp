@@ -12,7 +12,7 @@
 // Run in CI after `npm run build:dist`, before uploading the Pages artifact.
 // With no argument the host comes from ./CNAME, which is what Pages actually
 // serves the site as — passing it separately let the two drift for a week when
-// the CNAME changed (see FINDINGS.md, pages-deploy-and-cache-window).
+// the CNAME changed.
 //
 // A site that serves fine but has no asset-manifest.json is a genuine first
 // deploy: warn and exit 0. A host that does not answer at all is a

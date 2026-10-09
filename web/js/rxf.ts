@@ -131,8 +131,8 @@ const RXF_MODES: Readonly<Record<string, RepeaterMode>> = {
 
 // Read an RXF <ctcss> body as a tone. The element is not always a CTCSS
 // frequency: RepeaterBook publishes "CSQ" for carrier squelch, "Restricted"
-// for a closed repeater and DCS codes such as "D023" in the very same field
-// (FINDINGS.md **rxf-ctcss-is-not-always-a-ctcss-frequency**). A positive
+// for a closed repeater and DCS codes such as "D023" in the very same field.
+// A positive
 // number is CTCSS, a D-prefixed three-digit octal code is DCS, and anything
 // else is no tone -- never a tone the row would have to invent a value for.
 export function rxfTone(text: unknown): RepeaterTone {

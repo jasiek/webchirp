@@ -76,8 +76,7 @@ function resolveMode(
 
 // A tone as the text applyTonePair writes: a CTCSS frequency, or "" for no
 // tone. DCS is "" too: carrying a DCS code needs the DtcsCode/RxDtcsCode/
-// DtcsPolarity columns, which no import writes yet (FINDINGS.md
-// **rxf-ctcss-is-not-always-a-ctcss-frequency**), and writing it as a CTCSS
+// DtcsPolarity columns, which no import writes yet, and writing it as a CTCSS
 // tone would key a default tone the directory never mentioned.
 function ctcssText(tone: RepeaterTone): string {
   return tone.kind === "ctcss" ? formatCtcss(tone.hz) : "";

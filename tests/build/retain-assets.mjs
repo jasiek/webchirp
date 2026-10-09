@@ -2,7 +2,7 @@
 // a deployed hostname that drifted away from CNAME, and an unreachable host
 // being treated the same as a first deploy. Both cost the live site its
 // post-deploy cache window for a week before anyone noticed, because the
-// script exited 0 either way (see FINDINGS.md, pages-deploy-and-cache-window).
+// script exited 0 either way.
 // A third case fails identically but for a benign reason -- a CNAME moved to a
 // domain Pages has not been told about -- so what is pinned there is the
 // message, which is all that tells the two apart.
