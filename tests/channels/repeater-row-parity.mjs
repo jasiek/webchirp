@@ -67,10 +67,9 @@ const RADIOS = [
   { label: "Kenwood TK-690", module: "tk690", cls: "TK690Radio" },
 ];
 
-// The grid for one radio, its writes checked by the real runtime through the
-// harness -- the same wiring tests/channels/no-radio-schema.mjs uses, with a
-// selected radio's session when the case has one.
-async function tableFor(radio) {
+// What the grid holds for one radio: its session id (blank with no radio) and
+// the state members selecting it sets.
+async function radioState(radio) {
   const harness = await sharedHarness();
   let sessionId = "";
   let schema;
@@ -81,20 +80,36 @@ async function tableFor(radio) {
   } else {
     schema = await harness.runPythonJson("json.dumps(get_default_schema())");
   }
-  installFakeDom({ globals: fakeXmlGlobals() });
-  const { createChannelTable } = await import("../../web/js/ui/channel-table.ts");
   const headers = schema.headers?.length ? schema.headers : CSV_FORMAT_HEADERS.slice();
-  const state = {
+  return {
     currentHeaders: headers.slice(),
-    currentRows: [],
     radioMetadata: radio.noMetadata ? {} : { headers: headers.slice(), columns: schema.columns },
     radioSession: sessionId ? { id: sessionId } : null,
+  };
+}
+
+// The grid for one radio, its writes checked by the real runtime through the
+// harness -- the same wiring tests/channels/no-radio-schema.mjs uses, with a
+// selected radio's session when the case has one. `beforeAnswer` runs before
+// each runtime answer is handed back, so a test can change the radio while a
+// builder awaits its verdicts.
+async function gridFor(radio, { beforeAnswer = async () => {} } = {}) {
+  const harness = await sharedHarness();
+  const selected = await radioState(radio);
+  installFakeDom({ globals: fakeXmlGlobals() });
+  const { createChannelTable } = await import("../../web/js/ui/channel-table.ts");
+  const state = {
+    ...selected,
+    currentRows: [],
     runtimeApi: {
-      normalizeAndValidateRows: ({ sessionId: id, rows }) =>
-        harness.rpc("normalize_and_validate_rows", { session_id: id, rows }),
+      normalizeAndValidateRows: async ({ sessionId: id, rows }) => {
+        const answer = await harness.rpc("normalize_and_validate_rows", { session_id: id, rows });
+        await beforeAnswer(state);
+        return answer;
+      },
     },
   };
-  return createChannelTable({
+  const table = createChannelTable({
     dom: {
       tableHead: new FakeElement("thead"),
       tableBody: new FakeElement("tbody"),
@@ -104,8 +119,17 @@ async function tableFor(radio) {
     state,
     log: { setStatus() {}, logDebug() {} },
     actions: { channelSelectionChanged() {} },
-    session: { idOf: async (handle) => handle?.id ?? "" },
+    session: {
+      idOf: async (handle) => handle?.id ?? "",
+      isCurrent: (handle) => state.radioSession === handle,
+    },
   });
+  return { table, state };
+}
+
+// Just the grid, for the cases where the radio stays put.
+async function tableFor(radio) {
+  return (await gridFor(radio)).table;
 }
 
 // Skips compared as a set, and a tone by its value: the record path reports
@@ -229,3 +253,32 @@ for (const radio of RADIOS) {
     }
   });
 }
+
+test("a radio changed while an import awaits its verdicts gets rows built for it", async () => {
+  // buildRows (web/js/ui/channel-table.ts) drops an answer that arrives for a
+  // radio no longer selected and reruns the builder against the one that is.
+  // The repeater builder is a pure function of its records and the hooks, so
+  // the rerun has to land exactly on what a fresh import on the new radio
+  // builds: przemienniki.net's D-STAR entries are mode skips on a UV-5R and
+  // DV rows on an ID-51.
+  const uv5r = RADIOS.find((radio) => radio.module === "uv5r");
+  const id51 = RADIOS.find((radio) => radio.module === "id51");
+  const next = await radioState(id51);
+  let switched = false;
+  const { table } = await gridFor(uv5r, {
+    beforeAnswer: async (state) => {
+      if (!switched) {
+        switched = true;
+        Object.assign(state, next);
+      }
+    },
+  });
+  const parsed = parseRxfRecords(fixture("rxf-przemienniki.xml"), { source: "przemienniki" });
+  const built = await table.buildRows((hooks) => buildRepeaterRows(parsed.records, hooks));
+
+  assert.ok(switched, "the radio never changed under the builder");
+  const expected = expectedFor(`${id51.label} | rxf-przemienniki.xml`);
+  assert.deepEqual(built.rows.map(compact), expected.rows);
+  sameSkips([...parsed.unusable, ...built.skipped], expected.skipped, "skips for the radio now selected");
+  assert.equal(built.rows.find((row) => row.Name === "SR9DS")?.Mode, "DV");
+});
