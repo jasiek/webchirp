@@ -24,14 +24,22 @@
 // loaded, and queries live RSGB channels around IO82MM before capturing.
 
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { AddressInfo } from "node:net";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable } from "node:stream";
+
+import {
+  delay,
+  findFreePort,
+  inPageCall,
+  radioCatalogLoaded,
+  rsgbQueryOutcome,
+  selectRadioThroughSearch,
+  submitRsgbQuery,
+} from "./app-driver.ts";
 
 const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -86,22 +94,6 @@ const SCREENSHOT_LOCATOR = "IO82MM";
 // screenshot has to pick one. A widely recognised model keeps the sidebar
 // readout and the channel schema meaningful in the published images.
 const SCREENSHOT_RADIO_QUERY = "Baofeng UV-5R";
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      // A TCP listener's address() is an AddressInfo; only pipes give a string.
-      const { port } = probe.address() as AddressInfo;
-      probe.close(() => resolve(port));
-    });
-  });
-}
 
 function findChromeBinary() {
   const candidates = [
@@ -261,19 +253,7 @@ async function evaluate(cdp: CdpClient, sessionId: string, expression: string): 
 async function waitForAppReady(cdp: CdpClient, sessionId: string): Promise<void> {
   const deadline = Date.now() + APP_READY_TIMEOUT_MS;
   for (;;) {
-    const ready = await evaluate(
-      cdp,
-      sessionId,
-      `(() => {
-        const searchEl = document.querySelector("#radio-search");
-        const debugOutput = document.querySelector("#debug-output");
-        return Boolean(
-          searchEl
-          && !searchEl.disabled
-          && /STATUS Loaded \\d+ radio definitions/.test(debugOutput?.value || "")
-        );
-      })()`
-    );
+    const ready = await evaluate(cdp, sessionId, inPageCall(radioCatalogLoaded));
     if (ready) {
       return;
     }
@@ -288,22 +268,7 @@ async function waitForAppReady(cdp: CdpClient, sessionId: string): Promise<void>
 // suggestion — so the shot exercises the real selection path rather than
 // reaching into module state.
 async function selectScreenshotRadio(cdp: CdpClient, sessionId: string): Promise<string> {
-  const selected = await evaluate(
-    cdp,
-    sessionId,
-    `(() => {
-      const searchEl = document.querySelector("#radio-search");
-      if (!searchEl) {
-        return "";
-      }
-      searchEl.value = ${JSON.stringify(SCREENSHOT_RADIO_QUERY)};
-      searchEl.dispatchEvent(new Event("input", { bubbles: true }));
-      searchEl.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
-      );
-      return document.querySelector("#radio-selection-name")?.textContent || "";
-    })()`
-  );
+  const selected = await evaluate(cdp, sessionId, inPageCall(selectRadioThroughSearch, SCREENSHOT_RADIO_QUERY));
   if (!selected || selected === "No radio model selected") {
     throw new Error(
       `Could not select "${SCREENSHOT_RADIO_QUERY}" through the radio search box.`
@@ -317,41 +282,14 @@ async function selectScreenshotRadio(cdp: CdpClient, sessionId: string): Promise
 // IO82MM. Drive the public controls rather than reaching into module state, so
 // the screenshot run also exercises the user-visible query path.
 async function loadScreenshotChannels(cdp: CdpClient, sessionId: string): Promise<number> {
-  const started = await evaluate(
-    cdp,
-    sessionId,
-    `(() => {
-      document.querySelector("#channel-import-rsgb")?.click();
-      const locator = document.querySelector("#repeater-query-field-position-locator");
-      const form = document.querySelector("#repeater-query-form");
-      if (!locator || !form) {
-        return false;
-      }
-      locator.value = ${JSON.stringify(SCREENSHOT_LOCATOR)};
-      locator.dispatchEvent(new Event("input", { bubbles: true }));
-      form.requestSubmit();
-      return true;
-    })()`
-  );
+  const started = await evaluate(cdp, sessionId, inPageCall(submitRsgbQuery, SCREENSHOT_LOCATOR));
   if (!started) {
     throw new Error("Could not open and submit the RSGB screenshot query.");
   }
 
   const deadline = Date.now() + APP_READY_TIMEOUT_MS;
   for (;;) {
-    const result = await evaluate(
-      cdp,
-      sessionId,
-      `(() => {
-        const debugText = document.querySelector("#debug-output")?.value || "";
-        const modalClosed = document.querySelector("#repeater-query-modal")?.classList.contains("hidden");
-        if (modalClosed && /RSGB RESULTS /.test(debugText)) {
-          return { done: true, count: globalThis.currentRows?.length || 0 };
-        }
-        const failed = debugText.match(/RSGB ETCC QUERY ERROR[^\\n]*/)?.[0] || "";
-        return { done: false, failed };
-      })()`
-    );
+    const result = await evaluate(cdp, sessionId, inPageCall(rsgbQueryOutcome));
     if (result?.done) {
       return result.count;
     }
