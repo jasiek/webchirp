@@ -51,7 +51,7 @@ test("parseLookupXml drops entries with no usable position", () => {
     entry({ qra: "GB3XX", latitude: "", longitude: "" }),
   ]));
   assert.equal(parsed.length, 1);
-  assert.equal(parsed[0].qra, "GB3AM");
+  assert.equal(parsed[0].name, "GB3AM");
   assert.equal(parsed[0].latitude, 51.65);
   assert.equal(parsed[0].longitude, -0.62);
 });
@@ -104,8 +104,8 @@ test("concurrent lookups of one callsign share a single request", async () => {
   const { fetchImpl, requested } = fakeFetch({ GB3KI: response([entry()]) });
   const { lookup } = createCallsignLookup("https://api.example.com/lookup", { fetchImpl });
   const [a, b] = await Promise.all([lookup("GB3KI"), lookup("gb3ki")]);
-  assert.equal(a[0].qra, "GB3KI");
-  assert.equal(b[0].qra, "GB3KI");
+  assert.equal(a[0].name, "GB3KI");
+  assert.equal(b[0].name, "GB3KI");
   assert.deepEqual(requested, ["https://api.example.com/lookup/GB3KI"]);
 });
 
@@ -117,7 +117,7 @@ test("a failed lookup is retried on the next hover rather than cached", async ()
   const { lookup } = createCallsignLookup("https://api.example.com/lookup", { fetchImpl });
   await assert.rejects(lookup("GB3KI"));
   bodies.GB3KI = response([entry()]);
-  assert.equal((await lookup("GB3KI"))[0].qra, "GB3KI");
+  assert.equal((await lookup("GB3KI"))[0].name, "GB3KI");
   assert.equal(requested.length, 2);
 });
 

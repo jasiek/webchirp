@@ -1,4 +1,5 @@
-import { firstText, parseQrgMhz, parseRxfLocation, parseXmlDocument } from "./rxf.ts";
+import type { RepeaterRecord } from "./repeater-record.ts";
+import { parseRxfRecords } from "./rxf.ts";
 
 // Per-callsign position lookup behind the channel grid's context map
 // (web/js/ui/repeater-map.ts). Hovering a Location cell asks
@@ -31,38 +32,21 @@ export function callsignFromName(name: unknown): string {
 }
 
 // The usable entries in one lookup response. A lookup answers with the same
-// <repeaters> list the bulk directory query returns, so a callsign serving
-// several machines (W1AW has two, 2 km apart) yields several entries; each
-// keeps both frequencies so pickLookupEntry can tell them apart. Entries
+// <repeaters> list the bulk directory query returns, so it is read by the same
+// RXF parser into RepeaterRecords (parseRxfRecords, web/js/rxf.ts). A callsign
+// serving several machines (W1AW has two, 2 km apart) yields several records;
+// each keeps both frequencies so pickLookupEntry can tell them apart. Records
 // without a position are dropped here rather than filtered later, because for
-// this feature an entry with no coordinates is not an answer at all.
-/** One positioned repeater the per-callsign endpoint knows. */
-export interface LookupEntry {
-  qra: string;
-  qth: string;
-  qrgRx: number;
-  qrgTx: number;
-  latitude: number;
-  longitude: number;
-}
+// this feature a record with no coordinates is not an answer at all.
+/** A repeater the per-callsign endpoint knows, with the position it is drawn at. */
+export type LookupEntry = RepeaterRecord & { latitude: number; longitude: number };
 
 export function parseLookupXml(xmlText: string): LookupEntry[] {
-  const xmlDoc = parseXmlDocument(xmlText);
-  return Array.from(xmlDoc.querySelectorAll("repeaters > repeater"))
-    .map((repeaterEl) => {
-      const location = parseRxfLocation(repeaterEl);
-      if (!location) {
-        return null;
-      }
-      return {
-        qra: firstText(repeaterEl, "qra"),
-        qth: firstText(repeaterEl, "qth"),
-        qrgRx: parseQrgMhz(firstText(repeaterEl, 'qrg[type="rx"]')),
-        qrgTx: parseQrgMhz(firstText(repeaterEl, 'qrg[type="tx"]')),
-        ...location,
-      };
-    })
-    .filter((entry) => entry !== null);
+  // The lookup merges directories that name rx/tx from different sides, and
+  // pickLookupEntry compares against both frequencies, so a response without
+  // a <perspective> is still an answer here; the bulk query refuses one.
+  const { records } = parseRxfRecords(xmlText, { source: "lookup", defaultPerspective: "repeater" });
+  return records.filter((record): record is LookupEntry => record.latitude !== null && record.longitude !== null);
 }
 
 // Which of several same-callsign entries this row means, decided by frequency.
@@ -90,11 +74,11 @@ export function pickLookupEntry(entries: readonly LookupEntry[] | null | undefin
   let best = list[0];
   let bestGap = Infinity;
   for (const entry of list) {
-    for (const qrg of [entry.qrgRx, entry.qrgTx]) {
-      if (!Number.isFinite(qrg)) {
+    for (const hz of [entry.outputHz, entry.inputHz]) {
+      if (hz === null) {
         continue;
       }
-      const gap = Math.abs(qrg - target);
+      const gap = Math.abs(hz / 1e6 - target);
       if (gap < bestGap) {
         bestGap = gap;
         best = entry;
