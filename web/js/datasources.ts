@@ -4,6 +4,7 @@ import type { RepeaterRowsResult, RowBuilderHooks, SkippedRepeater } from "./row
 import type { ChannelRow } from "./ui/channel-values.ts";
 import type { City } from "./ui/query-fields.ts";
 import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.ts";
+import { errorFields } from "./error-details.ts";
 
 const PMR446_FREQUENCIES_MHZ = Array.from(
   { length: 16 },
@@ -210,7 +211,7 @@ export function parseCitySuggestions(jsonText: string): City[] {
   try {
     payload = JSON.parse(String(jsonText || ""));
   } catch (error) {
-    throw new Error(`City lookup returned invalid JSON: ${error.message}`);
+    throw new Error(`City lookup returned invalid JSON: ${errorFields(error).message}`);
   }
   if (payload && typeof payload.error === "string") {
     throw new Error(`City lookup failed: ${payload.error}`);
@@ -418,7 +419,7 @@ export function parsePrzemiennikiMetaJson(jsonText: string): {
   try {
     payload = JSON.parse(String(jsonText || "{}"));
   } catch (error) {
-    throw new Error(`Invalid meta JSON response: ${error.message}`);
+    throw new Error(`Invalid meta JSON response: ${errorFields(error).message}`);
   }
   const filters = payload?.filters && typeof payload.filters === "object" ? payload.filters : {};
 

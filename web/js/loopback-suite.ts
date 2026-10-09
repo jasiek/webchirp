@@ -18,6 +18,8 @@
 // a drain primitive, and must talk to a port it was handed rather than one it
 // requested.
 
+import { errorFields } from "./error-details.ts";
+
 export const DEFAULT_BAUD_RATES = [9600, 38400, 57600, 115200];
 
 /**
@@ -362,7 +364,7 @@ const PER_BAUD_CASES: LoopbackCase[] = [
             quietMs: ctx.quietMs,
           });
         } catch (error) {
-          throw new Error(`${size}-byte write: ${error.message}`);
+          throw new Error(`${size}-byte write: ${errorFields(error).message}`);
         }
       }
     },
@@ -542,7 +544,7 @@ async function runCase(
     await entry.run(session, ctx, port);
     return recordResult(entry, "pass", "", startedAt, ctx, results);
   } catch (error) {
-    return recordResult(entry, "fail", error?.message || String(error), startedAt, ctx, results);
+    return recordResult(entry, "fail", String(errorFields(error).message || error), startedAt, ctx, results);
   }
 }
 
@@ -588,7 +590,7 @@ async function runWithOpenPort(
     // different wording — "could not open port … is it open?" reads as a
     // contradiction and points at the wrong thing.
     const what = opened ? "could not start reading from the port at" : "could not open port at";
-    failEntries(withBaud, port, `${what} ${baudRate} baud: ${error?.message || error}`, caseCtx, results);
+    failEntries(withBaud, port, `${what} ${baudRate} baud: ${errorFields(error).message || error}`, caseCtx, results);
     // The port is open but unusable; leaving it claimed breaks every later pass
     // and any second run in the same page load.
     if (opened) {
@@ -616,7 +618,7 @@ async function runWithOpenPort(
       recordResult(
         { id: "teardown", title: "Port closed cleanly after the pass", baudRate },
         "fail",
-        `closing the port failed: ${error?.message || error}`,
+        `closing the port failed: ${errorFields(error).message || error}`,
         closedAt,
         caseCtx,
         results,

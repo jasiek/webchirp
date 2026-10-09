@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestRadioHarness } from "../tests/support/radio-harness.mjs";
+import { errorFields } from "../web/js/error-details.ts";
 
 type TestRadioHarness = Awaited<ReturnType<typeof createTestRadioHarness>>;
 
@@ -223,7 +224,7 @@ async function main() {
     try {
       await harness.disconnect();
     } catch (error) {
-      console.error(`Disconnect warning: ${error?.message || String(error)}`);
+      console.error(`Disconnect warning: ${errorFields(error).message || String(error)}`);
     }
   }
 }

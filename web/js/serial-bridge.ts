@@ -23,6 +23,7 @@ import type {
   SerialSignals,
   SerialTransport,
 } from "./serial-transport.ts";
+import { errorFields } from "./error-details.ts";
 
 /** Why the bridge gave up an open port, as onPortLost hears it. */
 export interface PortLostInfo {
@@ -275,7 +276,7 @@ export class SerialBridge {
       await this._teardown();
       this._reportPortLost({ deviceName, reason: "baud-rate-change" });
       throw new Error(
-        `Could not reopen the serial port at ${wanted} baud: ${error?.message || error}`,
+        `Could not reopen the serial port at ${wanted} baud: ${errorFields(error).message || error}`,
       );
     }
     this._debug(`Serial port reopened at ${wanted} baud (was ${previousBaudRate || "unknown"}).`);
@@ -588,7 +589,7 @@ export class SerialBridge {
         await this._teardown();
       }
       throw new Error(
-        `Could not reconfigure the port (${changed.join(", ")}): ${error?.message || error}`,
+        `Could not reconfigure the port (${changed.join(", ")}): ${errorFields(error).message || error}`,
       );
     }
     await this._restoreSignals();
@@ -751,7 +752,7 @@ export class SerialBridge {
           this._resolveReadWaiters(true);
         }
       } catch (error) {
-        endReason = `read error: ${error?.message || error}`;
+        endReason = `read error: ${errorFields(error).message || error}`;
         break;
       }
     }

@@ -1,6 +1,7 @@
 // BT-1AD UART protocol, verified in the companion ola-radio-reveng project.
 import type { BluetoothSerialDriver, BluetoothSerialProtocol } from "../webbluetooth-serial.ts";
 import type { SerialOpenOptions } from "../serial-transport.ts";
+import { errorFields } from "../error-details.ts";
 
 const SERVICE = "0000ff00-0000-1000-8000-00805f9b34fb";
 const ADVERTISEMENT = "0000bf98-0000-1000-8000-00805f9b34fb";
@@ -87,7 +88,7 @@ export const bt1adDriver: BluetoothSerialDriver = {
         || !baud.properties.write) return null;
       return new Bt1adProtocol(tx, rx, baud, options);
     } catch (error) {
-      if (error?.name === "NotFoundError") return null;
+      if (errorFields(error).name === "NotFoundError") return null;
       throw error;
     }
   },

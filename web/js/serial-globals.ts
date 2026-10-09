@@ -1,5 +1,6 @@
 import type { SerialBridge } from "./serial-bridge.ts";
 import type { SerialOpenOptions } from "./serial-transport.ts";
+import { errorFields } from "./error-details.ts";
 
 // The serial_* functions CHIRP's Python imports from the js module, defined
 // once for the browser (web/js/runtime-rpc.ts) and the Node harness
@@ -144,9 +145,9 @@ export function createSerialRpcHandler(
       return res;
     } catch (err) {
       logSerial(
-        `Control lines unchanged (${describeSignals(payload)}): ${err?.message || err}`,
+        `Control lines unchanged (${describeSignals(payload)}): ${errorFields(err).message || err}`,
       );
-      return { applied: false, error: String(err?.message || err) };
+      return { applied: false, error: String(errorFields(err).message || err) };
     }
   }
 

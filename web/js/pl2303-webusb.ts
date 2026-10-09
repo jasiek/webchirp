@@ -12,6 +12,7 @@
 import { WebUsbTransport } from "./webusb-transport.ts";
 import type { WebUsbTransportOptions } from "./webusb-transport.ts";
 import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
+import { errorFields } from "./error-details.ts";
 
 export const PROLIFIC_VENDOR_ID = 0x067b;
 
@@ -300,7 +301,7 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
     try {
       await this.device.open();
     } catch (error) {
-      throw new Error(`PL2303: could not open USB device: ${error?.message || error}`);
+      throw new Error(`PL2303: could not open USB device: ${errorFields(error).message || error}`);
     }
     const configuration = await this._activeConfiguration("PL2303");
     const iface = configuration.interfaces[0];
@@ -310,7 +311,7 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
     } catch (error) {
       throw new Error(
         `PL2303: could not claim USB interface ${this._interfaceNumber} `
-        + `(another driver may already control it): ${error?.message || error}`,
+        + `(another driver may already control it): ${errorFields(error).message || error}`,
       );
     }
 

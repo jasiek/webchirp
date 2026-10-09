@@ -18,6 +18,7 @@
 import { WebUsbTransport } from "./webusb-transport.ts";
 import type { WebUsbTransportOptions } from "./webusb-transport.ts";
 import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
+import { errorFields } from "./error-details.ts";
 
 // Silicon Labs' vendor id. The chooser filters on it vendor-wide, because ~150
 // of the kernel id_table's entries are OEM cables that ship a CP210x under a
@@ -468,7 +469,7 @@ export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport
     try {
       await this.device.open();
     } catch (error) {
-      throw new Error(`CP2102: could not open USB device: ${error?.message || error}`);
+      throw new Error(`CP2102: could not open USB device: ${errorFields(error).message || error}`);
     }
 
     // Past this point the device is owned, so every failure has to give it back
@@ -495,7 +496,7 @@ export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport
     } catch (error) {
       throw new Error(
         `CP2102: could not claim USB interface ${this._interfaceNumber} `
-        + `(another driver may already control it): ${error?.message || error}`,
+        + `(another driver may already control it): ${errorFields(error).message || error}`,
       );
     }
 

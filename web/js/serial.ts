@@ -12,6 +12,7 @@ import { SerialBridge } from "./serial-bridge.ts";
 import { createWebUsbSerial } from "./webusb-serial.ts";
 import { createWebBluetoothSerial } from "./webbluetooth-serial.ts";
 import type { SerialTransport } from "./serial-transport.ts";
+import { errorFields } from "./error-details.ts";
 
 /**
  * Something with a chooser: navigator.serial, or one of the WebUSB and Web
@@ -151,7 +152,7 @@ export class BrowserSerialBridge extends SerialBridge {
     try {
       return await serial.requestPort({});
     } catch (error) {
-      if (error?.name === "NotFoundError") {
+      if (errorFields(error).name === "NotFoundError") {
         throw createPortSelectionCancelledError();
       }
       throw error;

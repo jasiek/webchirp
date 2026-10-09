@@ -1,8 +1,17 @@
+/** What a thrown value may carry; any of it may be missing. */
+export interface ErrorFields {
+  name?: unknown;
+  message?: unknown;
+  stack?: unknown;
+  /** A Node system error's code ("ENOENT"), or a GeolocationPositionError's number. */
+  code?: unknown;
+}
+
 // The fields a thrown value may carry, read without trusting its type: anything
 // can be thrown, and reading a field off a primitive (or a missing one) gives
 // undefined, which is what every reader here already expects.
-export function errorFields(error: unknown): { name?: unknown; message?: unknown; stack?: unknown } {
-  return (error ?? {}) as { name?: unknown; message?: unknown; stack?: unknown };
+export function errorFields(error: unknown): ErrorFields {
+  return (error ?? {}) as ErrorFields;
 }
 
 // Preserve exception messages as well as frames: some browsers omit the

@@ -25,6 +25,7 @@ import type { UiContext } from "../types/ui-context.js";
 import type { QueryField } from "./query-fields.ts";
 import type { City, FieldOption } from "./query-fields.ts";
 import type { FieldConfig, PreviewSummary, QueryValues, RepeaterSource } from "./repeater-sources.ts";
+import { errorFields } from "../error-details.ts";
 
 // The key every source gives its "repeaters within N km" filter. The position
 // field's map preview draws that radius, so the shell has to know which field
@@ -535,8 +536,8 @@ export function createRepeaterQuery(ctx: UiContext) {
       // rate measurable. Anything else thrown from geolocate() (coordinates
       // the browser resolved that make no sense, a setPosition that failed)
       // is a genuine surprise and keeps the error funnel with its traceback.
-      if (GEOLOCATION_FAILURE_TEXT[Number(error?.code)]) {
-        log.reportActionCancelled(`${activeSource.actionLabel} geolocation`, error.message);
+      if (GEOLOCATION_FAILURE_TEXT[Number(errorFields(error).code)]) {
+        log.reportActionCancelled(`${activeSource.actionLabel} geolocation`, String(errorFields(error).message));
         return;
       }
       log.reportActionError(`${activeSource.actionLabel} geolocation`, error);

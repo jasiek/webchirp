@@ -10,6 +10,7 @@
 import { WebUsbTransport } from "./webusb-transport.ts";
 import type { WebUsbTransportOptions } from "./webusb-transport.ts";
 import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
+import { errorFields } from "./error-details.ts";
 
 export const FTDI_VENDOR_ID = 0x0403;
 
@@ -159,7 +160,7 @@ export class FtdiSerialPort extends WebUsbTransport implements SerialTransport {
     try {
       await this.device.open();
     } catch (error) {
-      throw new Error(`FTDI: could not open USB device: ${error?.message || error}`);
+      throw new Error(`FTDI: could not open USB device: ${errorFields(error).message || error}`);
     }
     const configuration = await this._activeConfiguration("FTDI");
     const iface = configuration.interfaces[0];
@@ -169,7 +170,7 @@ export class FtdiSerialPort extends WebUsbTransport implements SerialTransport {
     } catch (error) {
       throw new Error(
         `FTDI: could not claim USB interface ${this._interfaceNumber} `
-        + `(another driver may already control it): ${error?.message || error}`,
+        + `(another driver may already control it): ${errorFields(error).message || error}`,
       );
     }
 

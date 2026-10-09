@@ -42,6 +42,7 @@ import {
   chirpBundleFileNames,
   DEFAULT_CHIRP_REVISION,
 } from "../web/js/python-sources.ts";
+import { errorFields } from "../web/js/error-details.ts";
 
 const ROOT = process.cwd();
 const DIST_DIR = path.join(ROOT, "dist");
@@ -271,7 +272,7 @@ async function emitPythonFiles(): Promise<{ urls: Record<string, string>; emitte
   try {
     files = (await walkFiles(PYTHON_DIR)).filter((file) => file.endsWith(".py"));
   } catch (error) {
-    if (error?.code !== "ENOENT") {
+    if (errorFields(error).code !== "ENOENT") {
       throw error;
     }
   }

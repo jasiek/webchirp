@@ -34,6 +34,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { errorFields } from "../web/js/error-details.ts";
 
 const DIST_DIR = path.join(process.cwd(), "dist");
 const CNAME_FILE = path.join(process.cwd(), "CNAME");
@@ -86,7 +87,7 @@ async function fetchBytes(
       if (attempt === 3) {
         throw new Error(`Unable to retain ${url} after 3 attempts; deployment stopped to preserve existing assets`, { cause: error });
       }
-      console.warn(`Retrying ${url}: ${error.message}`);
+      console.warn(`Retrying ${url}: ${errorFields(error).message}`);
       await new Promise((resolve) => setTimeout(resolve, attempt * 250));
     }
   }

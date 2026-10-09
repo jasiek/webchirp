@@ -3,6 +3,7 @@ import { latLonToWorldPixel, worldPixelToLatLon, zoomForRadius } from "../static
 import { rememberBounded } from "./format.ts";
 import { createMapAttribution, renderStaticMap } from "./static-map-view.ts";
 import type { MapMarker } from "./static-map-view.ts";
+import { errorFields } from "../error-details.ts";
 
 // Field components for the shared repeater-query modal. Each factory builds
 // its own DOM from a config and returns the same shape:
@@ -1146,7 +1147,7 @@ export function createCityField({
       renderSuggestions([]);
       // One line for the user; the whole error, stack included, goes to the
       // debug panel through the shell — this file has no logger of its own.
-      setNote(`City lookup unavailable: ${error.message}`);
+      setNote(`City lookup unavailable: ${errorFields(error).message}`);
       if (typeof onError === "function") {
         onError(error);
       }

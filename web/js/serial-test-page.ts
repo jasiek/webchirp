@@ -10,6 +10,7 @@ import { formatLoopbackReport, runLoopbackSuite } from "./loopback-suite.ts";
 import { createWebUsbSerial } from "./webusb-serial.ts";
 import type { SerialTransport } from "./serial-transport.ts";
 import type { LoopbackResult } from "./loopback-suite.ts";
+import { errorFields } from "./error-details.ts";
 
 // Which driver a port object represents. Nothing in the build minifies, so the
 // constructor name is stable; the CDC polyfill and native Web Serial both call
@@ -238,14 +239,14 @@ async function onChoose() {
     dom.run.disabled = false;
   } catch (error) {
     // A user dismissing the chooser is not an error worth shouting about.
-    if (error?.name === "NotFoundError") {
+    if (errorFields(error).name === "NotFoundError") {
       setStatus("No adapter selected.");
       return;
     }
     chosenPort = null;
     dom.run.disabled = true;
     dom.adapter.textContent = "No adapter chosen.";
-    setStatus(`Could not open the device chooser: ${error?.message || error}`);
+    setStatus(`Could not open the device chooser: ${errorFields(error).message || error}`);
   }
 }
 
@@ -292,7 +293,7 @@ async function onRun() {
   } catch (error) {
     // The suite turns case failures into results; reaching here means something
     // outside a case broke, so surface it rather than showing a partial pass.
-    setStatus(`The run stopped: ${error?.message || error}`);
+    setStatus(`The run stopped: ${errorFields(error).message || error}`);
   } finally {
     running = false;
     setControlsDisabled(false);

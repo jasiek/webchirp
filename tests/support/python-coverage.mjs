@@ -69,7 +69,7 @@ export async function startPythonCoverage(pyodide) {
     } catch (error) {
       // A missing fragment understates coverage but must never fail a test
       // run that otherwise passed, so this reports rather than throws.
-      process.stderr.write(`python coverage fragment failed: ${error && error.message}\n`);
+      process.stderr.write(`python coverage fragment failed: ${error && /** @type {Error} */ (error).message}\n`);
     }
   });
   return true;

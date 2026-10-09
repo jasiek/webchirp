@@ -11,6 +11,7 @@
 import { WebUsbTransport } from "./webusb-transport.ts";
 import type { WebUsbTransportOptions } from "./webusb-transport.ts";
 import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
+import { errorFields } from "./error-details.ts";
 
 // The CH340/CH341 family ships under several vendor/product id pairs — WCH's
 // own, plus the QinHeng/clone ids the kernel's id_table also claims.
@@ -280,7 +281,7 @@ export class Ch340SerialPort extends WebUsbTransport implements SerialTransport 
     try {
       await this.device.open();
     } catch (error) {
-      throw new Error(`CH340: could not open USB device: ${error?.message || error}`);
+      throw new Error(`CH340: could not open USB device: ${errorFields(error).message || error}`);
     }
     const configuration = await this._activeConfiguration("CH340");
     const iface = configuration.interfaces[0];
@@ -290,7 +291,7 @@ export class Ch340SerialPort extends WebUsbTransport implements SerialTransport 
     } catch (error) {
       throw new Error(
         `CH340: could not claim USB interface ${this._interfaceNumber} `
-        + `(another driver may already control it): ${error?.message || error}`,
+        + `(another driver may already control it): ${errorFields(error).message || error}`,
       );
     }
 
