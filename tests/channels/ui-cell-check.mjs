@@ -24,7 +24,7 @@ import {
 } from "../support/fake-dom.mjs";
 import { fakeRowCheck, withRadioSessions } from "../support/fake-runtime-api.mjs";
 
-const HEADERS = ["Location", "Name", "Frequency"];
+const HEADERS = ["Location", "Name", "Frequency", "Power"];
 const SAMPLE_ROWS = [
   { Location: "0", Name: "ALPHA", Frequency: "146.520000" },
   { Location: "1", Name: "BRAVO", Frequency: "146.940000" },
@@ -33,6 +33,9 @@ const COLUMNS = {
   Location: { kind: "int", editable: false, min: 0, max: 127 },
   Name: { kind: "text", editable: true, maxLength: 7 },
   Frequency: { kind: "freq", editable: true, bands: [[144_000_000, 148_000_000]] },
+  // A select with a title of its own (the wattage legend), which a note on the
+  // cell must not hide behind.
+  Power: { kind: "enum", editable: true, options: ["High", "Low"], default: "", optionWatts: { High: "5.0W", Low: "1.0W" } },
 };
 const RADIOS = [
   { vendor: "Acme", model: "One", module: "one", className: "OneRadio", key: "one:OneRadio", isLiveRadio: false },
@@ -220,6 +223,35 @@ test("a paste is checked in one call, however many rows and cells it writes", as
   // The runtime's answer is what the grid shows.
   const names = channelRows(document).map((tr) => tr.children[1].children[0].value);
   assert.deepEqual(names, ["ALPHA", "BRAVO", "CHARL", "DELTA", "ECHO"]);
+});
+
+test("a finding is on the editor the user hovers, ahead of the editor's own title", async () => {
+  // Review of #224: a select, or the Extra button, fills its cell and carries
+  // a title of its own, so a note on the enclosing cell was never what the
+  // browser showed.
+  const { document } = await grid({
+    findings: (row) => (row.Power === "Low"
+      ? { issues: [{ column: "Power", message: "Power Low is not allowed on this memory" }], warnings: [] }
+      : { issues: [], warnings: [] }),
+  });
+  const select = () => cell(document, 0, "Power").children[0];
+  assert.match(select().title, /Driver power levels: High = 5\.0W, Low = 1\.0W/);
+
+  select().value = "Low";
+  document.querySelector("#mem-table tbody").dispatchEvent({ type: "change", target: select() });
+  await flushMicrotasks();
+
+  assert.equal(cell(document, 0, "Power").classList.contains("is-invalid"), true);
+  assert.match(select().title, /^Power Low is not allowed on this memory/);
+  assert.match(select().title, /Driver power levels: High = 5\.0W, Low = 1\.0W/, "the legend is still there");
+
+  // A recycled editor must not carry the note to the next channel it shows,
+  // and clearing the finding gives the editor back its own title.
+  select().value = "High";
+  document.querySelector("#mem-table tbody").dispatchEvent({ type: "change", target: select() });
+  await flushMicrotasks();
+  assert.equal(select().title, "Driver power levels: High = 5.0W, Low = 1.0W");
+  assert.equal(cell(document, 1, "Power").children[0].title, "Driver power levels: High = 5.0W, Low = 1.0W");
 });
 
 test("a check that fails in the runtime puts its traceback in Debug Output and leaves the cell settled", async () => {

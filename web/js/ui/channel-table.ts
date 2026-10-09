@@ -201,8 +201,24 @@ export function createChannelTable(ctx: UiContext) {
     const td = cellElement(Number(rowIdx), String(column || "")) as HTMLElement | null;
     td?.classList.remove("is-invalid");
     if (td) {
-      td.title = "";
+      showCellNote(td, "");
     }
+  }
+
+  // Show what the runtime said about a cell where the user hovers. The editor
+  // fills its cell and may carry a title of its own -- the power legend, the
+  // read-only explanation, the Extra button's label -- which the browser shows
+  // in preference to the cell's, so the note goes on the editor, ahead of that
+  // title, as well as on the cell. An empty note gives the editor back its own
+  // title, which matters because editors are recycled across channels.
+  function showCellNote(td: HTMLElement, note: string): void {
+    td.title = note;
+    const editor = td.children[0] as HTMLElement | undefined;
+    if (!editor) {
+      return;
+    }
+    const own = editor.dataset.ownTitle ?? "";
+    editor.title = note && own ? `${note}\n\n${own}` : note || own;
   }
 
   // Drop the preflight highlight from the given columns of the given rows and
@@ -1377,7 +1393,10 @@ export function createChannelTable(ctx: UiContext) {
     for (const column of renderedColumns) {
       const td = document.createElement("td");
       td.dataset.column = String(column);
-      td.appendChild(createCellEditor(column));
+      const editor = createCellEditor(column);
+      // The title the editor was built with, for showCellNote to put back.
+      editor.dataset.ownTitle = editor.title;
+      td.appendChild(editor);
       tr.appendChild(td);
     }
     return tr;
@@ -1401,7 +1420,7 @@ export function createChannelTable(ctx: UiContext) {
       // Typed but not yet answered by the runtime: the value shown is what was
       // typed, and may still change (web/styles.css dims it).
       td.classList.toggle("is-pending", Boolean(pending?.has(column)));
-      td.title = cellNotes.get(key) ?? "";
+      showCellNote(td, cellNotes.get(key) ?? "");
       // Each cell holds the one editor createRowElement() put there.
       bindCellEditor(td.children[0] as CellEditor, row, column);
     });
