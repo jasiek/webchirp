@@ -136,7 +136,7 @@ async function fetchText(url: string): Promise<string> {
 
 // The manifest, as JSON from our own origin; driverModulesFromManifest()
 // checks the fields it reads.
-async function fetchJson(url: string): Promise<any> {
+async function fetchJson(url: string): Promise<ChirpBundleManifest> {
   return (await fetchOk(url)).json();
 }
 
@@ -174,6 +174,16 @@ export function driverModulesFromManifest(
 // scripts/build-chirp-bundle.ts) and the bridge package and bundled drivers
 // from runtimeFileUrls. tests/support/chirp-bundle-source.mjs is the Node
 // counterpart with the same shape, building the archive from the submodule.
+/**
+ * The archive's manifest (scripts/build-chirp-bundle.ts writes it), as JSON:
+ * driverModulesFromManifest() checks the two fields the runtime reads.
+ */
+export interface ChirpBundleManifest {
+  chirpRevision?: string;
+  drivers?: unknown[];
+  [field: string]: unknown;
+}
+
 /** What the runtime reports about the Python it was seeded with. */
 export interface RuntimeInfo {
   /** The CHIRP pin. */
@@ -195,7 +205,7 @@ export interface PythonSourceProvider {
   /** The CHIRP zip. */
   fetchChirpArchive: () => Promise<Uint8Array>;
   /** Its JSON manifest. */
-  fetchChirpManifest?: () => Promise<any>;
+  fetchChirpManifest?: () => Promise<ChirpBundleManifest>;
   /** One file named the way RUNTIME_PYTHON_FILES names it. */
   fetchRuntimeFile: (relPath: string) => Promise<string>;
   listDriverModules: () => Promise<string[]>;
@@ -210,7 +220,7 @@ export interface BrowserPythonSourceOptions {
   /** The directory holding the archive. */
   chirpBundleBaseUrl: URL | string;
   fetchTextImpl?: (url: string) => Promise<string>;
-  fetchJsonImpl?: (url: string) => Promise<any>;
+  fetchJsonImpl?: (url: string) => Promise<ChirpBundleManifest>;
   fetchBytesImpl?: (url: string) => Promise<Uint8Array>;
 }
 
@@ -240,7 +250,7 @@ export function createBrowserPythonSource({
   }
   const bundleNames = chirpBundleFileNames(chirpRevision);
   const bundleUrl = (name: string) => new URL(name, chirpBundleBaseUrl).href;
-  let manifestPromise: Promise<any> | null = null;
+  let manifestPromise: Promise<ChirpBundleManifest> | null = null;
 
   // Fetched once per page: the manifest is read before the all-drivers sweep
   // and again by the catalog fallback, and it never changes under a pinned

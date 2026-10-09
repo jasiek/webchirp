@@ -329,7 +329,7 @@ declare global {
   // ---------------------------------------------------------------------------
 
   namespace WebAssembly {
-    const Suspending: (new (fn: (...args: any[]) => Promise<unknown>) => object) | undefined;
-    const promising: ((fn: Function) => (...args: any[]) => Promise<unknown>) | undefined;
+    const Suspending: (new (fn: (...args: never[]) => Promise<unknown>) => object) | undefined;
+    const promising: ((fn: Function) => (...args: unknown[]) => Promise<unknown>) | undefined;
   }
 }

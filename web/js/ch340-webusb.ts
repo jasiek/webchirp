@@ -155,8 +155,8 @@ export function ch340GetDivisor(
 }
 
 export class Ch340SerialPort extends WebUsbTransport implements SerialTransport {
-  readable: ReadableStream<any> | null;
-  writable: WritableStream<any> | null;
+  readable: ReadableStream<Uint8Array> | null;
+  writable: WritableStream<Uint8Array> | null;
   version: number;
   _interfaceNumber: number;
   _inEndpoint: number;
@@ -431,7 +431,7 @@ export class Ch340SerialPort extends WebUsbTransport implements SerialTransport 
     // suite dropping a packet mid-run on a 16 KB transfer.
     }, new CountQueuingStrategy({ highWaterMark: READ_PIPELINE_DEPTH }));
 
-    this.writable = new WritableStream({
+    this.writable = new WritableStream<Uint8Array<ArrayBuffer>>({
       write: async (chunk) => {
         await device.transferOut(outEndpoint, chunk);
       },

@@ -1,25 +1,33 @@
+// The fields a thrown value may carry, read without trusting its type: anything
+// can be thrown, and reading a field off a primitive (or a missing one) gives
+// undefined, which is what every reader here already expects.
+export function errorFields(error: unknown): { name?: unknown; message?: unknown; stack?: unknown } {
+  return (error ?? {}) as { name?: unknown; message?: unknown; stack?: unknown };
+}
+
 // Preserve exception messages as well as frames: some browsers omit the
 // message from Error.stack, and Pyodide stores its Python traceback in message.
 /**
  * @param error Anything thrown: an Error, a string, a plain object.
  */
-export function errorDetails(error: any): string {
+export function errorDetails(error: unknown): string {
   if (!error) {
     return "Unknown error";
   }
   if (typeof error === "string") {
     return error;
   }
-  if (typeof error.stack === "string" && error.stack.length > 0) {
-    const message = typeof error.message === "string" ? error.message : "";
-    if (message && !error.stack.includes(message)) {
-      const name = typeof error.name === "string" && error.name ? `${error.name}: ` : "";
-      return `${name}${message}\n${error.stack}`;
+  const { name, message, stack } = errorFields(error);
+  if (typeof stack === "string" && stack.length > 0) {
+    const text = typeof message === "string" ? message : "";
+    if (text && !stack.includes(text)) {
+      const prefix = typeof name === "string" && name ? `${name}: ` : "";
+      return `${prefix}${text}\n${stack}`;
     }
-    return error.stack;
+    return stack;
   }
-  if (typeof error.message === "string" && error.message.length > 0) {
-    return error.message;
+  if (typeof message === "string" && message.length > 0) {
+    return message;
   }
   try {
     return JSON.stringify(error) ?? String(error);

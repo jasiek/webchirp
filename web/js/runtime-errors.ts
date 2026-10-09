@@ -8,7 +8,7 @@
 // Python class names are the contract and they are stated once, in this module,
 // rather than at each call site.
 
-import { errorDetails } from "./error-details.ts";
+import { errorDetails, errorFields } from "./error-details.ts";
 
 /**
  * One exception the failed call was chained from (`__cause__`/`__context__`),
@@ -95,9 +95,11 @@ export class RuntimeCallError extends Error {
 // by its fields rather than instanceof: the fields are what every classifier
 // below reads, and they survive a caller that copies the error onto a plain
 // object.
-export function isRuntimeCallError(error: any): error is RuntimeCallError {
-  return typeof error?.pythonType === "string" && error.pythonType !== ""
-    && Array.isArray(error?.pythonBases);
+export function isRuntimeCallError(error: unknown): error is RuntimeCallError {
+  // Any thrown value, so its fields are read without trusting its type.
+  const fields = (error ?? {}) as { pythonType?: unknown; pythonBases?: unknown };
+  return typeof fields.pythonType === "string" && fields.pythonType !== ""
+    && Array.isArray(fields.pythonBases);
 }
 
 // Whether error is a Python exception of class typeName or of any subclass of
@@ -107,7 +109,7 @@ export function isRuntimeCallError(error: any): error is RuntimeCallError {
 /**
  * @param typeName A Python class name, e.g. "RadioError".
  */
-export function isPythonError(error: any, typeName: string): error is RuntimeCallError {
+export function isPythonError(error: unknown, typeName: string): error is RuntimeCallError {
   if (!isRuntimeCallError(error)) {
     return false;
   }
@@ -119,11 +121,12 @@ export function isPythonError(error: any, typeName: string): error is RuntimeCal
 // never crossed the runtime, its own name. The port chooser and the serial
 // transport report what happened through DOMException names, so this is what
 // a classifier reads to recognise them wherever they surfaced.
-export function jsErrorName(error: any): string {
+export function jsErrorName(error: unknown): string {
   if (isRuntimeCallError(error)) {
     return error.jsCause?.name || "";
   }
-  return typeof error?.name === "string" ? error.name : "";
+  const { name } = errorFields(error);
+  return typeof name === "string" ? name : "";
 }
 
 // A step the user has not taken yet, rather than something that went wrong:
@@ -132,7 +135,7 @@ export function jsErrorName(error: any): string {
 // UI answers with a modal (web/js/ui/notice-modal.ts) instead of a traceback in
 // the debug panel, and why the event never reaches Sentry (isIgnoredError,
 // web/js/sentry.ts). A subclass of RuntimePreconditionError is one too.
-export function isUserPreconditionFailure(error: any): error is RuntimeCallError {
+export function isUserPreconditionFailure(error: unknown): error is RuntimeCallError {
   return isPythonError(error, "RuntimePreconditionError");
 }
 
@@ -143,11 +146,11 @@ export function isUserPreconditionFailure(error: any): error is RuntimeCallError
 // an exception raised with no message falls back to its class name. Anything
 // else -- a JS Error, a bare string -- is its own first line, so a caller never
 // has to ask which kind of failure it is holding.
-export function runtimeErrorSentence(error: any): string {
+export function runtimeErrorSentence(error: unknown): string {
   if (isRuntimeCallError(error)) {
     return error.message.trim() || error.pythonType;
   }
-  const text = String(error?.message || error || "").trim();
+  const text = String(errorFields(error).message || error || "").trim();
   return text.split("\n").map((line) => line.trim()).find(Boolean) || "Unknown error";
 }
 
@@ -168,7 +171,7 @@ const JS_STACK_FRAME = /^\s+at\s|@(?:\S+:\d+:\d+|\[native code\])$/;
 // web/js/ui/debug-log.ts) gets the cause rather than "Traceback (most recent
 // call last):", which is what they got while the traceback was the message.
 // CLAUDE.md requires the whole of it to reach the panel.
-export function runtimeErrorDetail(error: any): string {
+export function runtimeErrorDetail(error: unknown): string {
   if (isRuntimeCallError(error)) {
     const jsFrames = String(error.stack || "")
       .split("\n")

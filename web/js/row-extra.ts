@@ -15,7 +15,8 @@ const EXTRA_KEY = "__extra";
 // entitled to the driver's defaults, which is what null says.
 export function rowExtras(row: ChannelRow | null | undefined): Record<string, unknown> | null {
   const values = row?.[EXTRA_KEY];
-  return values && typeof values === "object" ? values : null;
+  // The sidecar is the plain name -> value mapping the runtime writes.
+  return values && typeof values === "object" ? values as Record<string, unknown> : null;
 }
 
 // Merge edited values into whatever the row already carries rather than

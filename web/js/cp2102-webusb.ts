@@ -259,8 +259,8 @@ export function cp2102QuantizeBaudRate(baudRate: number, {
 }
 
 export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport {
-  readable: ReadableStream<any> | null;
-  writable: WritableStream<any> | null;
+  readable: ReadableStream<Uint8Array> | null;
+  writable: WritableStream<Uint8Array> | null;
   partNumber: number;
   baudRate: number;
   _interfaceNumber: number;
@@ -690,10 +690,12 @@ export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport
       // block went nowhere — an upload that silently loses a frame instead of
       // failing. So every transfer's status is checked, and a short write is
       // resumed from where it stopped rather than assumed complete.
-      write: async (chunk) => {
-        const bytes = chunk instanceof Uint8Array
-          ? chunk
-          : new Uint8Array(chunk.buffer || chunk, chunk.byteOffset || 0, chunk.byteLength);
+      write: async (chunk: Uint8Array<ArrayBuffer>) => {
+        // The contract hands a Uint8Array; a caller outside it may hand any
+        // view or a bare buffer. A view keeps its own window onto its buffer.
+        const bytes = ArrayBuffer.isView(chunk)
+          ? new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+          : new Uint8Array(chunk);
         let offset = 0;
         while (offset < bytes.length) {
           const remaining = bytes.subarray(offset);

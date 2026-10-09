@@ -15,6 +15,7 @@ import { FLOWS, OUTCOMES, recordFlow } from "./metrics.ts";
 import { requireRuntimeApi } from "./state.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { UiState } from "./state.ts";
+import type { ParsedCsv } from "../runtime-rpc.ts";
 
 const LOADABLE_FILE_KINDS = new Map([
   [".csv", "csv"],
@@ -115,7 +116,7 @@ export function createCodeplugIo(ctx: UiContext) {
    * @param csvSource Where the rows came from, for reporting.
    */
   function applyParsedCsv(
-    parsed: any,
+    parsed: ParsedCsv,
     mode: "replace" | "merge" = "replace",
     csvSource: UiState["codeplugSource"] = "csv",
   ) {

@@ -111,7 +111,13 @@ export function validateDeclarations(declarations: readonly GaDimension[]): stri
 // archive on its own: extras are reported and the caller opts in.
 export function planSync(declarations: readonly GaDimension[], existing: readonly GaDimension[]) {
   const byKey = new Map(existing.map((dimension) => [`${dimension.scope}:${dimension.parameterName}`, dimension]));
-  const plan: { create: Array<Record<string, any>>; update: Array<Record<string, any>>; unchanged: Array<Record<string, any>>; conflicts: Array<Record<string, any>>; extra: Array<Record<string, any>> } = { create: [], update: [], unchanged: [], conflicts: [], extra: [] };
+  const plan: {
+    create: GaDimension[];
+    update: Array<{ name?: string; declared: GaDimension; current: GaDimension; changes: Partial<GaDimension> }>;
+    unchanged: GaDimension[];
+    conflicts: Array<{ declared: GaDimension; current: GaDimension; reason: string }>;
+    extra: GaDimension[];
+  } = { create: [], update: [], unchanged: [], conflicts: [], extra: [] };
 
   for (const declared of declarations) {
     const current = byKey.get(`${declared.scope}:${declared.parameterName}`);
@@ -395,7 +401,7 @@ async function main() {
     console.log(`created ${dimension.parameterName}`);
   }
   for (const entry of plan.update) {
-    await api(token, entry.name, {
+    await api(token, String(entry.name), {
       method: "PATCH",
       body: entry.changes,
       query: { updateMask: Object.keys(entry.changes).join(",") },

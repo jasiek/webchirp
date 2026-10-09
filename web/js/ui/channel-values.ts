@@ -6,7 +6,7 @@
  * radio or an image may also carry the driver's per-channel extras under the
  * "__extra" sidecar key (web/js/row-extra.ts), which no header names.
  */
-export type ChannelRow = Record<string, any>;
+export type ChannelRow = Record<string, unknown>;
 
 /**
  * What the grid knows about one column, as _column_metadata_for_radio

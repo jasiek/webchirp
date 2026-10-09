@@ -211,7 +211,11 @@ function optionalBoolean(value: unknown): boolean | null {
   return value === null || value === undefined ? null : Boolean(value);
 }
 
-export type SerialGlobalOp = (...args: any[]) => [string, Record<string, any>];
+/**
+ * One serial_* global: Python's arguments in (whatever Pyodide converted them
+ * to, so any), the op name and its normalised payload out.
+ */
+export type SerialGlobalOp = (...args: any[]) => [string, SerialRpcPayload];
 
 // Each global Python can call, by the name it imports, mapped to the op and
 // normalised payload it sends. Defaults live here, once: a read with no count

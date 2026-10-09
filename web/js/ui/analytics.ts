@@ -18,6 +18,7 @@
 //     nowhere; tests/channels/ga-dimensions.mjs fails the build if it is not.
 
 import { errorDetails } from "./format.ts";
+import { errorFields } from "../error-details.ts";
 import { isRuntimeCallError, jsErrorName } from "../runtime-errors.ts";
 import { isPortSelectionCancelled } from "../serial-errors.ts";
 import type { CatalogRadio, RowIssue, SettingIssue } from "../runtime-rpc.ts";
@@ -182,7 +183,8 @@ export function errorTypeName(error: unknown): string {
     }
     return "";
   }
-  const name = typeof (error as Error | null)?.name === "string" ? (error as Error).name : "";
+  const { name: rawName } = errorFields(error);
+  const name = typeof rawName === "string" ? rawName : "";
   return /(?:Error|Exception)$/.test(name) ? name : "";
 }
 

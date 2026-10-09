@@ -10,6 +10,7 @@
 // (chirp/chirp/directory.py) — and must report ambiguity rather than guessing.
 
 import { isPythonError } from "./runtime-errors.ts";
+import { errorFields } from "./error-details.ts";
 import type { CatalogRadio, ImageMetadata } from "./runtime-rpc.ts";
 
 type RadioIdentity = { vendor: string; model: string; variant?: string };
@@ -132,7 +133,7 @@ export async function loadImageWithDriverFallback<T>({
     }
     log?.(
       `IMAGE detection failed with ${resolvedDriver.module}.${resolvedDriver.className} `
-      + `(${(error as Error)?.message || error}); retrying against all drivers`,
+      + `(${errorFields(error).message || error}); retrying against all drivers`,
     );
     await importAllDrivers();
     return loadImage();

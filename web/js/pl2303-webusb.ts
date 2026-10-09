@@ -109,8 +109,8 @@ export function detectPl2303Type({ deviceClass, maxPacketSize0, usbVersion, devi
 }
 
 export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport {
-  readable: ReadableStream<any> | null;
-  writable: WritableStream<any> | null;
+  readable: ReadableStream<Uint8Array> | null;
+  writable: WritableStream<Uint8Array> | null;
   chipType: string;
   _interfaceNumber: number;
   _inEndpoint: number;
@@ -460,7 +460,7 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
     // transfers while the consumer is busy.
     }, new CountQueuingStrategy({ highWaterMark: READ_PIPELINE_DEPTH }));
 
-    this.writable = new WritableStream({
+    this.writable = new WritableStream<Uint8Array<ArrayBuffer>>({
       write: async (chunk) => {
         await device.transferOut(outEndpoint, chunk);
       },

@@ -103,8 +103,8 @@ export function stripFtdiStatusBytes(bytes: Uint8Array | null | undefined): Uint
 }
 
 export class FtdiSerialPort extends WebUsbTransport implements SerialTransport {
-  readable: ReadableStream<any> | null;
-  writable: WritableStream<any> | null;
+  readable: ReadableStream<Uint8Array> | null;
+  writable: WritableStream<Uint8Array> | null;
   _interfaceNumber: number;
   _inEndpoint: number;
   _outEndpoint: number;
@@ -328,7 +328,7 @@ export class FtdiSerialPort extends WebUsbTransport implements SerialTransport {
     // transfers while the consumer is busy.
     }, new CountQueuingStrategy({ highWaterMark: READ_PIPELINE_DEPTH }));
 
-    this.writable = new WritableStream({
+    this.writable = new WritableStream<Uint8Array<ArrayBuffer>>({
       write: async (chunk) => {
         await device.transferOut(outEndpoint, chunk);
       },

@@ -12,6 +12,7 @@
 // the UI can import it without pulling in the whole serial stack.
 
 import { jsErrorName } from "./runtime-errors.ts";
+import { errorFields } from "./error-details.ts";
 
 // Carried on the Error object while it stays inside one JS realm (the bridge's
 // own callers, the CLI, tests).
@@ -31,7 +32,7 @@ export function createSerialUnsupportedError(message: string): Error {
 export function isSerialUnsupported(error: unknown): boolean {
   if (!error) return false;
   if (jsErrorName(error) === SERIAL_UNSUPPORTED) return true;
-  const fields = error as { message?: string; stack?: string };
+  const fields = errorFields(error);
   const text = typeof error === "string"
     ? error
     : `${fields.message || ""}\n${fields.stack || ""}`;

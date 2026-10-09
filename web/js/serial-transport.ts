@@ -211,7 +211,7 @@ export const SERIAL_TRANSPORT_MEMBERS: readonly Readonly<SerialTransportMember>[
  * @param port Anything claiming to be a port.
  * @param label How the error names it; the class name by default.
  */
-export function assertSerialTransport(port: any, label: string = ""): SerialTransport {
+export function assertSerialTransport(port: unknown, label: string = ""): SerialTransport {
   const name = label || port?.constructor?.name || "serial port";
   if (!port || typeof port !== "object") {
     throw new TypeError(`${name} is not a serial transport: got ${port === null ? "null" : typeof port}`);
@@ -225,7 +225,8 @@ export function assertSerialTransport(port: any, label: string = ""): SerialTran
       + `missing or invalid ${missing.length} member(s):\n  ${missing.join("\n  ")}`,
     );
   }
-  return port;
+  // Every member the contract names has just passed its check.
+  return port as SerialTransport;
 }
 
 // One-shot loss reporting shared by every transport, so each reports a loss

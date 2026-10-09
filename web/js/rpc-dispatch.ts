@@ -26,9 +26,11 @@ import type { PyodideInterface } from "pyodide";
 
 /**
  * What rpc_dispatch answers every call with: the method's JSON-decoded result,
- * or the fields describing the Python exception it raised.
+ * or the fields describing the Python exception it raised. The result is any
+ * because its shape is the method's: each caller in web/js/runtime-rpc.ts
+ * names it.
  */
-export type RpcEnvelope = {ok: true, result: any} | {ok: false, error: RpcErrorFields};
+export type RpcEnvelope = { ok: true; result: any } | { ok: false; error: RpcErrorFields };
 
 /** A runtime method's name: a key of RPC_METHODS. */
 export type RpcMethodName = keyof typeof RPC_METHODS;

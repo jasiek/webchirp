@@ -145,7 +145,7 @@ export function encodeMaidenhead(latitude: number, longitude: number, precision 
 // precision — 4, 6 and 8 characters all occur, plus one 5-character oddity —
 // so callers need the box to know how much slack a distance carries.
 // Returns null for anything that has no valid 4-character prefix.
-export function decodeMaidenheadBox(locator: string | null | undefined): MaidenheadBox | null {
+export function decodeMaidenheadBox(locator: unknown): MaidenheadBox | null {
   const text = String(locator || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (text.length < 4) {
     return null;
@@ -294,7 +294,22 @@ export function parseRsgbPayload(payload: { data?: unknown } | null | undefined)
  * One station as the RSGB directory API returns it (tx, rx, band, mode,
  * status, locator, callsign, ...), read field by field as the API spells it.
  */
-export type RsgbRecord = Record<string, any>;
+export interface RsgbRecord {
+  id?: unknown;
+  repeater?: unknown;
+  band?: unknown;
+  /** Output and input frequencies, in hertz. */
+  tx?: unknown;
+  rx?: unknown;
+  /** Transmit bandwidth, in kHz. */
+  txbw?: unknown;
+  locator?: unknown;
+  status?: unknown;
+  town?: unknown;
+  ctcss?: unknown;
+  modeCodes?: unknown;
+  [field: string]: unknown;
+}
 export interface RsgbFetchOptions {
   /** Four-character locator squares. */
   squares?: Iterable<string>;
@@ -564,7 +579,9 @@ export function buildRsgbRows(
   const rows: ChannelRow[] = [];
   const skipped: SkippedRepeater[] = [];
   for (const entry of entries) {
-    const record = entry?.record || entry;
+    // An entry from filterRsgbRecords() carries its record; a bare record is
+    // its own.
+    const record = ((entry as Partial<RsgbEntry>)?.record || entry) as RsgbRecord;
     const row = createBlankRow();
     const name = String(record?.repeater || "").trim();
 
