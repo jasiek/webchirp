@@ -8,6 +8,7 @@
 //
 // Protocol constants and the baud-rate divisor math follow libftdi.
 import { WebUsbTransport } from "./webusb-transport.ts";
+import type { WebUsbTransportOptions } from "./webusb-transport.ts";
 import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
 
 export const FTDI_VENDOR_ID = 0x0403;
@@ -50,14 +51,14 @@ const DATA_8N1 = 0x0008;
 // Control requests other than baud target port/interface A (libftdi index 1).
 const PORT_INDEX = 1;
 
-export function isFtdiDevice(device) {
-  return Boolean(device) && Number(device.vendorId) === FTDI_VENDOR_ID;
+export function isFtdiDevice(device: Partial<USBDevice> | null | undefined): boolean {
+  return !!device && Number(device.vendorId) === FTDI_VENDOR_ID;
 }
 
 // Port of libftdi ftdi_to_clkbits / ftdi_convert_baudrate for the FT232R / FT-X
 // family (3 MHz effective base clock). Returns the wValue/wIndex pair for the
 // SIO_SET_BAUD_RATE control request.
-export function ftdiConvertBaudrate(baudrate) {
+export function ftdiConvertBaudrate(baudrate: number): { value: number; index: number } {
   const baud = Number(baudrate);
   if (!Number.isFinite(baud) || baud <= 0) {
     throw new Error(`Invalid FTDI baud rate: ${baudrate}`);
@@ -94,7 +95,7 @@ export function ftdiConvertBaudrate(baudrate) {
 // packet, so each carries a single status header — a longer request would
 // return several packets concatenated, headers and all, and this would strip
 // only the first pair and pass the rest off as data.
-export function stripFtdiStatusBytes(bytes) {
+export function stripFtdiStatusBytes(bytes: Uint8Array | null | undefined): Uint8Array {
   if (!bytes || bytes.length <= 2) {
     return new Uint8Array(0);
   }
@@ -117,7 +118,7 @@ export class FtdiSerialPort extends WebUsbTransport implements SerialTransport {
   // rather than reopening and reporting a success the wire does not have.
 
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
-  constructor(device, options = {}) {
+  constructor(device: USBDevice, options: WebUsbTransportOptions = {}) {
     super(device, options);
     this.readable = null;
     this.writable = null;
@@ -135,7 +136,7 @@ export class FtdiSerialPort extends WebUsbTransport implements SerialTransport {
     return this._inPacketSize;
   }
 
-  async _controlOut(request, value, index) {
+  async _controlOut(request: number, value: number, index: number): Promise<void> {
     const result = await this.device.controlTransferOut({
       requestType: "vendor",
       recipient: "device",

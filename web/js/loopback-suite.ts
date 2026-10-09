@@ -20,17 +20,65 @@
 
 export const DEFAULT_BAUD_RATES = [9600, 38400, 57600, 115200];
 
+/**
+ * What the suite needs of a port: Web Serial's open/close and streams, plus
+ * the control lines when the control-line case runs.
+ */
+export interface LoopbackPort {
+  open(options: { baudRate: number }): Promise<void>;
+  close(): Promise<void>;
+  readonly readable: ReadableStream<Uint8Array> | null;
+  readonly writable: WritableStream<Uint8Array> | null;
+  setSignals?(signals: SerialOutputSignals): Promise<void>;
+  getSignals?(): Promise<SerialInputSignals>;
+}
+
+/** Progress as the suite runs: a case starting, then its result. */
+export type LoopbackCaseEvent =
+  | { phase: "start"; id: string; title: string; baudRate?: number }
+  | ({ phase: "finish" } & LoopbackResult);
+
+/** The suite's settings; runLoopbackSuite() fills in what a caller leaves out. */
+export interface LoopbackOptions {
+  baudRates: number[];
+  /** The adapter's bulk packet size, for the boundary case. */
+  packetSize: number;
+  /** RTS-CTS and DTR-DSR are jumpered too. */
+  controlLines: boolean;
+  idleMs: number;
+  readTimeoutMs: number;
+  quietMs: number;
+  signalSettleMs: number;
+  throughputBytes: number;
+  onCase: ((event: LoopbackCaseEvent) => void) | null;
+  now: () => number;
+}
+
+/** The options a case runs with: the suite's, plus the baud rate in force. */
+type CaseContext = LoopbackOptions & { baudRate: number };
+
+/** One case: what it checks, when it cannot run, and the check itself. */
+interface LoopbackCase {
+  id: string;
+  title: string;
+  /** Why the case cannot run on this port and setup, or "" when it can. */
+  requires?(port: LoopbackPort, ctx: CaseContext): string;
+  run(session: PortSession, ctx: CaseContext, port: LoopbackPort): Promise<void>;
+}
+
+type PortSession = ReturnType<typeof createPortSession>;
+
 // Timeout budget for an echo of `byteCount` bytes: the wire time for a round
 // trip at this baud (10 bits per byte, out and back) plus a fixed allowance for
 // USB latency and host scheduling. Without the baud term, large payloads at
 // 9600 fail on the clock rather than on a defect.
-function echoTimeoutFor(byteCount, baudRate, baseMs) {
+function echoTimeoutFor(byteCount: number, baudRate: number, baseMs: number): number {
   const wireMs = Math.ceil((byteCount * 10 * 2 * 1000) / Math.max(1, Number(baudRate) || 9600));
   return baseMs + wireMs;
 }
 
 export class LoopbackTimeoutError extends Error {
-  constructor(message) {
+  constructor(message: string) {
     super(message);
     this.name = "LoopbackTimeoutError";
   }
@@ -38,7 +86,7 @@ export class LoopbackTimeoutError extends Error {
 
 // Deterministic payload generator (xorshift32). Reproducible across runs so a
 // failure report names bytes the next run will produce again.
-export function deterministicBytes(length, seed = 0x1234abcd) {
+export function deterministicBytes(length: number, seed = 0x1234abcd): Uint8Array {
   const out = new Uint8Array(length);
   let state = seed >>> 0 || 1;
   for (let i = 0; i < length; i += 1) {
@@ -52,7 +100,7 @@ export function deterministicBytes(length, seed = 0x1234abcd) {
   return out;
 }
 
-function concatBytes(a, b) {
+function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length);
   out.set(a, 0);
   out.set(b, a.length);
@@ -68,7 +116,7 @@ function hexPreview(bytes: Uint8Array, limit = 16): string {
 
 // Describe how `got` differs from `want` in terms a hardware report can act on:
 // short/long, and the first byte that disagrees.
-function describeMismatch(want, got) {
+function describeMismatch(want: Uint8Array, got: Uint8Array): string {
   if (got.length !== want.length) {
     return `expected ${want.length} bytes, got ${got.length}`;
   }
@@ -84,10 +132,10 @@ function describeMismatch(want, got) {
 
 // A read/write session over an already-open port. Owns the reader lock and a
 // receive buffer so callers can ask for exact byte counts with a timeout.
-export function createPortSession(port) {
+export function createPortSession(port: LoopbackPort) {
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
-  let buffer = new Uint8Array(0);
+  let buffer: Uint8Array = new Uint8Array(0);
   let streamError: Error | null = null;
   let stopped = false;
   const waiters: Array<{
@@ -97,7 +145,7 @@ export function createPortSession(port) {
     timer: number;
   }> = [];
 
-  function takeFromBuffer(count) {
+  function takeFromBuffer(count: number): Uint8Array {
     const taken = buffer.slice(0, count);
     buffer = buffer.slice(count);
     return taken;
@@ -157,21 +205,21 @@ export function createPortSession(port) {
       return buffer.length;
     },
 
-    async write(bytes) {
+    async write(bytes: Uint8Array | ArrayLike<number>): Promise<void> {
       if (!writer) {
         throw new Error("The port session has not been started");
       }
       await writer.write(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
     },
 
-    read(count, timeoutMs) {
+    read(count: number, timeoutMs: number): Promise<Uint8Array> {
       if (streamError) {
         return Promise.reject(streamError);
       }
       if (buffer.length >= count) {
         return Promise.resolve(takeFromBuffer(count));
       }
-      return new Promise((resolve, reject) => {
+      return new Promise<Uint8Array>((resolve, reject) => {
         const waiter = { count, resolve, reject, timer: 0 };
         waiter.timer = setTimeout(() => {
           const index = waiters.indexOf(waiter);
@@ -189,7 +237,7 @@ export function createPortSession(port) {
 
     // Discard whatever is in flight until the line has been quiet for
     // `quietMs`. Used between cases so one failure cannot cascade.
-    async drain(quietMs) {
+    async drain(quietMs: number): Promise<void> {
       for (;;) {
         try {
           await this.read(1, quietMs);
@@ -234,7 +282,11 @@ export function createPortSession(port) {
 // Write a payload and require exactly that payload back — no more. The trailing
 // quiet check catches doubled echoes and stray status bytes leaking into the
 // data path, which a plain compare would silently accept.
-async function expectEcho(session, payload, { timeoutMs, quietMs }) {
+async function expectEcho(
+  session: PortSession,
+  payload: Uint8Array,
+  { timeoutMs, quietMs }: { timeoutMs: number; quietMs: number },
+): Promise<void> {
   await session.write(payload);
   const echoed = await session.read(payload.length, timeoutMs);
   const mismatch = describeMismatch(payload, echoed);
@@ -256,7 +308,7 @@ async function expectEcho(session, payload, { timeoutMs, quietMs }) {
 
 // Cases that run once per baud rate. `ctx` carries the resolved options plus
 // the baud rate in force.
-const PER_BAUD_CASES = [
+const PER_BAUD_CASES: LoopbackCase[] = [
   {
     id: "byte-transparency",
     title: "All 256 byte values survive the round trip",
@@ -337,7 +389,7 @@ const PER_BAUD_CASES = [
 
 // Cases that run once, at the highest baud rate, because they are slow or
 // baud-independent.
-const ONCE_CASES = [
+const ONCE_CASES: LoopbackCase[] = [
   {
     id: "sustained-throughput",
     title: "A large single write survives without truncation",
@@ -380,6 +432,11 @@ const ONCE_CASES = [
       return "";
     },
     async run(session, ctx, port) {
+      // requires() has skipped a port without getSignals(); every port that
+      // has it has setSignals() too.
+      if (!port.setSignals || !port.getSignals) {
+        throw new Error("port does not implement setSignals() and getSignals()");
+      }
       for (const asserted of [true, false]) {
         await port.setSignals({ requestToSend: asserted, dataTerminalReady: asserted });
         await new Promise((resolve) => setTimeout(resolve, ctx.signalSettleMs));
@@ -395,7 +452,7 @@ const ONCE_CASES = [
   },
 ];
 
-const REOPEN_CASE = {
+const REOPEN_CASE: LoopbackCase = {
   id: "reopen",
   title: "The port still works after close and reopen",
   async run(session, ctx) {
@@ -407,7 +464,7 @@ const REOPEN_CASE = {
   },
 };
 
-const DEFAULTS = {
+const DEFAULTS: LoopbackOptions = {
   baudRates: DEFAULT_BAUD_RATES,
   packetSize: 64,
   controlLines: false,
@@ -453,14 +510,27 @@ function makeResult(
 // Every result reaches the caller the same way, whether it came from a case
 // that ran or from one that never got the chance. A result that skips onCase is
 // invisible to any UI built from those events.
-function recordResult(entry, status, detail, startedAt, ctx, results) {
+function recordResult(
+  entry: { id: string; title: string; baudRate?: number },
+  status: LoopbackResult["status"],
+  detail: string,
+  startedAt: number,
+  ctx: LoopbackOptions,
+  results: LoopbackResult[],
+): LoopbackResult {
   const result = makeResult(entry, status, detail, startedAt, ctx);
   results.push(result);
   ctx.onCase?.({ phase: "finish", ...result });
   return result;
 }
 
-async function runCase(entry, session, port, ctx, results) {
+async function runCase(
+  entry: LoopbackCase & { baudRate: number },
+  session: PortSession,
+  port: LoopbackPort,
+  ctx: CaseContext,
+  results: LoopbackResult[],
+): Promise<LoopbackResult> {
   const startedAt = ctx.now();
   ctx.onCase?.({ phase: "start", id: entry.id, title: entry.title, baudRate: entry.baudRate });
   const skipReason = entry.requires ? entry.requires(port, ctx) : "";
@@ -480,7 +550,13 @@ async function runCase(entry, session, port, ctx, results) {
 // have skipped still skip: reporting control-lines as FAIL when the user never
 // claimed to have jumpered them sends them checking hardware they were told was
 // optional, and inflates the failure count.
-function failEntries(entries, port, detail, ctx, results) {
+function failEntries(
+  entries: Array<LoopbackCase & { baudRate: number }>,
+  port: LoopbackPort,
+  detail: string,
+  ctx: CaseContext,
+  results: LoopbackResult[],
+): void {
   for (const entry of entries) {
     const skipReason = entry.requires ? entry.requires(port, ctx) : "";
     recordResult(entry, skipReason ? "skip" : "fail", skipReason || detail, ctx.now(), ctx, results);
@@ -490,9 +566,15 @@ function failEntries(entries, port, detail, ctx, results) {
 // Open the port, run `entries` against it, then close. A failure to open is
 // itself recorded as a failure of every entry, so a chip that rejects one baud
 // rate shows up as that baud failing rather than as a thrown run.
-async function runWithOpenPort(port, baudRate, entries, ctx, results) {
+async function runWithOpenPort(
+  port: LoopbackPort,
+  baudRate: number,
+  entries: LoopbackCase[],
+  ctx: LoopbackOptions,
+  results: LoopbackResult[],
+): Promise<void> {
   // Cases read the baud in force off the context to size their timeouts.
-  const caseCtx = { ...ctx, baudRate };
+  const caseCtx: CaseContext = { ...ctx, baudRate };
   const withBaud = entries.map((entry) => ({ ...entry, baudRate }));
   let session: ReturnType<typeof createPortSession>;
   let opened = false;
@@ -548,10 +630,10 @@ async function runWithOpenPort(port, baudRate, entries, ctx, results) {
  * RX. The port must be closed on entry; it is left closed on return.
  */
 export async function runLoopbackSuite(
-  port,
-  options = {},
+  port: LoopbackPort,
+  options: Partial<LoopbackOptions> = {},
 ): Promise<{ results: LoopbackResult[]; passed: number; failed: number; skipped: number }> {
-  const ctx = { ...DEFAULTS, ...options };
+  const ctx: LoopbackOptions = { ...DEFAULTS, ...options };
   // Sorted, not just copied: the once-per-run cases below pick "the highest
   // rate" off the end, and an unsorted array would run the 16 KB throughput
   // case at the slowest rate against a timeout budgeted for the fastest.
@@ -580,7 +662,9 @@ export async function runLoopbackSuite(
 }
 
 // Plain-text report, suitable for pasting into an issue.
-export function formatLoopbackReport(summary) {
+export function formatLoopbackReport(
+  summary: { results: LoopbackResult[]; passed: number; failed: number; skipped: number },
+): string {
   const lines: string[] = [];
   for (const result of summary.results) {
     const mark = result.status === "pass" ? "PASS" : result.status === "fail" ? "FAIL" : "SKIP";

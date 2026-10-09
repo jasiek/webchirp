@@ -140,7 +140,7 @@ export class WebBluetoothSerialPort implements SerialTransport {
 
   // Serialize GATT operations: overlapping writes can fail with "busy" even
   // when they target different characteristics on the same connection.
-  _enqueue(operation) {
+  _enqueue(operation: () => Promise<void>): Promise<void> {
     const pending = this._queue.then(operation);
     this._queue = pending.catch(() => {});
     return pending;
@@ -148,7 +148,7 @@ export class WebBluetoothSerialPort implements SerialTransport {
 
   // Discover only the verified UART characteristics and subscribe before any
   // radio traffic can arrive. Every failed open cleans up its partial session.
-  async open(options) {
+  async open(options: SerialOpenOptions): Promise<void> {
     if (this._driver) {
       throw new Error("Bluetooth serial port is already open.");
     }
@@ -194,7 +194,7 @@ export class WebBluetoothSerialPort implements SerialTransport {
   }
 
   // Serialize device-specific UART changes with outgoing data on the same link.
-  async reconfigure(options) {
+  async reconfigure(options: SerialOpenOptions): Promise<void> {
     this._driver?.validateOptions(options);
     await this._enqueue(async () => {
       if (!this.device.gatt?.connected || !this._driver) {
@@ -209,7 +209,7 @@ export class WebBluetoothSerialPort implements SerialTransport {
   }
 
   // Copy outgoing bytes and let the matched driver encode and split them in order.
-  async _write(bytes) {
+  async _write(bytes: Uint8Array): Promise<void> {
     const data = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength).slice();
     await this._enqueue(async () => {
       if (!this.device.gatt?.connected || !this._driver) {
@@ -220,7 +220,7 @@ export class WebBluetoothSerialPort implements SerialTransport {
   }
 
   // Forward optional control-line operations to the matched adapter protocol.
-  async setSignals(signals) {
+  async setSignals(signals: SerialSignals): Promise<void> {
     await this._enqueue(async () => {
       if (!this._driver) throw new Error("Bluetooth serial port is not connected.");
       await this._driver.setSignals(signals);

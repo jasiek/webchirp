@@ -9,6 +9,7 @@
 // carries raw UART payload with no status header (modem status arrives on a
 // separate interrupt endpoint, which this driver does not read).
 import { WebUsbTransport } from "./webusb-transport.ts";
+import type { WebUsbTransportOptions } from "./webusb-transport.ts";
 import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
 
 // The CH340/CH341 family ships under several vendor/product id pairs — WCH's
@@ -72,7 +73,7 @@ const CLOCK_RATE = 48000000;
 const MIN_BAUD_RATE = 46;
 const MAX_BAUD_RATE = 3000000;
 
-function clockDivisor(ps, fact) {
+function clockDivisor(ps: number, fact: number): number {
   return 1 << (12 - 3 * ps - fact);
 }
 
@@ -82,7 +83,7 @@ const MIN_RATES = [0, 1, 2, 3].map(
   (ps) => Math.floor(CLOCK_RATE / (clockDivisor(ps, 1) * 512)),
 );
 
-export function isCh340Device(device) {
+export function isCh340Device(device: Partial<USBDevice> | null | undefined): boolean {
   if (!device) {
     return false;
   }
@@ -97,7 +98,10 @@ export function isCh340Device(device) {
 // divisor complement (register 0x13), low byte the prescaler and fact bits
 // (register 0x12). `limitedPrescaler` is the quirk seen on clone silicon that
 // cannot drive the faster base clocks.
-export function ch340GetDivisor(baudRate, { limitedPrescaler = false } = {}) {
+export function ch340GetDivisor(
+  baudRate: number,
+  { limitedPrescaler = false }: { limitedPrescaler?: boolean } = {},
+): number {
   const requested = Number(baudRate);
   if (!Number.isFinite(requested) || requested <= 0) {
     throw new Error(`Invalid CH340 baud rate: ${baudRate}`);
@@ -169,7 +173,7 @@ export class Ch340SerialPort extends WebUsbTransport implements SerialTransport 
   // rather than reopening and reporting a success the wire does not have.
 
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
-  constructor(device, options = {}) {
+  constructor(device: USBDevice, options: WebUsbTransportOptions = {}) {
     super(device, options);
     this.readable = null;
     this.writable = null;
@@ -190,7 +194,7 @@ export class Ch340SerialPort extends WebUsbTransport implements SerialTransport 
     return this._inPacketSize;
   }
 
-  async _controlOut(request, value, index) {
+  async _controlOut(request: number, value: number, index: number): Promise<void> {
     const result = await this.device.controlTransferOut({
       requestType: "vendor",
       recipient: "device",
@@ -205,7 +209,7 @@ export class Ch340SerialPort extends WebUsbTransport implements SerialTransport 
     }
   }
 
-  async _controlIn(request, value, index, length) {
+  async _controlIn(request: number, value: number, index: number, length: number) {
     const result = await this.device.controlTransferIn({
       requestType: "vendor",
       recipient: "device",
@@ -242,7 +246,7 @@ export class Ch340SerialPort extends WebUsbTransport implements SerialTransport 
     }
   }
 
-  async _setBaudRateAndLineControl(baudRate) {
+  async _setBaudRateAndLineControl(baudRate: number): Promise<void> {
     let value = ch340GetDivisor(baudRate, { limitedPrescaler: this.limitedPrescaler });
     // The CH341A holds data back until a full 32-byte endpoint packet has been
     // received unless bit 7 is set. Chips at version 0x27 and below want the
@@ -262,7 +266,7 @@ export class Ch340SerialPort extends WebUsbTransport implements SerialTransport 
   }
 
   // The chip takes the modem control lines inverted, in wValue.
-  async _writeModemControl(lines) {
+  async _writeModemControl(lines: number): Promise<void> {
     await this._controlOut(REQ_MODEM_CTRL, ~lines & 0xffff, 0);
     this._modemControl = lines;
   }

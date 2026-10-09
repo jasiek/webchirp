@@ -17,7 +17,12 @@ import {
   FRAMING_OPTIONS,
   assertSerialTransport,
 } from "./serial-transport.ts";
-import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
+import type {
+  SerialDisconnectPayload,
+  SerialOpenOptions,
+  SerialSignals,
+  SerialTransport,
+} from "./serial-transport.ts";
 
 /** Why the bridge gave up an open port, as onPortLost hears it. */
 export interface PortLostInfo {
@@ -82,8 +87,14 @@ export function bytesToHex(bytes: ArrayLike<number> | Iterable<number> | null | 
     .join(" ");
 }
 
+// The option names an options object carries, typed as option names:
+// Object.keys() can only promise strings.
+function optionKeys(options: Partial<SerialOpenOptions>): Array<keyof SerialOpenOptions> {
+  return Object.keys(options) as Array<keyof SerialOpenOptions>;
+}
+
 // Concatenate two Uint8Array buffers into one contiguous buffer.
-function concatUint8(a, b) {
+function concatUint8(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length);
   out.set(a, 0);
   out.set(b, a.length);
@@ -92,7 +103,7 @@ function concatUint8(a, b) {
 
 // How the connect message names the route a port took, where that is news
 // to the user; native Web Serial and the CLI's tty need no qualifier.
-const TRANSPORT_SUFFIX = Object.freeze({
+const TRANSPORT_SUFFIX: Readonly<Record<string, string>> = Object.freeze({
   webusb: " (via WebUSB)",
   webbluetooth: " (via WebBluetooth)",
 });
@@ -247,9 +258,9 @@ export class SerialBridge {
     // Back to the defaults, not to whatever the last clone's driver left
     // behind, and compared as a whole set so drifted framing is reset even when
     // the rate itself is unchanged.
-    const target = { ...DEFAULT_PORT_OPTIONS, baudRate: wanted };
-    const current = this.portOptions || {};
-    if (Object.keys(target).every((key) => target[key] === current[key])) {
+    const target: SerialOpenOptions = { ...DEFAULT_PORT_OPTIONS, baudRate: wanted };
+    const current: Partial<SerialOpenOptions> = this.portOptions || {};
+    if (optionKeys(target).every((key) => target[key] === current[key])) {
       return { changed: false, baudRate: this.baudRate, previousBaudRate: this.baudRate };
     }
     const previousBaudRate = this.baudRate;
@@ -528,18 +539,21 @@ export class SerialBridge {
    */
   async reconfigure(
     options: Partial<SerialOpenOptions> = {},
-  ): Promise<{ reconfigured: boolean; options: Partial<SerialOpenOptions>; changed: string[] }> {
-    if (!this.port) {
+  ): Promise<{ reconfigured: boolean; options: SerialOpenOptions; changed: string[] }> {
+    // open() records the options with the port, so an open port has both.
+    if (!this.port || !this.portOptions) {
       throw new Error("Port is not connected.");
     }
-    const current = this.portOptions || {};
-    const next = { ...current };
-    for (const [key, value] of Object.entries(options)) {
+    const current: SerialOpenOptions = this.portOptions;
+    const next: SerialOpenOptions = { ...current };
+    for (const key of optionKeys(options)) {
+      const value = options[key];
       if (value !== null && value !== undefined) {
-        next[key] = value;
+        // One key at a time, so the value is the type that key holds.
+        (next as Record<keyof SerialOpenOptions, unknown>)[key] = value;
       }
     }
-    const changed = Object.keys(next).filter((key) => next[key] !== current[key]);
+    const changed = optionKeys(next).filter((key) => next[key] !== current[key]);
     if (!changed.length) {
       // Drivers assign the rate they are already running at (often once per
       // block); a reopen per assignment would restart the chip mid-clone.
@@ -589,7 +603,10 @@ export class SerialBridge {
   // left closed on the reopen route; the caller decides what that means,
   // because the right answer differs between a clone-start re-rate and a
   // mid-clone change.
-  async _reopenPort(nextOptions, { preserveBuffer = false } = {}) {
+  async _reopenPort(
+    nextOptions: SerialOpenOptions,
+    { preserveBuffer = false }: { preserveBuffer?: boolean } = {},
+  ) {
     const port = this.port;
     if (!port) {
       throw new Error("No serial port is open to reconfigure");
@@ -674,7 +691,7 @@ export class SerialBridge {
   }
 
   // Close the lost port and tell the UI, which stops offering clone actions.
-  async _handleTransportDisconnect(payload) {
+  async _handleTransportDisconnect(payload: SerialDisconnectPayload) {
     if (!this.port || payload?.port !== this.port) {
       return;
     }
@@ -686,7 +703,7 @@ export class SerialBridge {
 
   // Deliver a loss to onPortLost; a broken sink must never take down the
   // serial path.
-  _reportPortLost(info) {
+  _reportPortLost(info: PortLostInfo) {
     try {
       this.onPortLost?.(info);
     } catch {
@@ -694,7 +711,7 @@ export class SerialBridge {
     }
   }
 
-  _debug(message) {
+  _debug(message: string) {
     try {
       this.onDebug?.(message);
     } catch {
@@ -743,10 +760,10 @@ export class SerialBridge {
     this._resolveReadWaiters(false);
   }
 
-  _waitForReadEvent(timeoutMs) {
+  _waitForReadEvent(timeoutMs: number): Promise<boolean> {
     return new Promise((resolve) => {
       const waiter = {
-        settle: (result) => {
+        settle: (result: boolean) => {
           if (!this.readWaiters.delete(waiter)) {
             return;
           }
@@ -759,7 +776,7 @@ export class SerialBridge {
     });
   }
 
-  _resolveReadWaiters(result) {
+  _resolveReadWaiters(result: boolean) {
     const waiters = Array.from(this.readWaiters);
     for (const waiter of waiters) {
       waiter.settle(result);
@@ -768,7 +785,7 @@ export class SerialBridge {
 
   // Name the port for the debug panel: its own displayName where it has one
   // (a Bluetooth profile, a tty path), otherwise its USB ids.
-  _describePort(port) {
+  _describePort(port: SerialTransport & { displayName?: string }): string {
     if (port.displayName) {
       return port.displayName;
     }
@@ -784,12 +801,12 @@ export class SerialBridge {
     return "Unknown (Web Serial API does not expose COM/tty path)";
   }
 
-  _getPortIdentity(port) {
-    const info = port?.getInfo?.() || {};
-    const usbVendorId = Number.isInteger(info.usbVendorId)
+  _getPortIdentity(port: SerialTransport | null): { usbVendorId: string | null; usbProductId: string | null } {
+    const info: { usbVendorId?: number; usbProductId?: number } = port?.getInfo?.() || {};
+    const usbVendorId = typeof info.usbVendorId === "number" && Number.isInteger(info.usbVendorId)
       ? `0x${info.usbVendorId.toString(16).padStart(4, "0").toUpperCase()}`
       : null;
-    const usbProductId = Number.isInteger(info.usbProductId)
+    const usbProductId = typeof info.usbProductId === "number" && Number.isInteger(info.usbProductId)
       ? `0x${info.usbProductId.toString(16).padStart(4, "0").toUpperCase()}`
       : null;
     return { usbVendorId, usbProductId };

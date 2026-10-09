@@ -107,7 +107,7 @@ export interface SerialTransport {
    */
   discardInput?: () => Promise<void>;
   /** Input lines, where readable. */
-  getSignals?: () => Promise<object>;
+  getSignals?: () => Promise<SerialInputSignals>;
 }
 
 /** One-shot loss reporting, as createDisconnectNotifier() builds it. */
@@ -127,7 +127,8 @@ export interface SerialTransportMember {
   name: string;
   /** What a passing value looks like, for the error. */
   expect: string;
-  check: (port: any) => boolean;
+  /** Given an object that claims to be a port, whatever it actually holds. */
+  check: (port: Partial<SerialTransport>) => boolean;
 }
 
 // The transport names a port may declare.
@@ -159,12 +160,14 @@ function isFunction(value: unknown): value is Function {
 // True for a capabilities object whose every field is one the bridge can act
 // on. A missing or misspelt field would otherwise read as undefined, which the
 // bridge would have to guess about -- the probing this contract replaces.
-function isCapabilities(value: any): value is SerialTransportCapabilities {
-  return Boolean(value)
-    && typeof value === "object"
-    && typeof value.framing === "boolean"
-    && typeof value.signals === "boolean"
-    && RECONFIGURE_MODES.includes(value.reconfigure);
+function isCapabilities(value: unknown): value is SerialTransportCapabilities {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const fields = value as Partial<Record<keyof SerialTransportCapabilities, unknown>>;
+  return typeof fields.framing === "boolean"
+    && typeof fields.signals === "boolean"
+    && RECONFIGURE_MODES.includes(fields.reconfigure as string);
 }
 
 // Every member the bridge relies on, each with the test it must pass. The
@@ -174,7 +177,7 @@ export const SERIAL_TRANSPORT_MEMBERS: readonly Readonly<SerialTransportMember>[
   Object.freeze({
     name: "transport",
     expect: `one of ${SERIAL_TRANSPORT_NAMES.join(", ")}`,
-    check: (port) => SERIAL_TRANSPORT_NAMES.includes(port.transport),
+    check: (port) => SERIAL_TRANSPORT_NAMES.includes(port.transport as string),
   }),
   Object.freeze({
     name: "capabilities",
@@ -194,7 +197,7 @@ export const SERIAL_TRANSPORT_MEMBERS: readonly Readonly<SerialTransportMember>[
     expect: "a method, since capabilities.reconfigure is \"update\"",
     check: (port) => port.capabilities?.reconfigure !== "update" || isFunction(port.reconfigure),
   }),
-]);
+] satisfies Readonly<SerialTransportMember>[]);
 
 // Throw naming every member the port is missing or has in the wrong shape,
 // all at once, the way web/js/ui/dom.ts reports missing elements: a port that

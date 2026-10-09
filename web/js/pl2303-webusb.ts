@@ -10,6 +10,7 @@
 // vendor writes use bmRequestType vendor|device (not class), and vendor reads
 // use bRequest 0x01 on non-HXN chips (0x81 is HXN-only).
 import { WebUsbTransport } from "./webusb-transport.ts";
+import type { WebUsbTransportOptions } from "./webusb-transport.ts";
 import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
 
 export const PROLIFIC_VENDOR_ID = 0x067b;
@@ -66,12 +67,12 @@ const SUPPORTED_BAUD_RATES = [
   921600, 1228800, 2457600, 3000000, 6000000,
 ];
 
-export function isProlificDevice(device) {
-  return Boolean(device) && Number(device.vendorId) === PROLIFIC_VENDOR_ID;
+export function isProlificDevice(device: Partial<USBDevice> | null | undefined): boolean {
+  return !!device && Number(device.vendorId) === PROLIFIC_VENDOR_ID;
 }
 
 // Nearest directly-supported baud rate (all common radio bauds are exact).
-export function pickPl2303BaudRate(baudRate) {
+export function pickPl2303BaudRate(baudRate: number): number {
   const baud = Number(baudRate);
   if (!Number.isFinite(baud) || baud <= 0) {
     throw new Error(`Invalid PL2303 baud rate: ${baudRate}`);
@@ -84,7 +85,14 @@ export function pickPl2303BaudRate(baudRate) {
 // Chip-generation detection ladder, following usb-serial-for-android's
 // ProlificSerialDriver.setDeviceType(). `hxStatus` is the result of probing
 // the legacy vendor-read register 0x8080 (HXN chips reject that request).
-export function detectPl2303Type({ deviceClass, maxPacketSize0, usbVersion, deviceVersion, hxStatus }) {
+export function detectPl2303Type({ deviceClass, maxPacketSize0, usbVersion, deviceVersion, hxStatus }: {
+  deviceClass?: number;
+  maxPacketSize0?: number;
+  usbVersion?: number;
+  deviceVersion?: number;
+  /** Whether the legacy vendor read of 0x8080 succeeded. */
+  hxStatus?: unknown;
+}): string {
   if (Number(deviceClass) === 0x02 || Number(maxPacketSize0) !== 64) {
     return PL2303_TYPE_01;
   }
@@ -118,7 +126,7 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
   // rather than reopening and reporting a success the wire does not have.
 
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
-  constructor(device, options = {}) {
+  constructor(device: USBDevice, options: WebUsbTransportOptions = {}) {
     super(device, options);
     this.readable = null;
     this.writable = null;
@@ -142,7 +150,7 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
     return this.chipType === PL2303_TYPE_HXN;
   }
 
-  async _vendorRead(value, index) {
+  async _vendorRead(value: number, index: number): Promise<USBInTransferResult> {
     const result = await this.device.controlTransferIn({
       requestType: "vendor",
       recipient: "device",
@@ -156,7 +164,7 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
     return result;
   }
 
-  async _vendorWrite(value, index) {
+  async _vendorWrite(value: number, index: number): Promise<void> {
     const result = await this.device.controlTransferOut({
       requestType: "vendor",
       recipient: "device",
@@ -169,7 +177,7 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
     }
   }
 
-  async _classInterfaceOut(request, value, data) {
+  async _classInterfaceOut(request: number, value: number, data?: BufferSource): Promise<void> {
     const result = await this.device.controlTransferOut({
       requestType: "class",
       recipient: "interface",
@@ -266,7 +274,7 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
   }
 
   // CDC-style line coding: LE32 baud, 1 stop bit, no parity, 8 data bits.
-  async _setLineCoding(baudRate) {
+  async _setLineCoding(baudRate: number): Promise<void> {
     // Read current coding first, as every known driver does before setting.
     await this.device.controlTransferIn({
       requestType: "class",

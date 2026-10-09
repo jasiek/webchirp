@@ -1,4 +1,5 @@
 import type { SerialBridge } from "./serial-bridge.ts";
+import type { SerialOpenOptions } from "./serial-transport.ts";
 
 // The serial_* functions CHIRP's Python imports from the js module, defined
 // once for the browser (web/js/runtime-rpc.ts) and the Node harness
@@ -56,9 +57,10 @@ function describeSignals(payload: SerialRpcPayload = {}) {
 }
 
 // Name the port options a reconfigure actually changed, for the debug panel.
-function describeOptions(options: Record<string, unknown> = {}, changed: string[] = []): string {
-  const keys = changed.length ? changed : Object.keys(options);
-  return keys.map((key) => `${key}=${options[key]}`).join(" ") || "no change";
+function describeOptions(options: Partial<SerialOpenOptions> = {}, changed: readonly string[] = []): string {
+  const values: Record<string, unknown> = { ...options };
+  const keys = changed.length ? changed : Object.keys(values);
+  return keys.map((key) => `${key}=${values[key]}`).join(" ") || "no change";
 }
 
 // Build the handler that answers serial ops from a bridge. logSerial receives
@@ -176,7 +178,7 @@ export function createSerialRpcHandler(
     return serialBridge.getPortInfo();
   }
 
-  const OP_HANDLERS = Object.freeze({
+  const OP_HANDLERS: Readonly<Record<string, (payload: SerialRpcPayload) => Promise<unknown>>> = Object.freeze({
     open: handleOpen,
     close: handleClose,
     writeHex: handleWriteHex,
@@ -281,9 +283,11 @@ export function installSerialBridgeGlobals<T extends object>(
   target: T,
   handleSerialRpc: SerialRpcHandler,
 ): T {
+  // The globals are defined by name, so the target is written as a record.
+  const globals = target as Record<string, unknown>;
   const ops: [string, SerialGlobalOp][] = Object.entries(SERIAL_GLOBAL_OPS);
   for (const [name, toMessage] of ops) {
-    target[name] = (...args) => {
+    globals[name] = (...args: unknown[]) => {
       const [op, payload] = toMessage(...args);
       return handleSerialRpc({ op, payload });
     };

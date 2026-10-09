@@ -16,6 +16,7 @@
 // provided event-insertion mode is off. This driver never turns event mode on
 // and clears any it inherited at open, so 0xEC is an ordinary data byte.
 import { WebUsbTransport } from "./webusb-transport.ts";
+import type { WebUsbTransportOptions } from "./webusb-transport.ts";
 import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
 
 // Silicon Labs' vendor id. The chooser filters on it vendor-wide, because ~150
@@ -135,7 +136,7 @@ const READ_PIPELINE_DEPTH = 16;
 // True when the device enumerates as USB CDC — checked across every
 // configuration, since the descriptors are readable before open() and a
 // composite part may not have the CDC pair in configuration 1.
-export function hasCdcInterface(device) {
+export function hasCdcInterface(device: Partial<USBDevice> | null | undefined): boolean {
   if (Number(device?.deviceClass) === USB_CLASS_CDC_CONTROL) {
     return true;
   }
@@ -156,7 +157,7 @@ export function hasCdcInterface(device) {
 
 // Why a device is not this driver's to drive, or "" when it is. Returning the
 // reason rather than a boolean keeps it usable in a diagnostic.
-export function cp2102RejectionReason(device) {
+export function cp2102RejectionReason(device: Partial<USBDevice> | null | undefined): string {
   if (!device || Number(device.vendorId) !== CP210X_VENDOR_ID) {
     return "not a Silicon Labs device";
   }
@@ -173,7 +174,7 @@ export function cp2102RejectionReason(device) {
   return "";
 }
 
-export function isCp2102Device(device) {
+export function isCp2102Device(device: Partial<USBDevice> | null | undefined): boolean {
   return cp2102RejectionReason(device) === "";
 }
 
@@ -189,14 +190,14 @@ const AN205_TABLE = [
   [500000, 567138], [576000, 670254], [921600, Number.MAX_SAFE_INTEGER],
 ];
 
-function an205Rate(baud) {
+function an205Rate(baud: number): number {
   const entry = AN205_TABLE.find(([, high]) => baud <= high);
   return entry ? entry[0] : AN205_TABLE[AN205_TABLE.length - 1][0];
 }
 
 // Parts from the CP2104 on derive the rate from a 48 MHz clock:
 //   div = round(48e6 / (2 x prescale x request)), actual = 48e6 / (2 x prescale x div)
-function actualRate(baud) {
+function actualRate(baud: number): number {
   const prescale = baud <= 365 ? 4 : 1;
   const base = 2 * prescale * baud;
   // The kernel's DIV_ROUND_CLOSEST, in integer arithmetic.
@@ -207,7 +208,10 @@ function actualRate(baud) {
 // Per-part line-speed limits, ported from cp210x_init_max_speed(). The CP2105
 // is the one part whose two interfaces differ: ECI on interface 0, the slower
 // SCI on interface 1.
-export function cp2102SpeedLimits(partNumber, interfaceNumber = 0) {
+export function cp2102SpeedLimits(
+  partNumber: number,
+  interfaceNumber = 0,
+): { minSpeed: number; maxSpeed: number; useActualRate: boolean } {
   switch (partNumber) {
     case CP210X_PARTNUM.CP2101:
       return { minSpeed: 300, maxSpeed: 921600, useActualRate: false };
@@ -235,7 +239,7 @@ export function cp2102SpeedLimits(partNumber, interfaceNumber = 0) {
 // it can generate anyway; doing it host-side means the number reported back is
 // the number on the wire, and it keeps a wild request from landing somewhere
 // undefined (AN205: results above 1053257 baud are not specified).
-export function cp2102QuantizeBaudRate(baudRate, {
+export function cp2102QuantizeBaudRate(baudRate: number, {
   partNumber = CP210X_PARTNUM.UNKNOWN,
   interfaceNumber = 0,
 } = {}) {
@@ -275,7 +279,7 @@ export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport
   // rather than reopening and reporting a success the wire does not have.
 
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
-  constructor(device, options = {}) {
+  constructor(device: USBDevice, options: WebUsbTransportOptions = {}) {
     super(device, options);
     this.readable = null;
     this.writable = null;
@@ -355,7 +359,7 @@ export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport
     }
   }
 
-  async _setBaudRate(baudRate) {
+  async _setBaudRate(baudRate: number): Promise<void> {
     const rate = cp2102QuantizeBaudRate(baudRate, {
       partNumber: this.partNumber,
       interfaceNumber: this._interfaceNumber,
@@ -378,11 +382,12 @@ export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport
   // driver has an opinion on survive; a chip that will not answer GET_FLOW gets
   // a block built from scratch instead.
   async _setFlowControl() {
-    let block;
+    let block: DataView<ArrayBuffer> | null;
     try {
       const current = await this._controlIn(REQ_GET_FLOW, FLOW_CTL_SIZE);
       block = current && current.byteLength >= FLOW_CTL_SIZE
-        ? new DataView(current.buffer.slice(
+        // A USB transfer's data is never a SharedArrayBuffer.
+        ? new DataView((current.buffer as ArrayBuffer).slice(
           current.byteOffset,
           current.byteOffset + FLOW_CTL_SIZE,
         ))
@@ -431,7 +436,7 @@ export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport
   // what setSignals() consults to skip a no-op write, so a shadow updated on a
   // request that failed would make the caller's identical retry a no-op against
   // hardware whose line never moved.
-  async _writeModemControl({ dtr, rts }) {
+  async _writeModemControl({ dtr, rts }: { dtr?: boolean; rts?: boolean }): Promise<void> {
     let control = 0;
     if (dtr !== undefined) {
       control |= CONTROL_WRITE_DTR;
@@ -480,7 +485,7 @@ export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport
     }
   }
 
-  async _initialize(baudRate) {
+  async _initialize(baudRate: number): Promise<void> {
     const configuration = await this._activeConfiguration("CP2102");
     const iface = configuration.interfaces[0];
     this._interfaceNumber = iface.interfaceNumber;

@@ -16,11 +16,11 @@ export const ISSUE_URL_LIMIT = 6000;
 
 const TAIL_TRIM_NOTE = "<report truncated - use Copy report for the full run>";
 
-function passTrimNote(count) {
+function passTrimNote(count: number): string {
   return `<${count} passing cases trimmed - use Copy report for the full run>`;
 }
 
-function isPassLine(line) {
+function isPassLine(line: string): boolean {
   return /^PASS\b/.test(line);
 }
 
@@ -29,7 +29,10 @@ function isPassLine(line) {
 // keeps every failure plus the header and the totals, which is what the report
 // is for. Only if that still overruns is the report cut at the end, and either
 // cut says so rather than passing for a complete run.
-export function fitLoopbackReport(report, { measure, limit }) {
+export function fitLoopbackReport(
+  report: string | null | undefined,
+  { measure, limit }: { measure: (text: string) => number; limit: number },
+): string {
   const lines = String(report ?? "").split("\n");
   if (measure(lines.join("\n")) <= limit) {
     return lines.join("\n");
@@ -58,7 +61,7 @@ export function fitLoopbackReport(report, { measure, limit }) {
 // and Android says "Linux" in its user agent — so a phone would report as a
 // Linux desktop. This page is the one people run on a phone, so it needs the
 // handset named.
-export function detectPlatform(userAgent) {
+export function detectPlatform(userAgent: string | null | undefined): string {
   const ua = String(userAgent || "");
   if (/\bAndroid\b/i.test(ua)) {
     return "Android";
@@ -81,7 +84,9 @@ export function detectPlatform(userAgent) {
   return "Other";
 }
 
-export function buildLoopbackIssueTitle({ adapter, summary }) {
+export function buildLoopbackIssueTitle(
+  { adapter, summary }: { adapter?: string | null; summary?: { failed?: number } | null },
+): string {
   const failed = Number(summary?.failed) || 0;
   const outcome = failed > 0
     ? `${failed} ${failed === 1 ? "case" : "cases"} failed`
@@ -98,8 +103,15 @@ export function buildLoopbackIssueUrl({
   version,
   userAgent = "",
   limit = ISSUE_URL_LIMIT,
-}) {
-  const buildUrl = (body) => {
+}: {
+  report: string;
+  adapter?: string | null;
+  summary?: { failed?: number } | null;
+  version?: string | null;
+  userAgent?: string;
+  limit?: number;
+}): string {
+  const buildUrl = (body: string) => {
     const params = new URLSearchParams({
       template: ISSUE_TEMPLATE_NAME,
       title: buildLoopbackIssueTitle({ adapter, summary }).slice(0, 240),

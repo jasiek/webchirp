@@ -1,4 +1,7 @@
 // BT-1AD UART protocol, verified in the companion ola-radio-reveng project.
+import type { BluetoothSerialDriver, BluetoothSerialProtocol } from "../webbluetooth-serial.ts";
+import type { SerialOpenOptions } from "../serial-transport.ts";
+
 const SERVICE = "0000ff00-0000-1000-8000-00805f9b34fb";
 const ADVERTISEMENT = "0000bf98-0000-1000-8000-00805f9b34fb";
 const TX = "0000ff02-0000-1000-8000-00805f9b34fb";
@@ -7,17 +10,22 @@ const BAUD = "0000ae10-0000-1000-8000-00805f9b34fb";
 
 // Keep device-specific framing, baud control and packet limits out of the
 // shared Web Bluetooth stream lifecycle in web/js/webbluetooth-serial.ts.
-class Bt1adProtocol {
+class Bt1adProtocol implements BluetoothSerialProtocol {
   name: string;
   supportsFraming: boolean;
   supportsSignals: boolean;
-  rx: any;
-  tx: any;
-  baud: any;
+  rx: BluetoothRemoteGATTCharacteristic;
+  tx: BluetoothRemoteGATTCharacteristic;
+  baud: BluetoothRemoteGATTCharacteristic;
   settleMs: number;
 
   // Retain discovered characteristics without changing the device during probing.
-  constructor(tx, rx, baud, { settleMs = 1000 } = {}) {
+  constructor(
+    tx: BluetoothRemoteGATTCharacteristic,
+    rx: BluetoothRemoteGATTCharacteristic,
+    baud: BluetoothRemoteGATTCharacteristic,
+    { settleMs = 1000 }: { settleMs?: number } = {},
+  ) {
     this.name = "BT-1AD";
     this.supportsFraming = false;
     // No DTR/RTS command is known for this adapter; see setSignals().
@@ -29,7 +37,7 @@ class Bt1adProtocol {
   }
 
   // Refuse unsupported UART settings before issuing a device command.
-  validateOptions(options) {
+  validateOptions(options: SerialOpenOptions): void {
     if (!Number.isInteger(options.baudRate) || options.baudRate <= 0
       || options.baudRate > 0xffffffff) {
       throw new Error("BT-1AD requires a positive 32-bit baud rate.");
@@ -42,7 +50,7 @@ class Bt1adProtocol {
   }
 
   // AE10 accepts LE32 baud with a response; retain Ola's one-second settle time.
-  async configure(options, previous) {
+  async configure(options: SerialOpenOptions, previous: SerialOpenOptions | null): Promise<void> {
     if (previous?.baudRate === options.baudRate) return;
     const value = new Uint8Array(4);
     new DataView(value.buffer).setUint32(0, options.baudRate, true);
@@ -51,25 +59,25 @@ class Bt1adProtocol {
   }
 
   // Twenty bytes fits the minimum ATT MTU, which Web Bluetooth cannot report.
-  async write(bytes) {
+  async write(bytes: Uint8Array): Promise<void> {
     for (let offset = 0; offset < bytes.length; offset += 20) {
       await this.tx.writeValueWithoutResponse(bytes.slice(offset, offset + 20));
     }
   }
 
   // No DTR/RTS command is known for this adapter.
-  async setSignals() {
+  async setSignals(): Promise<void> {
     throw new Error("BT-1AD does not support DTR/RTS control lines.");
   }
 }
 
-export const bt1adDriver = {
+export const bt1adDriver: BluetoothSerialDriver = {
   name: "BT-1AD",
   filters: [{ services: [ADVERTISEMENT] }],
   optionalServices: [SERVICE],
   // Match the complete UART profile, never the editable advertised device name.
   // Only missing attributes mean a mismatch; link/permission failures propagate.
-  async probe(server, options) {
+  async probe(server: BluetoothRemoteGATTServer, options?: { settleMs?: number }) {
     try {
       const service = await server.getPrimaryService(SERVICE);
       const tx = await service.getCharacteristic(TX);

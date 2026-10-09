@@ -21,19 +21,20 @@ export const PORT_SELECTION_CANCELLED = "PortSelectionCancelledError";
 export const SERIAL_UNSUPPORTED = "SerialUnsupportedError";
 
 // Name transport capability refusals without coupling reporting to UI wording.
-export function createSerialUnsupportedError(message) {
+export function createSerialUnsupportedError(message: string): Error {
   const error = new Error(message);
   error.name = SERIAL_UNSUPPORTED;
   return error;
 }
 
 // Recognize the bridge error, its runtime envelope and bootstrap traceback.
-export function isSerialUnsupported(error) {
+export function isSerialUnsupported(error: unknown): boolean {
   if (!error) return false;
   if (jsErrorName(error) === SERIAL_UNSUPPORTED) return true;
+  const fields = error as { message?: string; stack?: string };
   const text = typeof error === "string"
     ? error
-    : `${error.message || ""}\n${error.stack || ""}`;
+    : `${fields.message || ""}\n${fields.stack || ""}`;
   return /\bSerialUnsupportedError\b/.test(text);
 }
 
@@ -56,6 +57,6 @@ export function createPortSelectionCancelledError() {
 // the bridge, so the rejection becomes a JsException -- arrives as a
 // RuntimeCallError whose jsCause names the JS error underneath, which
 // jsErrorName (web/js/runtime-errors.ts) reads for either shape.
-export function isPortSelectionCancelled(error) {
+export function isPortSelectionCancelled(error: unknown): boolean {
   return jsErrorName(error) === PORT_SELECTION_CANCELLED;
 }

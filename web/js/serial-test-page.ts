@@ -9,11 +9,12 @@ import { buildLoopbackIssueUrl } from "./loopback-issue.ts";
 import { formatLoopbackReport, runLoopbackSuite } from "./loopback-suite.ts";
 import { createWebUsbSerial } from "./webusb-serial.ts";
 import type { SerialTransport } from "./serial-transport.ts";
+import type { LoopbackResult } from "./loopback-suite.ts";
 
 // Which driver a port object represents. Nothing in the build minifies, so the
 // constructor name is stable; the CDC polyfill and native Web Serial both call
 // theirs SerialPort, so the chosen transport disambiguates them.
-const DRIVER_LABELS = {
+const DRIVER_LABELS: Readonly<Record<string, string>> = {
   FtdiSerialPort: "FTDI (WebUSB driver)",
   Pl2303SerialPort: "Prolific PL2303 (WebUSB driver)",
   Ch340SerialPort: "WCH CH340/CH341 (WebUSB driver)",
@@ -83,7 +84,7 @@ let lastRun: { summary: Awaited<ReturnType<typeof runLoopbackSuite>>; adapter: s
 // checked against a fix, and the site updates under the tester's feet.
 let webchirpVersion = UNKNOWN_VERSION;
 
-function hex4(value) {
+function hex4(value: unknown): string {
   return `0x${Number(value).toString(16).padStart(4, "0")}`;
 }
 
@@ -95,7 +96,7 @@ function hasWebUsb() {
   return typeof navigator !== "undefined" && "usb" in navigator;
 }
 
-function setStatus(text) {
+function setStatus(text: string): void {
   dom.status.textContent = text;
   dom.status.hidden = !text;
 }
@@ -103,7 +104,7 @@ function setStatus(text) {
 // Lock the whole form for the duration of a run, not just the buttons: the run
 // reads its settings once at the start, so leaving the checkboxes live invites
 // a change that silently does not apply.
-function setControlsDisabled(disabled) {
+function setControlsDisabled(disabled: boolean): void {
   dom.run.disabled = disabled;
   dom.choose.disabled = disabled;
   dom.transport.disabled = disabled;
@@ -122,12 +123,14 @@ function selectedBaudRates() {
 
 // Name the driver actually in play — the whole point of the page is that you
 // can see which one your cable resolved to before trusting the result.
-export function describePort(port, transport) {
-  const driver = DRIVER_LABELS[port.constructor?.name]
+export function describePort(port: ChosenPort, transport: string): string {
+  const driver = DRIVER_LABELS[port.constructor?.name ?? ""]
     || (transport === "webusb" ? "USB CDC-ACM (web-serial-polyfill)" : "Native Web Serial (OS driver)");
   let ids = "";
   try {
-    const info = typeof port.getInfo === "function" ? port.getInfo() : {};
+    const info: { usbVendorId?: number; usbProductId?: number } = typeof port.getInfo === "function"
+      ? port.getInfo()
+      : {};
     if (info && info.usbVendorId !== undefined && info.usbVendorId !== null) {
       ids = ` — USB ${hex4(info.usbVendorId)}:${hex4(info.usbProductId)}`;
     }
@@ -137,7 +140,7 @@ export function describePort(port, transport) {
   return `${driver}${ids}`;
 }
 
-async function requestPort(transport) {
+async function requestPort(transport: string): Promise<{ port: ChosenPort; transport: string }> {
   if (transport === "webusb") {
     if (!hasWebUsb()) {
       throw new Error("This browser does not support WebUSB.");
@@ -161,7 +164,7 @@ async function requestPort(transport) {
   return { port: await createWebUsbSerial().requestPort(), transport: "webusb" };
 }
 
-function appendResultRow(result) {
+function appendResultRow(result: LoopbackResult): void {
   const row = document.createElement("tr");
   row.className = `loopback-row is-${result.status}`;
 
@@ -189,7 +192,10 @@ function appendResultRow(result) {
 // `settings` is snapshotted when the run starts, never re-read from the DOM:
 // a run takes tens of seconds, and a report pasted into an issue must describe
 // the run that happened rather than whatever the controls say afterwards.
-function buildReport(summary, settings) {
+function buildReport(
+  summary: Awaited<ReturnType<typeof runLoopbackSuite>>,
+  settings: { baudRates: number[]; controlLines: boolean },
+): string {
   return [
     `WebCHIRP: ${webchirpVersion}`,
     `Adapter: ${chosenDescription}`,
