@@ -312,6 +312,16 @@ declare global {
   }
 
   // ---------------------------------------------------------------------------
+  // navigator.standalone -- Safari on iOS/iPadOS only, true when the page was
+  // launched from the home screen; web/js/analytics.ts reads it because iOS
+  // never matches the display-mode media query.
+  // ---------------------------------------------------------------------------
+
+  interface Navigator {
+    standalone?: boolean;
+  }
+
+  // ---------------------------------------------------------------------------
   // WebAssembly JavaScript Promise Integration (JSPI) -- W3C WebAssembly CG
   // proposal, https://github.com/WebAssembly/js-promise-integration ; Chrome
   // 137+, Firefox 152+. Pyodide's run_sync needs it; web/app.ts feature-tests

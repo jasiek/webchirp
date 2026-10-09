@@ -4,7 +4,8 @@ import { normalizeSettingValue } from "./setting-values.ts";
 import { requireRuntimeApi } from "./state.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { SettingValueMeta } from "./setting-fields.ts";
-import type { SettingNode } from "../runtime-rpc.ts";
+import type { SettingIssue, SettingLeafNode, SettingNode } from "../runtime-rpc.ts";
+import type { RadioSessionHandle } from "./state.ts";
 
 /**
  * One value of one setting, flattened out of the settings tree: where it is
@@ -43,11 +44,12 @@ export function createSettingsPanel(ctx: UiContext) {
   const invalidKeys = new Set<string>();
   const invalidMessages = new Map<string, string>();
 
-  function cloneGroups(groups) {
+  // A deep copy, through JSON: the tree is plain data the runtime produced.
+  function cloneGroups(groups: readonly SettingNode[] | null | undefined): SettingNode[] {
     return JSON.parse(JSON.stringify(Array.isArray(groups) ? groups : []));
   }
 
-  function settingKey(path, valueIndex = 0) {
+  function settingKey(path: readonly unknown[] | null | undefined, valueIndex = 0): string {
     return `${(Array.isArray(path) ? path : []).join("/")}:${Number(valueIndex)}`;
   }
 
@@ -56,7 +58,7 @@ export function createSettingsPanel(ctx: UiContext) {
     invalidMessages.clear();
   }
 
-  function clearInvalidSetting(path, valueIndex = 0) {
+  function clearInvalidSetting(path: readonly unknown[], valueIndex = 0): void {
     const key = settingKey(path, valueIndex);
     invalidKeys.delete(key);
     invalidMessages.delete(key);
@@ -99,9 +101,9 @@ export function createSettingsPanel(ctx: UiContext) {
     actions.updateSerialActionState();
   }
 
-  function flattenSettingsFields(groups): FlatSettingField[] {
+  function flattenSettingsFields(groups: readonly SettingNode[] | null | undefined): FlatSettingField[] {
     const out: FlatSettingField[] = [];
-    function walk(node) {
+    function walk(node: SettingNode | null | undefined) {
       if (!node) {
         return;
       }
@@ -123,7 +125,7 @@ export function createSettingsPanel(ctx: UiContext) {
     return out;
   }
 
-  function setSettingValue(settingNode, valueIndex, rawValue) {
+  function setSettingValue(settingNode: SettingLeafNode, valueIndex: number, rawValue: unknown): void {
     const valueMeta = settingNode?.values?.[valueIndex];
     if (!valueMeta) {
       return;
@@ -141,11 +143,11 @@ export function createSettingsPanel(ctx: UiContext) {
     render();
   }
 
-  function findSettingsTabNode(tabId) {
+  function findSettingsTabNode(tabId: string): SettingNode | null {
     return settingsState.groups.find((group) => group.id === tabId) || null;
   }
 
-  function tabHasInvalidSettings(group) {
+  function tabHasInvalidSettings(group: SettingNode | null): boolean {
     if (!group) {
       return false;
     }
@@ -153,7 +155,7 @@ export function createSettingsPanel(ctx: UiContext) {
       invalidKeys.has(settingKey(field.path, field.valueIndex)));
   }
 
-  function renderSettingControl(settingNode, valueMeta, valueIndex) {
+  function renderSettingControl(settingNode: SettingLeafNode, valueMeta: SettingValueMeta, valueIndex: number): HTMLElement {
     const wrapper = document.createElement("div");
     wrapper.className = "settings-field-control";
     const key = settingKey(settingNode.path, valueIndex);
@@ -163,53 +165,56 @@ export function createSettingsPanel(ctx: UiContext) {
     wrapper.classList.toggle("is-immutable", immutable);
 
     const current = valueMeta.current;
-    let control;
+    let control: HTMLInputElement | HTMLSelectElement;
     if (valueMeta.type === "boolean") {
-      control = document.createElement("input");
-      control.type = "checkbox";
-      control.checked = Boolean(current);
-      control.disabled = immutable;
-      control.addEventListener("change", () => {
-        setSettingValue(settingNode, valueIndex, control.checked);
+      const checkbox = document.createElement("input");
+      control = checkbox;
+      checkbox.type = "checkbox";
+      checkbox.checked = Boolean(current);
+      checkbox.disabled = immutable;
+      checkbox.addEventListener("change", () => {
+        setSettingValue(settingNode, valueIndex, checkbox.checked);
       });
     } else if (valueMeta.type === "enum") {
-      control = document.createElement("select");
+      const select = document.createElement("select");
+      control = select;
       const options = Array.isArray(valueMeta.options) ? valueMeta.options : [];
       options.forEach((option) => {
         const optionEl = document.createElement("option");
         optionEl.value = String(option);
         optionEl.textContent = String(option);
-        control.appendChild(optionEl);
+        select.appendChild(optionEl);
       });
-      control.value = String(current ?? "");
-      control.disabled = immutable;
-      control.addEventListener("change", () => {
-        setSettingValue(settingNode, valueIndex, control.value);
+      select.value = String(current ?? "");
+      select.disabled = immutable;
+      select.addEventListener("change", () => {
+        setSettingValue(settingNode, valueIndex, select.value);
       });
     } else {
-      control = document.createElement("input");
-      control.type = valueMeta.type === "integer" || valueMeta.type === "float" ? "number" : "text";
+      const input = document.createElement("input");
+      control = input;
+      input.type = valueMeta.type === "integer" || valueMeta.type === "float" ? "number" : "text";
       if (valueMeta.type === "integer" || valueMeta.type === "float") {
         if (Number.isFinite(valueMeta.min)) {
-          control.min = String(valueMeta.min);
+          input.min = String(valueMeta.min);
         }
         if (Number.isFinite(valueMeta.max)) {
-          control.max = String(valueMeta.max);
+          input.max = String(valueMeta.max);
         }
         if (Number.isFinite(valueMeta.step)) {
-          control.step = String(valueMeta.step);
+          input.step = String(valueMeta.step);
         } else if (valueMeta.type === "float") {
-          control.step = "any";
+          input.step = "any";
         }
       }
       if (Number.isFinite(valueMeta.maxLength)) {
-        control.maxLength = Number(valueMeta.maxLength);
+        input.maxLength = Number(valueMeta.maxLength);
       }
-      control.value = current ?? "";
-      control.readOnly = immutable;
-      control.disabled = immutable;
-      control.addEventListener("change", () => {
-        setSettingValue(settingNode, valueIndex, control.value);
+      input.value = String(current ?? "");
+      input.readOnly = immutable;
+      input.disabled = immutable;
+      input.addEventListener("change", () => {
+        setSettingValue(settingNode, valueIndex, input.value);
       });
     }
 
@@ -230,7 +235,7 @@ export function createSettingsPanel(ctx: UiContext) {
     return wrapper;
   }
 
-  function renderSettingNode(parentEl, node) {
+  function renderSettingNode(parentEl: HTMLElement, node: SettingNode): void {
     if (node.kind === "group") {
       const section = document.createElement("section");
       section.className = node.path?.length > 1 ? "settings-subgroup" : "settings-group";
@@ -330,7 +335,7 @@ export function createSettingsPanel(ctx: UiContext) {
   // The settings state for a session's radio, or the empty state for none. A
   // runtime failure becomes an "unavailable" state rather than a throw, so a
   // driver whose settings cannot be built still loads its channel schema.
-  async function fetchForSession(session) {
+  async function fetchForSession(session: RadioSessionHandle | null): Promise<SettingsState> {
     if (!session) {
       return {
         supported: false,
@@ -340,7 +345,7 @@ export function createSettingsPanel(ctx: UiContext) {
         groups: [],
       };
     }
-    let nextState = {
+    let nextState: SettingsState = {
       supported: false,
       available: false,
       requiresImage: false,
@@ -364,10 +369,10 @@ export function createSettingsPanel(ctx: UiContext) {
     return nextState;
   }
 
-  function applyLoadedState(nextState, options: { preserveCurrent?: boolean } = {}) {
+  function applyLoadedState(nextState: SettingsState, options: { preserveCurrent?: boolean } = {}) {
     const preserveCurrent = Boolean(options.preserveCurrent);
     if (preserveCurrent && radioHasSettings() && nextState.supported) {
-      const currentByKey = new Map();
+      const currentByKey = new Map<string, unknown>();
       for (const field of flattenSettingsFields(settingsState.groups)) {
         currentByKey.set(settingKey(field.path, field.valueIndex), field.current);
       }
@@ -402,7 +407,7 @@ export function createSettingsPanel(ctx: UiContext) {
 
   // Record per-setting issues reported by the upload preflight so the affected
   // fields and their tabs render as invalid.
-  function applyValidationIssues(issues) {
+  function applyValidationIssues(issues: readonly SettingIssue[] | null | undefined): void {
     (issues || []).forEach((issue) => {
       const path = Array.isArray(issue?.path) ? issue.path : [];
       const valueIndex = Number(issue?.valueIndex || 0);
@@ -433,12 +438,12 @@ export function createSettingsPanel(ctx: UiContext) {
     getGroups: () => settingsState.groups,
     // Replace the settings tree, falling back to the current groups when the
     // runtime returns nothing (upload/export echo the settings back).
-    setGroups(groups) {
+    setGroups(groups: SettingNode[] | null | undefined) {
       settingsState.groups = cloneGroups(groups || settingsState.groups);
     },
     // Wholesale replacement after a download or image load, where the settings
     // come from the image rather than a driver probe.
-    replaceState(nextState) {
+    replaceState(nextState: SettingsState) {
       settingsState = nextState;
       activeTab = settingsState.groups[0]?.id || "";
     },

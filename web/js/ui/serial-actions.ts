@@ -22,6 +22,8 @@ import {
 } from "../serial-errors.ts";
 import { requireRuntimeApi } from "./state.ts";
 import type { UiContext } from "../types/ui-context.js";
+import type { CatalogRadio } from "../runtime-rpc.ts";
+import type { RadioSessionHandle } from "./state.ts";
 
 const LIVE_RADIO_TITLE = "Live-mode radios are not supported in this UI yet";
 const NO_RADIO_SELECTED_TITLE = "Search for and select a radio first";
@@ -40,7 +42,7 @@ const CLONE_UNSUPPORTED_MESSAGE =
 // Which flow and outcome each clone event stands for. Keyed by the GA event
 // name rather than derived from it, so "radio_download_success" is still one
 // grep away from every place it is reported.
-const CLONE_FLOW_OUTCOMES = Object.freeze({
+const CLONE_FLOW_OUTCOMES: Readonly<Record<string, { flow: string; outcome: string }>> = Object.freeze({
   radio_download_success: { flow: FLOWS.RADIO_DOWNLOAD, outcome: OUTCOMES.OK },
   radio_download_failure: { flow: FLOWS.RADIO_DOWNLOAD, outcome: OUTCOMES.FAILED },
   radio_upload_success: { flow: FLOWS.RADIO_UPLOAD, outcome: OUTCOMES.OK },
@@ -64,13 +66,13 @@ export function createSerialActions(ctx: UiContext) {
 
   // Wire the serial bridge's transport controls (capability + forced transport)
   // so the UI can offer explicit WebUSB and WebBluetooth connect paths.
-  function setSerialController(controller) {
+  function setSerialController(controller: NonNullable<typeof transportController> | null): void {
     transportController = controller || null;
     capability = controller?.capability || capability;
     updateSerialActionState();
   }
 
-  function setSerialButtonsBusy(busy) {
+  function setSerialButtonsBusy(busy: boolean): void {
     dom.serialConnectToggleEl.disabled = busy;
     dom.webusbConnectToggleEl.disabled = busy;
     dom.webbluetoothConnectToggleEl.disabled = busy;
@@ -78,12 +80,12 @@ export function createSerialActions(ctx: UiContext) {
 
   // Record whether a clone can run here at all; web/app.ts decides from the
   // WebAssembly feature check and web/js/ui.ts passes it through init().
-  function setCloneSupported(supported) {
+  function setCloneSupported(supported: boolean): void {
     cloneSupported = Boolean(supported);
   }
 
   // Connect using the requested transport ("auto", "webusb" or "webbluetooth").
-  async function connectSerial(preferredTransport) {
+  async function connectSerial(preferredTransport: string): Promise<void> {
     if (connected) {
       return;
     }
@@ -207,7 +209,7 @@ export function createSerialActions(ctx: UiContext) {
   // a different baud rate. The bridge has already torn the port down, so the
   // UI's job is to stop claiming there is a connection — otherwise
   // Download/Upload stay lit against a port that is gone.
-  function handlePortLost(deviceName, reason) {
+  function handlePortLost(deviceName: string | undefined, reason: string | undefined): void {
     if (!connected) {
       return;
     }
@@ -227,7 +229,7 @@ export function createSerialActions(ctx: UiContext) {
     updateSerialActionState();
   }
 
-  function setSidebarControlsEnabled(enabled) {
+  function setSidebarControlsEnabled(enabled: boolean): void {
     sidebarControlsEnabled = Boolean(enabled);
     for (const el of dom.sidebarControlEls) {
       el.disabled = !enabled;
@@ -245,7 +247,7 @@ export function createSerialActions(ctx: UiContext) {
   // WebKit. Missing WebAssembly stack switching is deliberately not an overlay
   // any more: it only stops a clone, and connectSerial() says so when one is
   // started.
-  function setBrowserUnsupportedOverlayVisible(visible, problems = { serial: true }) {
+  function setBrowserUnsupportedOverlayVisible(visible: boolean, problems: { serial?: boolean } = { serial: true }): void {
     const show = Boolean(visible);
     const iosShown = isIosPlatform();
     const serialShown = !iosShown && Boolean(problems.serial);
@@ -259,7 +261,7 @@ export function createSerialActions(ctx: UiContext) {
     dom.appShellEl.classList.toggle("browser-unsupported", show);
   }
 
-  function setLiveRadioSupportWarningVisible(visible) {
+  function setLiveRadioSupportWarningVisible(visible: boolean): void {
     dom.liveRadioSupportWarningEl.hidden = !visible;
   }
 
@@ -280,7 +282,7 @@ export function createSerialActions(ctx: UiContext) {
 
   // Show the clone progress bar in its indeterminate state until the driver's
   // first status report arrives with real block counts.
-  function beginCloneProgress(label) {
+  function beginCloneProgress(label: string): void {
     dom.cloneProgressLabelEl.textContent = String(label || "Working...");
     dom.cloneProgressPercentEl.textContent = "";
     dom.cloneProgressBarEl.removeAttribute?.("value");
@@ -289,7 +291,7 @@ export function createSerialActions(ctx: UiContext) {
 
   // CHIRP drivers report status once per transferred block (cur/max may be -1
   // when a driver reports no counts; the bar then stays indeterminate).
-  function updateCloneProgress(cur, max, msg) {
+  function updateCloneProgress(cur: number, max: number, msg: string): void {
     dom.cloneProgressEl.hidden = false;
     if (msg) {
       dom.cloneProgressLabelEl.textContent = msg;
@@ -394,7 +396,7 @@ export function createSerialActions(ctx: UiContext) {
       : "";
   }
 
-  function trackRadioEvent(eventName, radio, params = {}) {
+  function trackRadioEvent(eventName: string, radio: CatalogRadio | null, params: Record<string, unknown> = {}): void {
     if (!radio) {
       return;
     }
@@ -409,7 +411,12 @@ export function createSerialActions(ctx: UiContext) {
   // days, from a property someone has to go and read; the metric answers it as
   // a rate a dashboard can watch and an alert can fire on, which is what a
   // driver that breaks in a new browser release needs.
-  function trackCloneOutcome(eventName, radio, startedAt, params = {}) {
+  function trackCloneOutcome(
+    eventName: string,
+    radio: CatalogRadio | null,
+    startedAt: number,
+    params: Record<string, unknown> = {},
+  ): void {
     const durationMs = Date.now() - startedAt;
     trackRadioEvent(eventName, radio, {
       duration_ms: durationMs,
@@ -427,7 +434,7 @@ export function createSerialActions(ctx: UiContext) {
     );
   }
 
-  function cloneFailureParams(error, stage) {
+  function cloneFailureParams(error: unknown, stage: string) {
     return {
       stage,
       error_kind: classifyErrorKind(error),
@@ -490,7 +497,7 @@ export function createSerialActions(ctx: UiContext) {
   // on the schema it already had -- neither is a reason to report the
   // transfer that just succeeded as a failure, so both only reach the debug
   // panel.
-  async function refreshMetadataForDownloadedRadio(session) {
+  async function refreshMetadataForDownloadedRadio(session: RadioSessionHandle | null): Promise<void> {
     if (!ctx.session.isCurrent(session)) {
       return;
     }

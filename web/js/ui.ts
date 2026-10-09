@@ -134,7 +134,7 @@ export function createUiController() {
     return state.currentEditorView === "settings" ? "radio settings" : "channels";
   }
 
-  function setEditorView(nextView) {
+  function setEditorView(nextView: string) {
     state.currentEditorView = nextView === "settings" ? "settings" : "channels";
     const channelsActive = state.currentEditorView === "channels";
     dom.channelEditorEl.classList.toggle("is-active", channelsActive);
@@ -251,7 +251,7 @@ export function createUiController() {
   // missing JSPI means the blocking clone loops cannot wait on one. Neither
   // touches driver imports, which read the mounted CHIRP archive, so init
   // completes either way and the clone actions carry the explanation.
-  async function init(serialSupported, jspiSupported = true) {
+  async function init(serialSupported: boolean, jspiSupported = true) {
     // Covers the whole cold start the user waits through — including the
     // Pyodide boot the metadata and settings loads below trigger — so this is
     // the number that decides whether people wait or leave.
@@ -354,7 +354,7 @@ export function createUiController() {
     // instead of through reportActionError because there is no action to name:
     // the runtime took whatever was in flight down with it, and the message is
     // all that survives.
-    onRuntimeCrash(message) {
+    onRuntimeCrash(message: string) {
       log.logError(`RUNTIME CRASH ${message}`);
       captureError(message, { action: "Runtime", tags: { error_kind: "runtime_crash" } });
       recordFlow(FLOWS.RUNTIME, OUTCOMES.CRASHED, { error_kind: "runtime_crash" });

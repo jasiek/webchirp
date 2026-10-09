@@ -6,7 +6,7 @@ const buttons = [...document.querySelectorAll("[data-licensing-language]") as No
 const panels = [...document.querySelectorAll("[data-licensing-panel]") as NodeListOf<HTMLElement>];
 
 // Keep the visible panel, button state, document language, and title together.
-function showLanguage(language) {
+function showLanguage(language: string | undefined): void {
   const selected = panels.find((panel) => panel.dataset.licensingPanel === language);
   if (!selected) return;
   for (const panel of panels) panel.hidden = panel !== selected;

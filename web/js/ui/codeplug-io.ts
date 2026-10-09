@@ -28,7 +28,7 @@ export const DROPPABLE_FILE_DESCRIPTION = "a CHIRP CSV (.csv) or binary codeplug
 // browsers report .img files inconsistently (empty type on some platforms,
 // application/octet-stream on others) and report CSV as anything from
 // text/csv to application/vnd.ms-excel depending on what is installed.
-export function classifyLoadableFile(fileName) {
+export function classifyLoadableFile(fileName: string | null | undefined): string | null {
   const extension = String(fileName || "").toLowerCase().match(/\.[^.\\/]+$/)?.[0];
   if (!extension) {
     return null;
@@ -54,7 +54,7 @@ export function createCodeplugIo(ctx: UiContext) {
   // the user did with the replace-or-merge prompt are the parts that say
   // anything about the feature. "cancelled" is a mode of its own because an
   // abandoned import is the interesting outcome of that prompt.
-  function trackCodeplugImport(format, source, mode) {
+  function trackCodeplugImport(format: string, source: string, mode: string): void {
     trackEvent("codeplug_import", {
       ...radioEventParams(state.selectedRadio),
       ...codeplugParams(state),
@@ -101,7 +101,7 @@ export function createCodeplugIo(ctx: UiContext) {
   }
 
   // Parse CSV through Python runtime and refresh table rows and status text.
-  async function parseCsvViaRuntime(csvText) {
+  async function parseCsvViaRuntime(csvText: string) {
     log.setStatus("Parsing CSV with CHIRP Python...");
     return requireRuntimeApi(state).parseCsv({ csvText });
   }
@@ -176,7 +176,7 @@ export function createCodeplugIo(ctx: UiContext) {
 
   // Load a CSV file into the editor, asking first when doing so would discard
   // channels the user already has. Shared by the Load button and drops.
-  async function importCsvFile(file, source = "button") {
+  async function importCsvFile(file: File, source = "button"): Promise<void> {
     const parsed = await parseCsvViaRuntime(await file.text());
     let mode: "replace" | "merge" = "replace";
     if (ctx.table.hasRealChannels()) {
@@ -197,7 +197,7 @@ export function createCodeplugIo(ctx: UiContext) {
   }
 
   // Trigger client-side download of generated text content as a file.
-  function downloadText(filename, text) {
+  function downloadText(filename: string, text: string): void {
     const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -207,7 +207,7 @@ export function createCodeplugIo(ctx: UiContext) {
     URL.revokeObjectURL(url);
   }
 
-  function downloadBytes(filename, bytes) {
+  function downloadBytes(filename: string, bytes: Uint8Array<ArrayBuffer>): void {
     const blob = new Blob([bytes], { type: "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -268,7 +268,7 @@ export function createCodeplugIo(ctx: UiContext) {
     log.setStatus(`Exported ${fileName}`);
   }
 
-  async function importBinaryCodeplug(file, source = "button") {
+  async function importBinaryCodeplug(file: File, source = "button"): Promise<void> {
     const raw = new Uint8Array(await file.arrayBuffer());
     const imageBase64 = bytesToBase64(raw);
     log.setStatus("Loading CHIRP binary codeplug...");
@@ -343,7 +343,11 @@ export function createCodeplugIo(ctx: UiContext) {
   // prompt is open would overwrite the pending choice and strand the first
   // one's promise forever, and two loads racing to replace the channel list
   // would leave the editor showing whichever finished last.
-  async function runFileLoad(label, work, { format = "unknown", source = "button" } = {}) {
+  async function runFileLoad(
+    label: string,
+    work: () => Promise<unknown>,
+    { format = "unknown", source = "button" }: { format?: string; source?: string } = {},
+  ): Promise<void> {
     if (fileLoadInFlight) {
       log.setStatus("A file is already loading; wait for it to finish.");
       return;
@@ -378,7 +382,7 @@ export function createCodeplugIo(ctx: UiContext) {
   }
 
   // Route a picked or dropped file to the CSV or binary loader by extension.
-  async function loadCodeplugFile(file, source = "button") {
+  async function loadCodeplugFile(file: File, source = "button"): Promise<void> {
     const kind = classifyLoadableFile(file.name);
     if (!kind) {
       log.setStatus(`Cannot load ${file.name}: choose ${DROPPABLE_FILE_DESCRIPTION}.`);
@@ -393,7 +397,7 @@ export function createCodeplugIo(ctx: UiContext) {
   }
 
   // Keep the export menu's visible state and expanded label in sync.
-  function setExportMenuOpen(open) {
+  function setExportMenuOpen(open: boolean): void {
     dom.exportMenuEl.hidden = !open;
     dom.exportMenuToggleEl.setAttribute("aria-expanded", String(open));
   }
@@ -410,16 +414,16 @@ export function createCodeplugIo(ctx: UiContext) {
 
   // Only file drags are ours to handle; text dragged within the page (between
   // channel cells, say) must keep its native behaviour.
-  function dragCarriesFiles(event) {
+  function dragCarriesFiles(event: DragEvent): boolean {
     const types = event.dataTransfer?.types;
     return types ? Array.from(types).includes("Files") : false;
   }
 
-  function setDropOverlayVisible(visible) {
+  function setDropOverlayVisible(visible: boolean): void {
     dom.dropOverlayEl.classList.toggle("hidden", !visible);
   }
 
-  async function handleFileDrop(event) {
+  async function handleFileDrop(event: DragEvent): Promise<void> {
     if (!dragCarriesFiles(event)) {
       return;
     }

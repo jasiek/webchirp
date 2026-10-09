@@ -53,7 +53,7 @@ function forgetInstallPrompt() {
 // browsers and known to throw where site data is blocked, and neither is worth
 // failing over: without it the button is merely window-local again, which is
 // where it started.
-function openInstallChannel(win) {
+function openInstallChannel(win: (Window & typeof globalThis) | null | undefined): void {
   if (installChannel) {
     try {
       installChannel.close();
@@ -106,7 +106,7 @@ export function isInstallAvailable() {
 // not called on subscription: a subscriber that binds after the event has
 // already fired reads isInstallAvailable() once itself, which keeps this free
 // of assumptions about when it is called.
-export function onInstallAvailabilityChange(listener) {
+export function onInstallAvailabilityChange(listener: (available: boolean) => void): () => void {
   if (typeof listener !== "function") {
     return () => {};
   }

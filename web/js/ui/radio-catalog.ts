@@ -3,7 +3,12 @@ import { makeModelLabel } from "./format.ts";
 import { radioEventParams, trackEvent } from "./analytics.ts";
 import { DEFAULT_DRIVER_SET, QUANSHENG_UNOFFICIAL_DRIVER_SET } from "../python-sources.ts";
 import type { UiContext } from "../types/ui-context.js";
-import type { CatalogRadio } from "../runtime-rpc.ts";
+import type { CatalogRadio, LoadedImage } from "../runtime-rpc.ts";
+import type { RadioMetadata } from "./channel-values.ts";
+import type { RadioSessionHandle } from "./state.ts";
+
+/** Another name a catalog radio is sold under. */
+type RadioAlias = NonNullable<CatalogRadio["aliases"]>[number];
 
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
@@ -26,11 +31,11 @@ export function createRadioCatalog(ctx: UiContext) {
   // cold start does not claim the user simply has not chosen a radio yet.
   let catalogStatusText = "";
 
-  function setCookie(name, value, maxAgeSeconds = 31536000) {
+  function setCookie(name: string, value: string, maxAgeSeconds = 31536000): void {
     document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
   }
 
-  function getCookie(name) {
+  function getCookie(name: string): string {
     const prefix = `${name}=`;
     const parts = String(document.cookie || "").split(";").map((v) => v.trim());
     for (const part of parts) {
@@ -81,7 +86,7 @@ export function createRadioCatalog(ctx: UiContext) {
   }
 
   // Report which radio a user landed on and how they got there.
-  function trackRadioSelected(radio, method) {
+  function trackRadioSelected(radio: CatalogRadio | null, method: string): void {
     if (!radio) {
       return;
     }
@@ -95,28 +100,28 @@ export function createRadioCatalog(ctx: UiContext) {
   // ALIASES). Searching these is what replaces browsing a make dropdown: a
   // Retevis RT5R owner has no other way to discover it is a Baofeng UV-5R
   // driver, because the catalog lists the entry under Baofeng only.
-  function radioAliasIdentities(radio) {
+  function radioAliasIdentities(radio: CatalogRadio): RadioAlias[] {
     return (radio.aliases || []).filter(
       (alias) => alias.vendor !== radio.vendor || alias.model !== radio.model,
     );
   }
 
-  function aliasLabel(alias) {
+  function aliasLabel(alias: RadioAlias): string {
     return `${alias.vendor} ${alias.model}${alias.variant ? ` ${alias.variant}` : ""}`;
   }
 
   // The radio's own searchable text, without its aliases.
-  function primaryHaystack(radio) {
+  function primaryHaystack(radio: CatalogRadio): string {
     return `${makeModelLabel(radio)} ${radio.className}`.toLowerCase();
   }
 
-  function matchesAllTokens(haystack, tokens) {
+  function matchesAllTokens(haystack: string, tokens: readonly string[]): boolean {
     return tokens.every((token) => haystack.includes(token));
   }
 
   // Match a radio against a search query; every whitespace-separated token must
   // appear somewhere in its own or an alias identity's text (case-insensitive).
-  function radioMatchesFilter(radio, tokens) {
+  function radioMatchesFilter(radio: CatalogRadio, tokens: readonly string[]): boolean {
     if (tokens.length === 0) {
       return true;
     }
@@ -132,7 +137,7 @@ export function createRadioCatalog(ctx: UiContext) {
   // The alias that explains why a radio matched, or null when its own
   // vendor/model already covers the query. Used to label the suggestion, so a
   // search for "retevis" does not return a list of unexplained Baofengs.
-  function matchedAlias(radio, tokens) {
+  function matchedAlias(radio: CatalogRadio, tokens: readonly string[]): RadioAlias | null {
     const primary = primaryHaystack(radio);
     if (tokens.length === 0 || matchesAllTokens(primary, tokens)) {
       return null;
@@ -145,7 +150,7 @@ export function createRadioCatalog(ctx: UiContext) {
   }
 
   // Catalog entries matching a free-text search query.
-  function matchingRadios(query) {
+  function matchingRadios(query: string): CatalogRadio[] {
     const tokens = searchTokens(query);
     if (tokens.length === 0) {
       return [];
@@ -153,14 +158,14 @@ export function createRadioCatalog(ctx: UiContext) {
     return state.radioCatalog.filter((radio) => radioMatchesFilter(radio, tokens));
   }
 
-  function searchTokens(query) {
+  function searchTokens(query: string): string[] {
     return String(query || "").toLowerCase().split(/\s+/).filter(Boolean);
   }
 
   // Whether another catalog entry wears the same "<Make> <Model>" text. When
   // one does, the name alone cannot say which driver Connect / Load / Save will
   // act on, so the class is the only thing that can.
-  function hasAmbiguousLabel(radio) {
+  function hasAmbiguousLabel(radio: CatalogRadio): boolean {
     const label = makeModelLabel(radio);
     return state.radioCatalog.some(
       (other) => other.key !== radio.key && makeModelLabel(other) === label,
@@ -170,14 +175,19 @@ export function createRadioCatalog(ctx: UiContext) {
   // How a radio is named anywhere in this module — the suggestion rows and the
   // persistent readout share it, so the two cannot disagree about which entry
   // a name refers to.
-  function radioLabel(radio, isAmbiguous) {
+  function radioLabel(radio: CatalogRadio, isAmbiguous: boolean): string {
     const label = makeModelLabel(radio);
     return isAmbiguous ? `${label} (${radio.className})` : label;
   }
 
   // Fill one suggestion row. The name and the alias note are separate elements
   // so the narrow sidebar can stack them instead of ellipsising the name away.
-  function fillRadioSearchOption(li, radio, hasDuplicateLabel, alias) {
+  function fillRadioSearchOption(
+    li: HTMLLIElement,
+    radio: CatalogRadio,
+    hasDuplicateLabel: boolean,
+    alias: RadioAlias | null,
+  ): void {
     const nameEl = document.createElement("span");
     nameEl.className = "radio-search-name";
     nameEl.textContent = radioLabel(radio, hasDuplicateLabel);
@@ -214,7 +224,7 @@ export function createRadioCatalog(ctx: UiContext) {
   // Save disabled behind a populated readout. The runtime session moves with
   // the selection: opened here for the radio, or adopted when an image load
   // already opened one for the driver it named.
-  function commitSelectedRadio(radio, adoptedSessionId = "") {
+  function commitSelectedRadio(radio: CatalogRadio, adoptedSessionId = ""): void {
     clearRadioFilter();
     state.selectedRadio = radio;
     ctx.session.open(radio, adoptedSessionId);
@@ -303,7 +313,7 @@ export function createRadioCatalog(ctx: UiContext) {
   }
 
   // Move the keyboard highlight in the suggestion list by delta and keep it in view.
-  function moveRadioSearchActive(delta) {
+  function moveRadioSearchActive(delta: number): void {
     if (searchMatches.length === 0) {
       return;
     }
@@ -319,7 +329,7 @@ export function createRadioCatalog(ctx: UiContext) {
   }
 
   // Apply a suggestion: name it in the readout and load the radio.
-  function applyRadioSearchSelection(radio) {
+  function applyRadioSearchSelection(radio: CatalogRadio | null | undefined): void {
     if (!radio) {
       return;
     }
@@ -384,7 +394,7 @@ export function createRadioCatalog(ctx: UiContext) {
 
   // Say why no radio is named yet while the catalog is unavailable ("Loading…",
   // "Unavailable"), instead of the readout's ordinary empty text.
-  function setRadioSelectPlaceholder(label) {
+  function setRadioSelectPlaceholder(label: string): void {
     catalogStatusText = String(label || "");
     renderSelectedRadio();
   }
@@ -408,7 +418,7 @@ export function createRadioCatalog(ctx: UiContext) {
   // Select the catalog entry for a driver without going through the search box
   // (used when a loaded image identifies its own driver, in which case the
   // session the load opened for that driver is adopted along with it).
-  function selectRadioByDriver(moduleName, className, adoptedSessionId = "") {
+  function selectRadioByDriver(moduleName: string, className: string, adoptedSessionId = ""): boolean {
     const target = state.radioCatalog.find(
       (r) => r.module === moduleName && r.className === className,
     );
@@ -448,7 +458,9 @@ export function createRadioCatalog(ctx: UiContext) {
 
   // Select the radio a loaded image identified, adopting the session the load
   // opened for it so the image it holds is the one the editor works on.
-  function selectRadioByDetectedImage(loaded) {
+  function selectRadioByDetectedImage(
+    loaded: Pick<LoadedImage, "sessionId" | "module" | "className" | "vendor" | "model">,
+  ) {
     const sessionId = String(loaded.sessionId || "");
     if (selectRadioByDriver(loaded.module, loaded.className, sessionId)) {
       trackRadioSelected(state.selectedRadio, "image");
@@ -472,7 +484,7 @@ export function createRadioCatalog(ctx: UiContext) {
   }
 
   // The column schema for a session's radio, or the empty schema for none.
-  async function fetchRadioMetadata(session) {
+  async function fetchRadioMetadata(session: RadioSessionHandle | null): Promise<RadioMetadata> {
     if (!session) {
       return { headers: [], columns: {} };
     }
@@ -481,7 +493,7 @@ export function createRadioCatalog(ctx: UiContext) {
     return metadata || { headers: [], columns: {} };
   }
 
-  function applyRadioMetadata(metadata) {
+  function applyRadioMetadata(metadata: RadioMetadata): void {
     state.radioMetadata = metadata;
     state.currentHeaders = state.radioMetadata.headers?.length
       ? state.radioMetadata.headers

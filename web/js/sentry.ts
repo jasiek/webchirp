@@ -19,11 +19,19 @@
 
 import { isPythonError, isRuntimeCallError } from "./runtime-errors.ts";
 import { isSerialUnsupported } from "./serial-errors.ts";
+import type { BrowserOptions } from "@sentry/browser";
 
 // The SDK's namespace as the CDN's +esm build exports it, typed from the npm
 // package package.json pins to the same version (tests/channels/sentry.mjs
 // keeps the two in step). Type-only: nothing here imports the package.
 export type SentrySdk = typeof import("@sentry/browser");
+
+// The SDK's own shapes for what its hooks are handed, from the npm package the
+// CDN build is the same version of (type-only: nothing is imported at runtime).
+type SentryEvent = Parameters<NonNullable<BrowserOptions["beforeSend"]>>[0];
+type SentryBreadcrumb = Parameters<NonNullable<BrowserOptions["beforeBreadcrumb"]>>[0];
+type SentryMetrics = NonNullable<SentrySdk["metrics"]>;
+type MetricOptions = Parameters<SentryMetrics["count"]>[2];
 export type CaptureContext = {action?: string, tags?: Record<string, unknown>};
 export interface MetricRecord {
   type: "count" | "distribution";
@@ -126,7 +134,7 @@ export const IGNORED_CHIRP_ERRORS = Object.freeze([
 // error_type and the driver out through beforeSendMetric -- so "what share of
 // clones fail on this model" stays a question a dashboard can answer even for
 // the classes filtered here. The debug panel still prints the whole traceback.
-export function isIgnoredError(error) {
+export function isIgnoredError(error: unknown): boolean {
   if (isSerialUnsupported(error) || isPythonError(error, "RuntimePreconditionError")) {
     return true;
   }
@@ -183,16 +191,19 @@ const SCRUB_RULES: ReadonlyArray<[RegExp, string | ((match: string, ...groups: s
 // Apply every redaction rule to one string. Exported so the rules can be tested
 // directly -- they are the part of this module that has to be right, and a
 // rule that silently stops matching is invisible in the Sentry UI.
-export function scrubText(value) {
+export function scrubText(value: string): string;
+export function scrubText<T>(value: T): T;
+export function scrubText(value: unknown): unknown {
   if (typeof value !== "string" || value === "") {
     return value;
   }
   let out = value;
   for (const [pattern, replacement] of SCRUB_RULES) {
-    // Each rule's replacement is a string or a replacer function, both of
-    // which replace() takes; lib.es5 declares the two as separate overloads
-    // and TS picks neither for their union.
-    out = out.replace(pattern, replacement as any);
+    // replace() is declared once for a string and once for a replacer
+    // function, and picks neither for their union, so each is named.
+    out = typeof replacement === "string"
+      ? out.replace(pattern, replacement)
+      : out.replace(pattern, replacement);
   }
   return out;
 }
@@ -252,8 +263,10 @@ const SDK_ATTRIBUTE_PREFIX = "sentry.";
 // Drop every attribute not on the list above, then scrub the strings that
 // remain. The scrub is defence in depth rather than the control: an allowed key
 // whose value was built from a caught error could still carry a frequency.
-export function scrubMetricAttributes(attributes) {
-  const out = {};
+export function scrubMetricAttributes(
+  attributes: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(attributes || {})) {
     if (value === undefined || value === null || value === "") {
       continue;
@@ -280,7 +293,7 @@ export function scrubMetricAttributes(attributes) {
 // merged whatever scope a capture is given. The app's guarantee rests on never
 // setting one: it reaches the SDK only through this module, and
 // tests/channels/sentry.mjs fails if a setAttribute call appears in it.
-export function scrubMetric(metric) {
+export function scrubMetric<T extends { attributes?: Record<string, unknown> } | null | undefined>(metric: T): T {
   if (!metric || typeof metric !== "object") {
     return metric;
   }
@@ -290,7 +303,7 @@ export function scrubMetric(metric) {
 
 // Redact a breadcrumb in place. Breadcrumb data carries fetch URLs, so it needs
 // the same treatment as a message body.
-function scrubBreadcrumb(crumb) {
+function scrubBreadcrumb(crumb: SentryBreadcrumb): SentryBreadcrumb {
   if (!crumb || typeof crumb !== "object") {
     return crumb;
   }
@@ -310,7 +323,7 @@ function scrubBreadcrumb(crumb) {
 // Redact every free-form string on an outgoing event. Exception *types* are
 // left alone: "RadioError" is a class name from CHIRP, not user data, and it is
 // what makes an unrecognised failure legible.
-export function scrubEvent(event) {
+export function scrubEvent(event: SentryEvent): SentryEvent {
   if (!event || typeof event !== "object") {
     return event;
   }
@@ -346,7 +359,7 @@ export function scrubEvent(event) {
 // frames that say where CHIRP broke are only in the traceback, which used to
 // ride in the exception value and now rides here instead; scrubEvent redacts
 // it like any other free-form text.
-function attachPythonContext(event, error) {
+function attachPythonContext(event: SentryEvent, error: unknown): void {
   if (!isRuntimeCallError(error)) {
     return;
   }
@@ -381,9 +394,9 @@ const MAX_PENDING = 10;
 // have to reach into application state. Replaced wholesale by
 // setContextProvider(); called on each event so it always reflects the radio
 // selected at the time of the failure rather than at page load.
-let contextProvider = () => ({});
+let contextProvider: () => Record<string, unknown> = () => ({});
 
-export function setContextProvider(provider) {
+export function setContextProvider(provider: (() => Record<string, unknown>) | null | undefined): void {
   contextProvider = typeof provider === "function" ? provider : () => ({});
 }
 
@@ -400,7 +413,7 @@ function safeContext() {
 // Whether this copy of the app is the one allowed to report. Reads the live
 // location every time rather than caching, so a test can drive the module
 // against a fake window.
-export function isSentryHost(win) {
+export function isSentryHost(win: { location?: { hostname?: string } } | null | undefined): boolean {
   return SENTRY_HOSTS.includes(String(win?.location?.hostname || ""));
 }
 
@@ -421,7 +434,7 @@ function stringTags(source: Record<string, unknown> | null | undefined): Record<
 // that produced it. Comes from the same version.json the footer widget reads,
 // rather than being baked in here, because that file is regenerated on every
 // build while this one is not.
-async function resolveRelease(win) {
+async function resolveRelease(win: Pick<Window, "fetch">): Promise<string | undefined> {
   try {
     const response = await win.fetch("./version.json", { cache: "no-cache" });
     if (!response?.ok) {
@@ -481,7 +494,12 @@ export function captureError(error: unknown, context: CaptureContext = {}): bool
 // Counters answer "how often", distributions answer "how long". Gauges are
 // deliberately absent: a gauge samples a level over time, and a page that lives
 // for one clone session has no level worth sampling.
-const METRIC_EMITTERS = Object.freeze({
+const METRIC_EMITTERS: Readonly<Record<MetricRecord["type"], (
+  metrics: SentryMetrics,
+  name: string,
+  value: number,
+  options: MetricOptions,
+) => void>> = Object.freeze({
   count: (metrics, name, value, options) => metrics.count(name, value, options),
   distribution: (metrics, name, value, options) => metrics.distribution(name, value, options),
 });
@@ -542,11 +560,11 @@ export function captureMetric(name: string, metric: Partial<MetricRecord> = {}):
 // Catch unhandled failures raised before the SDK is ready, and replay them once
 // it is. These listeners are removed the moment the SDK's own global handlers
 // take over, so nothing is reported twice.
-function bufferEarlyErrors(win) {
-  const onError = (event) => {
+function bufferEarlyErrors(win: Window): () => void {
+  const onError = (event: ErrorEvent) => {
     captureError(event?.error || event?.message || "Unknown error");
   };
-  const onRejection = (event) => {
+  const onRejection = (event: PromiseRejectionEvent) => {
     captureError(event?.reason ?? "Unhandled promise rejection");
   };
   win.addEventListener("error", onError);
@@ -581,7 +599,7 @@ function drainPendingMetrics(client: SentrySdk) {
 
 // Options handed to Sentry.init. Split out so a test can assert on them without
 // standing up the real SDK.
-export function initOptions(release) {
+export function initOptions(release: string | undefined): BrowserOptions {
   return {
     dsn: SENTRY_DSN,
     release,

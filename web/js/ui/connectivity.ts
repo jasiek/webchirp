@@ -9,7 +9,7 @@ export function createConnectivity(ctx: UiContext) {
 
   // Publish one browser state to both its global badge and the only controls
   // that require a network, keeping display and behaviour on the same value.
-  function setOnline(nextOnline) {
+  function setOnline(nextOnline: boolean) {
     online = Boolean(nextOnline);
     dom.offlineIndicatorEl.hidden = online;
     ctx.repeaterQuery.setOnline(online);

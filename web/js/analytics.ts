@@ -241,9 +241,9 @@ const DISPLAY_MODES = ["window-controls-overlay", "fullscreen", "standalone", "m
 // The window analytics was initialised against. Kept so trackEvent() callers
 // elsewhere in the app do not have to thread a window through, and so tests can
 // drive the module against a fake one.
-let target = typeof window === "undefined" ? null : window;
+let target: Window | null = typeof window === "undefined" ? null : window;
 
-export function detectDisplayMode(win) {
+export function detectDisplayMode(win: Window | null | undefined): string {
   // iOS Safari never matches the display-mode query for home-screen launches
   // and reports navigator.standalone instead.
   if (win?.navigator?.standalone === true) {
@@ -263,7 +263,7 @@ export function detectDisplayMode(win) {
 // Whether this copy of the app is the one allowed to report. Reads the live
 // location every time rather than caching, so a test can drive the module
 // against a fake window.
-export function isAnalyticsHost(win) {
+export function isAnalyticsHost(win: Window | null | undefined): boolean {
   return ANALYTICS_HOSTS.includes(String(win?.location?.hostname || ""));
 }
 
@@ -276,7 +276,7 @@ export function isAnalyticsHost(win) {
 // A throwing gtag is swallowed: content blockers commonly replace it with a
 // stub that throws, and telemetry must never be able to fail the clone it is
 // reporting on.
-export function trackEvent(name, params = {}, win = target) {
+export function trackEvent(name: string, params: Record<string, unknown> = {}, win: Window | null = target): boolean {
   const gtag = win?.gtag;
   if (typeof gtag !== "function") {
     return false;
@@ -291,7 +291,7 @@ export function trackEvent(name, params = {}, win = target) {
 
 // The install funnel. Without these, installs are invisible in GA: the browser
 // mints the WebAPK on its own and never navigates anywhere we could measure.
-export function bindInstallTracking(win = target) {
+export function bindInstallTracking(win: Window | null = target) {
   if (typeof win?.addEventListener !== "function") {
     return;
   }
@@ -329,7 +329,7 @@ export function bindInstallTracking(win = target) {
 
 // Request the vendor tag. The pages carry no static loader, so this is the only
 // place gtag.js is ever asked for, and it is reached only past the host gate.
-function loadGtagScript(win) {
+function loadGtagScript(win: Window): void {
   const doc = win?.document;
   if (typeof doc?.createElement !== "function") {
     return;
@@ -349,7 +349,7 @@ function loadGtagScript(win) {
 // custom parameters from it onto events, so the parameter silently never
 // reaches the collect payload. Config parameters do ride along with the
 // automatic page_view.
-export function initAnalytics(win) {
+export function initAnalytics(win: Window | null | undefined) {
   if (!win || !isAnalyticsHost(win)) {
     return null;
   }
