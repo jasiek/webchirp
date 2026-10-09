@@ -225,7 +225,7 @@ function isLocalRef(value: string): boolean {
 function pageAssetRefs(
   html: string,
   pageRel: string,
-): Array<{ kind: "js" | "css"; attr: TagAttr; source: string }> {
+): Array<{ kind: "js" | "css"; attr: TagAttr; source: string; suffix: string }> {
   const refs: Array<{ kind: "js" | "css"; attr: TagAttr }> = [];
   for (const tag of startTags(html)) {
     const attr = (name: string) => tag.attrs.find((candidate) => candidate.name === name);
