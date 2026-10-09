@@ -17,6 +17,7 @@
 // a window of them. Windowing is covered by the browser tests in tests/e2e.
 import fs from "node:fs";
 import path from "node:path";
+import { afterEach } from "node:test";
 
 import { JSDOM, VirtualConsole } from "jsdom";
 
@@ -217,6 +218,9 @@ function parsePage(name) {
     removeTrackedListeners,
     // Property descriptors to put back at the next reset, as [object, name, descriptor|undefined].
     undo: [],
+    // The objects a test receives, as parsed: restorePageObjects() returns
+    // them to this before every reuse.
+    snapshots: [window, window.navigator, window.document].map((target) => [target, snapshotOwnProperties(target)]),
   };
 }
 
@@ -237,6 +241,75 @@ function undoOverrides(mark = 0) {
     }
   }
 }
+
+// Every own property of target, name and symbol keys alike, with its
+// descriptor: what restoreOwnProperties() puts back.
+function snapshotOwnProperties(target) {
+  return new Map(Reflect.ownKeys(target).map((key) => [key, Object.getOwnPropertyDescriptor(target, key)]));
+}
+
+// Whether two property descriptors describe the same property.
+function sameDescriptor(a, b) {
+  return ["value", "get", "set", "writable", "enumerable", "configurable"].every((field) => Object.is(a[field], b[field]));
+}
+
+// Puts target's own properties back the way snapshotOwnProperties() found
+// them, whatever a test did in between: a property assigned or defined since
+// is deleted (unless keepAdded), and one that was replaced -- a value, a
+// getter, a read-only property redefined -- or deleted is defined again from
+// its snapshot. A test cannot make a stub permanent, because the restore can
+// only fail on a property it made non-configurable, and that fails loudly.
+function restoreOwnProperties(target, snapshot, { keepAdded = false } = {}) {
+  for (const key of Reflect.ownKeys(target)) {
+    const before = snapshot.get(key);
+    if (!before) {
+      if (!keepAdded && !Reflect.deleteProperty(target, key)) {
+        throw new Error(`index-page reset cannot remove ${String(key)}: a test made it non-configurable`);
+      }
+      continue;
+    }
+    if (!sameDescriptor(before, Object.getOwnPropertyDescriptor(target, key))) {
+      Object.defineProperty(target, key, before);
+    }
+  }
+  for (const [key, before] of snapshot) {
+    if (!Object.prototype.hasOwnProperty.call(target, key)) {
+      Object.defineProperty(target, key, before);
+    }
+  }
+}
+
+// globalThis as the last installIndexPage() (or its restore()) left it: the
+// page's globals and whatever the test had set up before installing it.
+let globalBaseline = null;
+
+// Undoes whatever a test did directly to the objects the page hands out
+// (window, navigator, document): a stub it assigned or defined itself, which
+// installIndexPage()'s option list never saw.
+function restorePageObjects() {
+  for (const [target, snapshot] of page.snapshots) {
+    restoreOwnProperties(target, snapshot);
+  }
+}
+
+// At the end of every test in a file that uses the page, put back the page's
+// objects and every global the test changed after installing the page (a
+// fetch or navigator stub, say), so no stub reaches the next test. It runs as
+// an afterEach hook rather than at the next install because only the test
+// boundary says whose a change is: a stub a test set before installing the
+// page (a fetch, mocked timers) is part of that test's baseline and stays for
+// the rest of it. node:test runs afterEach before a test's own t.after hooks
+// and before it resets t.mock, so both still find what they set up. Globals
+// added since the install are kept: they are module and runtime state a file
+// shares on purpose (the Pyodide harness's serial_* bridge, the app's
+// currentRows), and removing them would strand a memoized runtime.
+afterEach(() => {
+  if (!page) {
+    return;
+  }
+  restorePageObjects();
+  restoreOwnProperties(globalThis, globalBaseline, { keepAdded: true });
+});
 
 // Puts the reused page's document and storage back into the state index.html
 // ships in. Listeners and overrides are undone separately, before this.
@@ -268,7 +341,10 @@ function resetDocument() {
 //   navigator  extra navigator properties (clipboard, serial, onLine...).
 //   globals    any further globals to define (fetch, a DOMParser stand-in...).
 // Everything installed here, globals included, is undone by the next
-// installIndexPage() call, so one test's stubs never reach the next.
+// installIndexPage() call, and a stub a test assigns straight onto the
+// window, navigator, document or a global after installing the page is undone
+// when the test ends (the afterEach hook above), so one test's stubs never
+// reach the next.
 export function installIndexPage({
   page: pageName = "index.html",
   url = null,
@@ -280,6 +356,7 @@ export function installIndexPage({
   if (page) {
     undoOverrides();
     page.removeTrackedListeners();
+    restorePageObjects();
   }
   if (!page || fresh || page.name !== pageName) {
     page?.window.close();
@@ -308,8 +385,10 @@ export function installIndexPage({
   const restore = () => {
     if (page === installedPage) {
       undoOverrides(globalsMark);
+      globalBaseline = snapshotOwnProperties(globalThis);
     }
   };
+  globalBaseline = snapshotOwnProperties(globalThis);
   return { document, window, navigator: window.navigator, restore };
 }
 
