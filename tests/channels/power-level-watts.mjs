@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
-import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
+import { installIndexPage, pageElement } from "../support/index-page.mjs";
 
 async function powerColumnFor(harness, module, className) {
   await ensureModule(harness, module);
@@ -61,16 +61,16 @@ test("a driver whose labels are already wattages publishes no duplicates", async
 // Spacer rows stand in for the channels outside the window, so a rendered row is
 // found by data-row-idx rather than by position in the tbody.
 function renderedRows(dom) {
-  return dom.tableBody.children.filter((tr) => tr.dataset.rowIdx !== undefined);
+  return Array.from(dom.tableBody.children).filter((tr) => tr.dataset.rowIdx !== undefined);
 }
 
 function renderGridWithPowerColumn(columns) {
-  installFakeDom();
+  installIndexPage();
   const dom = {
-    tableHead: new FakeElement("thead"),
-    tableBody: new FakeElement("tbody"),
-    tableScrollEl: new FakeElement("div"),
-    channelEmptyStateEl: new FakeElement("div"),
+    tableHead: pageElement("tableHead"),
+    tableBody: pageElement("tableBody"),
+    tableScrollEl: pageElement("tableScrollEl"),
+    channelEmptyStateEl: pageElement("channelEmptyStateEl"),
   };
   const state = {
     currentHeaders: ["Location", "Power"],

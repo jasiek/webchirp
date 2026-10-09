@@ -128,22 +128,11 @@ test("a named cancellation still reports a usable error_type", () => {
 
 // Imported next to the fixtures it serves: the bridge and classifier tests
 // above need no DOM at all.
-import { FakeElement as SharedFakeElement, fakeDebugDom } from "../support/fake-dom.mjs";
-
-// The serial-actions context below reaches the connect toggle's click handler
-// directly through .listener, so keep exposing the last one bound on top of
-// the shared element's listener list.
-class FakeElement extends SharedFakeElement {
-  addEventListener(type, handler) {
-    super.addEventListener(type, handler);
-    if (type === "click") {
-      this.listener = handler;
-    }
-  }
-}
+import { installIndexPage, pageElement } from "../support/index-page.mjs";
+import { debugPanelElements, dispatch } from "../support/ui-interactions.mjs";
 
 test("a cancellation opens the debug panel without becoming the next bug report", () => {
-  const dom = fakeDebugDom();
+  const dom = debugPanelElements();
   const log = createDebugLog({ dom });
   log.bindEvents();
 
@@ -159,15 +148,18 @@ test("a cancellation opens the debug panel without becoming the next bug report"
   assert.equal(log.getLastErrorSummary(), "");
 });
 
+// index.html's serial controls, on a page whose navigator is a desktop
+// browser's, and a runtime whose connect fails with connectError.
 function makeSerialActionsContext(connectError) {
+  installIndexPage({ navigator: { userAgent: "FakeBrowser/1.0", maxTouchPoints: 0 } });
   const dom = {
-    serialConnectToggleEl: new FakeElement(),
-    webusbConnectToggleEl: new FakeElement(),
-    webbluetoothConnectToggleEl: new FakeElement(),
-    radioDownloadEl: new FakeElement(),
-    radioUploadEl: new FakeElement(),
-    liveRadioSupportWarningEl: new FakeElement(),
-    unsupportedBrowserContinueEl: new FakeElement(),
+    serialConnectToggleEl: pageElement("serialConnectToggleEl"),
+    webusbConnectToggleEl: pageElement("webusbConnectToggleEl"),
+    webbluetoothConnectToggleEl: pageElement("webbluetoothConnectToggleEl"),
+    radioDownloadEl: pageElement("radioDownloadEl"),
+    radioUploadEl: pageElement("radioUploadEl"),
+    liveRadioSupportWarningEl: pageElement("liveRadioSupportWarningEl"),
+    unsupportedBrowserContinueEl: pageElement("unsupportedBrowserContinueEl"),
     sidebarControlEls: [],
   };
   dom.sidebarControlEls = [
@@ -211,7 +203,6 @@ function makeSerialActionsContext(connectError) {
 }
 
 test("connect reports a dismissed chooser as a cancellation, not a crash", async () => {
-  setNavigator({ userAgent: "FakeBrowser/1.0", maxTouchPoints: 0 });
   const { createSerialActions } = await import("../../web/js/ui/serial-actions.ts");
 
   const cancelled = new Error(PORT_SELECTION_CANCELLED_MESSAGE);
@@ -222,7 +213,7 @@ test("connect reports a dismissed chooser as a cancellation, not a crash", async
   serial.setSidebarControlsEnabled(true);
   serial.bindEvents();
 
-  await ctx.dom.serialConnectToggleEl.listener();
+  await dispatch(ctx.dom.serialConnectToggleEl, "click");
 
   assert.deepEqual(calls.cancelled, [["Serial connect", PORT_SELECTION_CANCELLED_MESSAGE]]);
   assert.deepEqual(calls.errors, []);
@@ -236,7 +227,6 @@ test("connect reports a dismissed chooser as a cancellation, not a crash", async
 });
 
 test("connect still reports a genuine open failure as an error", async () => {
-  setNavigator({ userAgent: "FakeBrowser/1.0", maxTouchPoints: 0 });
   const { createSerialActions } = await import("../../web/js/ui/serial-actions.ts");
 
   const { ctx, calls } = makeSerialActionsContext(new Error("Failed to open serial port."));
@@ -245,7 +235,7 @@ test("connect still reports a genuine open failure as an error", async () => {
   serial.setSidebarControlsEnabled(true);
   serial.bindEvents();
 
-  await ctx.dom.serialConnectToggleEl.listener();
+  await dispatch(ctx.dom.serialConnectToggleEl, "click");
 
   assert.deepEqual(calls.cancelled, []);
   assert.equal(calls.errors.length, 1);

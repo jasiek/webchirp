@@ -29,7 +29,7 @@ import { classifyErrorKind, errorTypeName } from "../../web/js/ui/analytics.ts";
 import { createDebugLog } from "../../web/js/ui/debug-log.ts";
 import { errorSummary } from "../../web/js/ui/format.ts";
 import { ensureModule, readImage, sharedHarness } from "../support/chirp.mjs";
-import { fakeDebugDom } from "../support/fake-dom.mjs";
+import { debugPanelElements } from "../support/ui-interactions.mjs";
 
 // Run a call that must fail and hand back what it threw.
 async function failure(promise) {
@@ -123,7 +123,7 @@ test("a generic exception carries its traceback to the debug log", async () => {
   assert.equal(error.name, "ModuleNotFoundError");
   assert.ok(isPythonError(error, "ImportError"), "a builtin subclass matches its base too");
 
-  const dom = fakeDebugDom();
+  const dom = debugPanelElements();
   const log = createDebugLog({ dom, notice: { show: () => assert.fail("not a precondition") } });
   log.reportActionError("Open radio", error);
 

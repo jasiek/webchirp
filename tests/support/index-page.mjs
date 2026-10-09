@@ -20,13 +20,15 @@ import path from "node:path";
 
 import { JSDOM, VirtualConsole } from "jsdom";
 
+import { REQUIRED_ELEMENTS } from "../../web/js/ui/dom.ts";
 import { webDir } from "./repo-paths.mjs";
-
-const INDEX_HTML = fs.readFileSync(path.join(webDir, "index.html"), "utf8");
 
 // Same-origin with the dev server and off the production host, so the
 // analytics and error-reporting gates stay shut as they do in development.
-export const PAGE_URL = "http://localhost:8000/";
+export const PAGE_ORIGIN = "http://localhost:8000/";
+
+// The markup of each web/ page parsed so far, by file name.
+const pageSources = new Map();
 
 // Window members copied onto globalThis, because the app reads them as bare
 // identifiers (document.querySelector, navigator.serial, x instanceof Element)
@@ -152,8 +154,18 @@ export function collectListenerResults(fn) {
 
 // The layout and pointer-capture APIs the UI calls that jsdom does not
 // implement. Inert, as they would be on an element that is not rendered.
+//
+// clientHeight is the exception that is taken away rather than added. jsdom
+// answers 0 for every layout metric, and the channel grid would read a 0 as a
+// real, empty viewport and render only its overscan rows. With no layout there
+// is no viewport to measure, so clientHeight reads as unmeasured, which is the
+// grid's headless path (visibleRowRange() in web/js/ui/channel-table.ts):
+// every row is rendered and the tests see the whole grid. Row windowing itself
+// is covered by the browser tests in tests/e2e. A test that wants the
+// windowing arithmetic gives the viewport a height with setLayout().
 function addMissingLayoutApis(window) {
   const proto = window.Element.prototype;
+  Object.defineProperty(proto, "clientHeight", { configurable: true, get: () => undefined });
   if (typeof proto.scrollIntoView !== "function") {
     proto.scrollIntoView = function scrollIntoView() {};
   }
@@ -182,15 +194,22 @@ function failOnListenerErrors() {
   return virtualConsole;
 }
 
-// Parses web/index.html into a new jsdom window. Scripts are not run and no
-// subresource is fetched: the tests import the modules they exercise.
-function parsePage() {
-  const dom = new JSDOM(INDEX_HTML, { url: PAGE_URL, virtualConsole: failOnListenerErrors() });
+// Parses a page under web/ (index.html unless a test names another) into a
+// new jsdom window at its own URL. Scripts are not run and no subresource is
+// fetched: the tests import the modules they exercise.
+function parsePage(name) {
+  if (!pageSources.has(name)) {
+    pageSources.set(name, fs.readFileSync(path.join(webDir, name), "utf8"));
+  }
+  const url = new URL(name === "index.html" ? "" : name, PAGE_ORIGIN).href;
+  const dom = new JSDOM(pageSources.get(name), { url, virtualConsole: failOnListenerErrors() });
   const { window } = dom;
   addMissingLayoutApis(window);
   const tracked = [];
   const removeTrackedListeners = instrumentListeners(window, tracked);
   return {
+    name,
+    url,
     dom,
     window,
     document: window.document,
@@ -228,8 +247,8 @@ function resetDocument() {
   window.localStorage.clear();
   window.sessionStorage.clear();
   page.dom.cookieJar.removeAllCookiesSync();
-  if (window.location.href !== PAGE_URL) {
-    window.history.replaceState(null, "", PAGE_URL);
+  if (window.location.href !== page.url) {
+    window.history.replaceState(null, "", page.url);
   }
 }
 
@@ -240,6 +259,10 @@ function resetDocument() {
 // leak its environment into the next file in the same process.
 //
 // Options:
+//   page       another page under web/ (serial-test.html), for the modules
+//              that belong to it; switching pages parses the new one.
+//   url        the address the page is at, relative to it ("?radio=uv5r:X"),
+//              for code that reads location; reset with the page.
 //   fresh      parse a new page instead of resetting the shared one.
 //   window     extra window properties (matchMedia, innerWidth, open...).
 //   navigator  extra navigator properties (clipboard, serial, onLine...).
@@ -247,6 +270,8 @@ function resetDocument() {
 // Everything installed here, globals included, is undone by the next
 // installIndexPage() call, so one test's stubs never reach the next.
 export function installIndexPage({
+  page: pageName = "index.html",
+  url = null,
   fresh = false,
   window: windowOverrides = {},
   navigator: navigatorOverrides = {},
@@ -256,13 +281,16 @@ export function installIndexPage({
     undoOverrides();
     page.removeTrackedListeners();
   }
-  if (!page || fresh) {
+  if (!page || fresh || page.name !== pageName) {
     page?.window.close();
-    page = parsePage();
+    page = parsePage(pageName);
   } else {
     resetDocument();
   }
   const { window, document } = page;
+  if (url !== null) {
+    window.history.replaceState(null, "", new URL(url, page.url).href);
+  }
   for (const [name, value] of Object.entries(windowOverrides)) {
     override(window, name, value);
   }
@@ -283,4 +311,15 @@ export function installIndexPage({
     }
   };
   return { document, window, navigator: window.navigator, restore };
+}
+
+// The installed page's element for a web/js/ui/dom.ts name
+// (pageElement("radioDownloadEl")), for a test that hands a module a ctx.dom
+// of a few elements rather than booting the whole UI.
+export function pageElement(name) {
+  const selector = REQUIRED_ELEMENTS[name];
+  if (!selector) {
+    throw new Error(`web/js/ui/dom.ts declares no element named ${name}`);
+  }
+  return page.document.querySelector(selector);
 }

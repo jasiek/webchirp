@@ -7,11 +7,11 @@ import {
   parseLookupXml,
   pickLookupEntry,
 } from "../../web/js/callsign-lookup.ts";
-import { installFakeDom } from "../support/fake-dom.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
 import { fakeXmlGlobals } from "../support/fake-xml.mjs";
 
 // parseLookupXml runs on the browser's DOMParser, which node has not got.
-installFakeDom({ globals: fakeXmlGlobals() });
+installIndexPage({ globals: fakeXmlGlobals() });
 
 function entry({ qra = "GB3KI", rx = "145.0375", tx = "145.6375", latitude = "51.370400", longitude = "1.128900", qth = "" } = {}) {
   return `<repeater><qra>${qra}</qra><qth>${qth}</qth>`

@@ -8,7 +8,7 @@
 // dispatch() and emit() also await whatever the listeners they reached
 // returned, which no browser does but which lets a test wait for an async
 // handler (a submit that fetches, a drop that reads a file) before asserting.
-import { collectListenerResults } from "./index-page.mjs";
+import { collectListenerResults, installIndexPage } from "./index-page.mjs";
 
 // Event types that do not bubble or cannot be cancelled in a browser, so a
 // synthetic one behaves like the real one.
@@ -89,9 +89,11 @@ export async function emit(target, type, init = {}) {
   return !notCancelled;
 }
 
-// The Debug Output panel's elements from the page, in the folded state
-// index.html ships them in, keyed as createDebugLog expects them.
-export function debugPanelElements(document = globalThis.document) {
+// The Debug Output panel's elements from a freshly reset page, in the folded
+// state index.html ships them in, keyed as createDebugLog expects them.
+// pageOptions are installIndexPage()'s (a navigator.clipboard stub, say).
+export function debugPanelElements(pageOptions = {}) {
+  const { document } = installIndexPage(pageOptions);
   const element = (id) => document.getElementById(id);
   return {
     debugToggleEl: element("debug-toggle"),

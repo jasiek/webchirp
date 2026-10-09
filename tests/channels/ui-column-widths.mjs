@@ -10,7 +10,7 @@ import test from "node:test";
 // web/styles.css, which needs two things from here that nothing else asserts:
 // inputs that ask the browser for no width of their own, and the stylesheet
 // rule that gives them one. The resulting layout is the browser's own and
-// cannot be checked headlessly -- the fake DOM has no layout at all -- so it is
+// cannot be checked headlessly -- jsdom does no layout at all -- so it is
 // verified in a real browser instead. The last test covers the grid's other
 // stylesheet-only guarantee for the same reason: a sticky header row whose
 // bottom edge would go missing, while scrolled and only while scrolled, if the
@@ -18,19 +18,19 @@ import test from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 
+import { installIndexPage } from "../support/index-page.mjs";
 import {
   channelRows,
   flushMicrotasks,
   importSampleCsv,
-  installFakeDom,
   selectRadioBySearch,
-} from "../support/fake-dom.mjs";
+} from "../support/ui-interactions.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 const HEADERS = ["Location", "Name", "Frequency", "Duplex", "Comment"];
 
 async function renderGrid(rows, columns = {}) {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   ui.setRuntimeApi(withRadioSessions({
@@ -65,7 +65,7 @@ test("text editors ask the browser for no width of their own", async () => {
   );
 
   const row = channelRows(document)[0];
-  const editors = row.children.map((td) => td.children[0]);
+  const editors = Array.from(row.children).map((td) => td.children[0]);
   // A size of 1 is what leaves the stylesheet in charge of the column. It also
   // decides the fallback: where field-sizing is missing, the size attribute is
   // still what governs, so those columns come out at their header width rather
@@ -78,7 +78,7 @@ test("text editors ask the browser for no width of their own", async () => {
   // as wide as the widest option it may have to show, and the Location button
   // prints its slot number as ordinary text the browser can measure.
   assert.equal(editors[HEADERS.indexOf("Duplex")].tagName, "SELECT");
-  assert.equal(editors[HEADERS.indexOf("Duplex")].size, undefined);
+  assert.equal(editors[HEADERS.indexOf("Duplex")].hasAttribute("size"), false);
   assert.equal(editors[HEADERS.indexOf("Location")].tagName, "BUTTON");
 });
 
@@ -110,11 +110,11 @@ test("the Location header is abbreviated without renaming the column", async () 
   assert.equal(location.textContent, "#");
   // An abbreviation still has to name its column to anyone who cannot see the
   // grid, and to a user hovering the header.
-  assert.equal(location.attributes.get("aria-label"), "Location");
+  assert.equal(location.getAttribute("aria-label"), "Location");
   assert.equal(location.title, "Location");
   // Every other header is spelled out as the driver names it.
   assert.deepEqual(
-    header.children.slice(1).map((th) => th.textContent),
+    Array.from(header.children).slice(1).map((th) => th.textContent),
     HEADERS.slice(1),
   );
 

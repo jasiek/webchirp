@@ -31,7 +31,7 @@ import {
 } from "../../web/js/rsgb.ts";
 import { parseRxfRecords } from "../../web/js/rxf.ts";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
-import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
+import { installIndexPage, pageElement } from "../support/index-page.mjs";
 import { fakeXmlGlobals } from "../support/fake-xml.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
@@ -96,7 +96,7 @@ async function radioState(radio) {
 async function gridFor(radio, { beforeAnswer = async () => {} } = {}) {
   const harness = await sharedHarness();
   const selected = await radioState(radio);
-  installFakeDom({ globals: fakeXmlGlobals() });
+  installIndexPage({ globals: fakeXmlGlobals() });
   const { createChannelTable } = await import("../../web/js/ui/channel-table.ts");
   const state = {
     ...selected,
@@ -111,10 +111,10 @@ async function gridFor(radio, { beforeAnswer = async () => {} } = {}) {
   };
   const table = createChannelTable({
     dom: {
-      tableHead: new FakeElement("thead"),
-      tableBody: new FakeElement("tbody"),
-      tableScrollEl: new FakeElement("div"),
-      channelEmptyStateEl: new FakeElement("div"),
+      tableHead: pageElement("tableHead"),
+      tableBody: pageElement("tableBody"),
+      tableScrollEl: pageElement("tableScrollEl"),
+      channelEmptyStateEl: pageElement("channelEmptyStateEl"),
     },
     state,
     log: { setStatus() {}, logDebug() {} },

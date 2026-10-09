@@ -8,17 +8,19 @@ import test from "node:test";
 // memories from 1 rather than 0. Editing the grid must therefore leave the
 // slots of untouched channels alone.
 //
-// The fake DOM and grid-driving helpers are shared with
-// tests/channels/ui-channel-cut.mjs via tests/support/fake-dom.mjs.
+// The page and grid-driving helpers are shared with
+// tests/channels/ui-channel-cut.mjs via tests/support/index-page.mjs and
+// tests/support/ui-interactions.mjs.
+import { installIndexPage } from "../support/index-page.mjs";
 import {
   channelRows,
   clickLocationButton,
+  domEvent,
   flushMicrotasks,
   importSampleCsv,
-  installFakeDom,
   selectRadioBySearch,
   tableNames,
-} from "../support/fake-dom.mjs";
+} from "../support/ui-interactions.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The UV-5R test image's real shape, trimmed: two low channels, then gaps.
@@ -51,7 +53,7 @@ function tableLocations(document) {
 // Boot the UI with a stubbed runtime whose driver reports `bounds` as the
 // Location column's range, then load `rows` through the CSV import path.
 async function bootWithRows(rows, bounds = { min: 0, max: 127 }) {
-  const { document, navigator } = installFakeDom();
+  const { document, navigator } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const columns = { Location: { kind: "int", editable: false, ...bounds } };
@@ -76,7 +78,7 @@ async function bootWithRows(rows, bounds = { min: 0, max: 127 }) {
 }
 
 function click(document, selector) {
-  document.querySelector(selector).dispatchEvent({ type: "click" });
+  document.querySelector(selector).dispatchEvent(domEvent({ type: "click" }));
 }
 
 test("a sparse codeplug loads with the radio's own memory numbering", async () => {

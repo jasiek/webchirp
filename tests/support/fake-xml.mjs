@@ -73,7 +73,7 @@ export class FakeXmlDocument {
   }
 }
 
-// The globals option installFakeDom takes, so a test that parses RXF installs
+// The globals option installIndexPage takes, so a test that parses RXF installs
 // the stand-in the same way in every suite.
 export function fakeXmlGlobals() {
   return {

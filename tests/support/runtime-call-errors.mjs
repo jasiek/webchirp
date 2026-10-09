@@ -4,7 +4,7 @@
 // rpc_dispatch (web/python/webchirp_bridge/rpc.py) answers a failed call with
 // an error envelope, and unwrapRpcEnvelope (web/js/rpc-dispatch.ts) turns it
 // into a RuntimeCallError. The helpers here go through that same unwrap, so a
-// fake-DOM or classifier test holds exactly the error the real dispatcher
+// headless UI or classifier test holds exactly the error the real dispatcher
 // would have thrown -- and a change to the envelope's shape breaks them too.
 
 import { unwrapRpcEnvelope } from "../../web/js/rpc-dispatch.ts";
