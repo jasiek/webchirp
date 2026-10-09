@@ -1,0 +1,19 @@
+# Commits that changed the syntax of many lines without changing behaviour,
+# so git blame should look through them to the commit that wrote the line.
+# To use it locally, run once in your clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub's blame view reads this file by itself.
+#
+# These SHAs only stay valid if the branch that added them is merged with a
+# merge commit (or rebased), not squashed.
+
+# JSDoc to TypeScript conversion (git mv + JSDoc types turned into annotations).
+a8ea7ead21c4b1e84ef4edb3eecd5c1230b5edeb
+26bf90b28bf66fa5f93a7c6bf6eb6344761a049f
+486ecd72b26eedba623b38b1c67ee2b5adb9742e
+87ac8e29c580194b6b525c2a036917f9f606b012
+d69bccd99d8f5ffe866705281a571625036d417f
+2c5f98e57a97b0676f411a67bf559a65a491785e
+cf9e18d3c2a87e1f3dbfd7348b589158c6e6420f
+# Formatting fix-up of the conversion (re-joined wrapped arrow parameter lists).
+c3f4e86dd14a1111ef2fa43fe4369b94b20dd932
