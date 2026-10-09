@@ -28,7 +28,7 @@ const DECIMAL_LITERAL = /^[+-]?(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/;
 // digit left of the point's new position is all that is left, i.e. every digit
 // at or beyond it is zero. That keeps "1e2" (100) and "1.50e1" (15) while
 // rejecting "1.5" and ".99999999999999999".
-export function denotesInteger(text) {
+export function denotesInteger(text: string): boolean {
   const match = DECIMAL_LITERAL.exec(text);
   if (!match) {
     return false;
@@ -50,7 +50,7 @@ export function denotesInteger(text) {
 // catch a literal that overflows to Infinity ("1e400"). The per-channel driver
 // settings reached the same conclusion for their own controls -- see
 // readSettingControl in web/js/ui/setting-fields.ts.
-function parseIntegerInput(rawValue) {
+function parseIntegerInput(rawValue: unknown): number {
   const text = String(rawValue ?? "").trim();
   if (!text || !denotesInteger(text)) {
     return Number.NaN;
@@ -63,7 +63,13 @@ function parseIntegerInput(rawValue) {
 // show; on a rejected value the caller keeps the raw text visible so the user
 // can correct it, except where falling back to the previous value is the only
 // sensible result (immutable settings, unsupported enum options).
-export function normalizeSettingValue(meta, rawValue, previousValue) {
+import type { SettingReading, SettingValueMeta } from "./setting-fields.ts";
+
+export function normalizeSettingValue(
+  meta: SettingValueMeta,
+  rawValue: unknown,
+  previousValue: unknown,
+): SettingReading {
   const type = String(meta?.type || "");
   if (meta?.mutable === false) {
     return { value: previousValue, error: "" };

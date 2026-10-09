@@ -124,8 +124,8 @@ export function normalizeCellValue(
   previous?: unknown,
   { allowReadOnly = false }: { allowReadOnly?: boolean } = {},
 ): NormalizedCell {
-  const rejected = (fallback) => ({ value: String(fallback ?? ""), accepted: false });
-  const stored = (out) => ({ value: String(out ?? ""), accepted: true });
+  const rejected = (fallback: unknown) => ({ value: String(fallback ?? ""), accepted: false });
+  const stored = (out: unknown) => ({ value: String(out ?? ""), accepted: true });
   let v = String(value ?? "");
   if (!meta || (meta.editable === false && !allowReadOnly)) {
     return rejected(previous ?? v);

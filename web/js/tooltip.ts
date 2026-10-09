@@ -20,7 +20,7 @@ export function installTooltips({ delayMs = TOOLTIP_DELAY_MS } = {}) {
 
   // Move the title into data-tooltip so the browser's own tooltip is
   // suppressed while we own the hover. Returns the tooltip text.
-  function stashTitle(el) {
+  function stashTitle(el: HTMLElement | SVGElement): string {
     const title = el.getAttribute("title");
     if (title) {
       el.dataset.tooltip = title;
@@ -29,7 +29,7 @@ export function installTooltips({ delayMs = TOOLTIP_DELAY_MS } = {}) {
     return el.dataset.tooltip || "";
   }
 
-  function restoreTitle(el) {
+  function restoreTitle(el: HTMLElement | SVGElement): void {
     // Skip the restore if code set a fresh title while we were hovering
     // (e.g. connect toggles rewriting their state tooltips).
     if (el.dataset.tooltip && !el.hasAttribute("title")) {

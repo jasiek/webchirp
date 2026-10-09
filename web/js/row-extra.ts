@@ -6,12 +6,14 @@
 // The key is shared with the runtime, which fills it on download and replays it
 // on upload -- ROW_EXTRA_KEY in web/python/webchirp_bridge/channel_extra.py.
 // The two spellings have to agree.
+import type { ChannelRow } from "./ui/channel-values.ts";
+
 const EXTRA_KEY = "__extra";
 
 // The values a row carries, or null when it carries none. A channel created in
 // the grid, imported from CSV or pasted over a slot has no sidecar and is
 // entitled to the driver's defaults, which is what null says.
-export function rowExtras(row) {
+export function rowExtras(row: ChannelRow | null | undefined): Record<string, unknown> | null {
   const values = row?.[EXTRA_KEY];
   return values && typeof values === "object" ? values : null;
 }
@@ -21,7 +23,7 @@ export function rowExtras(row) {
 // this driver never described, and the upload path ignores names the
 // destination memory does not have. Dropping them here would instead lose them
 // the moment someone opened the editor.
-export function setRowExtras(row, values) {
+export function setRowExtras(row: ChannelRow | null | undefined, values: Record<string, unknown> | null | undefined): void {
   if (!row || !values || typeof values !== "object") {
     return;
   }

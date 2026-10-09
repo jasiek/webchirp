@@ -16,6 +16,17 @@ import { callsignFromName } from "../callsign-lookup.ts";
 import { radioEventParams, trackEvent } from "./analytics.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { ChannelRow, ColumnMeta, RadioMetadata } from "./channel-values.ts";
+import type { RowBuilderHooks } from "../row-power.ts";
+import type { RowIssue } from "../runtime-rpc.ts";
+
+/** A grid cell's editor: a button (Location, Extra), a select or a text input. */
+type CellEditor = HTMLButtonElement | HTMLSelectElement | HTMLInputElement;
+
+/** Which channel and column a grid cell shows. */
+interface CellReference {
+  rowIdx: number;
+  column: string;
+}
 
 // The editable channel grid: rendering, row selection, the row operations
 // (insert/remove/move/copy/cut/paste), the band-plan presets, and the
@@ -25,7 +36,7 @@ import type { ChannelRow, ColumnMeta, RadioMetadata } from "./channel-values.ts"
 export function createChannelTable({ dom, state, log, actions }: UiContext) {
   let selectedRowIndexes = new Set<number>();
   let selectionAnchorIndex: number | null = null;
-  const invalidCellKeys = new Set();
+  const invalidCellKeys = new Set<string>();
 
   // --- Grid rendering -----------------------------------------------------
   // This grid is the heaviest DOM in the app: every enum cell carries a full
@@ -129,7 +140,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     notifySelectionChanged();
   }
 
-  function invalidCellKey(rowIdx, column) {
+  function invalidCellKey(rowIdx: number, column: string): string {
     return `${Number(rowIdx)}:${String(column || "")}`;
   }
 
@@ -137,7 +148,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     invalidCellKeys.clear();
   }
 
-  function clearInvalidCell(rowIdx, column) {
+  function clearInvalidCell(rowIdx: number, column: string): void {
     const key = invalidCellKey(rowIdx, column);
     if (!invalidCellKeys.has(key)) {
       return;
@@ -152,7 +163,10 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
   // writes a few columns across a selection, and clearing the whole set there
   // would take the markers off cells whose values it never touched, leaving
   // them invalid but no longer visibly so until the next upload attempt.
-  function clearInvalidHighlightsForCells(rows, columns) {
+  function clearInvalidHighlightsForCells(
+    rows: readonly ChannelRow[],
+    columns: readonly string[] | null | undefined,
+  ): void {
     const columnList = (columns || []).map((column) => String(column || ""));
     if (columnList.length === 0) {
       return;
@@ -183,7 +197,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     });
   }
 
-  function selectRowRange(fromIdx, toIdx, addToExisting) {
+  function selectRowRange(fromIdx: number, toIdx: number, addToExisting: boolean): void {
     const start = Math.max(0, Math.min(fromIdx, toIdx));
     const end = Math.min(state.currentRows.length - 1, Math.max(fromIdx, toIdx));
     const next = addToExisting ? new Set(selectedRowIndexes) : new Set<number>();
@@ -193,12 +207,16 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     selectedRowIndexes = next;
   }
 
-  function updateRowSelectionFromLocationClick(event, rowIdx) {
+  function updateRowSelectionFromLocationClick(
+    event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey">,
+    rowIdx: number,
+  ): void {
     const wantsToggle = event.metaKey || event.ctrlKey;
-    const wantsRange = event.shiftKey && Number.isInteger(selectionAnchorIndex);
+    const anchor = selectionAnchorIndex;
+    const wantsRange = event.shiftKey && anchor !== null && Number.isInteger(anchor);
 
     if (wantsRange) {
-      selectRowRange(selectionAnchorIndex, rowIdx, wantsToggle);
+      selectRowRange(anchor, rowIdx, wantsToggle);
     } else if (wantsToggle) {
       if (selectedRowIndexes.has(rowIdx)) {
         selectedRowIndexes.delete(rowIdx);
@@ -215,7 +233,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     notifySelectionChanged();
   }
 
-  function defaultValueForColumn(column) {
+  function defaultValueForColumn(column: string): string {
     if (column === "Location") {
       return "";
     }
@@ -247,7 +265,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     };
   }
 
-  function parsedLocation(row) {
+  function parsedLocation(row: ChannelRow | null | undefined): number | null {
     const value = Number.parseInt(String(row?.Location ?? "").trim(), 10);
     return Number.isInteger(value) ? value : null;
   }
@@ -331,7 +349,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
 
   // Row operations know which row objects they touched, not where those rows
   // end up once the list is reordered. Resolve identity to position here.
-  function selectRowsByIdentity(rows) {
+  function selectRowsByIdentity(rows: readonly ChannelRow[]): number[] {
     const positionOf = new Map(state.currentRows.map((row, index) => [row, index]));
     const indexes = rows
       .map((row) => positionOf.get(row))
@@ -355,7 +373,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
   // builder can react rather than assume — a rejected enum leaves a valid
   // looking option behind (a tone the radio's table lacks becomes 67.0 Hz), so
   // the write is otherwise indistinguishable from a successful one.
-  function setRowValueIfPresent(row, column, value) {
+  function setRowValueIfPresent(row: ChannelRow, column: string, value: unknown): boolean {
     if (!state.currentHeaders.includes(column)) {
       return false;
     }
@@ -369,7 +387,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
   // list, returning the first one the driver offers (or "" when it offers
   // none). The ranking is the point: a repeater builder asks for
   // ["FM", "NFM", "FMN"] and takes whichever spelling this driver uses.
-  function findEnumOption(column, choices, caseInsensitive = false) {
+  function findEnumOption(column: string, choices: readonly string[], caseInsensitive = false): string {
     if (!state.currentHeaders.includes(column)) {
       return "";
     }
@@ -480,7 +498,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     log.setStatus(`Inserted new channel at memory ${inserted.Location || "(none free)"}.`);
   }
 
-  function insertRowsAtSelectionOrEnd(rowsToInsert, label) {
+  function insertRowsAtSelectionOrEnd(rowsToInsert: ChannelRow[], label: string): boolean {
     if (!state.currentHeaders.length) {
       log.setStatus("No channel schema loaded yet.");
       return false;
@@ -513,7 +531,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
   // before an await (Cut's clipboard write) deletes the rows that were
   // serialized even if the selection or row order changed while it was
   // pending. Returns how many rows were actually removed.
-  function removeChannelRows(rowsToRemove) {
+  function removeChannelRows(rowsToRemove: Iterable<ChannelRow>): number {
     const identity = new Set(rowsToRemove);
     const firstIndex = state.currentRows.findIndex((row) => identity.has(row));
     const before = state.currentRows.length;
@@ -551,7 +569,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
   // channels rotate through them, so moving a channel up swaps its memory
   // with its neighbour's instead of renumbering the whole codeplug. That
   // keeps the set of occupied memories — and so a sparse layout — intact.
-  function moveSelectedChannelRows(direction) {
+  function moveSelectedChannelRows(direction: number): void {
     const selectedIndexes = sortedSelectedRowIndexes();
     if (selectedIndexes.length === 0) {
       log.setStatus("Select one or more channels to move.");
@@ -602,7 +620,10 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
   // Channel clipboard/reorder shortcuts only apply in the channel view, with
   // no modal open and no cell editor (or other field) focused. Copy/cut also
   // defer to a regular DOM text selection (e.g. copying Debug Output text).
-  function channelShortcutsActive(event, { respectTextSelection = false } = {}) {
+  function channelShortcutsActive(
+    event: Event,
+    { respectTextSelection = false }: { respectTextSelection?: boolean } = {},
+  ): boolean {
     if (state.currentEditorView !== "channels") {
       return false;
     }
@@ -624,7 +645,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
 
   // Serialize the explicitly selected rows (never the select-nothing-means-
   // all-rows fallback: cut would otherwise silently delete every channel).
-  function selectedChannelTsv(actionLabel) {
+  function selectedChannelTsv(actionLabel: string): { tsv: string; count: number; rows: ChannelRow[] } | null {
     const selectedIndexes = sortedSelectedRowIndexes();
     if (selectedIndexes.length === 0) {
       log.setStatus(`Select one or more channels to ${actionLabel}.`);
@@ -638,9 +659,10 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     };
   }
 
-  function copySelectedChannels(event) {
+  function copySelectedChannels(event: ClipboardEvent): void {
     const payload = selectedChannelTsv("copy");
-    if (!payload) {
+    // A copy event always carries its clipboard; null only for a synthetic one.
+    if (!payload || !event.clipboardData) {
       return;
     }
     event.clipboardData.setData("text/plain", payload.tsv);
@@ -648,9 +670,9 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     log.setStatus(`Copied ${payload.count} channel(s) to clipboard.`);
   }
 
-  function cutSelectedChannels(event) {
+  function cutSelectedChannels(event: ClipboardEvent): void {
     const payload = selectedChannelTsv("cut");
-    if (!payload) {
+    if (!payload || !event.clipboardData) {
       return;
     }
     event.clipboardData.setData("text/plain", payload.tsv);
@@ -659,7 +681,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     log.setStatus(`Cut ${removed} channel(s) to clipboard.`);
   }
 
-  async function writeChannelTsvToClipboard(actionLabel, remove) {
+  async function writeChannelTsvToClipboard(actionLabel: string, remove: boolean): Promise<void> {
     const payload = selectedChannelTsv(actionLabel);
     if (!payload) {
       return;
@@ -689,7 +711,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
   // semantics): pasted rows replace existing rows downward, extend the list
   // past the end, and require confirmation when non-empty rows would be
   // overwritten. With no selection, pasted rows append at the end.
-  function pasteChannelsFromText(text) {
+  function pasteChannelsFromText(text: string): void {
     if (!state.currentHeaders.length) {
       log.setStatus("No channel schema loaded yet.");
       return;
@@ -808,7 +830,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     pasteChannelsFromText(text);
   }
 
-  function addBandPlanChannels(buildRows, label) {
+  function addBandPlanChannels(buildRows: (hooks: RowBuilderHooks) => ChannelRow[], label: string): void {
     if (!state.currentHeaders.length) {
       log.setStatus("No channel schema loaded yet.");
       return;
@@ -829,7 +851,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
   // is all the driver publishes, and a driver that reuses a label across bands
   // (vx6's 220MHz list) advertises only one of the two wattages — so this describes
   // the levels the driver offers, not what a given channel transmits.
-  function columnLegend(column) {
+  function columnLegend(column: string): string {
     const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[column] || {};
     const watts = meta.optionWatts;
     if (!watts || typeof watts !== "object") {
@@ -845,13 +867,13 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
   // Structure only — kind, options and read-only state depend on the column,
   // never on a row — so the element stays valid for any row until the schema
   // changes. bindCellEditor() is what puts a row's data into it.
-  function createCellEditor(column) {
+  function createCellEditor(column: string): CellEditor {
     const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[column] || {};
     const readOnly = column === "Location" || meta.editable === false;
 
     // Grey out read-only cells and explain why; Location is excluded because
     // its button is the row-selection handle, not a disabled editor.
-    function markReadOnly(editor) {
+    function markReadOnly<T extends HTMLElement>(editor: T): T {
       if (readOnly && column !== "Location") {
         editor.classList.add("readonly-cell");
         editor.title = `${column} is read-only for this radio.`;
@@ -909,7 +931,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     return markReadOnly(input);
   }
 
-  function bindCellEditor(editor, row, column) {
+  function bindCellEditor(editor: CellEditor, row: ChannelRow, column: string): void {
     if (column === EXTRA_COLUMN) {
       // Nothing to bind: the button is identical for every row, and marking
       // the ones carrying stored extras would mark every row a download
@@ -928,9 +950,11 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     // Drop any option added for a previous occupant of this recycled element,
     // so the list a row offers is the driver's plus at most that row's own
     // off-list value — exactly what a freshly built select would show.
-    const driverOptions = Number(editor.dataset.driverOptions);
-    if (Number.isInteger(driverOptions) && editor.length > driverOptions) {
-      editor.length = driverOptions;
+    // Only a select is left: its option count is what this trims back.
+    const select = editor as HTMLSelectElement;
+    const driverOptions = Number(select.dataset.driverOptions);
+    if (Number.isInteger(driverOptions) && select.length > driverOptions) {
+      select.length = driverOptions;
     }
     editor.value = value;
     if (value !== "" && editor.value !== value) {
@@ -960,7 +984,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
 
   // Point an existing row element at a model row: values, selection and
   // invalid-cell classes. This is the whole per-row cost of a render.
-  function bindRowElement(tr, rowIdx) {
+  function bindRowElement(tr: HTMLTableRowElement, rowIdx: number): void {
     const row = state.currentRows[rowIdx];
     if (!row) {
       return;
@@ -971,7 +995,8 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     renderedColumns.forEach((column, columnIdx) => {
       const td = tr.children[columnIdx];
       td.classList.toggle("is-invalid", invalidCellKeys.has(invalidCellKey(rowIdx, column)));
-      bindCellEditor(td.children[0], row, column);
+      // Each cell holds the one editor createRowElement() put there.
+      bindCellEditor(td.children[0] as CellEditor, row, column);
     });
     const locationButton = locationButtonIn(tr);
     if (locationButton) {
@@ -991,7 +1016,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     return tr.children[locationColumnIndex]?.children[0] || null;
   }
 
-  function cellElement(rowIdx, column) {
+  function cellElement(rowIdx: number, column: string): Element | null {
     const tr = rowElements[rowIdx - windowStart];
     if (!tr || tr.dataset.rowIdx !== String(rowIdx)) {
       return null;
@@ -1013,7 +1038,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     return { tr, cell };
   }
 
-  function schemaChanged(columns) {
+  function schemaChanged(columns: readonly string[]): boolean {
     return renderedMetadata !== state.radioMetadata
       || columns.length !== renderedColumns.length
       || columns.some((column, idx) => column !== renderedColumns[idx]);
@@ -1109,7 +1134,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     dom.tableBody.appendChild(spacers.below.tr);
   }
 
-  function applySpacerHeights(start, count) {
+  function applySpacerHeights(start: number, count: number): void {
     if (!spacers) {
       return;
     }
@@ -1169,7 +1194,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
 
   // Hand focus to whichever element now shows the row that had it, so typing
   // continues in the same channel it started in.
-  function restoreFocusedCell(captured) {
+  function restoreFocusedCell(captured: ReturnType<typeof captureFocusedCell>): void {
     if (!captured) {
       return;
     }
@@ -1187,9 +1212,10 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     }
     // bindRowElement has just written the row's stored value into this
     // element; put the in-progress text back over it.
-    const restoredDraft = captured.draft !== null && editor.tagName === "INPUT";
+    const draft = captured.draft;
+    const restoredDraft = draft !== null && editor.tagName === "INPUT";
     if (restoredDraft) {
-      editor.value = captured.draft;
+      editor.value = draft;
     }
     const refocused = editor !== globalThis.document?.activeElement;
     if (refocused) {
@@ -1270,7 +1296,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
 
   // Record per-cell issues reported by the upload preflight. Returns how many
   // cells were highlighted so the caller can decide whether to re-render.
-  function applyValidationIssues(issues) {
+  function applyValidationIssues(issues: readonly RowIssue[] | null | undefined): number {
     let applied = 0;
     for (const issue of issues || []) {
       const rowIdx = Number(issue?.rowIndex);
@@ -1290,19 +1316,20 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
   // row index is read from the element at event time, never captured when the
   // element was built, so recycled rows always report the channel they are
   // currently showing.
-  function cellReferenceFor(target) {
-    const td = target?.closest?.("td[data-column]");
-    const rowIdx = Number(td?.parentNode?.dataset?.rowIdx);
+  function cellReferenceFor(target: EventTarget | null): CellReference | null {
+    const td = (target as Element | null)?.closest?.<HTMLElement>("td[data-column]");
+    const rowIdx = Number((td?.parentNode as HTMLElement | null | undefined)?.dataset?.rowIdx);
     if (!td || !Number.isInteger(rowIdx) || !state.currentRows[rowIdx]) {
       return null;
     }
-    return { rowIdx, column: td.dataset.column };
+    // The selector matched on data-column, so the cell has one.
+    return { rowIdx, column: td.dataset.column as string };
   }
 
   // Normalize a raw editor string into the row it belongs to and report what
   // was stored. Split out from commitCellValue because a draft rescued from a
   // recycled row element has text but no element left to write back to.
-  function commitRawValue({ rowIdx, column }, text) {
+  function commitRawValue({ rowIdx, column }: CellReference, text: string): string | null {
     const row = state.currentRows[rowIdx];
     if (!row) {
       return null;
@@ -1313,7 +1340,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     return next;
   }
 
-  function commitCellValue(cell, editor) {
+  function commitCellValue(cell: CellReference, editor: HTMLInputElement | HTMLSelectElement): void {
     const next = commitRawValue(cell, editor.value);
     if (next !== null) {
       editor.value = next;
@@ -1350,7 +1377,8 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     });
 
     dom.tableBody.addEventListener("change", (event) => {
-      const target = event.target as HTMLElement;
+      // Checked for SELECT below before it is read as one.
+      const target = event.target as HTMLSelectElement;
       if (target?.tagName !== "SELECT") {
         return;
       }
@@ -1364,7 +1392,8 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     // Text cells normalize when they lose focus. blur does not bubble, so the
     // delegated equivalent is focusout.
     dom.tableBody.addEventListener("focusout", (event) => {
-      const target = event.target as HTMLElement;
+      // Checked for INPUT below before it is read as one.
+      const target = event.target as HTMLInputElement;
       if (target?.tagName !== "INPUT") {
         return;
       }

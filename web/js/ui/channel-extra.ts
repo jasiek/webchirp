@@ -42,7 +42,7 @@ export function createChannelExtra(ctx: UiContext) {
     return !dom.channelExtraModalEl.classList.contains("hidden");
   }
 
-  function setModalOpen(open) {
+  function setModalOpen(open: boolean): void {
     dom.channelExtraModalEl.classList.toggle("hidden", !open);
     if (!open) {
       editedRow = null;
@@ -58,7 +58,7 @@ export function createChannelExtra(ctx: UiContext) {
     setModalOpen(false);
   }
 
-  function setMessage(text) {
+  function setMessage(text: string): void {
     const message = String(text || "");
     dom.channelExtraMessageEl.textContent = message;
     dom.channelExtraMessageEl.hidden = message === "";
@@ -104,7 +104,7 @@ export function createChannelExtra(ctx: UiContext) {
       // What the field opened on, so the save can tell an edit from a value
       // that was merely on display. See save().
       initial: current,
-      setError(text) {
+      setError(text: string) {
         errorEl.textContent = String(text || "");
         errorEl.hidden = !text;
         controlCell.classList.toggle("is-invalid", Boolean(text));
@@ -112,7 +112,7 @@ export function createChannelExtra(ctx: UiContext) {
     };
   }
 
-  function renderFields(fields, stored) {
+  function renderFields(fields: readonly ExtraField[], stored: Record<string, unknown>): void {
     dom.channelExtraGridEl.innerHTML = "";
     fieldControls = fields.map((field) => {
       // The row's own value wins over the one read from the slot: it is what
@@ -128,7 +128,7 @@ export function createChannelExtra(ctx: UiContext) {
   // there before -- a channel this one replaced, or the image's own occupant.
   // Saying so is what keeps the form from reading as "your channel's settings",
   // and pairs with the save writing back only what was actually changed.
-  function startingValuesNote(stored, location) {
+  function startingValuesNote(stored: Record<string, unknown>, location: unknown): string {
     if (Object.keys(stored).length > 0) {
       return "";
     }

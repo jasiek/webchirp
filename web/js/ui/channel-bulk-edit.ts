@@ -54,7 +54,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
     return !dom.channelBulkEditModalEl.classList.contains("hidden");
   }
 
-  function setModalOpen(open) {
+  function setModalOpen(open: boolean): void {
     dom.channelBulkEditModalEl.classList.toggle("hidden", !open);
     if (!open) {
       editedRows = [];
@@ -72,13 +72,13 @@ export function createChannelBulkEdit(ctx: UiContext) {
     setModalOpen(false);
   }
 
-  function setMessage(text) {
+  function setMessage(text: string): void {
     const message = String(text || "");
     dom.channelBulkEditMessageEl.textContent = message;
     dom.channelBulkEditMessageEl.hidden = message === "";
   }
 
-  function setExtraMessage(text) {
+  function setExtraMessage(text: string): void {
     const message = String(text || "");
     dom.channelBulkEditExtraMessageEl.textContent = message;
     dom.channelBulkEditExtraMessageEl.hidden = message === "";
@@ -137,7 +137,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
   // whether the rows disagree. A disagreement is shown rather than resolved --
   // the control has to display something, and saying "multiple values" beside
   // it is what stops that something from reading as the selection's value.
-  function commonValue(values) {
+  function commonValue<T>(values: readonly T[]): { value: T | undefined; mixed: boolean } {
     const first = values[0];
     return {
       value: first,
@@ -148,7 +148,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
   // The control for one grid column, built from the same CHIRP column metadata
   // the grid's own cell editors are built from (createCellEditor in
   // web/js/ui/channel-table.ts).
-  function createColumnControl(column, initial) {
+  function createColumnControl(column: string, initial: string | undefined): HTMLInputElement | HTMLSelectElement {
     const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[column] || {};
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
       const select = document.createElement("select");
@@ -269,7 +269,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
     return {
       control,
       apply,
-      setError(message) {
+      setError(message: string) {
         errorEl.textContent = String(message || "");
         errorEl.hidden = !message;
         controlCell.classList.toggle("is-invalid", Boolean(message));
@@ -277,7 +277,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
     };
   }
 
-  function renderColumnFields(rows) {
+  function renderColumnFields(rows: readonly ChannelRow[]): void {
     dom.channelBulkEditGridEl.innerHTML = "";
     columnFields = editableColumns().map((column) => {
       const { value, mixed } = commonValue(rows.map((row) => String(row?.[column] ?? "")));
@@ -293,7 +293,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
     dom.channelBulkEditApplyEl.disabled = columnFields.length === 0;
   }
 
-  function renderExtraFields(fields, rows) {
+  function renderExtraFields(fields: readonly ExtraField[], rows: readonly ChannelRow[]): void {
     dom.channelBulkEditExtraGridEl.innerHTML = "";
     extraFields = fields.map((field) => {
       // A row's own value wins over the one the driver reported for the slot,
@@ -320,7 +320,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
   // drops the rows it was opened on) or re-opened on another selection. Both
   // have to be checked -- a token alone misses a close, and rendering into a
   // hidden dialog leaves fields there for whatever opens it next.
-  function superseded(rows, token) {
+  function superseded(rows: readonly ChannelRow[], token: number): boolean {
     return token !== openToken || editedRows !== rows;
   }
 
@@ -334,7 +334,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
   // destination memory does not have (_apply_row_extras_to_memory in
   // web/python/webchirp_bridge/channel_extra.py), so the failure mode is a
   // setting that does not land, not a corrupted channel.
-  async function loadExtraFields(rows, token) {
+  async function loadExtraFields(rows: ChannelRow[], token: number): Promise<void> {
     const radio = state.selectedRadio;
     if (!radio) {
       setExtraMessage("Select a radio to edit driver-specific channel settings.");
