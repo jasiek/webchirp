@@ -36,7 +36,7 @@ test("the baud checkboxes the controller reads are present and pre-selected", ()
 test("the page loads no analytics and does not offer itself for install", () => {
   // A hardware-debugging page must not mint page_view traffic, and it is not
   // part of the installable app.
-  assert.ok(!HTML.includes("js/analytics.js"), "diagnostics page must not load analytics");
+  assert.ok(!HTML.includes("js/analytics.ts"), "diagnostics page must not load analytics");
   assert.ok(!HTML.includes("manifest.webmanifest"), "diagnostics page must not link the manifest");
   assert.ok(!HTML.includes("pyodide"), "diagnostics page must not pull in the Python runtime");
 });

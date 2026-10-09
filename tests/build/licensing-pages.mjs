@@ -49,7 +49,7 @@ test("one localized, cited guide is built for each named CSV location", async ()
         assert.ok(html.includes('data-licensing-language="native" aria-pressed="true"'), filename);
         assert.ok(html.includes('data-licensing-language="en" aria-pressed="false"'), filename);
         assert.ok(html.includes('data-licensing-panel="en"'), filename);
-        assert.ok(html.includes('src="../js/licensing-language.js"'), filename);
+        assert.ok(html.includes('src="../js/licensing-language.ts"'), filename);
       }
       const sourceIds = [...html.matchAll(/<li id="(source-(?:native|en)-\d+)">/g)]
         .map((match) => match[1]);

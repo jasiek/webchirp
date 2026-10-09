@@ -1,5 +1,5 @@
 // Sync the GA4 property's custom dimensions with the declarations in
-// web/js/analytics.js, via the Google Analytics Admin API v1beta.
+// web/js/analytics.ts, via the Google Analytics Admin API v1beta.
 //
 // GA4 reports only show event parameters that have been registered as custom
 // dimensions, registration is not retroactive, and the console is the only
@@ -24,7 +24,7 @@ import crypto from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
-import { CUSTOM_DIMENSIONS, MEASUREMENT_ID } from "../web/js/analytics.js";
+import { CUSTOM_DIMENSIONS, MEASUREMENT_ID } from "../web/js/analytics.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -306,10 +306,10 @@ async function resolveProperty(token) {
 const USAGE = `Usage: npm run ga:dimensions [-- <options>]
 
 Syncs the GA4 property's custom dimensions with CUSTOM_DIMENSIONS in
-web/js/analytics.js. Prints the diff and changes nothing unless --apply.
+web/js/analytics.ts. Prints the diff and changes nothing unless --apply.
 
   --property <id>   Numeric GA4 property id (default: $GA_PROPERTY_ID, else
-                    resolved from the measurement id in analytics.js)
+                    resolved from the measurement id in web/js/analytics.ts)
   --apply           Create and update dimensions on the property
   --archive-extra   Also archive dimensions the app no longer declares
   --json            Emit the plan as JSON instead of prose

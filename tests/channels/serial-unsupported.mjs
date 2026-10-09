@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { BrowserSerialBridge } from "../../web/js/serial.ts";
-import { initOptions, isIgnoredError } from "../../web/js/sentry.js";
+import { initOptions, isIgnoredError } from "../../web/js/sentry.ts";
 import { isSerialUnsupported } from "../../web/js/serial-errors.ts";
 import { withNavigator } from "../support/globals.mjs";
 import { createTestRadioHarness } from "../support/radio-harness.mjs";

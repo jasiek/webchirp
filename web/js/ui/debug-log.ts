@@ -1,6 +1,6 @@
 import { errorDetails } from "./format.ts";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.ts";
-import { captureError } from "../sentry.js";
+import { captureError } from "../sentry.ts";
 import { isBootstrapFailure } from "../runtime-bootstrap.ts";
 import { isUserPreconditionFailure, runtimeErrorSentence } from "../runtime-errors.ts";
 import type { UiContext } from "../types/ui-context.js";
@@ -118,7 +118,7 @@ export function createDebugLog(
   // a defect gets, for the same reasons a cancellation does: it does not open
   // the debug panel in the user's face, it does not become the title of their
   // next bug report, and it is not reported to Sentry (isIgnoredError,
-  // web/js/sentry.js drops it by exception class).
+  // web/js/sentry.ts drops it by exception class).
   //
   // The full traceback still goes to the panel, unconditionally: whatever the
   // UI makes of a failure, the panel is where all of it lands. details is

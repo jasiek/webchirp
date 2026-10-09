@@ -9,7 +9,7 @@
 // Two halves have to agree for the drop to happen, and neither is visible from
 // the other: the runtime has to raise RuntimePreconditionError
 // (web/python/webchirp_bridge/runtime_errors.py), and isIgnoredError in
-// web/js/sentry.js has to test for that class. The dispatcher sends the class
+// web/js/sentry.ts has to test for that class. The dispatcher sends the class
 // as a field of the error envelope, so the class name is the contract between
 // them -- rename the class and the rule stops matching in a way nothing else
 // notices.
@@ -17,7 +17,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { initOptions } from "../../web/js/sentry.js";
+import { initOptions } from "../../web/js/sentry.ts";
 import { isPythonError, runtimeErrorSentence } from "../../web/js/runtime-errors.ts";
 import { createDebugLog } from "../../web/js/ui/debug-log.ts";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";

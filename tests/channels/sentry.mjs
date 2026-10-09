@@ -20,8 +20,8 @@ import {
   scrubMetricAttributes,
   scrubText,
   setContextProvider,
-} from "../../web/js/sentry.js";
-import { ANALYTICS_HOSTS } from "../../web/js/analytics.js";
+} from "../../web/js/sentry.ts";
+import { ANALYTICS_HOSTS } from "../../web/js/analytics.ts";
 import { makeWindow } from "../support/fake-window.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
@@ -71,7 +71,7 @@ test("the SDK URL is pinned to the version declared in package.json", () => {
   assert.equal(
     SENTRY_SDK_VERSION,
     declared,
-    "web/js/sentry.js ships a different SDK version than package.json pins",
+    "web/js/sentry.ts ships a different SDK version than package.json pins",
   );
   assert.ok(SENTRY_SDK_URL.includes(`@sentry/browser@${declared}`));
 });
@@ -475,11 +475,11 @@ test("this module never sets a scope attribute, which would bypass the allowlist
   // that. The app's guarantee is that it never sets one -- it reaches the SDK
   // only through this module -- so that is what is pinned here rather than a
   // behaviour the SDK does not offer.
-  const source = fs.readFileSync(path.join(repoRoot, "web", "js", "sentry.js"), "utf8");
+  const source = fs.readFileSync(path.join(repoRoot, "web", "js", "sentry.ts"), "utf8");
   assert.equal(
     /\.setAttributes?\s*\(/.test(source),
     false,
-    "web/js/sentry.js sets a scope attribute, which is not covered by METRIC_ATTRIBUTES",
+    "web/js/sentry.ts sets a scope attribute, which is not covered by METRIC_ATTRIBUTES",
   );
 });
 

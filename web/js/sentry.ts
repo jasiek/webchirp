@@ -1,6 +1,6 @@
 // Sentry error reporting.
 //
-// Shaped deliberately like web/js/analytics.js, and for the same reasons: the
+// Shaped deliberately like web/js/analytics.ts, and for the same reasons: the
 // production-host gate, the vendor loader and the redaction rules all live in
 // one module, so no feature module has to know whether reporting is switched on
 // or what it is allowed to send. Loaded with type="module", so it runs after
@@ -23,15 +23,14 @@ import { isSerialUnsupported } from "./serial-errors.ts";
 // The SDK's namespace as the CDN's +esm build exports it, typed from the npm
 // package package.json pins to the same version (tests/channels/sentry.mjs
 // keeps the two in step). Type-only: nothing here imports the package.
-/** @typedef {typeof import("@sentry/browser")} SentrySdk */
-/** @typedef {{action?: string, tags?: Record<string, unknown>}} CaptureContext */
-/**
- * @typedef {Object} MetricRecord
- * @property {"count"|"distribution"} type
- * @property {number} value
- * @property {string} [unit]
- * @property {Record<string, unknown>} [attributes]
- */
+export type SentrySdk = typeof import("@sentry/browser");
+export type CaptureContext = {action?: string, tags?: Record<string, unknown>};
+export interface MetricRecord {
+  type: "count" | "distribution";
+  value: number;
+  unit?: string;
+  attributes?: Record<string, unknown>;
+}
 
 // Project this app reports into. Unlike a secret, a DSN is meant to be public --
 // it only grants the right to submit events -- which is why it can sit in a
@@ -152,8 +151,7 @@ const DENY_URLS = Object.freeze([
 // The rules keep the shape of the failure while dropping the values: what broke
 // and where stays, which value it broke on does not. Order matters, because the
 // later numeric rules would otherwise eat digits out of the earlier patterns.
-/** @type {ReadonlyArray<[RegExp, string | ((match: string, ...groups: string[]) => string)]>} */
-const SCRUB_RULES = Object.freeze([
+const SCRUB_RULES: ReadonlyArray<[RegExp, string | ((match: string, ...groups: string[]) => string)]> = Object.freeze([
   // Query strings first. A repeater query puts the user's coordinates in the
   // URL, so the URL of a failed fetch is a location fix.
   [/(https?:\/\/[^\s"'<>]*?)\?[^\s"'<>]*/gi, "$1?[query]"],
@@ -194,7 +192,7 @@ export function scrubText(value) {
     // Each rule's replacement is a string or a replacer function, both of
     // which replace() takes; lib.es5 declares the two as separate overloads
     // and TS picks neither for their union.
-    out = out.replace(pattern, /** @type {any} */ (replacement));
+    out = out.replace(pattern, replacement as any);
   }
   return out;
 }
@@ -204,7 +202,7 @@ export function scrubText(value) {
 // SCRUB_RULES above have to chase; a metric attribute is a value we chose to
 // attach, so the honest control is a list of the keys rather than a filter on
 // their contents. This is the job CUSTOM_DIMENSIONS does in
-// web/js/analytics.js -- one declared vocabulary, reviewed as a unit -- minus
+// web/js/analytics.ts -- one declared vocabulary, reviewed as a unit -- minus
 // the vendor registration, which Sentry does not require.
 //
 // Every key here is a CHIRP driver identifier, a fixed enum, or a bucketed
@@ -367,8 +365,7 @@ function attachPythonContext(event, error) {
 }
 
 // The loaded SDK namespace, or null while reporting is off or still loading.
-/** @type {SentrySdk|null} */
-let sdk = null;
+let sdk: SentrySdk | null = null;
 
 // Captures raised before the SDK finished loading. The window this covers is
 // small but it is the one that matters: Pyodide boots from a CDN behind a
@@ -376,10 +373,8 @@ let sdk = null;
 // of failure that happens before any of our code is ready to report it.
 // Metrics recorded in the same window, kept apart from the captures above
 // only because they are replayed through a different SDK call.
-/** @type {Array<[unknown, CaptureContext]>} */
-const pendingCaptures = [];
-/** @type {Array<[string, Partial<MetricRecord>]>} */
-const pendingMetrics = [];
+const pendingCaptures: Array<[unknown, CaptureContext]> = [];
+const pendingMetrics: Array<[string, Partial<MetricRecord>]> = [];
 const MAX_PENDING = 10;
 
 // Tags stamped onto every event, supplied by the UI so this module does not
@@ -411,8 +406,8 @@ export function isSentryHost(win) {
 
 // String tags only: Sentry indexes tags for search and drops structured values,
 // and a tag whose value is "[object Object]" is worse than an absent one.
-function stringTags(source) {
-  const tags = {};
+function stringTags(source: Record<string, unknown> | null | undefined): Record<string, string> {
+  const tags: Record<string, string> = {};
   for (const [key, value] of Object.entries(source || {})) {
     if (value === undefined || value === null || value === "") {
       continue;
@@ -444,12 +439,7 @@ async function resolveRelease(win) {
 // Error so they group by message like everything else -- Sentry files a bare
 // string as a "Non-Error exception" with no useful title. The caller passes the
 // loaded SDK it has just checked for, so this never runs against a null one.
-/**
- * @param {SentrySdk} client
- * @param {unknown} error
- * @param {CaptureContext} [context]
- */
-function sendCapture(client, error, { action, tags } = {}) {
+function sendCapture(client: SentrySdk, error: unknown, { action, tags }: CaptureContext = {}) {
   const payload = typeof error === "string" ? new Error(error) : error;
   client.withScope((scope) => {
     if (action) {
@@ -469,11 +459,10 @@ function sendCapture(client, error, { action, tags } = {}) {
 // Never throws: telemetry must not be able to fail the operation it is
 // reporting on, which is the same rule trackEvent() follows.
 /**
- * @param {unknown} error  An Error, or a message to wrap in one.
- * @param {CaptureContext} [context]
- * @returns {boolean}  Whether the SDK took it (false while buffered or off).
+ * @param error An Error, or a message to wrap in one.
+ * @returns Whether the SDK took it (false while buffered or off).
  */
-export function captureError(error, context = {}) {
+export function captureError(error: unknown, context: CaptureContext = {}): boolean {
   try {
     if (!sdk) {
       if (pendingCaptures.length < MAX_PENDING) {
@@ -501,12 +490,11 @@ const METRIC_EMITTERS = Object.freeze({
 // is merged underneath the caller's, so an attribute set explicitly at the call
 // site still wins -- the same precedence beforeSend gives tags. Like
 // sendCapture(), it is handed the SDK its caller checked for.
-/**
- * @param {SentrySdk} client
- * @param {string} name
- * @param {Partial<MetricRecord>} [metric]
- */
-function sendMetric(client, name, { type, value, unit, attributes } = {}) {
+function sendMetric(
+  client: SentrySdk,
+  name: string,
+  { type, value, unit, attributes }: Partial<MetricRecord> = {},
+) {
   const emit = type ? METRIC_EMITTERS[type] : undefined;
   // A kind nobody wired up, or a CDN build without the metrics namespace. Both
   // are silent: a missing metric must not become a thrown error.
@@ -526,12 +514,7 @@ function sendMetric(client, name, { type, value, unit, attributes } = {}) {
 //
 // Buffered like a capture when the SDK has not landed yet, and never throws --
 // telemetry must not be able to fail the operation it is reporting on.
-/**
- * @param {string} name
- * @param {Partial<MetricRecord>} [metric]
- * @returns {boolean}
- */
-export function captureMetric(name, metric = {}) {
+export function captureMetric(name: string, metric: Partial<MetricRecord> = {}): boolean {
   try {
     if (!sdk) {
       if (pendingMetrics.length < MAX_PENDING) {
@@ -574,8 +557,7 @@ function bufferEarlyErrors(win) {
   };
 }
 
-/** @param {SentrySdk} client */
-function drainPendingCaptures(client) {
+function drainPendingCaptures(client: SentrySdk) {
   const queued = pendingCaptures.splice(0, pendingCaptures.length);
   for (const [error, context] of queued) {
     try {
@@ -586,8 +568,7 @@ function drainPendingCaptures(client) {
   }
 }
 
-/** @param {SentrySdk} client */
-function drainPendingMetrics(client) {
+function drainPendingMetrics(client: SentrySdk) {
   const queued = pendingMetrics.splice(0, pendingMetrics.length);
   for (const [name, metric] of queued) {
     try {
@@ -656,18 +637,15 @@ export function initOptions(release) {
 //
 // loadSdk is injectable so tests can drive the whole path without reaching the
 // network.
-/**
- * @param {Window|null|undefined} win
- * @param {{loadSdk?: () => Promise<SentrySdk>}} [options]
- * @returns {Promise<SentrySdk|null>}
- */
-export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) } = {}) {
+export async function initSentry(
+  win: Window | null | undefined,
+  { loadSdk = () => import(SENTRY_SDK_URL) }: { loadSdk?: () => Promise<SentrySdk> } = {},
+): Promise<SentrySdk | null> {
   if (!win || !isSentryHost(win)) {
     return null;
   }
   const stopBuffering = bufferEarlyErrors(win);
-  /** @type {SentrySdk} */
-  let loaded;
+  let loaded: SentrySdk;
   try {
     // Both are network round trips and neither needs the other, so they overlap
     // rather than adding up.

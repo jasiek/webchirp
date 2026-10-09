@@ -291,7 +291,7 @@ export function bindInstallTracking(win = target) {
     // Deliberately not preventDefault()ed here: this is the measurement side
     // and it runs on both pages, while only index.html has a button to replace
     // what cancelling would suppress. Cancelling is that page's own decision,
-    // taken in web/js/install-prompt.js, and preventDefault() from a second
+    // taken in web/js/install-prompt.ts, and preventDefault() from a second
     // listener is honoured whichever runs first — so this event means "an
     // install became available", not "the browser showed something".
     trackEvent("pwa_install_prompt", {}, win);

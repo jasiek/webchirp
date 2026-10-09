@@ -2,8 +2,8 @@
 // default native-language page that visitors and crawlers receive.
 // The generated pages (scripts/build-licensing-pages.mjs) put these attributes
 // on HTML elements only, so each match has dataset, hidden, lang and dir.
-const buttons = [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-licensing-language]"))];
-const panels = [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-licensing-panel]"))];
+const buttons = [...document.querySelectorAll("[data-licensing-language]") as NodeListOf<HTMLElement>];
+const panels = [...document.querySelectorAll("[data-licensing-panel]") as NodeListOf<HTMLElement>];
 
 // Keep the visible panel, button state, document language, and title together.
 function showLanguage(language) {

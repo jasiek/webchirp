@@ -1,8 +1,8 @@
 // The UI's side of Sentry metrics: the vocabulary of user flows, and the one
 // entry point every feature module records through.
 //
-// This module is to web/js/sentry.js what web/js/ui/analytics.ts is to
-// web/js/analytics.js. The generic module owns the production-host gate, the
+// This module is to web/js/sentry.ts what web/js/ui/analytics.ts is to
+// web/js/analytics.ts. The generic module owns the production-host gate, the
 // pre-load buffer and the attribute allowlist; this one owns what the app
 // actually has to say. Feature modules import recordFlow() and nothing else, so
 // none of them has to know whether reporting is switched on.
@@ -24,7 +24,7 @@
 // how the app is used; this answers what share of attempts fail, on which
 // driver, and is the half worth alerting on.
 
-import { captureMetric } from "../sentry.js";
+import { captureMetric } from "../sentry.ts";
 
 // Every flow that reports an outcome, as a closed set. A typo at a call site
 // then costs one missing metric rather than quietly opening a second series in
@@ -59,7 +59,7 @@ const FLOW_NAMES: ReadonlySet<string> = new Set(Object.values(FLOWS));
 // app is answerable for -- a clone, a runtime boot -- and omit it where the
 // number would measure the user's disk or the user's own hesitation instead.
 //
-// Attributes are filtered against the allowlist in web/js/sentry.js, so a
+// Attributes are filtered against the allowlist in web/js/sentry.ts, so a
 // caller may pass the same parameter bag it hands trackEvent(): the values that
 // are not dimensions (a raw channel count, a duration) are dropped there rather
 // than having to be stripped at every call site.

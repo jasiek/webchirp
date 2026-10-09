@@ -32,7 +32,7 @@ import {
   trackEvent,
 } from "./ui/analytics.ts";
 import { FLOWS, OUTCOMES, recordFlow } from "./ui/metrics.ts";
-import { captureError, setContextProvider } from "./sentry.js";
+import { captureError, setContextProvider } from "./sentry.ts";
 import type { RuntimeApi } from "./runtime-rpc.ts";
 import type { UiActions, UiContext } from "./types/ui-context.js";
 

@@ -1,7 +1,7 @@
 This repository hosts a browser-based CHIRP interface (`web/`) that executes CHIRP Python code in Pyodide and communicates with radios via Web Serial.
 
 ## Core Architecture
-- `web/app.js`: Browser entry point: wires the UI, the runtime RPC client and
+- `web/app.ts`: Browser entry point: wires the UI, the runtime RPC client and
   the browser serial bridge together.
 - `web/js/runtime-rpc.ts`: Main-thread runtime RPC layer and Pyodide bootstrap.
 - Serial layer: `web/js/serial-transport.ts` declares the port contract every
@@ -168,7 +168,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - When you discover something new, or unexpected, put it in FINDINGS.md.
 - Analytics goes through `trackEvent` in `web/js/ui/analytics.ts`; never reach
   `gtag` directly. Every parameter an event sends must be declared in
-  `CUSTOM_DIMENSIONS` (`web/js/analytics.js`) or GA collects it and shows it
+  `CUSTOM_DIMENSIONS` (`web/js/analytics.ts`) or GA collects it and shows it
   nowhere, and never send user data — no file names, channel names, frequencies,
   search terms or coordinates.
 - When on a worktree other than the master branch run a dev server on a port other than 8000.

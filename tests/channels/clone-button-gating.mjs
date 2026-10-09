@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { FakeElement } from "../support/fake-dom.mjs";
 import { makeWindow } from "../support/fake-window.mjs";
-import { initSentry, resetSentryForTests } from "../../web/js/sentry.js";
+import { initSentry, resetSentryForTests } from "../../web/js/sentry.ts";
 import { createSerialUnsupportedError } from "../../web/js/serial-errors.ts";
 
 // The clone buttons must stay dead until a serial port has actually been

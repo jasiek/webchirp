@@ -131,7 +131,7 @@ export function jsErrorName(error: any): string {
 // for. The message is already the instruction that fixes it, which is why the
 // UI answers with a modal (web/js/ui/notice-modal.ts) instead of a traceback in
 // the debug panel, and why the event never reaches Sentry (isIgnoredError,
-// web/js/sentry.js). A subclass of RuntimePreconditionError is one too.
+// web/js/sentry.ts). A subclass of RuntimePreconditionError is one too.
 export function isUserPreconditionFailure(error: any): error is RuntimeCallError {
   return isPythonError(error, "RuntimePreconditionError");
 }

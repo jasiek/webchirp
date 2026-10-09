@@ -604,7 +604,7 @@ async function handleValidateRadioSettings(
   });
 }
 
-// The runtime API the app calls, by the names web/app.js and the UI modules
+// The runtime API the app calls, by the names web/app.ts and the UI modules
 // use. Most map onto one RPC method; listRadios, loadImage and getRuntimeInfo
 // compose several or none. The Python-facing names are in RPC_METHODS
 // (web/js/rpc-dispatch.ts). Radio-bound methods take the sessionId that

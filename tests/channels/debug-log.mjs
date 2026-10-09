@@ -3,7 +3,7 @@ import test from "node:test";
 import "../support/register-cdn-imports.mjs";
 
 import { createDebugLog } from "../../web/js/ui/debug-log.ts";
-import { initOptions, initSentry, resetSentryForTests } from "../../web/js/sentry.js";
+import { initOptions, initSentry, resetSentryForTests } from "../../web/js/sentry.ts";
 import { markBootstrapFailure } from "../../web/js/runtime-bootstrap.ts";
 import { fakeDebugDom } from "../support/fake-dom.mjs";
 

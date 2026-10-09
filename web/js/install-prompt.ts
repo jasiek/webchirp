@@ -11,7 +11,7 @@
 // Cancelling is only safe where a replacement affordance exists, so this module
 // is loaded by index.html alone: about.html keeps the browser's own prompt.
 //
-// Measurement stays in web/js/analytics.js, whose bindInstallTracking() listens
+// Measurement stays in web/js/analytics.ts, whose bindInstallTracking() listens
 // for the same event without cancelling it. Two listeners on one event is
 // deliberate -- one page may cancel and one may not, while both report the same
 // funnel -- and preventDefault() from either is honoured regardless of order.
@@ -28,10 +28,9 @@ let target = typeof window === "undefined" ? null : window;
 // Null whenever no install can be offered right now: before the browser offers
 // one, after the prompt has been used (an event may be raised only once), and
 // after the app has been installed.
-/** @type {BeforeInstallPromptEvent|null} */
-let deferredPrompt = null;
+let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
-const availabilityListeners = new Set();
+const availabilityListeners = new Set<(available: boolean) => void>();
 
 // appinstalled is dispatched only to the window the install happened from, so a
 // second tab left open on this origin would go on showing an Install button
@@ -41,8 +40,7 @@ const availabilityListeners = new Set();
 const INSTALL_CHANNEL_NAME = "webchirp-install";
 const INSTALLED_MESSAGE = "installed";
 
-/** @type {BroadcastChannel|null} */
-let installChannel = null;
+let installChannel: BroadcastChannel | null = null;
 
 // Drop the parked prompt and tell whoever is listening. The one path both the
 // local appinstalled event and another tab's message converge on.
@@ -68,8 +66,7 @@ function openInstallChannel(win) {
   if (typeof Channel !== "function") {
     return;
   }
-  /** @type {BroadcastChannel} */
-  let channel;
+  let channel: BroadcastChannel;
   try {
     channel = new Channel(INSTALL_CHANNEL_NAME);
   } catch {

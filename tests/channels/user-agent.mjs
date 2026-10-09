@@ -6,7 +6,7 @@ import {
   detectPlatformName,
   resetBrowserProbeForTests,
 } from "../../web/js/ui/format.ts";
-import { METRIC_ATTRIBUTES } from "../../web/js/sentry.js";
+import { METRIC_ATTRIBUTES } from "../../web/js/sentry.ts";
 import { withNavigator } from "../support/globals.mjs";
 
 // Browser and platform as bounded telemetry tokens. Nearly every case here is
@@ -195,7 +195,7 @@ test("an unrecognised platform reports other", (t) => {
   assert.equal(detectPlatformName(), "other");
 });
 
-test("both tokens are declared, or web/js/sentry.js would drop them", () => {
+test("both tokens are declared, or web/js/sentry.ts would drop them", () => {
   assert.ok(METRIC_ATTRIBUTES.includes("browser"));
   assert.ok(METRIC_ATTRIBUTES.includes("platform"));
 });

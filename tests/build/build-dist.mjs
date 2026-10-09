@@ -206,6 +206,27 @@ test("a module bundled into its importer renames the importer when it changes", 
   assert.notEqual(hashedNameOf(after, "js/app"), hashedNameOf(before, "js/app"));
 });
 
+// The sources are TypeScript: a page names its .ts entry, the entry imports
+// other .ts files by their .ts names, and what ships is JavaScript under a
+// hashed .js name with the page pointed at it.
+test("a TypeScript entry is bundled with its types stripped", async () => {
+  const emitted = await build({
+    "index.html": '<script type="module" src="./js/app.ts"></script>\n',
+    "js/app.ts":
+      'import { leaf } from "./leaf.ts";\n'
+      + 'import type { Leaf } from "./leaf.ts";\n'
+      + "export const value: Leaf = leaf;\n",
+    "js/leaf.ts": "export type Leaf = number;\nexport const leaf: Leaf = 41 + 1;\n",
+  });
+  const entry = hashedNameOf(emitted, "js/app");
+  assert.match(entry, /\.js$/);
+  const code = text(emitted, entry);
+  assert.match(code, /41 \+ 1/);
+  assert.doesNotMatch(code, /: Leaf|import type/);
+  assert.ok(text(emitted, "index.html").includes(`src="./${entry}"`));
+  assert.deepEqual([...emitted.keys()].filter((rel) => rel.endsWith(".ts")), [], "no .ts file ships");
+});
+
 test("no source module or stylesheet ships under its own name", async () => {
   const emitted = await build(appTree("export const leaf = 1;\n"));
   const unhashed = [...emitted.keys()].filter(

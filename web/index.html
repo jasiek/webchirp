@@ -11,7 +11,7 @@
       out in prose here -- build-dist rewrites every occurrence of one, comments
       included.
     -->
-    <script type="module" src="./js/sentry.js"></script>
+    <script type="module" src="./js/sentry.ts"></script>
     <!--
       Analytics. Everything with logic in it lives in the module below, shared
       with about.html: the production-host gate, the vendor loader it injects,
@@ -22,7 +22,7 @@
       the vendor at all. Do not spell asset paths out in prose here — build-dist
       rewrites every occurrence of one, comments included.
     -->
-    <script type="module" src="./js/analytics.js"></script>
+    <script type="module" src="./js/analytics.ts"></script>
     <!--
       Home-screen install. Cancels the browser's own install prompt and parks
       it for the toolbar button, which is the only way most Android users ever
@@ -32,7 +32,7 @@
       paths out in prose here -- build-dist rewrites every occurrence of one,
       comments included.
     -->
-    <script type="module" src="./js/install-prompt.js"></script>
+    <script type="module" src="./js/install-prompt.ts"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
       Base URL of the API that fronts przemienniki.net, repeaterbook.com and
@@ -764,7 +764,7 @@
     </div>
 
     <input id="codeplug-file" type="file" accept=".csv,.img" hidden />
-    <script type="module" src="./js/version-info.js"></script>
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./js/version-info.ts"></script>
+    <script type="module" src="./app.ts"></script>
   </body>
 </html>

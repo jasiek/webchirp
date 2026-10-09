@@ -506,7 +506,7 @@ export class FakeDocument {
 
   // The id lookup, in terms of the selector lookup, so an element resolved
   // either way is the same object and the vivify rule applies to both.
-  // web/js/version-info.js and web/js/serial-test-page.ts reach for the DOM
+  // web/js/version-info.ts and web/js/serial-test-page.ts reach for the DOM
   // this way rather than by selector.
   getElementById(id) {
     return this.querySelector(`#${id}`);

@@ -197,8 +197,8 @@ function renderCountry(record, guide, local, english, cept, baseUrl) {
     <meta property="og:image" content="${baseUrl}/images/social-preview.png" />
     <link rel="icon" href="../favicon.ico" sizes="any" />
     <link rel="stylesheet" href="../styles.css" />
-    <script type="module" src="../js/analytics.js"></script>
-    ${record.locale === "en" ? "" : '<script type="module" src="../js/licensing-language.js"></script>'}
+    <script type="module" src="../js/analytics.ts"></script>
+    ${record.locale === "en" ? "" : '<script type="module" src="../js/licensing-language.ts"></script>'}
   </head>
   <body class="about-page licensing-page">
     <!-- ${englishComment} -->
@@ -232,7 +232,7 @@ function renderIndex(records, baseUrl) {
   <meta name="description" content="Country guides to amateur radio licensing, fees, processing times and national societies." />
   <link rel="canonical" href="${baseUrl}/licensing/index.html" />
   <link rel="stylesheet" href="../styles.css" /><link rel="icon" href="../favicon.ico" sizes="any" />
-  <script type="module" src="../js/analytics.js"></script></head>
+  <script type="module" src="../js/analytics.ts"></script></head>
 <body class="about-page licensing-page"><main class="about-shell"><div class="about-card">
   <h1>Amateur radio licences by country</h1><p>Select a country for its licensing authority, cost, processing time, requirements and national amateur radio organization.</p>
   <ul class="licensing-directory">${links}</ul>

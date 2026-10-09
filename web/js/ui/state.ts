@@ -79,7 +79,7 @@ export function createUiState(): UiState {
   };
 }
 
-// The runtime client, or a clear error before web/app.js has installed one.
+// The runtime client, or a clear error before web/app.ts has installed one.
 export function requireRuntimeApi(state: UiState): RuntimeApi {
   if (!state.runtimeApi) {
     throw new Error("Runtime API client is not initialized");

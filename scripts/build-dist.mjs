@@ -56,7 +56,7 @@ const PYTHON_URLS_MODULE = path.join(WEB_DIR, "js", "runtime-python-urls.ts");
 // that way) then resolves it the same way in whichever chunk it ends up in.
 const JS_OUT_DIR = "js";
 // The three CDN modules, all on jsDelivr: Pyodide's loader (a static import in
-// web/js/runtime-rpc.ts), the Sentry SDK (web/js/sentry.js) and the
+// web/js/runtime-rpc.ts), the Sentry SDK (web/js/sentry.ts) and the
 // web-serial polyfill (web/js/webusb-serial.ts), the last two lazy.
 const EXTERNAL_URLS = ["https://cdn.jsdelivr.net/*"];
 // The CHIRP archive and manifest for the pinned revision. Immutable by name like

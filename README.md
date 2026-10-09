@@ -168,7 +168,7 @@ wrong one still echoes perfectly. The same cases run against fake hardware in
 
 ## Architecture
 
-- Entry point / wiring: `web/app.js` connects the UI controller, runtime RPC
+- Entry point / wiring: `web/app.ts` connects the UI controller, runtime RPC
   client, and serial bridge.
 - UI controller: `web/js/ui.ts` (channel table, settings editor, clipboard,
   status/debug panels).
@@ -216,7 +216,7 @@ sequenceDiagram
   participant S as serial.js<br/>(Web Serial / WebUSB)
   participant R as Radio
 
-  Note over UI,S: app.js wires the UI controller, main-thread RPC client, and serial bridge
+  Note over UI,S: app.ts wires the UI controller, main-thread RPC client, and serial bridge
 
   U->>UI: Open page
   UI->>RPC: listRadios()

@@ -29,7 +29,7 @@ export const REQUIRED_ELEMENTS = {
   debugCopyEl: "#debug-copy",
   reportIssueEl: "#report-issue",
   // Toolbar install affordance, hidden until the browser parks an install
-  // prompt for web/js/install-prompt.js to raise.
+  // prompt for web/js/install-prompt.ts to raise.
   installAppEl: "#install-app",
   // Global badge shown only while the browser reports that it is offline.
   offlineIndicatorEl: "#offline-indicator",

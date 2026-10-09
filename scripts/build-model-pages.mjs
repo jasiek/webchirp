@@ -739,7 +739,7 @@ ${variants
   <head>
     <meta charset="UTF-8" />
     <!-- Same analytics wiring as index.html; the module owns the production-host gate. -->
-    <script type="module" src="../js/analytics.js"></script>
+    <script type="module" src="../js/analytics.ts"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${escapeHtml(title)} | WebCHIRP</title>
     <meta name="description" content="${escapeHtml(description)}" />
@@ -835,7 +835,7 @@ function renderVendorPage({ vendor, radios, baseUrl }) {
   <head>
     <meta charset="UTF-8" />
     <!-- Same analytics wiring as index.html; the module owns the production-host gate. -->
-    <script type="module" src="../js/analytics.js"></script>
+    <script type="module" src="../js/analytics.ts"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${escapeHtml(title)} | WebCHIRP</title>
     <meta name="description" content="${escapeHtml(description)}" />
@@ -897,7 +897,7 @@ function renderIndexPage({ directory, radios, baseUrl }) {
   <head>
     <meta charset="UTF-8" />
     <!-- Same analytics wiring as index.html; the module owns the production-host gate. -->
-    <script type="module" src="../js/analytics.js"></script>
+    <script type="module" src="../js/analytics.ts"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${escapeHtml(title)} | WebCHIRP</title>
     <meta name="description" content="${escapeHtml(description)}" />

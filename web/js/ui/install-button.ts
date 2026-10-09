@@ -2,13 +2,13 @@ import {
   isInstallAvailable,
   onInstallAvailabilityChange,
   promptInstall,
-} from "../install-prompt.js";
+} from "../install-prompt.ts";
 import { trackEvent } from "./analytics.ts";
 import { errorDetails } from "./format.ts";
 import type { UiContext } from "../types/ui-context.js";
 
 // The toolbar's Install button: this app's own install affordance, standing in
-// for the browser one that web/js/install-prompt.js suppresses. See that module
+// for the browser one that web/js/install-prompt.ts suppresses. See that module
 // for why -- in short, Chrome's Android install badge is throttled to the point
 // of invisibility, so the install has to be offered somewhere a user looks.
 //
@@ -28,7 +28,7 @@ export function createInstallButton(ctx: UiContext) {
   }
 
   // Raise the prompt and report the tap. Only the tap is reported here: the
-  // answer arrives separately as pwa_install_choice from web/js/analytics.js,
+  // answer arrives separately as pwa_install_choice from web/js/analytics.ts,
   // which watches the same event whether or not this button raised it, and the
   // two together are this button's conversion rate. The outcome still reaches
   // the debug panel, where it is the only sign the tap did anything at all when

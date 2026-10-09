@@ -76,7 +76,7 @@ export function createSerialActions(ctx: UiContext) {
     dom.webbluetoothConnectToggleEl.disabled = busy;
   }
 
-  // Record whether a clone can run here at all; web/app.js decides from the
+  // Record whether a clone can run here at all; web/app.ts decides from the
   // WebAssembly feature check and web/js/ui.ts passes it through init().
   function setCloneSupported(supported) {
     cloneSupported = Boolean(supported);

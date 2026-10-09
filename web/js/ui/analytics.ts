@@ -1,7 +1,7 @@
 // The UI's side of analytics: the parameters every event site builds, and the
 // one import path the UI modules reach gtag through.
 //
-// trackEvent lives in web/js/analytics.js, which the two pages load directly —
+// trackEvent lives in web/js/analytics.ts, which the two pages load directly —
 // it owns the production-host gate, the vendor tag and the launch context, and
 // is inert wherever gtag is absent (off-domain, behind a blocker, in the
 // headless tests). It is re-exported here so a UI module never has to know
@@ -21,7 +21,7 @@ import { errorDetails } from "./format.ts";
 import { isRuntimeCallError, jsErrorName } from "../runtime-errors.ts";
 import { isPortSelectionCancelled } from "../serial-errors.ts";
 
-export { trackEvent } from "../analytics.js";
+export { trackEvent } from "../analytics.ts";
 
 // The driver identity every radio-scoped event carries. radio answers "which
 // radios do people own", module/class answer "which CHIRP driver ran", and the

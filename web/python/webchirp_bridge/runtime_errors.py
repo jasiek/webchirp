@@ -42,7 +42,7 @@ class RuntimePreconditionError(RuntimeUnsupportedError):
     Split out from the generic error for the same reason ``ImageDetectionError``
     is: the class is the contract the JS side matches on, and its message is
     user-facing copy that must stay free to change. ``isIgnoredError`` in
-    ``web/js/sentry.js`` matches it by type and drops the event, keeping one
+    ``web/js/sentry.ts`` matches it by type and drops the event, keeping one
     Sentry report per user who pressed the buttons out of order from burying the
     real failures. The debug panel still prints it in full.
     ``tests/channels/precondition-errors.mjs`` pins the two together.

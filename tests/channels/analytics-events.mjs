@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CUSTOM_DIMENSIONS } from "../../web/js/analytics.js";
+import { CUSTOM_DIMENSIONS } from "../../web/js/analytics.ts";
 import {
   channelCountBucket,
   classifyErrorKind,
@@ -15,7 +15,7 @@ import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 // The parameters the UI attaches to its events. What these produce is what GA
 // stores forever, so the tests here are as much about what must never be sent —
 // a file name, a frequency, a raw error message — as about what must.
-// web/js/analytics.js owns the gtag side of it and is covered in
+// web/js/analytics.ts owns the gtag side of it and is covered in
 // tests/channels/analytics.mjs.
 
 // A runtime failure reaches the UI as the RuntimeCallError the dispatcher
