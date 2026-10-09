@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeCellValue, parseFreqToHz } from "../../web/js/ui/channel-values.ts";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
 
 // What a value typed into a grid cell becomes is decided in one place: the
 // Python runtime's normalize_cell (web/python/webchirp_bridge/row_normalization.py),
 // reached through the normalize_and_validate_rows RPC. It replaced a copy of
-// the same rules in the browser (normalizeCellValue, web/js/ui/channel-values.ts),
-// and this table is how the move is proved: every case the JS tests covered
-// (tests/channels/channel-values.mjs), plus the parsing edges the two
-// languages could disagree on, run through both implementations against the
-// column metadata the runtime reports for a real driver, and each must give
-// the stored value and the accepted flag listed here.
+// the same rules in the browser (normalizeCellValue in
+// web/js/ui/channel-values.ts), and this table is what proved the move: every
+// case that function's tests covered, plus the parsing edges JavaScript and
+// Python could disagree on, ran through both implementations against the
+// column metadata the runtime reports for a real driver, and both gave the
+// stored value and accepted flag listed here. The browser copy is gone; the
+// table now pins the runtime to the outcomes the grid has always had.
 //
 // The drivers stand in for the hand-written metadata the JS tests used:
 //   uv5r   - 50-tone CTCSS table, 0-127 memories, 7-character upper-case
@@ -91,7 +91,7 @@ async function schemas(harness) {
 test("the runtime normalizes every cell case exactly as the browser's rules did", async () => {
   const harness = await sharedHarness();
   const bySession = await schemas(harness);
-  for (const [driver, { sessionId, columns }] of Object.entries(bySession)) {
+  for (const [driver, { sessionId }] of Object.entries(bySession)) {
     const cases = CASES.filter(([caseDriver]) => caseDriver === driver);
     // One call per driver, one request per case: the batching the grid uses.
     const result = await harness.rpc("normalize_and_validate_rows", {
@@ -102,18 +102,12 @@ test("the runtime normalizes every cell case exactly as the browser's rules did"
       })),
     });
     assert.equal(result.rows.length, cases.length);
-    cases.forEach(([, column, value, previous, allowReadOnly, wantValue, wantAccepted], index) => {
-      const label = `${driver || "no radio"} ${column} ${JSON.stringify(value)}`;
+    cases.forEach(([, column, value, , , wantValue, wantAccepted], index) => {
       const [cell] = result.rows[index].cells;
       assert.deepEqual(
         { value: cell.value, accepted: cell.accepted },
         { value: wantValue, accepted: wantAccepted },
-        `Python: ${label}`,
-      );
-      assert.deepEqual(
-        normalizeCellValue(column, value, columns[column] || {}, previous, { allowReadOnly }),
-        { value: wantValue, accepted: wantAccepted },
-        `JavaScript: ${label}`,
+        `${driver || "no radio"} ${column} ${JSON.stringify(value)}`,
       );
     });
   }
@@ -156,12 +150,23 @@ test("edits to one row apply in order, each falling back to what the one before 
   );
 });
 
-test("frequency text parses to hertz the same way on both sides", async () => {
+test("frequency text parses to hertz as the browser parsed it", async () => {
+  // Half a hertz rounds up, as JavaScript's Math.round does, rather than to
+  // even as Python's round() would; blank and anything but plain MHz digits
+  // are not frequencies.
   const harness = await sharedHarness();
-  const inputs = ["", "145.5", "145.0000005", "446.00625", " 7.1 ", "abc", "1e3"];
+  const cases = [
+    ["", null],
+    ["145.5", 145_500_000],
+    ["145.0000005", 145_000_001],
+    ["446.00625", 446_006_250],
+    [" 7.1 ", 7_100_000],
+    ["abc", null],
+    ["1e3", null],
+  ];
   const python = await harness.runPythonJson(
     "json.dumps([parse_freq_to_hz(text) for text in json.loads(_inputs)])",
-    { _inputs: JSON.stringify(inputs) },
+    { _inputs: JSON.stringify(cases.map(([text]) => text)) },
   );
-  assert.deepEqual(python, inputs.map((text) => parseFreqToHz(text)));
+  assert.deepEqual(python, cases.map(([, hz]) => hz));
 });

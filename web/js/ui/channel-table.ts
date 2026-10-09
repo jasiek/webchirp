@@ -683,9 +683,9 @@ export function createChannelTable(ctx: UiContext) {
     // A column with no driver metadata behind it is unconstrained, not
     // unsupported. Until a radio is selected the grid runs on the startup
     // schema (loadEmptySchema in web/js/ui/codeplug-io.ts), which seeds
-    // CHIRP's generic CSV headers with no columns to validate against, and
-    // setRowValueIfPresent writes anything through in that state. This has to
-    // agree with it: reading the absent option list as "the radio refuses
+    // CHIRP's generic CSV headers with no columns behind them, and the
+    // runtime checks a write then against the permissive default schema. This
+    // has to agree with it: reading the absent option list as "the radio refuses
     // this" made every repeater builder skip every record it was given, so a
     // directory query fetched hundreds of repeaters and inserted none, blaming
     // a selected radio that did not exist.

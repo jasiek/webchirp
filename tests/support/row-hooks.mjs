@@ -1,5 +1,6 @@
-// Row hooks matching web/js/ui/channel-table.ts's rowBuilderHooks(), for tests that
-// drive a repeater-directory row builder without a grid. Every builder test
+// Row hooks standing in for the ones buildRows() in web/js/ui/channel-table.ts
+// hands a builder, for tests that drive a repeater-directory row builder
+// without a grid or a runtime. Every builder test
 // needs the same three callbacks — a blank row, a guarded column write, and an
 // enum lookup that treats the caller's choices as a priority ranking — and
 // differs only in which columns exist, which options each enum column offers,
@@ -20,16 +21,18 @@ export const REPEATER_COLUMNS = [
 //   caseInsensitive - match options ignoring case. web/js/ui/channel-table.ts does; a
 //                     test that wants to pin the exact strings a driver
 //                     advertises leaves this off, so it is an explicit choice.
-//   maxFrequencyMhz - reject Frequency writes above this, the way
-//                     normalizeValue keeps the previous value when a frequency
-//                     falls outside valid_bands (Offset is exempt from that
-//                     check, which is the asymmetry some builders must notice).
+//   maxFrequencyMhz - reject Frequency writes above this, the way the runtime
+//                     keeps the previous value when a frequency falls outside
+//                     valid_bands (normalize_cell in
+//                     web/python/webchirp_bridge/row_normalization.py; Offset
+//                     is exempt from that check, which is the asymmetry some
+//                     builders must notice).
 //
-// setRowValue reports acceptance exactly as web/js/ui/channel-table.ts's does: false when
-// the column is absent, the frequency is out of band, or the value is not one
-// of the column's options. A column with no options listed is not an enum, so
-// anything can be written to it — matching normalizeValue, which only validates
-// against a non-empty option list.
+// setRowValue reports acceptance as the grid's does, from the runtime's
+// verdict: false when the column is absent, the frequency is out of band, or
+// the value is not one of the column's options. A column with no options
+// listed is not an enum, so anything can be written to it — matching the
+// runtime, which only validates against a non-empty option list.
 export function makeRowHooks({
   columns = REPEATER_COLUMNS,
   optionsByColumn = {},

@@ -2326,7 +2326,7 @@ button:disabled {
    paragraph, not a working limit: it only ever binds on a free-text column,
    because a name is bounded by the driver's own valid_name_length (16
    characters at the most, across every real driver) and a frequency by the ten
-   digits normalizeValue() writes. So it is set well clear of what the repeater
+   digits a CHIRP frequency is written with. So it is set well clear of what the repeater
    directories actually produce -- an RSGB query returns comments like
    "KIDDERMINSTER | IO82 | ~3.6 km", 23 to 32 characters -- and a value past it
    still scrolls inside the input.

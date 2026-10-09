@@ -555,8 +555,8 @@
         unticked field would make the form invalid and suppress the submit
         event, so applying some other field would do nothing at all. Bounds are
         checked on the ticked fields only, in readSettingControl
-        (web/js/ui/setting-fields.ts) and normalizeCellValue
-        (web/js/ui/channel-values.ts), and reported on the field itself.
+        (web/js/ui/setting-fields.ts) and by the runtime (previewRowEdits in
+        web/js/ui/channel-table.ts), and reported on the field itself.
       -->
       <form id="channel-bulk-edit-form" class="modal-card" novalidate>
         <h2 id="channel-bulk-edit-title">Edit selected channels</h2>
