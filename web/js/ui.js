@@ -2,17 +2,17 @@ import {
   buildExportFileName,
   detectBrowserName,
   detectPlatformName,
-} from "./ui/format.js";
-import { queryUiElements } from "./ui/dom.js";
+} from "./ui/format.ts";
+import { queryUiElements } from "./ui/dom.ts";
 import {
   createUiState,
   exposeCurrentRowsForDebugging,
   requireRuntimeApi,
-} from "./ui/state.js";
-import { createDebugLog } from "./ui/debug-log.js";
-import { createNoticeModal } from "./ui/notice-modal.js";
-import { createProgress } from "./ui/progress.js";
-import { createIssueReporter } from "./ui/issue-report.js";
+} from "./ui/state.ts";
+import { createDebugLog } from "./ui/debug-log.ts";
+import { createNoticeModal } from "./ui/notice-modal.ts";
+import { createProgress } from "./ui/progress.ts";
+import { createIssueReporter } from "./ui/issue-report.ts";
 import { createSettingsPanel } from "./ui/settings-panel.js";
 import { createChannelExtra } from "./ui/channel-extra.js";
 import { createChannelBulkEdit } from "./ui/channel-bulk-edit.js";
@@ -30,8 +30,8 @@ import {
   errorTypeName,
   radioEventParams,
   trackEvent,
-} from "./ui/analytics.js";
-import { FLOWS, OUTCOMES, recordFlow } from "./ui/metrics.js";
+} from "./ui/analytics.ts";
+import { FLOWS, OUTCOMES, recordFlow } from "./ui/metrics.ts";
 import { captureError, setContextProvider } from "./sentry.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
@@ -114,7 +114,7 @@ export function createUiController() {
   // Browser and platform ride along for a reason specific to this app: it talks
   // to hardware through APIs only some browsers have, so "which flows are
   // broken" usually has a browser answer. They are not read once at startup --
-  // the Brave probe in web/js/ui/format.js is async and settles after the first
+  // the Brave probe in web/js/ui/format.ts is async and settles after the first
   // few calls, and a provider read per failure picks that up for free.
   //
   // These go to Sentry only, never to GA: GA4 already collects browser, OS and

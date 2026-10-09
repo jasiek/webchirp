@@ -19,7 +19,7 @@ import test from "node:test";
 
 import { initOptions } from "../../web/js/sentry.js";
 import { isPythonError, runtimeErrorSentence } from "../../web/js/runtime-errors.ts";
-import { createDebugLog } from "../../web/js/ui/debug-log.js";
+import { createDebugLog } from "../../web/js/ui/debug-log.ts";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
 import { fakeDebugDom } from "../support/fake-dom.mjs";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";

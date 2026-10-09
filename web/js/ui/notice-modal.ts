@@ -1,4 +1,4 @@
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+import type { UiContext } from "../types/ui-context.js";
 
 // One modal for the messages the user has to read and act on, as opposed to the
 // failures a developer has to read.
@@ -11,18 +11,14 @@
 // class of user who had done nothing wrong.
 //
 // Nothing here knows about uploads or radios. It is handed a title and a
-// sentence, which is all a notice ever is; web/js/ui/debug-log.js decides which
+// sentence, which is all a notice ever is; web/js/ui/debug-log.ts decides which
 // failures get one (RuntimePreconditionError, recognised by
 // web/js/runtime-errors.ts).
-/**
- * @param {Pick<UiContext, "dom">} ctx
- */
-export function createNoticeModal(ctx) {
+export function createNoticeModal(ctx: Pick<UiContext, "dom">) {
   const { dom } = ctx;
   // What had focus when the notice opened, so dismissing it puts the user back
   // where they were rather than at the top of the document.
-  /** @type {(Element & Partial<HTMLOrSVGElement>)|null} */
-  let previousFocus = null;
+  let previousFocus: (Element & Partial<HTMLOrSVGElement>) | null = null;
 
   function isModalOpen() {
     return !dom.noticeModalEl.classList.contains("hidden");

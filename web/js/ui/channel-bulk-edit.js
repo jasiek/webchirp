@@ -1,8 +1,8 @@
 import { normalizeCellValue } from "./channel-values.js";
 import { rowExtras, setRowExtras } from "../row-extra.js";
 import { createSettingControl, readSettingControl } from "./setting-fields.js";
-import { radioEventParams, trackEvent } from "./analytics.js";
-import { requireRuntimeApi } from "./state.js";
+import { radioEventParams, trackEvent } from "./analytics.ts";
+import { requireRuntimeApi } from "./state.ts";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 /** @typedef {import("./channel-values.js").ColumnMeta} ColumnMeta */

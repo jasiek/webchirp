@@ -51,7 +51,9 @@ export function markBootstrapFailure(error: unknown): Error {
  * @returns 
  *   Whether the error is a bootstrap failure (and so has been reported).
  */
-export function createBootstrapCrashReporter(reportCrash: (detail: string) => void): (error: unknown, detail: string) => boolean {
+export function createBootstrapCrashReporter(
+  reportCrash: (detail: string) => void,
+): (error: unknown, detail: string) => boolean {
   if (typeof reportCrash !== "function") {
     throw new Error("createBootstrapCrashReporter requires a reportCrash() function");
   }
@@ -79,7 +81,9 @@ export interface RuntimeBootstrap<T> {
   /** The seeded runtime, or null before boot. */
   getRuntime: () => T | null;
 }
-export function createRuntimeBootstrap<T>({ loadRuntime }: { loadRuntime?: () => Promise<T> } = {}): RuntimeBootstrap<T> {
+export function createRuntimeBootstrap<T>(
+  { loadRuntime }: { loadRuntime?: () => Promise<T> } = {},
+): RuntimeBootstrap<T> {
   if (typeof loadRuntime !== "function") {
     throw new Error("createRuntimeBootstrap requires a loadRuntime() function");
   }

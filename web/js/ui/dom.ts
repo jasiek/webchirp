@@ -140,81 +140,80 @@ export const ELEMENT_COLLECTIONS = {
  * plain HTMLElement in index.html (a button's disabled, an input's value, a
  * progress bar's value). Every other entry is an HTMLElement. Keep it in step
  * with the markup when an element changes tag.
- * @typedef {{
- *   tableHead: HTMLTableSectionElement,
- *   tableBody: HTMLTableSectionElement,
- *   viewChannelsEl: HTMLButtonElement,
- *   viewSettingsEl: HTMLButtonElement,
- *   fileInput: HTMLInputElement,
- *   debugToggleEl: HTMLButtonElement,
- *   debugOutputEl: HTMLTextAreaElement,
- *   debugClearEl: HTMLButtonElement,
- *   debugCopyEl: HTMLButtonElement,
- *   reportIssueEl: HTMLButtonElement,
- *   installAppEl: HTMLButtonElement,
- *   unsupportedBrowserContinueEl: HTMLButtonElement,
- *   radioSearchEl: HTMLInputElement,
- *   useQuanshengDriversEl: HTMLAnchorElement,
- *   useChirpDriversEl: HTMLAnchorElement,
- *   radioSearchResultsEl: HTMLUListElement,
- *   serialConnectToggleEl: HTMLButtonElement,
- *   webusbConnectToggleEl: HTMLButtonElement,
- *   webbluetoothConnectToggleEl: HTMLButtonElement,
- *   radioDownloadEl: HTMLButtonElement,
- *   radioUploadEl: HTMLButtonElement,
- *   cloneProgressBarEl: HTMLProgressElement,
- *   appProgressBarEl: HTMLProgressElement,
- *   loadCodeplugEl: HTMLButtonElement,
- *   exportMenuToggleEl: HTMLButtonElement,
- *   exportCsvEl: HTMLButtonElement,
- *   exportBinaryEl: HTMLButtonElement,
- *   channelInsertEl: HTMLButtonElement,
- *   channelRemoveEl: HTMLButtonElement,
- *   channelMoveUpEl: HTMLButtonElement,
- *   channelMoveDownEl: HTMLButtonElement,
- *   channelCopyEl: HTMLButtonElement,
- *   channelCutEl: HTMLButtonElement,
- *   channelPasteEl: HTMLButtonElement,
- *   channelBulkEditEl: HTMLButtonElement,
- *   channelAddGmrsEl: HTMLButtonElement,
- *   channelAddFrsEl: HTMLButtonElement,
- *   channelAddPmr446El: HTMLButtonElement,
- *   channelImportPrzemiennikiEl: HTMLButtonElement,
- *   channelImportRepeaterbookEl: HTMLButtonElement,
- *   channelImportIrtsEl: HTMLButtonElement,
- *   channelExtraFormEl: HTMLFormElement,
- *   channelExtraCancelEl: HTMLButtonElement,
- *   channelExtraSaveEl: HTMLButtonElement,
- *   channelBulkEditFormEl: HTMLFormElement,
- *   channelBulkEditCancelEl: HTMLButtonElement,
- *   channelBulkEditApplyEl: HTMLButtonElement,
- *   repeaterQueryFormEl: HTMLFormElement,
- *   repeaterQueryCancelEl: HTMLButtonElement,
- *   repeaterQuerySubmitEl: HTMLButtonElement,
- *   channelImportRsgbEl: HTMLButtonElement,
- *   repeaterMapCloseEl: HTMLButtonElement,
- *   importChoiceReplaceEl: HTMLButtonElement,
- *   importChoiceMergeEl: HTMLButtonElement,
- *   importChoiceCancelEl: HTMLButtonElement,
- *   noticeDismissEl: HTMLButtonElement
- * }} UiElementTypes
  */
+export type UiElementTypes = {
+  tableHead: HTMLTableSectionElement;
+  tableBody: HTMLTableSectionElement;
+  viewChannelsEl: HTMLButtonElement;
+  viewSettingsEl: HTMLButtonElement;
+  fileInput: HTMLInputElement;
+  debugToggleEl: HTMLButtonElement;
+  debugOutputEl: HTMLTextAreaElement;
+  debugClearEl: HTMLButtonElement;
+  debugCopyEl: HTMLButtonElement;
+  reportIssueEl: HTMLButtonElement;
+  installAppEl: HTMLButtonElement;
+  unsupportedBrowserContinueEl: HTMLButtonElement;
+  radioSearchEl: HTMLInputElement;
+  useQuanshengDriversEl: HTMLAnchorElement;
+  useChirpDriversEl: HTMLAnchorElement;
+  radioSearchResultsEl: HTMLUListElement;
+  serialConnectToggleEl: HTMLButtonElement;
+  webusbConnectToggleEl: HTMLButtonElement;
+  webbluetoothConnectToggleEl: HTMLButtonElement;
+  radioDownloadEl: HTMLButtonElement;
+  radioUploadEl: HTMLButtonElement;
+  cloneProgressBarEl: HTMLProgressElement;
+  appProgressBarEl: HTMLProgressElement;
+  loadCodeplugEl: HTMLButtonElement;
+  exportMenuToggleEl: HTMLButtonElement;
+  exportCsvEl: HTMLButtonElement;
+  exportBinaryEl: HTMLButtonElement;
+  channelInsertEl: HTMLButtonElement;
+  channelRemoveEl: HTMLButtonElement;
+  channelMoveUpEl: HTMLButtonElement;
+  channelMoveDownEl: HTMLButtonElement;
+  channelCopyEl: HTMLButtonElement;
+  channelCutEl: HTMLButtonElement;
+  channelPasteEl: HTMLButtonElement;
+  channelBulkEditEl: HTMLButtonElement;
+  channelAddGmrsEl: HTMLButtonElement;
+  channelAddFrsEl: HTMLButtonElement;
+  channelAddPmr446El: HTMLButtonElement;
+  channelImportPrzemiennikiEl: HTMLButtonElement;
+  channelImportRepeaterbookEl: HTMLButtonElement;
+  channelImportIrtsEl: HTMLButtonElement;
+  channelExtraFormEl: HTMLFormElement;
+  channelExtraCancelEl: HTMLButtonElement;
+  channelExtraSaveEl: HTMLButtonElement;
+  channelBulkEditFormEl: HTMLFormElement;
+  channelBulkEditCancelEl: HTMLButtonElement;
+  channelBulkEditApplyEl: HTMLButtonElement;
+  repeaterQueryFormEl: HTMLFormElement;
+  repeaterQueryCancelEl: HTMLButtonElement;
+  repeaterQuerySubmitEl: HTMLButtonElement;
+  channelImportRsgbEl: HTMLButtonElement;
+  repeaterMapCloseEl: HTMLButtonElement;
+  importChoiceReplaceEl: HTMLButtonElement;
+  importChoiceMergeEl: HTMLButtonElement;
+  importChoiceCancelEl: HTMLButtonElement;
+  noticeDismissEl: HTMLButtonElement;
+};
 
 /**
  * What queryUiElements() returns: every REQUIRED_ELEMENTS name bound to its
  * element, plus each ELEMENT_COLLECTIONS group as an array.
- * @typedef {{[K in keyof typeof REQUIRED_ELEMENTS]: K extends keyof UiElementTypes ? UiElementTypes[K] : HTMLElement}
- *   & {sidebarControlEls: Array<HTMLButtonElement|HTMLInputElement>}} UiDom
  */
+export type UiDom = {
+  [K in keyof typeof REQUIRED_ELEMENTS]: K extends keyof UiElementTypes ? UiElementTypes[K] : HTMLElement;
+} & { sidebarControlEls: Array<HTMLButtonElement | HTMLInputElement> };
 
 // Single place where the UI resolves its document elements. Every module
 // receives the returned object rather than querying the document itself, which
 // keeps the id list in one place and lets the headless tests stub the DOM once.
-/** @returns {UiDom} */
-export function queryUiElements() {
-  /** @type {Record<string, Element|Element[]>} */
-  const dom = {};
-  const missing = [];
+export function queryUiElements(): UiDom {
+  const dom: Record<string, Element | Element[]> = {};
+  const missing: string[] = [];
 
   for (const [name, selector] of Object.entries(REQUIRED_ELEMENTS)) {
     const element = document.querySelector(selector);
@@ -238,5 +237,5 @@ export function queryUiElements() {
 
   // Every name was bound above or the throw fired, so the record is whole;
   // the element types are the markup's, which UiElementTypes states.
-  return /** @type {UiDom} */ (/** @type {unknown} */ (dom));
+  return dom as unknown as UiDom;
 }

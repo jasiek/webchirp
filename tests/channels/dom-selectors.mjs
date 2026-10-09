@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { ELEMENT_COLLECTIONS, REQUIRED_ELEMENTS } from "../../web/js/ui/dom.js";
+import { ELEMENT_COLLECTIONS, REQUIRED_ELEMENTS } from "../../web/js/ui/dom.ts";
 import { FakeDocument } from "../support/fake-dom.mjs";
 
-// Guards the contract between index.html and web/js/ui/dom.js: every element the
+// Guards the contract between index.html and web/js/ui/dom.ts: every element the
 // UI declares as required must actually exist in the page. Renaming or removing
-// an id without updating dom.js is otherwise invisible until someone clicks the
+// an id without updating dom.ts is otherwise invisible until someone clicks the
 // control that no longer works — which is how the #serial-transaction handler
 // survived long after its markup was deleted.
 const HTML = fs.readFileSync(
@@ -16,7 +16,7 @@ const HTML = fs.readFileSync(
   "utf8",
 );
 
-// Minimal, dependency-free resolution of the selector shapes dom.js uses:
+// Minimal, dependency-free resolution of the selector shapes dom.ts uses:
 // "#id" and "#id descendant-tag". Anything else is rejected so a new selector
 // shape cannot silently skip this check.
 function resolveInHtml(selector) {
@@ -64,7 +64,7 @@ test("every required UI element exists in index.html", () => {
   assert.deepEqual(
     missing,
     [],
-    "index.html is missing elements that web/js/ui/dom.js requires",
+    "index.html is missing elements that web/js/ui/dom.ts requires",
   );
 });
 
@@ -88,7 +88,7 @@ test("collection selectors match markup that exists", () => {
 });
 
 test("queryUiElements reports every missing element at once", async () => {
-  const { queryUiElements } = await import("../../web/js/ui/dom.js");
+  const { queryUiElements } = await import("../../web/js/ui/dom.ts");
   const previousDocument = globalThis.document;
   // A page with exactly one of the required elements present.
   globalThis.document = new FakeDocument({
@@ -136,7 +136,7 @@ test("Report Bug sits outside the collapsible debug actions", () => {
 });
 
 // The element interface each tag stands for in UiElementTypes
-// (web/js/ui/dom.js); any tag not listed is a plain HTMLElement there.
+// (web/js/ui/dom.ts); any tag not listed is a plain HTMLElement there.
 const TAG_INTERFACES = Object.freeze({
   a: "HTMLAnchorElement",
   button: "HTMLButtonElement",
@@ -172,13 +172,13 @@ function tagOf(selector) {
 // UiElementTypes is what npm run check:js trusts for every dom.* member: a
 // button typed HTMLElement hides .disabled from the checker, and a div typed
 // HTMLButtonElement lets code call what the element does not have. It is a
-// JSDoc typedef, so nothing ties it to the markup but this test.
-test("the element types dom.js declares match index.html's tags", () => {
-  const source = fs.readFileSync(path.join(process.cwd(), "web", "js", "ui", "dom.js"), "utf8");
-  const block = source.match(/@typedef \{\{\n([\s\S]*?)\n \* \}\} UiElementTypes/);
-  assert.ok(block, "web/js/ui/dom.js no longer declares UiElementTypes in the expected shape");
+// type, so nothing ties it to the markup but this test.
+test("the element types dom.ts declares match index.html's tags", () => {
+  const source = fs.readFileSync(path.join(process.cwd(), "web", "js", "ui", "dom.ts"), "utf8");
+  const block = source.match(/^export type UiElementTypes = \{\n([\s\S]*?)\n\};/m);
+  assert.ok(block, "web/js/ui/dom.ts no longer declares UiElementTypes in the expected shape");
   const declared = Object.fromEntries(
-    [...block[1].matchAll(/^ \*\s+(\w+): (\w+),?$/gm)].map(([, name, type]) => [name, type]),
+    [...block[1].matchAll(/^\s+(\w+): (\w+);$/gm)].map(([, name, type]) => [name, type]),
   );
   const wrong = [];
   for (const [name, selector] of Object.entries(REQUIRED_ELEMENTS)) {
@@ -191,5 +191,5 @@ test("the element types dom.js declares match index.html's tags", () => {
   }
   const unknown = Object.keys(declared).filter((name) => !(name in REQUIRED_ELEMENTS));
   assert.deepEqual(unknown, [], "UiElementTypes names elements REQUIRED_ELEMENTS does not");
-  assert.deepEqual(wrong, [], "update UiElementTypes in web/js/ui/dom.js to the markup");
+  assert.deepEqual(wrong, [], "update UiElementTypes in web/js/ui/dom.ts to the markup");
 });

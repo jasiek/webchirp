@@ -1,20 +1,20 @@
-import { errorDetails } from "./format.js";
-import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
+import { errorDetails } from "./format.ts";
+import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.ts";
 import { captureError } from "../sentry.js";
 import { isBootstrapFailure } from "../runtime-bootstrap.ts";
 import { isUserPreconditionFailure, runtimeErrorSentence } from "../runtime-errors.ts";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+import type { UiContext } from "../types/ui-context.js";
 
 // The bottom debug panel is the single sink for status text, serial traffic and
 // full error detail. Keeping every write in one module preserves the rule that
 // full errors and tracebacks always reach the panel.
 /**
- * @param {{dom: UiContext["dom"], notice?: Pick<UiContext["notice"], "show">}} deps
- *   notice: where a precondition failure's sentence goes; without one it
+ * @param deps notice: where a precondition failure's sentence goes; without one it
  *   only reaches the panel.
  */
-export function createDebugLog({ dom, notice }) {
+export function createDebugLog(
+  { dom, notice }: { dom: UiContext["dom"]; notice?: Pick<UiContext["notice"], "show"> },
+) {
   let lastErrorSummary = "";
 
   function isExpanded() {
@@ -114,7 +114,7 @@ export function createDebugLog({ dom, notice }) {
   // Report an action the runtime refused because the user has not done a step
   // it depends on -- pressing Upload before anything has been downloaded. The
   // message such a failure carries is already the instruction that clears it,
-  // so it gets the modal (web/js/ui/notice-modal.js) rather than the treatment
+  // so it gets the modal (web/js/ui/notice-modal.ts) rather than the treatment
   // a defect gets, for the same reasons a cancellation does: it does not open
   // the debug panel in the user's face, it does not become the title of their
   // next bug report, and it is not reported to Sentry (isIgnoredError,
@@ -122,7 +122,7 @@ export function createDebugLog({ dom, notice }) {
   //
   // The full traceback still goes to the panel, unconditionally: whatever the
   // UI makes of a failure, the panel is where all of it lands. details is
-  // errorDetails() (web/js/ui/format.js), which for a runtime failure is its
+  // errorDetails() (web/js/ui/format.ts), which for a runtime failure is its
   // Python traceback rather than the one-line message the error carries.
   function reportActionBlocked(action, error, details) {
     const sentence = runtimeErrorSentence(error);

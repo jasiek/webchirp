@@ -19,8 +19,8 @@ import {
   squaresForRadius,
 } from "../rsgb.js";
 import { withRequestTimeout } from "../request-timeout.ts";
-import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from "./format.js";
-import { trackEvent } from "./analytics.js";
+import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from "./format.ts";
+import { trackEvent } from "./analytics.ts";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 /** @typedef {import("../rsgb.js").RsgbRecord} RsgbRecord */

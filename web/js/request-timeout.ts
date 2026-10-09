@@ -51,7 +51,7 @@ function describeDeadline(timeoutMs: number): string {
 // signal.aborted is true only when this deadline fired, so the caller's own
 // failures keep their own messages while a genuine timeout gets a sentence
 // naming what stalled. That sentence says "timed out" on purpose —
-// classifyErrorKind() in web/js/ui/analytics.js matches it to report the failure
+// classifyErrorKind() in web/js/ui/analytics.ts matches it to report the failure
 // as a timeout rather than "other".
 export async function withRequestTimeout<T>(
   label: string,

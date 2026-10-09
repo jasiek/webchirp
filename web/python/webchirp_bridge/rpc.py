@@ -166,7 +166,7 @@ def _python_causes(exc: BaseException) -> list[dict[str, str]]:
     ``iradio_uv_5118plus`` turns "Block failed checksum!" into "Failed to read
     block" -- so the outer message alone can hide what went wrong. JS
     classifies a failure by what it said (``classifyErrorKind``,
-    ``web/js/ui/analytics.js``), and these messages are part of what it said;
+    ``web/js/ui/analytics.ts``), and these messages are part of what it said;
     the traceback's frames, which are not, stay out.
     """
     return [

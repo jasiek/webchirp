@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { createIssueReporter } from "../../web/js/ui/issue-report.js";
+import { createIssueReporter } from "../../web/js/ui/issue-report.ts";
 
 const TEMPLATE_NAME = "radio_bug_report.yml";
 const TEMPLATE = fs.readFileSync(

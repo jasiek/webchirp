@@ -5,7 +5,9 @@ import { createRuntimeBootstrap } from "./runtime-bootstrap.ts";
 /**
  * @param options isolated: boot a fresh runtime whenever a different module is selected.
  */
-export function createSelectedDriverRuntime<T>({ loadRuntime, isolated = false }: { loadRuntime: () => Promise<T>; isolated?: boolean }): { ensure: () => Promise<T>; select: (moduleName: string) => Promise<T> } {
+export function createSelectedDriverRuntime<T>(
+  { loadRuntime, isolated = false }: { loadRuntime: () => Promise<T>; isolated?: boolean },
+): { ensure: () => Promise<T>; select: (moduleName: string) => Promise<T> } {
   let bootstrap = createRuntimeBootstrap({ loadRuntime });
   let selectedModule = "";
 

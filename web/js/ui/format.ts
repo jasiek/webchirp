@@ -156,8 +156,7 @@ const BRAND_TOKENS = Object.freeze([
 // call afterwards is right. Worth the asymmetry because Brave users are the
 // cohort most likely to block analytics outright, so an error report is often
 // the only place they appear at all.
-/** @type {Promise<void>|null} */
-let braveProbe = null;
+let braveProbe: Promise<void> | null = null;
 let isBraveBrowser = false;
 
 // Ask the browser whether it is Brave, once, and remember the answer. Fired

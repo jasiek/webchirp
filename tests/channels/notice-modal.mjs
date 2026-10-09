@@ -6,11 +6,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createNoticeModal } from "../../web/js/ui/notice-modal.js";
+import { createNoticeModal } from "../../web/js/ui/notice-modal.ts";
 import { closeVivifiedModals, installFakeDom, keydownEvent } from "../support/fake-dom.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
-// The four elements dom.js resolves for this modal, in the state index.html
+// The four elements dom.ts resolves for this modal, in the state index.html
 // ships them in.
 function bootNotice() {
   const { document, restore } = installFakeDom();

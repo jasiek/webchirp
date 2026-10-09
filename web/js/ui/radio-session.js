@@ -1,8 +1,8 @@
-import { requireRuntimeApi } from "./state.js";
+import { requireRuntimeApi } from "./state.ts";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
-/** @typedef {import("./state.js").RadioSessionHandle} RadioSessionHandle */
-/** @typedef {import("./state.js").CatalogRadio} CatalogRadio */
+/** @typedef {import("./state.ts").RadioSessionHandle} RadioSessionHandle */
+/** @typedef {import("../runtime-rpc.ts").CatalogRadio} CatalogRadio */
 
 // The runtime session behind the selected radio.
 //

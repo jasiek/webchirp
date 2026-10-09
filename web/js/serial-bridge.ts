@@ -334,8 +334,12 @@ export class SerialBridge {
 
   // The held port's state and identity, for the UI and issue reports.
   getPortInfo(): {
-connected: boolean; baudRate: number; deviceName: string;
-usbVendorId?: string | null; usbProductId?: string | null } {
+    connected: boolean;
+    baudRate: number;
+    deviceName: string;
+    usbVendorId?: string | null;
+    usbProductId?: string | null;
+  } {
     const identity: { usbVendorId?: string | null; usbProductId?: string | null } = this.port ? this._getPortIdentity(this.port) : {};
     return {
       connected: Boolean(this.port),
@@ -442,7 +446,12 @@ usbVendorId?: string | null; usbProductId?: string | null } {
   /**
    * @param baudRate The driver's declared BAUD_RATE.
    */
-  async prepareClone(wantsDtr: boolean, wantsRts: boolean, settleMs: number, baudRate: number): Promise<{ prepared: true; baudRate: number; baudRateChanged: boolean; settleMs: number }> {
+  async prepareClone(
+    wantsDtr: boolean,
+    wantsRts: boolean,
+    settleMs: number,
+    baudRate: number,
+  ): Promise<{ prepared: true; baudRate: number; baudRateChanged: boolean; settleMs: number }> {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }
@@ -481,7 +490,10 @@ usbVendorId?: string | null; usbProductId?: string | null } {
   // raises RTS after the radio enters PROGRAM mode -- and those toggles must
   // reach the port rather than only being remembered in Python. A null line is
   // left as it is, so a driver changing one line does not clear the other.
-  async setSignals(dataTerminalReady: boolean | null | undefined, requestToSend: boolean | null | undefined): Promise<{ applied: boolean } & SerialSignals> {
+  async setSignals(
+    dataTerminalReady: boolean | null | undefined,
+    requestToSend: boolean | null | undefined,
+  ): Promise<{ applied: boolean } & SerialSignals> {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }
@@ -514,7 +526,9 @@ usbVendorId?: string | null; usbProductId?: string | null } {
   /**
    * @param options A null or absent option is left as it is.
    */
-  async reconfigure(options: Partial<SerialOpenOptions> = {}): Promise<{ reconfigured: boolean; options: Partial<SerialOpenOptions>; changed: string[] }> {
+  async reconfigure(
+    options: Partial<SerialOpenOptions> = {},
+  ): Promise<{ reconfigured: boolean; options: Partial<SerialOpenOptions>; changed: string[] }> {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { FLOWS, OUTCOMES, recordFlow } from "../../web/js/ui/metrics.js";
+import { FLOWS, OUTCOMES, recordFlow } from "../../web/js/ui/metrics.ts";
 import { METRIC_ATTRIBUTES, initSentry, resetSentryForTests } from "../../web/js/sentry.js";
 import { makeWindow } from "../support/fake-window.mjs";
 import { callArgumentKeys, sourceFiles } from "../support/param-scanner.mjs";

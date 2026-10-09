@@ -4,9 +4,9 @@ import {
   resolveRepeaterApiBase,
 } from "../datasources.js";
 import { encodeMaidenhead } from "../rsgb.js";
-import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.js";
-import { errorDetails } from "./format.js";
-import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
+import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.ts";
+import { errorDetails } from "./format.ts";
+import { FLOWS, OUTCOMES, recordFlow } from "./metrics.ts";
 import {
   RepeaterInputError,
   createRepeaterSources,

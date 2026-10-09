@@ -6,7 +6,7 @@ import { installFakeDom } from "../support/fake-dom.mjs";
 
 // The field components build every element themselves via
 // document.createElement, so the shared fake DOM's element class is all they
-// need — no index.html, no dom.js, no UI controller boot.
+// need — no index.html, no dom.ts, no UI controller boot.
 installFakeDom();
 
 const {

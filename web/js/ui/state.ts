@@ -1,47 +1,54 @@
+import type { RuntimeInfo } from "../python-sources.ts";
+import type { CatalogRadio, RuntimeApi } from "../runtime-rpc.ts";
+import type { ChannelRow, RadioMetadata } from "./channel-values.js";
+
 // Cross-module UI state. Only state that genuinely spans several UI modules
 // lives here; state used by a single module (row selection, settings validation
 // keys, serial connection flags) stays private to that module and is reached
 // through its accessors.
 
-/** @typedef {import("../runtime-rpc.ts").RuntimeApi} RuntimeApi */
-/** @typedef {import("../runtime-rpc.ts").CatalogRadio} CatalogRadio */
-/** @typedef {import("../python-sources.ts").RuntimeInfo} RuntimeInfo */
-/** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
-/** @typedef {import("./channel-values.js").RadioMetadata} RadioMetadata */
-
 /**
  * The handle web/js/ui/radio-session.js keeps for the runtime session behind
  * the selected radio. Created synchronously at selection; its id arrives when
  * the runtime answers, through ready.
- * @typedef {Object} RadioSessionHandle
- * @property {CatalogRadio|null} radio  The selection the session is for.
- * @property {string} id  The runtime's session id; "" until ready settles.
- * @property {boolean} loaded  Metadata and settings have both been applied.
- * @property {boolean} loading  A metadata/settings load is in flight.
- * @property {boolean} closed  The session was released; nothing may use it.
- * @property {boolean} failed  The runtime refused to open it.
- * @property {Promise<string>} ready  Resolves to id once open.
  */
+export interface RadioSessionHandle {
+  /** The selection the session is for. */
+  radio: CatalogRadio | null;
+  /** The runtime's session id; "" until ready settles. */
+  id: string;
+  /** Metadata and settings have both been applied. */
+  loaded: boolean;
+  /** A metadata/settings load is in flight. */
+  loading: boolean;
+  /** The session was released; nothing may use it. */
+  closed: boolean;
+  /** The runtime refused to open it. */
+  failed: boolean;
+  /** Resolves to id once open. */
+  ready: Promise<string>;
+}
 
-/**
- * State that genuinely spans UI modules; see the comment above.
- * @typedef {Object} UiState
- * @property {RuntimeApi|null} runtimeApi  Read through requireRuntimeApi().
- * @property {string[]} currentHeaders  The grid's CHIRP columns, in order.
- * @property {ChannelRow[]} currentRows  Replaced, not mutated, by row operations.
- * @property {""|"radio"|"csv"|"img"|"mixed"} codeplugSource
- * @property {CatalogRadio[]} radioCatalog
- * @property {CatalogRadio|null} selectedRadio
- * @property {RadioSessionHandle|null} radioSession
- * @property {RadioMetadata} radioMetadata
- * @property {RuntimeInfo|{chirpRevision: string}} runtimeInfo
- * @property {"channels"|"settings"} currentEditorView
- * @property {string} lastUsbVendorId
- * @property {string} lastUsbProductId
- */
+/** State that genuinely spans UI modules; see the comment above. */
+export interface UiState {
+  /** Read through requireRuntimeApi(). */
+  runtimeApi: RuntimeApi | null;
+  /** The grid's CHIRP columns, in order. */
+  currentHeaders: string[];
+  /** Replaced, not mutated, by row operations. */
+  currentRows: ChannelRow[];
+  codeplugSource: "" | "radio" | "csv" | "img" | "mixed";
+  radioCatalog: CatalogRadio[];
+  selectedRadio: CatalogRadio | null;
+  radioSession: RadioSessionHandle | null;
+  radioMetadata: RadioMetadata;
+  runtimeInfo: RuntimeInfo | {chirpRevision: string};
+  currentEditorView: "channels" | "settings";
+  lastUsbVendorId: string;
+  lastUsbProductId: string;
+}
 
-/** @returns {UiState} */
-export function createUiState() {
+export function createUiState(): UiState {
   return {
     runtimeApi: null,
     // Channel grid contents. The channel-table module owns mutation; other
@@ -73,11 +80,7 @@ export function createUiState() {
 }
 
 // The runtime client, or a clear error before web/app.js has installed one.
-/**
- * @param {UiState} state
- * @returns {RuntimeApi}
- */
-export function requireRuntimeApi(state) {
+export function requireRuntimeApi(state: UiState): RuntimeApi {
   if (!state.runtimeApi) {
     throw new Error("Runtime API client is not initialized");
   }
@@ -87,8 +90,7 @@ export function requireRuntimeApi(state) {
 // Expose the live channel rows for debugging from the browser console. Defined
 // as a getter so it always reflects the current array identity, which the
 // channel operations replace rather than mutate in place.
-/** @param {UiState} state */
-export function exposeCurrentRowsForDebugging(state) {
+export function exposeCurrentRowsForDebugging(state: UiState) {
   if (Object.getOwnPropertyDescriptor(globalThis, "currentRows")) {
     return;
   }

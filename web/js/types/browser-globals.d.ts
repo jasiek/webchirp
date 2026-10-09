@@ -253,7 +253,7 @@ declare global {
 
   // ---------------------------------------------------------------------------
   // User-Agent Client Hints -- WICG, https://wicg.github.io/ua-client-hints/
-  // Chromium 90+. Read by the browser-brand detector in web/js/ui/format.js.
+  // Chromium 90+. Read by the browser-brand detector in web/js/ui/format.ts.
   // ---------------------------------------------------------------------------
 
   interface NavigatorUABrandVersion {

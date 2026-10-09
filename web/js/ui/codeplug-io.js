@@ -3,16 +3,16 @@ import {
   buildExportFileName,
   bytesToBase64,
   undecodedChannelsNote,
-} from "./format.js";
+} from "./format.ts";
 import {
   classifyErrorKind,
   codeplugParams,
   errorTypeName,
   radioEventParams,
   trackEvent,
-} from "./analytics.js";
-import { FLOWS, OUTCOMES, recordFlow } from "./metrics.js";
-import { requireRuntimeApi } from "./state.js";
+} from "./analytics.ts";
+import { FLOWS, OUTCOMES, recordFlow } from "./metrics.ts";
+import { requireRuntimeApi } from "./state.ts";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 
@@ -122,7 +122,7 @@ export function createCodeplugIo(ctx) {
   /**
    * @param {any} parsed  parse_csv's result.
    * @param {"replace"|"merge"} [mode]
-   * @param {import("./state.js").UiState["codeplugSource"]} [csvSource]
+   * @param {import("./state.ts").UiState["codeplugSource"]} [csvSource]
    *   Where the rows came from, for reporting.
    */
   function applyParsedCsv(parsed, mode = "replace", csvSource = "csv") {

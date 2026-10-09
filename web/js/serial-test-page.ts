@@ -332,7 +332,7 @@ function init() {
       missing.push(id);
     }
   }
-  // Same contract index.html has with dom.js: name everything missing at once
+  // Same contract index.html has with dom.ts: name everything missing at once
   // rather than failing later at the control that no longer works.
   if (missing.length > 0) {
     throw new Error(`serial-test.html is missing elements: ${missing.join(", ")}`);

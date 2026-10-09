@@ -1,4 +1,10 @@
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+import type { UiContext } from "../types/ui-context.js";
+
+/** What begin() hands back: one operation's hold on the strip. */
+export interface ProgressHandle {
+  update(cur: number, nextLabel?: string): void;
+  end(): void;
+}
 
 // The app-wide progress strip above Debug Output. Any long runtime operation
 // that is not owned by one panel reports here; the matching narration goes to
@@ -6,15 +12,11 @@
 //
 // Deliberately not #clone-progress: that one lives inside a collapsible sidebar
 // <details>, so it is invisible whenever the user has that section closed.
-/**
- * @param {Pick<UiContext, "dom">} deps
- */
-export function createProgress({ dom }) {
+export function createProgress({ dom }: Pick<UiContext, "dom">) {
   // Only the operation that began the strip may update or end it. Without this
   // a slow operation finishing late would tear down the bar a newer one is
   // using, or repaint it with stale text.
-  /** @type {number|null} */
-  let activeToken = null;
+  let activeToken: number | null = null;
   let nextToken = 0;
 
   function render(label, cur, max) {
@@ -34,7 +36,7 @@ export function createProgress({ dom }) {
   }
 
   // Show the strip and return the handle used to drive it.
-  function begin(label, max) {
+  function begin(label: string, max: number): ProgressHandle {
     nextToken += 1;
     activeToken = nextToken;
     const token = activeToken;
@@ -42,7 +44,7 @@ export function createProgress({ dom }) {
     dom.appProgressEl.hidden = false;
 
     return {
-      update(cur, nextLabel) {
+      update(cur: number, nextLabel?: string) {
         if (activeToken !== token) {
           return;
         }

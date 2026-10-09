@@ -1,6 +1,6 @@
 import { decodeMaidenheadBox, encodeMaidenhead } from "../rsgb.js";
 import { latLonToWorldPixel, worldPixelToLatLon, zoomForRadius } from "../staticmap.js";
-import { rememberBounded } from "./format.js";
+import { rememberBounded } from "./format.ts";
 import { createMapAttribution, renderStaticMap } from "./static-map-view.js";
 
 // Field components for the shared repeater-query modal. Each factory builds
@@ -18,7 +18,7 @@ import { createMapAttribution, renderStaticMap } from "./static-map-view.js";
 // already typed into it — no directory is contacted and nothing is reported.)
 //
 // Elements get generated ids under this prefix so <label for> association
-// works. They are deliberately not in web/js/ui/dom.js: the fields exist only
+// works. They are deliberately not in web/js/ui/dom.ts: the fields exist only
 // between one modal open and the next, so nothing outside this file may look
 // them up.
 const FIELD_ID_PREFIX = "repeater-query-field-";

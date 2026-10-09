@@ -1,7 +1,7 @@
 // The UI's side of Sentry metrics: the vocabulary of user flows, and the one
 // entry point every feature module records through.
 //
-// This module is to web/js/sentry.js what web/js/ui/analytics.js is to
+// This module is to web/js/sentry.js what web/js/ui/analytics.ts is to
 // web/js/analytics.js. The generic module owns the production-host gate, the
 // pre-load buffer and the attribute allowlist; this one owns what the app
 // actually has to say. Feature modules import recordFlow() and nothing else, so
@@ -53,7 +53,7 @@ export const OUTCOMES = Object.freeze({
   CRASHED: "crashed",
 });
 
-const FLOW_NAMES = new Set(Object.values(FLOWS));
+const FLOW_NAMES: ReadonlySet<string> = new Set(Object.values(FLOWS));
 
 // Record how one flow ended. durationMs is optional: pass it for the flows this
 // app is answerable for -- a clone, a runtime boot -- and omit it where the
@@ -63,7 +63,12 @@ const FLOW_NAMES = new Set(Object.values(FLOWS));
 // caller may pass the same parameter bag it hands trackEvent(): the values that
 // are not dimensions (a raw channel count, a duration) are dropped there rather
 // than having to be stripped at every call site.
-export function recordFlow(flow, outcome, attributes = {}, durationMs) {
+export function recordFlow(
+  flow: string,
+  outcome: string,
+  attributes: Record<string, unknown> = {},
+  durationMs?: number,
+): void {
   if (!FLOW_NAMES.has(flow)) {
     return;
   }

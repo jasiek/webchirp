@@ -13,7 +13,7 @@ import {
 import { normalizeCellValue, normalizeValue } from "./channel-values.js";
 import { rowExtras } from "../row-extra.js";
 import { callsignFromName } from "../callsign-lookup.js";
-import { radioEventParams, trackEvent } from "./analytics.js";
+import { radioEventParams, trackEvent } from "./analytics.ts";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 /** @typedef {import("./channel-values.js").ColumnMeta} ColumnMeta */

@@ -5,7 +5,7 @@ import {
   detectBrowserName,
   detectPlatformName,
   resetBrowserProbeForTests,
-} from "../../web/js/ui/format.js";
+} from "../../web/js/ui/format.ts";
 import { METRIC_ATTRIBUTES } from "../../web/js/sentry.js";
 import { withNavigator } from "../support/globals.mjs";
 

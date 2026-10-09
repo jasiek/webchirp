@@ -68,7 +68,10 @@ export class WebBluetoothSerialPort implements SerialTransport {
   /**
    * @param options drivers to probe, plus options handed to each probe().
    */
-  constructor(device: BluetoothDevice, { drivers = BLUETOOTH_SERIAL_DRIVERS, ...driverOptions }: { drivers?: BluetoothSerialDriver[];[option: string]: unknown } = {}) {
+  constructor(
+    device: BluetoothDevice,
+    { drivers = BLUETOOTH_SERIAL_DRIVERS, ...driverOptions }: { drivers?: BluetoothSerialDriver[]; [option: string]: unknown } = {},
+  ) {
     this.device = device;
     this._lossNotifier = createDisconnectNotifier(this);
     this.readable = null;
@@ -245,7 +248,9 @@ export class WebBluetoothSerialPort implements SerialTransport {
 
 // Request devices advertised by registered profiles and permit their services.
 // Detection occurs during open, so failed probes use the normal port cleanup.
-export function createWebBluetoothSerial({ drivers = BLUETOOTH_SERIAL_DRIVERS }: { drivers?: BluetoothSerialDriver[] } = {}): { requestPort(): Promise<WebBluetoothSerialPort> } {
+export function createWebBluetoothSerial(
+  { drivers = BLUETOOTH_SERIAL_DRIVERS }: { drivers?: BluetoothSerialDriver[] } = {},
+): { requestPort(): Promise<WebBluetoothSerialPort> } {
   return {
     // Keep the picker call within the user gesture, before any async discovery.
     async requestPort() {

@@ -1,7 +1,7 @@
 import { callsignFromName, createCallsignLookup, pickLookupEntry } from "../callsign-lookup.js";
 import { buildRepeaterEndpoints, resolveRepeaterApiBase } from "../datasources.js";
 import { formatCoordinates } from "../staticmap.js";
-import { trackEvent } from "./analytics.js";
+import { trackEvent } from "./analytics.ts";
 import { fillMapAttribution, renderStaticMap } from "./static-map-view.js";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */

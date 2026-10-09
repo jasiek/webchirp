@@ -5,7 +5,7 @@
 // is the whole reason a failure goes unreported. One tap has to be enough, so
 // everything the maintainer would otherwise ask for rides in the URL.
 
-import { detectBrowserVersion } from "./ui/format.js";
+import { detectBrowserVersion } from "./ui/format.ts";
 
 export const ISSUE_TEMPLATE_NAME = "adapter_loopback_report.yml";
 export const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";

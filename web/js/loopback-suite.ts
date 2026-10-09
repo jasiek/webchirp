@@ -91,8 +91,11 @@ export function createPortSession(port) {
   let streamError: Error | null = null;
   let stopped = false;
   const waiters: Array<{
-count: number; resolve: (bytes: Uint8Array) => void;
-reject: (error: Error) => void; timer: number }> = [];
+    count: number;
+    resolve: (bytes: Uint8Array) => void;
+    reject: (error: Error) => void;
+    timer: number;
+  }> = [];
 
   function takeFromBuffer(count) {
     const taken = buffer.slice(0, count);
@@ -544,7 +547,10 @@ async function runWithOpenPort(port, baudRate, entries, ctx, results) {
  * Run the loopback suite against a Web Serial-shaped port with TX jumpered to
  * RX. The port must be closed on entry; it is left closed on return.
  */
-export async function runLoopbackSuite(port, options = {}): Promise<{ results: LoopbackResult[]; passed: number; failed: number; skipped: number }> {
+export async function runLoopbackSuite(
+  port,
+  options = {},
+): Promise<{ results: LoopbackResult[]; passed: number; failed: number; skipped: number }> {
   const ctx = { ...DEFAULTS, ...options };
   // Sorted, not just copied: the once-per-run cases below pick "the highest
   // rate" off the end, and an unsorted array would run the 16 KB throughput

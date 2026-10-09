@@ -25,9 +25,9 @@ import {
   createPortSelectionCancelledError,
   isPortSelectionCancelled,
 } from "../../web/js/serial-errors.ts";
-import { classifyErrorKind, errorTypeName } from "../../web/js/ui/analytics.js";
-import { createDebugLog } from "../../web/js/ui/debug-log.js";
-import { errorSummary } from "../../web/js/ui/format.js";
+import { classifyErrorKind, errorTypeName } from "../../web/js/ui/analytics.ts";
+import { createDebugLog } from "../../web/js/ui/debug-log.ts";
+import { errorSummary } from "../../web/js/ui/format.ts";
 import { ensureModule, readImage, sharedHarness } from "../support/chirp.mjs";
 import { fakeDebugDom } from "../support/fake-dom.mjs";
 

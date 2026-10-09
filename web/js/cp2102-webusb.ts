@@ -317,7 +317,11 @@ export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport
     }
   }
 
-  async _controlIn(request: number, length: number, { recipient = "interface", value = 0 }: { recipient?: USBRecipient; value?: number } = {}): Promise<DataView | null> {
+  async _controlIn(
+    request: number,
+    length: number,
+    { recipient = "interface", value = 0 }: { recipient?: USBRecipient; value?: number } = {},
+  ): Promise<DataView | null> {
     const result = await this.device.controlTransferIn({
       requestType: "vendor",
       recipient,

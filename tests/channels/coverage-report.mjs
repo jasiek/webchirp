@@ -15,7 +15,7 @@ import {
 // One file's worth of report input, with only the fields the renderer reads.
 function fileFixture(overrides = {}) {
   return {
-    path: "web/js/ui/format.js",
+    path: "web/js/ui/format.ts",
     language: "javascript",
     sourceLines: ["const x = 1;"],
     verdicts: ["covered"],
@@ -96,7 +96,7 @@ test("each row carries the sort keys the toolbar reads", () => {
   const html = renderFileSection(fileFixture());
 
   assert.match(html, /data-percent="83\.19"/);
-  assert.match(html, /data-path="web\/js\/ui\/format\.js"/);
+  assert.match(html, /data-path="web\/js\/ui\/format\.ts"/);
   assert.match(html, /data-language="javascript"/);
 });
 

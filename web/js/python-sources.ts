@@ -151,7 +151,10 @@ async function fetchBytes(url) {
  * @param chirpRevision The pin the runtime expects.
  * @returns The driver module names, sorted.
  */
-export function driverModulesFromManifest(manifest: { chirpRevision?: string; drivers?: unknown[] } | null | undefined, chirpRevision: string): string[] {
+export function driverModulesFromManifest(
+  manifest: { chirpRevision?: string; drivers?: unknown[] } | null | undefined,
+  chirpRevision: string,
+): string[] {
   if (manifest?.chirpRevision !== chirpRevision) {
     throw new Error(
       `CHIRP bundle manifest is for revision ${manifest?.chirpRevision || "unknown"}, `
@@ -302,7 +305,10 @@ async function mkdirp(pyodide, dir) {
 /**
  * @param pyodide A freshly loaded interpreter.
  */
-export async function seedPyodideRuntime(pyodide: PyodideInterface, sourceProvider: PythonSourceProvider): Promise<void> {
+export async function seedPyodideRuntime(
+  pyodide: PyodideInterface,
+  sourceProvider: PythonSourceProvider,
+): Promise<void> {
   ensureProvider(sourceProvider);
   await mkdirp(pyodide, RUNTIME_MOUNT_DIR);
 

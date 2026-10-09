@@ -9,11 +9,11 @@
 // module has to type-import the composer that imports it. Nothing loads this
 // file at runtime, and *.d.ts never reaches dist/.
 
-import type { UiDom } from "../ui/dom.js";
-import type { UiState } from "../ui/state.js";
-import type { createDebugLog } from "../ui/debug-log.js";
-import type { createNoticeModal } from "../ui/notice-modal.js";
-import type { createProgress } from "../ui/progress.js";
+import type { UiDom } from "../ui/dom.ts";
+import type { UiState } from "../ui/state.ts";
+import type { createDebugLog } from "../ui/debug-log.ts";
+import type { createNoticeModal } from "../ui/notice-modal.ts";
+import type { createProgress } from "../ui/progress.ts";
 import type { createRadioSession } from "../ui/radio-session.js";
 import type { createSettingsPanel } from "../ui/settings-panel.js";
 import type { createChannelTable } from "../ui/channel-table.js";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { undecodedChannelsNote } from "../../web/js/ui/format.js";
+import { undecodedChannelsNote } from "../../web/js/ui/format.ts";
 import { readImage, sharedHarness } from "../support/chirp.mjs";
 
 // A memory the driver cannot decode used to disappear from the grid with

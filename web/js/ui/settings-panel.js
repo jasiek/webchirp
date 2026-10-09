@@ -1,7 +1,7 @@
-import { errorSummary } from "./format.js";
-import { radioEventParams, trackEvent } from "./analytics.js";
+import { errorSummary } from "./format.ts";
+import { radioEventParams, trackEvent } from "./analytics.ts";
 import { normalizeSettingValue } from "./setting-values.js";
-import { requireRuntimeApi } from "./state.js";
+import { requireRuntimeApi } from "./state.ts";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 

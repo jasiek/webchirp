@@ -125,8 +125,9 @@ export class CdcSerialPort extends WebUsbTransport implements SerialTransport {
  *   polyfill's SerialPort class comes from (the CDN by default).
  */
 export function createWebUsbSerial({ loadCdcSerialPort, usb }: {
-loadCdcSerialPort?: () => Promise<new (device: USBDevice) => SerialPort>;
-usb?: EventTarget | null } = {}): { requestPort(): Promise<SerialTransport> } {
+  loadCdcSerialPort?: () => Promise<new (device: USBDevice) => SerialPort>;
+  usb?: EventTarget | null;
+} = {}): { requestPort(): Promise<SerialTransport> } {
   const loadCdc = loadCdcSerialPort || defaultLoadCdcSerialPort;
 
   return {

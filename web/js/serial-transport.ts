@@ -183,11 +183,17 @@ export const SERIAL_TRANSPORT_MEMBERS: readonly Readonly<SerialTransportMember>[
   }),
   Object.freeze({ name: "open", expect: "a method", check: (port) => isFunction(port.open) }),
   Object.freeze({ name: "close", expect: "a method", check: (port) => isFunction(port.close) }),
-  Object.freeze({ name: "readable", expect: "a member (null while closed)", check: (port) => "readable" in port }),
-  Object.freeze({ name: "writable", expect: "a member (null while closed)", check: (port) => "writable" in port }),
+  Object.freeze({ name: "readable", expect: "a member (null while closed)", check: (
+    port,
+  ) => "readable" in port }),
+  Object.freeze({ name: "writable", expect: "a member (null while closed)", check: (
+    port,
+  ) => "writable" in port }),
   Object.freeze({ name: "setSignals", expect: "a method", check: (port) => isFunction(port.setSignals) }),
   Object.freeze({ name: "getInfo", expect: "a method", check: (port) => isFunction(port.getInfo) }),
-  Object.freeze({ name: "usbDevice", expect: "a member (USBDevice or null)", check: (port) => "usbDevice" in port }),
+  Object.freeze({ name: "usbDevice", expect: "a member (USBDevice or null)", check: (
+    port,
+  ) => "usbDevice" in port }),
   Object.freeze({ name: "onDisconnect", expect: "a method", check: (port) => isFunction(port.onDisconnect) }),
   Object.freeze({
     name: "reconfigure",
@@ -197,7 +203,7 @@ export const SERIAL_TRANSPORT_MEMBERS: readonly Readonly<SerialTransportMember>[
 ]);
 
 // Throw naming every member the port is missing or has in the wrong shape,
-// all at once, the way web/js/ui/dom.js reports missing elements: a port that
+// all at once, the way web/js/ui/dom.ts reports missing elements: a port that
 // half-implements the contract is an authoring error, and finding its gaps one
 // failed clone at a time is how the old by-convention interface drifted.
 // Returns the port so a caller can assert and use it in one expression.
@@ -278,7 +284,11 @@ export function createDisconnectNotifier(port: SerialTransport): DisconnectNotif
  * @param usbEvents navigator.usb, or a stand-in.
  * @returns Stops watching.
  */
-export function watchUsbDisconnect(usbEvents: EventTarget | null | undefined, device: USBDevice | null | undefined, onLost: () => void): () => void {
+export function watchUsbDisconnect(
+  usbEvents: EventTarget | null | undefined,
+  device: USBDevice | null | undefined,
+  onLost: () => void,
+): () => void {
   if (!usbEvents || typeof usbEvents.addEventListener !== "function" || !device) {
     return () => {};
   }

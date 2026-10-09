@@ -123,7 +123,7 @@ export const IGNORED_CHIRP_ERRORS = Object.freeze([
 // webchirp_bridge.runtime_errors -- reported as before.
 //
 // Dropping the events does not drop the signal. This filters events only,
-// while the failure metrics in web/js/ui/metrics.js carry error_kind,
+// while the failure metrics in web/js/ui/metrics.ts carry error_kind,
 // error_type and the driver out through beforeSendMetric -- so "what share of
 // clones fail on this model" stays a question a dashboard can answer even for
 // the classes filtered here. The debug panel still prints the whole traceback.
@@ -229,7 +229,7 @@ export const METRIC_ATTRIBUTES = Object.freeze([
   // platform, and every browser on iOS is Safari underneath whatever brand it
   // wears -- so for this app these are often the dimension that explains a
   // failure rate rather than merely describing it. Both are bounded tokens from
-  // web/js/ui/format.js, never a version and never a raw user agent.
+  // web/js/ui/format.ts, never a version and never a raw user agent.
   "browser",
   "platform",
   // What it was working on or over.

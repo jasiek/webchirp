@@ -47,7 +47,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   (`web/js/runtime-errors.ts`) named after the Python class, with the message alone as
   its message. Classify runtime failures by type with `isPythonError(error, "ClassName")`
   (which also matches subclasses), never by searching error text; print
-  `errorDetails()` (`web/js/ui/format.js`) to the debug panel, which carries the traceback.
+  `errorDetails()` (`web/js/ui/format.ts`) to the debug panel, which carries the traceback.
 - `web/python/webchirp_bridge/`: The runtime logic, one module per concern —
   `chirp_loader` (driver imports from the mounted CHIRP tree, driver enumeration), `serial_pipe`
   (pyserial stand-in over Web Serial), `session` (the `RadioSession` dataclass
@@ -117,13 +117,13 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Each module is a `create<Area>(ctx)` factory. `ctx` carries `dom`, `state`,
   `log`, `actions` and every constructed sibling module.
 - Keep state private to the module that owns it; expose accessors instead.
-  `web/js/ui/state.js` is only for state that genuinely spans modules.
+  `web/js/ui/state.ts` is only for state that genuinely spans modules.
 - Call siblings through `ctx` (`ctx.table.render()`) or `ctx.actions`, never by
   importing them — that keeps the module graph free of cycles. Such calls must
   happen after construction, never in a factory body.
 - Modules bind their own DOM listeners in a `bindEvents()`; `ui.js` only binds
   what no single module owns.
-- Query document elements in `web/js/ui/dom.js`, not in feature modules.
+- Query document elements in `web/js/ui/dom.ts`, not in feature modules.
 
 ## Rules for Agents
 - Keep Python and JavaScript separated. Put runtime Python code in
@@ -166,7 +166,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   guessing; an unknown radio gets no section. Adding a vendor to the catalog without
   an answer fails `tests/build/radio-firmware.mjs`.
 - When you discover something new, or unexpected, put it in FINDINGS.md.
-- Analytics goes through `trackEvent` in `web/js/ui/analytics.js`; never reach
+- Analytics goes through `trackEvent` in `web/js/ui/analytics.ts`; never reach
   `gtag` directly. Every parameter an event sends must be declared in
   `CUSTOM_DIMENSIONS` (`web/js/analytics.js`) or GA collects it and shows it
   nowhere, and never send user data — no file names, channel names, frequencies,

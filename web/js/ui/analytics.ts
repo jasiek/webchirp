@@ -17,7 +17,7 @@
 //     to be declared in CUSTOM_DIMENSIONS, or GA collects it and shows it
 //     nowhere; tests/channels/ga-dimensions.mjs fails the build if it is not.
 
-import { errorDetails } from "./format.js";
+import { errorDetails } from "./format.ts";
 import { isRuntimeCallError, jsErrorName } from "../runtime-errors.ts";
 import { isPortSelectionCancelled } from "../serial-errors.ts";
 
@@ -96,8 +96,7 @@ const JS_ERROR_KINDS = new Map([
 // ("timeout.py", "_do_ident") would otherwise match patterns meant for the
 // sentence. First match wins, so the specific patterns come before the general
 // ones.
-/** @type {Array<[string, RegExp]>} */
-const TEXT_ERROR_KINDS = [
+const TEXT_ERROR_KINDS: Array<[string, RegExp]> = [
   ["permission_denied", /permission (?:was )?denied|access denied/i],
   ["serial_disconnect", /device has been lost|device lost|port is (?:closed|already open)/i],
   ["no_response", /did not respond|not responding|no response|no data received/i],

@@ -381,11 +381,11 @@ export class FakeElement {
   }
 }
 
-// Elements web/js/ui/dom.js requires that are stubbed with their real tag,
+// Elements web/js/ui/dom.ts requires that are stubbed with their real tag,
 // because the tag is load-bearing somewhere: sidebarControlEls filters on
 // BUTTON/INPUT, a <select> answers with its first option, a <progress>
 // reflects value to an attribute. Anything else the UI queries auto-vivifies
-// as a div. Every entry must be an element dom.js declares —
+// as a div. Every entry must be an element dom.ts declares —
 // test-ui-radio-loading.mjs pins that so a removed id fails loudly.
 export const UI_STUBBED_SELECTORS = new Map([
   ["#mem-table thead", "thead"],
@@ -442,7 +442,7 @@ export const UI_STUBBED_SELECTORS = new Map([
 ]);
 
 // Default vivification rule: index.html always provides every #id element
-// dom.js requires, so an unregistered id stands for markup the test does not
+// dom.ts requires, so an unregistered id stands for markup the test does not
 // care about, not a missing element. Anything that is not an id lookup (the
 // repeater-API meta tag, say) resolves to null unless the test registered it,
 // matching a genuinely absent element.

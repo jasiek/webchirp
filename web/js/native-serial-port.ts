@@ -37,7 +37,10 @@ export class NativeSerialPort implements SerialTransport {
   /**
    * @param port The browser's port, from requestPort().
    */
-  constructor(port: SerialPort, { events = globalThis.navigator?.serial ?? null }: { events?: EventTarget | null } = {}) {
+  constructor(
+    port: SerialPort,
+    { events = globalThis.navigator?.serial ?? null }: { events?: EventTarget | null } = {},
+  ) {
     this.nativePort = port;
     this._events = events;
     this._lossNotifier = createDisconnectNotifier(this);

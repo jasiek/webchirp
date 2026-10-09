@@ -63,7 +63,9 @@ function describeOptions(options: Record<string, unknown> = {}, changed: string[
 
 // Build the handler that answers serial ops from a bridge. logSerial receives
 // the lines meant for the serial/debug log; onProgress receives clone progress.
-export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }: SerialRpcHandlerOptions): SerialRpcHandler {
+export function createSerialRpcHandler(
+  { serialBridge, logSerial, onProgress }: SerialRpcHandlerOptions,
+): SerialRpcHandler {
   async function handleOpen(payload: SerialRpcPayload = {}) {
     const res = await serialBridge.open(payload.baudRate);
     logSerial(res.message);
@@ -274,7 +276,10 @@ export const SERIAL_GLOBAL_NAMES = Object.freeze(Object.keys(SERIAL_GLOBAL_OPS))
 // each forwarding one {op, payload} message to handleSerialRpc -- the function
 // createSerialRpcHandler() returns, or anything answering the same messages.
 // Installed before the runtime boots: Python binds these by name at import.
-export function installSerialBridgeGlobals<T extends object>(target: T, handleSerialRpc: SerialRpcHandler): T {
+export function installSerialBridgeGlobals<T extends object>(
+  target: T,
+  handleSerialRpc: SerialRpcHandler,
+): T {
   const ops: [string, SerialGlobalOp][] = Object.entries(SERIAL_GLOBAL_OPS);
   for (const [name, toMessage] of ops) {
     target[name] = (...args) => {

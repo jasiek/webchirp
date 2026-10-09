@@ -1,6 +1,5 @@
-import { detectUserAgent } from "./format.js";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+import { detectUserAgent } from "./format.ts";
+import type { UiContext } from "../types/ui-context.js";
 
 const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
 const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
@@ -44,7 +43,7 @@ function fitDebugExcerpt(lines, { measure, limit, alreadyTrimmed }) {
     return whole;
   }
 
-  let kept = [];
+  let kept: string[] = [];
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const candidate = [TRUNCATION_NOTE, lines[index], ...kept];
     if (measure(candidate.join("\n")) > limit) {
@@ -60,10 +59,7 @@ function fitDebugExcerpt(lines, { measure, limit, alreadyTrimmed }) {
 // tail of
 // the debug panel in its own Debug Log field — so a report arrives with the
 // diagnostics already attached.
-/**
- * @param {Pick<UiContext, "state"|"log">} deps
- */
-export function createIssueReporter({ state, log }) {
+export function createIssueReporter({ state, log }: Pick<UiContext, "state" | "log">) {
   function buildIssueUrl() {
     // Read the selection from state, never from the sidebar readout: every
     // path that names a radio there also sets state.selectedRadio, so the

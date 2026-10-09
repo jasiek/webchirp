@@ -9,7 +9,7 @@ import {
   errorTypeName,
   firstIssueColumn,
   radioEventParams,
-} from "../../web/js/ui/analytics.js";
+} from "../../web/js/ui/analytics.ts";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
 // The parameters the UI attaches to its events. What these produce is what GA

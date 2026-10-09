@@ -1,6 +1,6 @@
-import { requireRuntimeApi } from "./state.js";
-import { makeModelLabel } from "./format.js";
-import { radioEventParams, trackEvent } from "./analytics.js";
+import { requireRuntimeApi } from "./state.ts";
+import { makeModelLabel } from "./format.ts";
+import { radioEventParams, trackEvent } from "./analytics.ts";
 import { DEFAULT_DRIVER_SET, QUANSHENG_UNOFFICIAL_DRIVER_SET } from "../python-sources.ts";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */

@@ -760,8 +760,8 @@ test("serial and clone actions stay disabled until a radio is selected", async (
 // #tx-hex / #rx-bytes / #rx-timeout stubs outlived the debug panel ff5607a
 // removed, and nothing noticed. Pin the stub list to the element contract
 // instead, so a removed id fails here as well as in test-dom-selectors.mjs.
-test("every stubbed element is one dom.js actually declares", async () => {
-  const { REQUIRED_ELEMENTS, ELEMENT_COLLECTIONS } = await import("../../web/js/ui/dom.js");
+test("every stubbed element is one dom.ts actually declares", async () => {
+  const { REQUIRED_ELEMENTS, ELEMENT_COLLECTIONS } = await import("../../web/js/ui/dom.ts");
   const declared = new Set([
     ...Object.values(REQUIRED_ELEMENTS),
     ...Object.values(ELEMENT_COLLECTIONS),

@@ -409,7 +409,9 @@ async function handleParseCsv(payload: { csvText?: string } = {}): Promise<any> 
 // Open a radio session for a catalog entry: import its driver (which, under
 // the isolated driver set, may boot the interpreter for that release), then
 // register the session with the interpreter that holds it.
-async function handleOpenRadioSession(payload: { module?: string; className?: string } = {}): Promise<{ sessionId: string } & Record<string, unknown>> {
+async function handleOpenRadioSession(
+  payload: { module?: string; className?: string } = {},
+): Promise<{ sessionId: string } & Record<string, unknown>> {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
   const owner = currentInterpreter();
@@ -424,7 +426,9 @@ async function handleOpenRadioSession(payload: { module?: string; className?: st
 // Close a radio session in the interpreter that holds it. Quiet for an id
 // this side never saw: the UI closes the previous selection's session without
 // waiting to learn whether it ever finished opening.
-async function handleCloseRadioSession(payload: SessionPayload = {}): Promise<{ closed: boolean; sessionId: string }> {
+async function handleCloseRadioSession(
+  payload: SessionPayload = {},
+): Promise<{ closed: boolean; sessionId: string }> {
   const sessionId = String(payload.sessionId || "");
   const owner = sessionRuntimes.get(sessionId);
   if (!owner) {
@@ -474,7 +478,9 @@ async function loadImageIntoSession(image_b64: string): Promise<any> {
  *   driver set; ordinary CHIRP mode detects the driver from the image.
  * @returns The session the image opened, its rows and settings.
  */
-async function handleLoadImage(payload: { imageBase64?: string; module?: string; className?: string } = {}): Promise<any> {
+async function handleLoadImage(
+  payload: { imageBase64?: string; module?: string; className?: string } = {},
+): Promise<any> {
   if (DRIVER_SET === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
     const selected = (await loadRadioCatalog()).find((radio) =>
       radio.module === payload.module && radio.className === payload.className);
@@ -543,7 +549,9 @@ async function handleSerialDisconnect(): Promise<any> {
   return rpc("webserial_disconnect");
 }
 
-async function handleSerialTxRx(payload: { txHex?: string; rxBytes?: number; timeoutMs?: number } = {}): Promise<any> {
+async function handleSerialTxRx(
+  payload: { txHex?: string; rxBytes?: number; timeoutMs?: number } = {},
+): Promise<any> {
   await requirePyodide();
   return rpc("webserial_txrx_hex", {
     tx_hex: payload.txHex || "",
@@ -573,7 +581,9 @@ async function handleGetRadioMetadata(payload: SessionPayload = {}): Promise<Rad
 // The driver's own per-channel extra settings for one memory slot, typed the
 // way the radio-wide settings are, so the extras modal can render real controls
 // instead of guessing from the bare values a row carries.
-async function handleGetChannelExtra(payload: SessionPayload & { location?: string | number } = {}): Promise<any> {
+async function handleGetChannelExtra(
+  payload: SessionPayload & { location?: string | number } = {},
+): Promise<any> {
   return sessionRpc(payload.sessionId, "get_channel_extra", {
     location: String(payload.location ?? ""),
   });
@@ -586,7 +596,9 @@ async function handleGetRadioSettings(payload: SessionPayload = {}): Promise<any
   return sessionRpc(payload.sessionId, "get_radio_settings");
 }
 
-async function handleValidateRadioSettings(payload: SessionPayload & { settings?: object[] } = {}): Promise<any> {
+async function handleValidateRadioSettings(
+  payload: SessionPayload & { settings?: object[] } = {},
+): Promise<any> {
   return sessionRpc(payload.sessionId, "validate_radio_settings", {
     settings_groups: payload.settings || [],
   });

@@ -3,8 +3,8 @@ import {
   onInstallAvailabilityChange,
   promptInstall,
 } from "../install-prompt.js";
-import { trackEvent } from "./analytics.js";
-import { errorDetails } from "./format.js";
+import { trackEvent } from "./analytics.ts";
+import { errorDetails } from "./format.ts";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 

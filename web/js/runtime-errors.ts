@@ -129,7 +129,7 @@ export function jsErrorName(error: any): string {
 // A step the user has not taken yet, rather than something that went wrong:
 // pressing Upload before anything has been downloaded is the case this exists
 // for. The message is already the instruction that fixes it, which is why the
-// UI answers with a modal (web/js/ui/notice-modal.js) instead of a traceback in
+// UI answers with a modal (web/js/ui/notice-modal.ts) instead of a traceback in
 // the debug panel, and why the event never reaches Sentry (isIgnoredError,
 // web/js/sentry.js). A subclass of RuntimePreconditionError is one too.
 export function isUserPreconditionFailure(error: any): error is RuntimeCallError {
@@ -164,8 +164,8 @@ const JS_STACK_FRAME = /^\s+at\s|@(?:\S+:\d+:\d+|\[native code\])$/;
 // frames that say where CHIRP broke -- then the JS frames of the call that
 // asked for it; anything else prints its own stack or message. The first line
 // is shaped like a JS stack's so that everything reading a detail's first line
-// (errorSummary in web/js/ui/format.js, the Report Bug prefill in
-// web/js/ui/debug-log.js) gets the cause rather than "Traceback (most recent
+// (errorSummary in web/js/ui/format.ts, the Report Bug prefill in
+// web/js/ui/debug-log.ts) gets the cause rather than "Traceback (most recent
 // call last):", which is what they got while the traceback was the message.
 // CLAUDE.md requires the whole of it to reach the panel.
 export function runtimeErrorDetail(error: any): string {
