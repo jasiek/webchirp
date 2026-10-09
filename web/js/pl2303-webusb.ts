@@ -1,5 +1,5 @@
 // Prolific PL2303 USB-UART driver implemented over WebUSB, implementing the
-// same serial transport contract (web/js/serial-transport.mjs) as the FTDI
+// same serial transport contract (web/js/serial-transport.ts) as the FTDI
 // driver, so the serial bridge can use either interchangeably.
 //
 // Protocol references: the Linux kernel driver (drivers/usb/serial/pl2303.c)
@@ -9,9 +9,8 @@
 // deliberate divergences from those ports, matching the kernel instead:
 // vendor writes use bmRequestType vendor|device (not class), and vendor reads
 // use bRequest 0x01 on non-HXN chips (0x81 is HXN-only).
-import { WebUsbTransport } from "./webusb-transport.js";
-
-/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+import { WebUsbTransport } from "./webusb-transport.ts";
+import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
 
 export const PROLIFIC_VENDOR_ID = 0x067b;
 
@@ -101,12 +100,21 @@ export function detectPl2303Type({ deviceClass, maxPacketSize0, usbVersion, devi
   return PL2303_TYPE_HX;
 }
 
-/** @implements {SerialTransport} */
-export class Pl2303SerialPort extends WebUsbTransport {
+export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport {
+  readable: ReadableStream<any> | null;
+  writable: WritableStream<any> | null;
+  chipType: string;
+  _interfaceNumber: number;
+  _inEndpoint: number;
+  _outEndpoint: number;
+  _inPacketSize: number;
+  _controlLines: number;
+  _closed: boolean;
+
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: the line-coding block is written 8N1 unconditionally.
   // It therefore declares capabilities.framing false (WEBUSB_CHIP_CAPABILITIES
-  // in web/js/webusb-transport.js), so the bridge refuses a framing change
+  // in web/js/webusb-transport.ts), so the bridge refuses a framing change
   // rather than reopening and reporting a success the wire does not have.
 
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
@@ -275,7 +283,7 @@ export class Pl2303SerialPort extends WebUsbTransport {
     await this._classInterfaceOut(SET_LINE_REQUEST, 0, coding.buffer);
   }
 
-  async open(options = {}) {
+  async open(options: Partial<SerialOpenOptions> = {}): Promise<void> {
     const baudRate = Number(options.baudRate) || 9600;
     // close() latches _closed and the read loop exits as soon as it is set;
     // reopening the same port object needs it cleared or no byte ever arrives.
@@ -341,7 +349,7 @@ export class Pl2303SerialPort extends WebUsbTransport {
 
   // Web Serial-style signal control: only the provided keys change; the chip
   // takes an absolute DTR|RTS value, so unspecified lines keep cached state.
-  async setSignals(signals = {}) {
+  async setSignals(signals: SerialSignals = {}): Promise<void> {
     let lines = this._controlLines;
     if (signals.dataTerminalReady !== undefined) {
       lines = signals.dataTerminalReady ? lines | CONTROL_DTR : lines & ~CONTROL_DTR;
@@ -367,7 +375,7 @@ export class Pl2303SerialPort extends WebUsbTransport {
     // endpoint complete in the order they were issued, so draining this as a
     // FIFO keeps the byte order intact. See READ_PIPELINE_DEPTH for why more
     // than one has to be outstanding.
-    let inFlight = [];
+    let inFlight: Promise<USBInTransferResult>[] = [];
     const topUp = () => {
       while (inFlight.length < READ_PIPELINE_DEPTH && !isClosed()) {
         const transfer = device.transferIn(inEndpoint, packetSize);

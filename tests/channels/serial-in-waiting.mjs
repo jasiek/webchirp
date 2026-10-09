@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { BrowserSerialBridge } from "../../web/js/serial.js";
+import { BrowserSerialBridge } from "../../web/js/serial.ts";
 import { createTestRadioHarness } from "../support/radio-harness.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
@@ -15,7 +15,7 @@ import { repoRoot } from "../support/repo-paths.mjs";
 // Python shim exposes it under both the modern and the legacy spelling.
 
 // ---------------------------------------------------------------------------
-// The JS half: the serial bridge's inWaiting() (web/js/serial-bridge.mjs)
+// The JS half: the serial bridge's inWaiting() (web/js/serial-bridge.ts)
 // ---------------------------------------------------------------------------
 
 import { makeEmitter, makeRecordingPort } from "../support/fake-serial.mjs";

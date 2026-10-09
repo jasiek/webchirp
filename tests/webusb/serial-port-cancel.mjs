@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { BrowserSerialBridge } from "../../web/js/serial.js";
+import { BrowserSerialBridge } from "../../web/js/serial.ts";
 import {
   PORT_SELECTION_CANCELLED,
   PORT_SELECTION_CANCELLED_MESSAGE,
   isPortSelectionCancelled,
-} from "../../web/js/serial-errors.js";
+} from "../../web/js/serial-errors.ts";
 import { classifyErrorKind, errorTypeName } from "../../web/js/ui/analytics.js";
 import { createDebugLog } from "../../web/js/ui/debug-log.js";
 import { setNavigator } from "../support/globals.mjs";

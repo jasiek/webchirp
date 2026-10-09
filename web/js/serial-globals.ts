@@ -1,3 +1,5 @@
+import type { SerialBridge } from "./serial-bridge.ts";
+
 // The serial_* functions CHIRP's Python imports from the js module, defined
 // once for the browser (web/js/runtime-rpc.ts) and the Node harness
 // (tests/support/radio-harness.mjs). web/python/typings/js.pyi declares the
@@ -7,34 +9,43 @@
 // Two layers, both shared: installSerialBridgeGlobals() turns each Python call
 // into one {op, payload} message with its arguments normalised, and
 // createSerialRpcHandler() answers those messages from a serial bridge
-// (web/js/serial-bridge.mjs), logging what the debug panel needs to see.
+// (web/js/serial-bridge.ts), logging what the debug panel needs to see.
 
 /**
  * One serial operation as it crosses from a Python serial_* call to the
  * bridge: the op name and its normalised arguments.
- * @typedef {Object} SerialRpcMessage
- * @property {string} op  A key of the handler's op table ("open", "readBytes", ...).
- * @property {Record<string, any>} [payload]
  */
+export interface SerialRpcMessage {
+  /** A key of the handler's op table ("open", "readBytes", ...). */
+  op: string;
+  payload?: SerialRpcPayload;
+}
+
+/**
+ * An op's arguments, already normalised by SERIAL_GLOBAL_OPS below. Values
+ * arrive from Python through Pyodide, so each handler reads only the keys its
+ * own op sends.
+ */
+export type SerialRpcPayload = Record<string, any>;
 
 /**
  * What answers SerialRpcMessages: createSerialRpcHandler()'s result, or a
  * test's stand-in.
- * @typedef {(msg: SerialRpcMessage) => Promise<unknown>} SerialRpcHandler
  */
+export type SerialRpcHandler = (msg: SerialRpcMessage) => Promise<unknown>;
 
-/**
- * @typedef {Object} SerialRpcHandlerOptions
- * @property {import("./serial-bridge.mjs").SerialBridge} serialBridge
- * @property {(line: string) => void} logSerial  The serial/debug log.
- * @property {(cur: number, max: number, message: string) => void} [onProgress]
- *   Clone progress; cur and max are -1 when a driver reports no counts.
- */
+export interface SerialRpcHandlerOptions {
+  serialBridge: SerialBridge;
+  /** The serial/debug log. */
+  logSerial: (line: string) => void;
+  /** Clone progress; cur and max are -1 when a driver reports no counts. */
+  onProgress?: (cur: number, max: number, message: string) => void;
+}
 
 // Render a setSignals payload for the debug panel, naming only the lines the
 // caller actually asked to change.
-function describeSignals(payload = {}) {
-  const parts = [];
+function describeSignals(payload: SerialRpcPayload = {}) {
+  const parts: string[] = [];
   if (payload.dataTerminalReady !== null && payload.dataTerminalReady !== undefined) {
     parts.push(`DTR=${Boolean(payload.dataTerminalReady)}`);
   }
@@ -45,19 +56,15 @@ function describeSignals(payload = {}) {
 }
 
 // Name the port options a reconfigure actually changed, for the debug panel.
-function describeOptions(options = {}, changed = []) {
+function describeOptions(options: Record<string, unknown> = {}, changed: string[] = []): string {
   const keys = changed.length ? changed : Object.keys(options);
   return keys.map((key) => `${key}=${options[key]}`).join(" ") || "no change";
 }
 
 // Build the handler that answers serial ops from a bridge. logSerial receives
 // the lines meant for the serial/debug log; onProgress receives clone progress.
-/**
- * @param {SerialRpcHandlerOptions} options
- * @returns {SerialRpcHandler}
- */
-export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) {
-  async function handleOpen(payload = {}) {
+export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }: SerialRpcHandlerOptions): SerialRpcHandler {
+  async function handleOpen(payload: SerialRpcPayload = {}) {
     const res = await serialBridge.open(payload.baudRate);
     logSerial(res.message);
     return res;
@@ -69,39 +76,39 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
     return res;
   }
 
-  async function handleWriteHex(payload = {}) {
+  async function handleWriteHex(payload: SerialRpcPayload = {}) {
     const res = await serialBridge.writeHex(payload.hex);
     logSerial(`TX ${res.hex}`);
     return res;
   }
 
-  async function handleReadHex(payload = {}) {
+  async function handleReadHex(payload: SerialRpcPayload = {}) {
     const res = await serialBridge.readHex(payload.count, payload.timeoutMs);
     logSerial(`RX ${res.hex || "<none>"}${res.timedOut ? " (timeout)" : ""}`);
     return res;
   }
 
-  async function handleWriteBytes(payload = {}) {
+  async function handleWriteBytes(payload: SerialRpcPayload = {}) {
     return serialBridge.writeBytes(payload.bytes || []);
   }
 
-  async function handleReadBytes(payload = {}) {
+  async function handleReadBytes(payload: SerialRpcPayload = {}) {
     return serialBridge.readBytes(payload.count, payload.timeoutMs);
   }
 
-  async function handleLog(payload = {}) {
+  async function handleLog(payload: SerialRpcPayload = {}) {
     logSerial(String(payload.message || ""));
     return { logged: true };
   }
 
   // CHIRP drivers report clone progress once per transferred block; forward
   // it to the UI (cur/max may be -1 when a driver reports no counts).
-  async function handleProgress(payload = {}) {
+  async function handleProgress(payload: SerialRpcPayload = {}) {
     onProgress?.(Number(payload.cur), Number(payload.max), String(payload.msg || ""));
     return { reported: true };
   }
 
-  async function handlePrepareClone(payload = {}) {
+  async function handlePrepareClone(payload: SerialRpcPayload = {}) {
     const res = await serialBridge.prepareClone(
       payload.wantsDtr,
       payload.wantsRts,
@@ -121,7 +128,7 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
   // Control-line changes are advisory: adapters and browsers that cannot set
   // DTR/RTS must not abort a clone that would otherwise work, so a failure is
   // reported to the debug panel instead of propagating into the driver.
-  async function handleSetSignals(payload = {}) {
+  async function handleSetSignals(payload: SerialRpcPayload = {}) {
     try {
       const res = await serialBridge.setSignals(
         payload.dataTerminalReady,
@@ -143,7 +150,7 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
   // assigns it the radio has already switched, so a port left at the old rate
   // cannot complete the clone -- a silent timeout ten seconds later is a much
   // worse diagnostic than the failure itself. This one propagates.
-  async function handleReconfigure(payload = {}) {
+  async function handleReconfigure(payload: SerialRpcPayload = {}) {
     const res = await serialBridge.reconfigure(payload.options || {});
     if (res.reconfigured) {
       logSerial(`Reopened port (${describeOptions(res.options, res.changed)})`);
@@ -153,7 +160,7 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
 
   // Deliberately unlogged: a clone polls this once per byte, so echoing it to
   // the debug panel would bury every diagnostic the panel exists for.
-  async function handleInWaiting(payload = {}) {
+  async function handleInWaiting(payload: SerialRpcPayload = {}) {
     return serialBridge.inWaiting(payload.waitMs);
   }
 
@@ -196,11 +203,7 @@ export function createSerialRpcHandler({ serialBridge, logSerial, onProgress }) 
 
 // Pass a nullable line through as null, so a driver setting one line never
 // implicitly clears the other.
-/**
- * @param {unknown} value
- * @returns {boolean|null}
- */
-function optionalBoolean(value) {
+function optionalBoolean(value: unknown): boolean | null {
   return value === null || value === undefined ? null : Boolean(value);
 }
 
@@ -209,8 +212,8 @@ function optionalBoolean(value) {
 // asks for one byte within 1200 ms, a clone settles 350 ms unless told
 // otherwise, and a driver that declares no BAUD_RATE sends 0, which the bridge
 // reads as "keep the rate the port has".
-/** @typedef {(...args: any[]) => [string, Record<string, any>]} SerialGlobalOp */
-const SERIAL_GLOBAL_OPS = Object.freeze(/** @satisfies {Record<string, SerialGlobalOp>} */ ({
+export type SerialGlobalOp = (...args: any[]) => [string, Record<string, any>];
+const SERIAL_GLOBAL_OPS = Object.freeze({
   serial_open: (baudRate) => ["open", { baudRate: Number(baudRate) }],
   serial_close: () => ["close", {}],
   serial_write_hex: (hex) => ["writeHex", { hex: String(hex || "") }],
@@ -246,8 +249,7 @@ const SERIAL_GLOBAL_OPS = Object.freeze(/** @satisfies {Record<string, SerialGlo
   // the pipe actually holds a value for are sent; the rest keep what the port
   // was opened with.
   serial_reconfigure: (baudRate, dataBits, stopBits, parity) => {
-    /** @type {Record<string, number|string>} */
-    const options = {};
+    const options: Record<string, number | string> = {};
     if (baudRate !== null && baudRate !== undefined) {
       options.baudRate = Number(baudRate);
     }
@@ -263,7 +265,7 @@ const SERIAL_GLOBAL_OPS = Object.freeze(/** @satisfies {Record<string, SerialGlo
     return ["reconfigure", { options }];
   },
   serial_reset_buffers: () => ["resetBuffers", {}],
-}));
+} satisfies Record<string, SerialGlobalOp>);
 
 // The names installSerialBridgeGlobals() defines, for the typings check.
 export const SERIAL_GLOBAL_NAMES = Object.freeze(Object.keys(SERIAL_GLOBAL_OPS));
@@ -272,15 +274,8 @@ export const SERIAL_GLOBAL_NAMES = Object.freeze(Object.keys(SERIAL_GLOBAL_OPS))
 // each forwarding one {op, payload} message to handleSerialRpc -- the function
 // createSerialRpcHandler() returns, or anything answering the same messages.
 // Installed before the runtime boots: Python binds these by name at import.
-/**
- * @template {object} T
- * @param {T} target
- * @param {SerialRpcHandler} handleSerialRpc
- * @returns {T}
- */
-export function installSerialBridgeGlobals(target, handleSerialRpc) {
-  /** @type {[string, SerialGlobalOp][]} */
-  const ops = Object.entries(SERIAL_GLOBAL_OPS);
+export function installSerialBridgeGlobals<T extends object>(target: T, handleSerialRpc: SerialRpcHandler): T {
+  const ops: [string, SerialGlobalOp][] = Object.entries(SERIAL_GLOBAL_OPS);
   for (const [name, toMessage] of ops) {
     target[name] = (...args) => {
       const [op, payload] = toMessage(...args);

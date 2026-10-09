@@ -1,7 +1,7 @@
 """The JS globals Pyodide exposes to ``webchirp_bridge`` as the ``js`` module.
 
 These are not Python functions: each is a JS function installed on
-``globalThis`` by ``installSerialBridgeGlobals()`` in ``web/js/serial-globals.mjs``
+``globalThis`` by ``installSerialBridgeGlobals()`` in ``web/js/serial-globals.ts``
 before the runtime boots -- by ``web/js/runtime-rpc.ts`` in the browser and by
 ``tests/support/radio-harness.mjs`` under Node, so both environments define the
 same functions with the same argument handling -- and reached through

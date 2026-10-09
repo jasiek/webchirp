@@ -5,11 +5,11 @@ import test from "node:test";
 import {
   SERIAL_GLOBAL_NAMES,
   installSerialBridgeGlobals,
-} from "../../web/js/serial-globals.mjs";
+} from "../../web/js/serial-globals.ts";
 import { repoRoot } from "../support/repo-paths.mjs";
 
 // The serial_* functions Python imports from js are defined once, by
-// web/js/serial-globals.mjs, for both the browser and the Node harness. These
+// web/js/serial-globals.ts, for both the browser and the Node harness. These
 // tests pin that list against the Python-side declaration and pin the
 // argument normalisation both environments now share.
 

@@ -1,24 +1,23 @@
-// The browser's serial bridge: the shared SerialBridge (web/js/serial-bridge.mjs)
+// The browser's serial bridge: the shared SerialBridge (web/js/serial-bridge.ts)
 // plus the one thing only a browser has, a chooser. It decides which provider
 // a connect goes through -- native Web Serial, the WebUSB drivers
-// (web/js/webusb-serial.js) or Web Bluetooth (web/js/webbluetooth-serial.js) --
+// (web/js/webusb-serial.ts) or Web Bluetooth (web/js/webbluetooth-serial.ts) --
 // shows that provider's chooser, and hands the bridge a port that satisfies
-// the transport contract (web/js/serial-transport.mjs). Native ports are the
-// browser's own objects, so they are wrapped (web/js/native-serial-port.js)
+// the transport contract (web/js/serial-transport.ts). Native ports are the
+// browser's own objects, so they are wrapped (web/js/native-serial-port.ts)
 // rather than modified.
-import { createPortSelectionCancelledError, createSerialUnsupportedError } from "./serial-errors.js";
-import { NativeSerialPort } from "./native-serial-port.js";
-import { SerialBridge } from "./serial-bridge.mjs";
-import { createWebUsbSerial } from "./webusb-serial.js";
-import { createWebBluetoothSerial } from "./webbluetooth-serial.js";
-
-/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+import { createPortSelectionCancelledError, createSerialUnsupportedError } from "./serial-errors.ts";
+import { NativeSerialPort } from "./native-serial-port.ts";
+import { SerialBridge } from "./serial-bridge.ts";
+import { createWebUsbSerial } from "./webusb-serial.ts";
+import { createWebBluetoothSerial } from "./webbluetooth-serial.ts";
+import type { SerialTransport } from "./serial-transport.ts";
 
 /**
  * Something with a chooser: navigator.serial, or one of the WebUSB and Web
  * Bluetooth providers, which mirror its requestPort().
- * @typedef {{requestPort(options?: object): Promise<SerialPort|SerialTransport>}} PortProvider
  */
+export type PortProvider = {requestPort(options?: object): Promise<SerialPort | SerialTransport>};
 
 function hasNativeSerial() {
   return typeof navigator !== "undefined" && "serial" in navigator;
@@ -26,8 +25,7 @@ function hasNativeSerial() {
 
 // The browser's own Web Serial object, or undefined where there is none. Read
 // once by the provider choice below, so the object it checks is the one it uses.
-/** @returns {Serial|undefined} */
-function nativeSerial() {
+function nativeSerial(): Serial | undefined {
   return typeof navigator !== "undefined" ? navigator.serial : undefined;
 }
 
@@ -42,17 +40,23 @@ function hasWebBluetooth() {
 }
 
 export class BrowserSerialBridge extends SerialBridge {
+  serial: PortProvider | null;
+  preferredTransport: string;
+  _createWebUsbSerial: () => PortProvider;
+  _createWebBluetoothSerial: () => PortProvider;
+
   /**
-   * @param {{createWebUsbSerial?: () => PortProvider,
-   *   createWebBluetoothSerial?: () => PortProvider}} [options]  Test seams
+   * @param options Test seams
    *   for the two providers this module would otherwise build itself.
    */
   constructor({ createWebUsbSerial: createWebUsbSerialImpl,
-    createWebBluetoothSerial: createWebBluetoothSerialImpl } = {}) {
+    createWebBluetoothSerial: createWebBluetoothSerialImpl }: {
+    createWebUsbSerial?: () => PortProvider;
+    createWebBluetoothSerial?: () => PortProvider;
+  } = {}) {
     super();
     // The resolved native, USB, or Bluetooth provider, set on connect. Each
     // offers requestPort(); this.transport names which one it is.
-    /** @type {PortProvider|null} */
     this.serial = null;
     // Which transport open() should use: "auto" (native preferred), "webserial",
     // "webusb", or "webbluetooth". Forcing "webusb" is needed where native Web Serial exists but
@@ -64,8 +68,8 @@ export class BrowserSerialBridge extends SerialBridge {
 
   // Choose the transport open() will use. Resets any cached provider while
   // disconnected so the next connect re-resolves against the new preference.
-  /** @param {string} transport  "auto", "webserial", "webusb" or "webbluetooth". */
-  setPreferredTransport(transport) {
+  /** @param transport "auto", "webserial", "webusb" or "webbluetooth". */
+  setPreferredTransport(transport: string) {
     this.preferredTransport =
       ["webusb", "webserial", "webbluetooth"].includes(transport) ? transport : "auto";
     if (!this.port) {
@@ -79,8 +83,7 @@ export class BrowserSerialBridge extends SerialBridge {
   }
 
   // Report what serial transport(s) this browser can offer.
-  /** @returns {{supported: boolean, native: boolean, webusb: boolean, webbluetooth: boolean}} */
-  getCapability() {
+  getCapability(): { supported: boolean; native: boolean; webusb: boolean; webbluetooth: boolean } {
     const native = hasNativeSerial();
     const webusb = hasWebUsb();
     const webbluetooth = hasWebBluetooth();
@@ -89,8 +92,7 @@ export class BrowserSerialBridge extends SerialBridge {
 
   // Resolve the serial provider: prefer native Web Serial, otherwise fall back
   // to the WebUSB chip-aware provider. Cached after the first call.
-  /** @returns {Promise<PortProvider>} */
-  async _ensureSerial() {
+  async _ensureSerial(): Promise<PortProvider> {
     if (this.serial) {
       return this.serial;
     }
@@ -145,11 +147,7 @@ export class BrowserSerialBridge extends SerialBridge {
   // This sits apart from the open() body on purpose: only the chooser
   // produces NotFoundError, so translating inside the wider try would risk
   // relabelling a later failure as a user cancellation.
-  /**
-   * @param {PortProvider} serial
-   * @returns {Promise<SerialPort|SerialTransport>}
-   */
-  async _requestPort(serial) {
+  async _requestPort(serial: PortProvider): Promise<SerialPort | SerialTransport> {
     try {
       return await serial.requestPort({});
     } catch (error) {
@@ -163,20 +161,16 @@ export class BrowserSerialBridge extends SerialBridge {
   // The bridge's transport factory: resolve the provider, show its chooser,
   // and wrap a native SerialPort so it meets the contract like every other
   // port does. Its loss events arrive on navigator.serial, the provider.
-  /**
-   * @override
-   * @returns {Promise<SerialTransport>}
-   */
-  async requestTransport() {
+  override async requestTransport(): Promise<SerialTransport> {
     const serial = await this._ensureSerial();
     const port = await this._requestPort(serial);
     // Only navigator.serial hands back a bare SerialPort; the WebUSB and Web
     // Bluetooth providers already return contract ports.
     if (this.transport === "webserial") {
-      return new NativeSerialPort(/** @type {SerialPort} */ (port), {
-        events: /** @type {Serial} */ (serial),
+      return new NativeSerialPort(port as SerialPort, {
+        events: serial as Serial,
       });
     }
-    return /** @type {SerialTransport} */ (port);
+    return port as SerialTransport;
   }
 }

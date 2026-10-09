@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BrowserSerialBridge } from "../../web/js/serial.js";
+import { BrowserSerialBridge } from "../../web/js/serial.ts";
 import { makeEmitter, makeRecordingPort } from "../support/fake-serial.mjs";
 import { tick, withNavigator } from "../support/globals.mjs";
 
 // An adapter that disappears mid-session (unplugged, or powered down with the
 // radio) is reported by its transport through onDisconnect(), in one shape
-// whatever the transport (web/js/serial-transport.mjs). The bridge has to close
+// whatever the transport (web/js/serial-transport.ts). The bridge has to close
 // the port it holds and say so once. How each transport recognises its own
 // loss -- by event target, by USBDevice identity, by GATT link -- is
 // tests/webusb/serial-transport-conformance.mjs; this file is the bridge's

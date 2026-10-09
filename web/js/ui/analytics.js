@@ -19,7 +19,7 @@
 
 import { errorDetails } from "./format.js";
 import { isRuntimeCallError, jsErrorName } from "../runtime-errors.ts";
-import { isPortSelectionCancelled } from "../serial-errors.js";
+import { isPortSelectionCancelled } from "../serial-errors.ts";
 
 export { trackEvent } from "../analytics.js";
 

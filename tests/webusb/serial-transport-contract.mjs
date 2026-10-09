@@ -6,7 +6,7 @@ import {
   assertSerialTransport,
   createDisconnectNotifier,
   watchUsbDisconnect,
-} from "../../web/js/serial-transport.mjs";
+} from "../../web/js/serial-transport.ts";
 import { makeEmitter } from "../support/fake-serial.mjs";
 
 // The contract module on its own: what assertSerialTransport() accepts and how

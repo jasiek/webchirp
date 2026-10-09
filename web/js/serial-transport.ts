@@ -1,11 +1,11 @@
 // The serial port contract every transport implements, declared once.
 //
-// The serial bridge (web/js/serial-bridge.mjs) drives a port through nothing
+// The serial bridge (web/js/serial-bridge.ts) drives a port through nothing
 // but the members listed here, so native Web Serial (wrapped by
-// web/js/native-serial-port.js), the four WebUSB chip drivers (sharing
-// web/js/webusb-transport.js), the CDC polyfill wrapper
-// (web/js/webusb-serial.js), the Web Bluetooth port
-// (web/js/webbluetooth-serial.js) and the node-serialport adapter the CLI and
+// web/js/native-serial-port.ts), the four WebUSB chip drivers (sharing
+// web/js/webusb-transport.ts), the CDC polyfill wrapper
+// (web/js/webusb-serial.ts), the Web Bluetooth port
+// (web/js/webbluetooth-serial.ts) and the node-serialport adapter the CLI and
 // test harness use (tests/support/node-serial-port.mjs) are interchangeable
 // behind it. What a transport cannot do is a declared capability, read by the
 // bridge, rather than a property the bridge has to probe for or an error it has
@@ -13,95 +13,122 @@
 //
 // No DOM or navigator access at module scope: Node imports this too.
 //
-// The typedefs below are the contract's single statement: every transport
-// class declares @implements {SerialTransport}, so tsc (npm run check:js)
+// The types below are the contract's single statement: every transport
+// class declares implements SerialTransport, so tsc (npm run check:js)
 // checks each one against them, and assertSerialTransport() checks the same
 // members at runtime for ports tsc never sees (a test's stand-in, the Node
 // adapter).
 
-/**
- * What open() and reconfigure() take, in Web Serial's spelling.
- * @typedef {Object} SerialOpenOptions
- * @property {number} baudRate
- * @property {7|8} [dataBits]
- * @property {1|2} [stopBits]
- * @property {"none"|"even"|"odd"} [parity]
- * @property {"none"|"hardware"} [flowControl]
- */
+/** What open() and reconfigure() take, in Web Serial's spelling. */
+export interface SerialOpenOptions {
+  baudRate: number;
+  dataBits?: 7 | 8;
+  stopBits?: 1 | 2;
+  parity?: "none" | "even" | "odd";
+  flowControl?: "none" | "hardware";
+}
 
-/**
- * Output control lines. An absent line is left as it is.
- * @typedef {Object} SerialSignals
- * @property {boolean} [dataTerminalReady]
- * @property {boolean} [requestToSend]
- */
+/** Output control lines. An absent line is left as it is. */
+export interface SerialSignals {
+  dataTerminalReady?: boolean;
+  requestToSend?: boolean;
+}
 
 /**
  * What a transport can do, declared rather than discovered by trying.
  * Transports that only learn their adapter at open() (Web Bluetooth) answer
  * for the adapter they hold once open, and conservatively before.
- * @typedef {Object} SerialTransportCapabilities
- * @property {boolean} framing  open() honours dataBits, stopBits and parity. A
- *   transport that programs 8N1 whatever it is asked must say false, or a
- *   driver's even parity is "applied" and every byte is misframed.
- * @property {"reopen"|"update"} reconfigure  How a settings change lands:
- *   "reopen" is close() then open() on the same port (Web Serial has no other
- *   route); "update" is reconfigure(options) in place, with readable and
- *   writable surviving it.
- * @property {boolean} signals  setSignals() reaches DTR/RTS.
  */
+export interface SerialTransportCapabilities {
+  /**
+   * open() honours dataBits, stopBits and parity. A
+   * transport that programs 8N1 whatever it is asked must say false, or a
+   * driver's even parity is "applied" and every byte is misframed.
+   */
+  framing: boolean;
+  /**
+   * How a settings change lands:
+   * "reopen" is close() then open() on the same port (Web Serial has no other
+   * route); "update" is reconfigure(options) in place, with readable and
+   * writable surviving it.
+   */
+  reconfigure: "reopen" | "update";
+  /** setSignals() reaches DTR/RTS. */
+  signals: boolean;
+}
 
 /**
  * The one shape a lost port is reported in, whatever the transport's own
  * event looks like.
- * @typedef {Object} SerialDisconnectPayload
- * @property {string} transport  The port's transport name.
- * @property {SerialTransport} port  The port that went away.
  */
+export interface SerialDisconnectPayload {
+  /** The port's transport name. */
+  transport: string;
+  /** The port that went away. */
+  port: SerialTransport;
+}
 
 /**
  * A serial port as the bridge sees it: Web Serial's SerialPort surface plus
  * the declarations every transport has to make explicitly.
- * @typedef {Object} SerialTransport
- * @property {string} transport  "webserial", "webusb", "webbluetooth" or "node".
- * @property {SerialTransportCapabilities} capabilities
- * @property {(options: SerialOpenOptions) => Promise<void>} open
- * @property {() => Promise<void>} close
- * @property {ReadableStream<Uint8Array>|null} readable  Null while closed.
- * @property {WritableStream<Uint8Array>|null} writable  Null while closed.
- * @property {(signals: SerialSignals) => Promise<void>} setSignals
- * @property {() => {usbVendorId?: number, usbProductId?: number}} getInfo
- * @property {USBDevice|null} usbDevice  The USBDevice behind the port, or null
- *   when there is none (native Web Serial, Bluetooth, node-serialport).
- * @property {(callback: (payload: SerialDisconnectPayload) => void) => () => void} onDisconnect
- *   Registers a callback for the loss of the open port and returns its
- *   unsubscribe. Called once per loss, never for an intentional close().
- * @property {(options: SerialOpenOptions) => Promise<void>} [reconfigure]
- *   Required when capabilities.reconfigure is "update".
- * @property {string} [displayName]  How the debug panel names the port when
- *   USB ids cannot (a Bluetooth adapter's profile, a tty path).
- * @property {() => Promise<void>} [discardInput]  Drops bytes the transport
- *   holds but has not delivered yet (the OS queue behind node-serialport).
- * @property {() => Promise<object>} [getSignals]  Input lines, where readable.
  */
+export interface SerialTransport {
+  /** "webserial", "webusb", "webbluetooth" or "node". */
+  transport: string;
+  capabilities: SerialTransportCapabilities;
+  open: (options: SerialOpenOptions) => Promise<void>;
+  close: () => Promise<void>;
+  /** Null while closed. */
+  readable: ReadableStream<Uint8Array> | null;
+  /** Null while closed. */
+  writable: WritableStream<Uint8Array> | null;
+  setSignals: (signals: SerialSignals) => Promise<void>;
+  getInfo: () => {usbVendorId?: number, usbProductId?: number};
+  /**
+   * The USBDevice behind the port, or null
+   * when there is none (native Web Serial, Bluetooth, node-serialport).
+   */
+  usbDevice: USBDevice | null;
+  /**
+   * Registers a callback for the loss of the open port and returns its
+   * unsubscribe. Called once per loss, never for an intentional close().
+   */
+  onDisconnect: (callback: (payload: SerialDisconnectPayload) => void) => () => void;
+  /** Required when capabilities.reconfigure is "update". */
+  reconfigure?: (options: SerialOpenOptions) => Promise<void>;
+  /**
+   * How the debug panel names the port when
+   * USB ids cannot (a Bluetooth adapter's profile, a tty path).
+   */
+  displayName?: string;
+  /**
+   * Drops bytes the transport
+   * holds but has not delivered yet (the OS queue behind node-serialport).
+   */
+  discardInput?: () => Promise<void>;
+  /** Input lines, where readable. */
+  getSignals?: () => Promise<object>;
+}
 
-/**
- * One-shot loss reporting, as createDisconnectNotifier() builds it.
- * @typedef {Object} DisconnectNotifier
- * @property {(callback: (payload: SerialDisconnectPayload) => void) => () => void} subscribe
- *   What a transport's onDisconnect() forwards to.
- * @property {() => void} arm  At the end of a successful open().
- * @property {() => void} disarm  At the start of close().
- * @property {() => boolean} fire  On loss; false when not armed.
- */
+/** One-shot loss reporting, as createDisconnectNotifier() builds it. */
+export interface DisconnectNotifier {
+  /** What a transport's onDisconnect() forwards to. */
+  subscribe: (callback: (payload: SerialDisconnectPayload) => void) => () => void;
+  /** At the end of a successful open(). */
+  arm: () => void;
+  /** At the start of close(). */
+  disarm: () => void;
+  /** On loss; false when not armed. */
+  fire: () => boolean;
+}
 
-/**
- * One member of the contract and the test a port's value for it must pass.
- * @typedef {Object} SerialTransportMember
- * @property {string} name
- * @property {string} expect  What a passing value looks like, for the error.
- * @property {(port: any) => boolean} check
- */
+/** One member of the contract and the test a port's value for it must pass. */
+export interface SerialTransportMember {
+  name: string;
+  /** What a passing value looks like, for the error. */
+  expect: string;
+  check: (port: any) => boolean;
+}
 
 // The transport names a port may declare.
 export const SERIAL_TRANSPORT_NAMES = Object.freeze(["webserial", "webusb", "webbluetooth", "node"]);
@@ -115,8 +142,7 @@ export const FRAMING_OPTIONS = Object.freeze(["dataBits", "stopBits", "parity"])
 // (tk280 wants even parity, tg_uv2p two stop bits) must not be inherited by the
 // next radio, which would corrupt every byte it reads. The browser and the
 // node-serialport bridge both open from this one object.
-/** @type {Readonly<Omit<SerialOpenOptions, "baudRate">>} */
-export const DEFAULT_PORT_OPTIONS = Object.freeze({
+export const DEFAULT_PORT_OPTIONS: Readonly<Omit<SerialOpenOptions, "baudRate">> = Object.freeze({
   dataBits: 8,
   stopBits: 1,
   parity: "none",
@@ -126,22 +152,14 @@ export const DEFAULT_PORT_OPTIONS = Object.freeze({
 const RECONFIGURE_MODES = Object.freeze(["reopen", "update"]);
 
 // True for a function-valued member; the methods every port must have.
-/**
- * @param {unknown} value
- * @returns {value is Function}
- */
-function isFunction(value) {
+function isFunction(value: unknown): value is Function {
   return typeof value === "function";
 }
 
 // True for a capabilities object whose every field is one the bridge can act
 // on. A missing or misspelt field would otherwise read as undefined, which the
 // bridge would have to guess about -- the probing this contract replaces.
-/**
- * @param {any} value
- * @returns {value is SerialTransportCapabilities}
- */
-function isCapabilities(value) {
+function isCapabilities(value: any): value is SerialTransportCapabilities {
   return Boolean(value)
     && typeof value === "object"
     && typeof value.framing === "boolean"
@@ -152,8 +170,7 @@ function isCapabilities(value) {
 // Every member the bridge relies on, each with the test it must pass. The
 // streams and usbDevice only have to be present: they are legitimately null
 // while the port is closed, or when no USBDevice exists.
-/** @type {readonly Readonly<SerialTransportMember>[]} */
-export const SERIAL_TRANSPORT_MEMBERS = Object.freeze([
+export const SERIAL_TRANSPORT_MEMBERS: readonly Readonly<SerialTransportMember>[] = Object.freeze([
   Object.freeze({
     name: "transport",
     expect: `one of ${SERIAL_TRANSPORT_NAMES.join(", ")}`,
@@ -185,11 +202,10 @@ export const SERIAL_TRANSPORT_MEMBERS = Object.freeze([
 // failed clone at a time is how the old by-convention interface drifted.
 // Returns the port so a caller can assert and use it in one expression.
 /**
- * @param {any} port  Anything claiming to be a port.
- * @param {string} [label]  How the error names it; the class name by default.
- * @returns {SerialTransport}
+ * @param port Anything claiming to be a port.
+ * @param label How the error names it; the class name by default.
  */
-export function assertSerialTransport(port, label = "") {
+export function assertSerialTransport(port: any, label: string = ""): SerialTransport {
   const name = label || port?.constructor?.name || "serial port";
   if (!port || typeof port !== "object") {
     throw new TypeError(`${name} is not a serial transport: got ${port === null ? "null" : typeof port}`);
@@ -211,12 +227,10 @@ export function assertSerialTransport(port, label = "") {
 // asked to do. arm() at the end of a successful open(), disarm() at the start
 // of close(); fire() from whatever the transport's own loss signal is.
 /**
- * @param {SerialTransport} port  The port the payload names.
- * @returns {DisconnectNotifier}
+ * @param port The port the payload names.
  */
-export function createDisconnectNotifier(port) {
-  /** @type {Set<(payload: SerialDisconnectPayload) => void>} */
-  const callbacks = new Set();
+export function createDisconnectNotifier(port: SerialTransport): DisconnectNotifier {
+  const callbacks: Set<(payload: SerialDisconnectPayload) => void> = new Set();
   let armed = false;
   return {
     // Register a callback; returns its unsubscribe, which is what the
@@ -261,17 +275,14 @@ export function createDisconnectNotifier(port) {
 // is ignored. Returns the function that stops watching. A missing source
 // (Node without a stand-in) watches nothing.
 /**
- * @param {EventTarget|null|undefined} usbEvents  navigator.usb, or a stand-in.
- * @param {USBDevice|null|undefined} device
- * @param {() => void} onLost
- * @returns {() => void}  Stops watching.
+ * @param usbEvents navigator.usb, or a stand-in.
+ * @returns Stops watching.
  */
-export function watchUsbDisconnect(usbEvents, device, onLost) {
+export function watchUsbDisconnect(usbEvents: EventTarget | null | undefined, device: USBDevice | null | undefined, onLost: () => void): () => void {
   if (!usbEvents || typeof usbEvents.addEventListener !== "function" || !device) {
     return () => {};
   }
-  /** @param {Event & {device?: USBDevice}} event */
-  const handler = (event) => {
+  const handler = (event: Event & { device?: USBDevice }) => {
     if (event?.device === device) {
       onLost();
     }

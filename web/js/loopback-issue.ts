@@ -44,7 +44,7 @@ export function fitLoopbackReport(report, { measure, limit }) {
 
   // Measure with the note already attached, so the note itself can never be what
   // pushes the URL back over the limit.
-  let kept = [];
+  let kept: string[] = [];
   for (const line of trimmed) {
     if (measure([...kept, line, TAIL_TRIM_NOTE].join("\n")) > limit) {
       break;

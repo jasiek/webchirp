@@ -57,7 +57,7 @@ const PYTHON_URLS_MODULE = path.join(WEB_DIR, "js", "runtime-python-urls.ts");
 const JS_OUT_DIR = "js";
 // The three CDN modules, all on jsDelivr: Pyodide's loader (a static import in
 // web/js/runtime-rpc.ts), the Sentry SDK (web/js/sentry.js) and the
-// web-serial polyfill (web/js/webusb-serial.js), the last two lazy.
+// web-serial polyfill (web/js/webusb-serial.ts), the last two lazy.
 const EXTERNAL_URLS = ["https://cdn.jsdelivr.net/*"];
 // The CHIRP archive and manifest for the pinned revision. Immutable by name like
 // the hashed assets, but named after the pin rather than their content, so they

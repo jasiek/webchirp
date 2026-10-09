@@ -13,7 +13,7 @@
 // timeouts and reopen.
 //
 // The session below deliberately reimplements read buffering rather than
-// reusing the serial bridge (web/js/serial-bridge.mjs): the bridge buffers for CHIRP's byte-at-a-time
+// reusing the serial bridge (web/js/serial-bridge.ts): the bridge buffers for CHIRP's byte-at-a-time
 // protocol needs, while a test needs exact-length reads, explicit timeouts and
 // a drain primitive, and must talk to a port it was handed rather than one it
 // requested.
@@ -59,7 +59,7 @@ function concatBytes(a, b) {
   return out;
 }
 
-function hexPreview(bytes, limit = 16) {
+function hexPreview(bytes: Uint8Array, limit = 16): string {
   const shown = Array.from(bytes.slice(0, limit))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join(" ");
@@ -85,19 +85,14 @@ function describeMismatch(want, got) {
 // A read/write session over an already-open port. Owns the reader lock and a
 // receive buffer so callers can ask for exact byte counts with a timeout.
 export function createPortSession(port) {
-  /** @type {ReadableStreamDefaultReader<Uint8Array>|null} */
-  let reader = null;
-  /** @type {WritableStreamDefaultWriter<Uint8Array>|null} */
-  let writer = null;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   let buffer = new Uint8Array(0);
-  /** @type {Error|null} */
-  let streamError = null;
+  let streamError: Error | null = null;
   let stopped = false;
-  /**
-   * @type {Array<{count: number, resolve: (bytes: Uint8Array) => void,
-   *   reject: (error: Error) => void, timer: number}>}
-   */
-  const waiters = [];
+  const waiters: Array<{
+count: number; resolve: (bytes: Uint8Array) => void;
+reject: (error: Error) => void; timer: number }> = [];
 
   function takeFromBuffer(count) {
     const taken = buffer.slice(0, count);
@@ -123,8 +118,7 @@ export function createPortSession(port) {
     }
   }
 
-  /** @param {ReadableStreamDefaultReader<Uint8Array>} activeReader */
-  async function pump(activeReader) {
+  async function pump(activeReader: ReadableStreamDefaultReader<Uint8Array>) {
     try {
       for (;;) {
         const { value, done } = await activeReader.read();
@@ -423,7 +417,23 @@ const DEFAULTS = {
   now: () => Date.now(),
 };
 
-function makeResult(entry, status, detail, startedAt, ctx) {
+/** One case's outcome, as the report and the page's table show it. */
+export interface LoopbackResult {
+  id: string;
+  title: string;
+  baudRate?: number;
+  status: "pass" | "fail" | "skip";
+  detail: string;
+  durationMs: number;
+}
+
+function makeResult(
+  entry: { id: string; title: string; baudRate?: number },
+  status: LoopbackResult["status"],
+  detail: string,
+  startedAt: number,
+  ctx: { now(): number },
+): LoopbackResult {
   return {
     id: entry.id,
     title: entry.title,
@@ -481,8 +491,7 @@ async function runWithOpenPort(port, baudRate, entries, ctx, results) {
   // Cases read the baud in force off the context to size their timeouts.
   const caseCtx = { ...ctx, baudRate };
   const withBaud = entries.map((entry) => ({ ...entry, baudRate }));
-  /** @type {ReturnType<typeof createPortSession>} */
-  let session;
+  let session: ReturnType<typeof createPortSession>;
   let opened = false;
   try {
     await port.open({ baudRate });
@@ -534,10 +543,8 @@ async function runWithOpenPort(port, baudRate, entries, ctx, results) {
 /**
  * Run the loopback suite against a Web Serial-shaped port with TX jumpered to
  * RX. The port must be closed on entry; it is left closed on return.
- *
- * @returns {Promise<{results: Array, passed: number, failed: number, skipped: number}>}
  */
-export async function runLoopbackSuite(port, options = {}) {
+export async function runLoopbackSuite(port, options = {}): Promise<{ results: LoopbackResult[]; passed: number; failed: number; skipped: number }> {
   const ctx = { ...DEFAULTS, ...options };
   // Sorted, not just copied: the once-per-run cases below pick "the highest
   // rate" off the end, and an unsorted array would run the 16 KB throughput
@@ -546,7 +553,7 @@ export async function runLoopbackSuite(port, options = {}) {
   if (baudRates.length === 0) {
     throw new Error("runLoopbackSuite needs at least one baud rate");
   }
-  const results = [];
+  const results: LoopbackResult[] = [];
 
   for (const baudRate of baudRates) {
     await runWithOpenPort(port, baudRate, PER_BAUD_CASES, ctx, results);
@@ -568,7 +575,7 @@ export async function runLoopbackSuite(port, options = {}) {
 
 // Plain-text report, suitable for pasting into an issue.
 export function formatLoopbackReport(summary) {
-  const lines = [];
+  const lines: string[] = [];
   for (const result of summary.results) {
     const mark = result.status === "pass" ? "PASS" : result.status === "fail" ? "FAIL" : "SKIP";
     const baud = result.baudRate ? ` @ ${result.baudRate}` : "";

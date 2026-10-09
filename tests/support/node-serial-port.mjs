@@ -1,10 +1,10 @@
 // node-serialport wrapped to the serial transport contract
-// (web/js/serial-transport.mjs), so the agent CLI (scripts/radio-codeplug.mjs)
+// (web/js/serial-transport.ts), so the agent CLI (scripts/radio-codeplug.mjs)
 // and the Pyodide suites drive a tty through the same SerialBridge
-// (web/js/serial-bridge.mjs) the browser uses. Lives with the harness because
+// (web/js/serial-bridge.ts) the browser uses. Lives with the harness because
 // it is Node-only: it imports serialport, which no browser module may.
 import { SerialPort } from "serialport";
-import { FRAMING_OPTIONS, createDisconnectNotifier } from "../../web/js/serial-transport.mjs";
+import { FRAMING_OPTIONS, createDisconnectNotifier } from "../../web/js/serial-transport.ts";
 
 // What node-serialport can do: the OS driver honours framing and DTR/RTS, and
 // settings change on the open handle (update() for the rate; framing by

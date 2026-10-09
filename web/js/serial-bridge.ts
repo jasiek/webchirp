@@ -1,60 +1,61 @@
 // The serial bridge: the one object behind the serial_* functions CHIRP's
-// Python calls (installed by web/js/serial-globals.mjs), shared by the browser
-// (web/js/serial.js) and the node-serialport harness the CLI and the Pyodide
+// Python calls (installed by web/js/serial-globals.ts), shared by the browser
+// (web/js/serial.ts) and the node-serialport harness the CLI and the Pyodide
 // suites use (tests/support/radio-harness.mjs).
 //
 // It owns everything that is about a clone rather than about a transport: the
 // read buffer and its waiters, open and close, byte and hex I/O, in_waiting,
 // control lines, the clone-start re-rate and the mid-clone reconfigure. The
 // port it drives comes from a transport factory and is checked against the
-// contract in web/js/serial-transport.mjs; what a port cannot do is read from
+// contract in web/js/serial-transport.ts; what a port cannot do is read from
 // its declared capabilities, so nothing here knows which transport it holds.
 //
 // No DOM or navigator access, at module scope or anywhere else: the browser's
-// chooser lives in the factory web/js/serial.js passes in.
+// chooser lives in the factory web/js/serial.ts passes in.
 import {
   DEFAULT_PORT_OPTIONS,
   FRAMING_OPTIONS,
   assertSerialTransport,
-} from "./serial-transport.mjs";
+} from "./serial-transport.ts";
+import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
 
-/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
-/** @typedef {import("./serial-transport.mjs").SerialOpenOptions} SerialOpenOptions */
-/** @typedef {import("./serial-transport.mjs").SerialSignals} SerialSignals */
-
-/**
- * Why the bridge gave up an open port, as onPortLost hears it.
- * @typedef {Object} PortLostInfo
- * @property {string} [deviceName]  How the port was named while open.
- * @property {string} [reason]  "disconnected", "baud-rate-change", ...
- */
+/** Why the bridge gave up an open port, as onPortLost hears it. */
+export interface PortLostInfo {
+  /** How the port was named while open. */
+  deviceName?: string;
+  /** "disconnected", "baud-rate-change", ... */
+  reason?: string;
+}
 
 /**
  * What open() reports: the message the UI shows, and the identity the issue
  * report and analytics record.
- * @typedef {Object} SerialConnectResult
- * @property {boolean} connected
- * @property {string} message
- * @property {string} transport  The port's transport name.
- * @property {string} [deviceName]
- * @property {string|null} [usbVendorId]  "0x1A86"-style, or null.
- * @property {string|null} [usbProductId]
  */
+export interface SerialConnectResult {
+  connected: boolean;
+  message: string;
+  /** The port's transport name. */
+  transport: string;
+  deviceName?: string;
+  /** "0x1A86"-style, or null. */
+  usbVendorId?: string | null;
+  usbProductId?: string | null;
+}
 
-/**
- * What a clone-start re-rate did.
- * @typedef {Object} BaudRateChange
- * @property {boolean} changed  False when the port already ran at those settings.
- * @property {number} baudRate  The rate now in effect.
- * @property {number} previousBaudRate
- */
+/** What a clone-start re-rate did. */
+export interface BaudRateChange {
+  /** False when the port already ran at those settings. */
+  changed: boolean;
+  /** The rate now in effect. */
+  baudRate: number;
+  previousBaudRate: number;
+}
 
 // Parse hex byte text into a Uint8Array for serial writes.
 /**
- * @param {unknown} input  Hex byte text; any non-hex character separates bytes.
- * @returns {Uint8Array}
+ * @param input Hex byte text; any non-hex character separates bytes.
  */
-export function parseHex(input) {
+export function parseHex(input: unknown): Uint8Array {
   const text = String(input || "").trim();
   if (!text) {
     return new Uint8Array(0);
@@ -75,11 +76,7 @@ export function parseHex(input) {
 }
 
 // Convert a byte array into uppercase space-delimited hex for display/logging.
-/**
- * @param {ArrayLike<number>|Iterable<number>|null|undefined} bytes
- * @returns {string}
- */
-export function bytesToHex(bytes) {
+export function bytesToHex(bytes: ArrayLike<number> | Iterable<number> | null | undefined): string {
   return Array.from(bytes || [])
     .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
     .join(" ");
@@ -101,24 +98,31 @@ const TRANSPORT_SUFFIX = Object.freeze({
 });
 
 export class SerialBridge {
+  _transportFactory: (() => Promise<SerialTransport>) | null;
+  port: SerialTransport | null;
+  reader: ReadableStreamDefaultReader<Uint8Array> | null;
+  writer: WritableStreamDefaultWriter<Uint8Array> | null;
+  readBuffer: Uint8Array;
+  readWaiters: Set<{settle: (gotData: boolean) => void}>;
+  lastDeviceName: string;
+  transport: string;
+  onDebug: ((message: string) => void) | null;
+  onPortLost: ((info: PortLostInfo) => void) | null;
+  _stopLossWatch: (() => void) | null;
+  portOptions: SerialOpenOptions | null;
+  lastSignals: SerialSignals | null;
+  _readLoop: Promise<void> | null;
+
   // requestTransport is the transport factory: an async function returning a
-  // port that satisfies web/js/serial-transport.mjs, not yet opened. The
+  // port that satisfies web/js/serial-transport.ts, not yet opened. The
   // browser's shows a chooser; the harness's constructs a node-serialport
   // adapter. A subclass may override requestTransport() instead.
-  /**
-   * @param {{requestTransport?: () => Promise<SerialTransport>}} [options]
-   */
-  constructor({ requestTransport } = {}) {
+  constructor({ requestTransport }: { requestTransport?: () => Promise<SerialTransport> } = {}) {
     this._transportFactory = requestTransport || null;
-    /** @type {SerialTransport|null} */
     this.port = null;
-    /** @type {ReadableStreamDefaultReader<Uint8Array>|null} */
     this.reader = null;
-    /** @type {WritableStreamDefaultWriter<Uint8Array>|null} */
     this.writer = null;
-    /** @type {Uint8Array} */
     this.readBuffer = new Uint8Array(0);
-    /** @type {Set<{settle: (gotData: boolean) => void}>} */
     this.readWaiters = new Set();
     this.lastDeviceName = "";
     // The transport name of the port last opened ("webserial", "webusb",
@@ -127,32 +131,26 @@ export class SerialBridge {
     // Optional diagnostic sink (wired to the debug log by the app). The read
     // loop MUST report why it ended: a silently-dead read loop is
     // indistinguishable from "no data" and cost us a debugging session.
-    /** @type {((message: string) => void)|null} */
     this.onDebug = null;
     // Called when the port's transport reports that the adapter behind the
     // open port has gone away -- unplugged, or powered down with the radio
     // where the adapter lives in the cable -- and when a clone-start re-rate
     // leaves the port unusable. The port is already torn down by then.
-    /** @type {((info: PortLostInfo) => void)|null} */
     this.onPortLost = null;
     // The unsubscribe the port's onDisconnect() handed back.
-    /** @type {(() => void)|null} */
     this._stopLossWatch = null;
     // The full option set this.port was opened with. A reconfigure has to hand
     // open() every option again, not just the changed one, so what the caller
     // did not touch has to be remembered rather than re-defaulted.
-    /** @type {SerialOpenOptions|null} */
     this.portOptions = null;
     // The last DTR/RTS state we applied. Closing a port drops the control lines
     // back to the adapter's defaults, so a reconfigure has to put them back --
     // otherwise a rate change silently undoes the line state a driver set just
     // before it (thd72 does both, two lines apart).
-    /** @type {SerialSignals|null} */
     this.lastSignals = null;
     // The in-flight read loop, so a reopen can wait for the old one to die
     // before starting the next. Two loops sharing this.readBuffer would
     // interleave stale and fresh bytes.
-    /** @type {Promise<void>|null} */
     this._readLoop = null;
   }
 
@@ -164,8 +162,7 @@ export class SerialBridge {
 
   // Produce the port open() will use. The default asks the factory given to
   // the constructor; the browser bridge overrides this with its chooser.
-  /** @returns {Promise<SerialTransport>} */
-  async requestTransport() {
+  async requestTransport(): Promise<SerialTransport> {
     if (!this._transportFactory) {
       throw new Error("No serial transport factory is configured.");
     }
@@ -175,10 +172,9 @@ export class SerialBridge {
   // Connect: reuse the held port (re-rated if need be) or take a new one from
   // the transport factory, open it with the default framing and start reading.
   /**
-   * @param {number} baudRate  Falls back to 9600 when not a positive number.
-   * @returns {Promise<SerialConnectResult>}
+   * @param baudRate Falls back to 9600 when not a positive number.
    */
-  async open(baudRate) {
+  async open(baudRate: number): Promise<SerialConnectResult> {
     // A live connection requires a writer, not just a port handle. A previous
     // attempt that failed mid-open can leave this.port set with no writer; treat
     // that as not-connected and tear it down before retrying.
@@ -240,11 +236,7 @@ export class SerialBridge {
   // They share the reopen but not the failure policy, and deliberately so:
   // nothing has been transferred yet here, so a port that cannot carry the
   // clone is better torn down than left open and offering Download.
-  /**
-   * @param {number} baudRate
-   * @returns {Promise<BaudRateChange>}
-   */
-  async applyBaudRate(baudRate) {
+  async applyBaudRate(baudRate: number): Promise<BaudRateChange> {
     const wanted = Number(baudRate);
     if (!Number.isFinite(wanted) || wanted <= 0) {
       return { changed: false, baudRate: this.baudRate, previousBaudRate: this.baudRate };
@@ -280,8 +272,7 @@ export class SerialBridge {
   }
 
   // Disconnect, if anything is connected.
-  /** @returns {Promise<{connected: false, message: string}>} */
-  async close() {
+  async close(): Promise<{ connected: false; message: string }> {
     if (!this.port) {
       return { connected: false, message: "No port connected." };
     }
@@ -342,13 +333,10 @@ export class SerialBridge {
   }
 
   // The held port's state and identity, for the UI and issue reports.
-  /**
-   * @returns {{connected: boolean, baudRate: number, deviceName: string,
-   *   usbVendorId?: string|null, usbProductId?: string|null}}
-   */
-  getPortInfo() {
-    /** @type {{usbVendorId?: string|null, usbProductId?: string|null}} */
-    const identity = this.port ? this._getPortIdentity(this.port) : {};
+  getPortInfo(): {
+connected: boolean; baudRate: number; deviceName: string;
+usbVendorId?: string | null; usbProductId?: string | null } {
+    const identity: { usbVendorId?: string | null; usbProductId?: string | null } = this.port ? this._getPortIdentity(this.port) : {};
     return {
       connected: Boolean(this.port),
       baudRate: this.baudRate,
@@ -359,22 +347,14 @@ export class SerialBridge {
   }
 
   // Write hex byte text; returns what was written, normalised.
-  /**
-   * @param {string} hex
-   * @returns {Promise<{written: number, hex: string}>}
-   */
-  async writeHex(hex) {
+  async writeHex(hex: string): Promise<{ written: number; hex: string }> {
     const bytes = parseHex(hex);
     await this.writeBytes(bytes);
     return { written: bytes.length, hex: bytesToHex(bytes) };
   }
 
   // Write raw bytes to the open port.
-  /**
-   * @param {ArrayLike<number>|null|undefined} bytesLike
-   * @returns {Promise<{written: number}>}
-   */
-  async writeBytes(bytesLike) {
+  async writeBytes(bytesLike: ArrayLike<number> | null | undefined): Promise<{ written: number }> {
     if (!this.writer) {
       throw new Error("Port is not connected.");
     }
@@ -386,12 +366,7 @@ export class SerialBridge {
   // Take up to count bytes off the read buffer, waiting up to timeoutMs for
   // them to arrive. Returns the bytes as a plain array: what pyserial's read()
   // hands a driver is a short read, never an error, when the line goes quiet.
-  /**
-   * @param {number} count
-   * @param {number} timeoutMs
-   * @returns {Promise<number[]>}
-   */
-  async readBytes(count, timeoutMs) {
+  async readBytes(count: number, timeoutMs: number): Promise<number[]> {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }
@@ -418,12 +393,7 @@ export class SerialBridge {
   }
 
   // readBytes() as hex text, saying whether the read came up short.
-  /**
-   * @param {number} count
-   * @param {number} timeoutMs
-   * @returns {Promise<{read: number, hex: string, timedOut: boolean}>}
-   */
-  async readHex(count, timeoutMs) {
+  async readHex(count: number, timeoutMs: number): Promise<{ read: number; hex: string; timedOut: boolean }> {
     const bytes = await this.readBytes(count, timeoutMs);
     return {
       read: bytes.length,
@@ -443,11 +413,7 @@ export class SerialBridge {
   // park on the same read event readBytes() uses instead: it settles the
   // instant bytes land, so a busy line costs nothing, and an idle one costs
   // one round trip per waitMs rather than one per loop iteration.
-  /**
-   * @param {number} waitMs
-   * @returns {Promise<{available: number}>}
-   */
-  async inWaiting(waitMs) {
+  async inWaiting(waitMs: number): Promise<{ available: number }> {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }
@@ -462,8 +428,7 @@ export class SerialBridge {
   // and the buffer-clear step of a clone's preparation. A transport that holds
   // bytes of its own below the stream (the OS queue behind node-serialport)
   // declares discardInput() and is told to drop those too.
-  /** @returns {Promise<{reset: true}>} */
-  async resetBuffers() {
+  async resetBuffers(): Promise<{ reset: true }> {
     this.readBuffer = new Uint8Array(0);
     if (this.port && typeof this.port.discardInput === "function") {
       await this.port.discardInput();
@@ -475,13 +440,9 @@ export class SerialBridge {
   // input buffer, the driver's DTR/RTS, then the settle delay the radio needs
   // before the first byte.
   /**
-   * @param {boolean} wantsDtr
-   * @param {boolean} wantsRts
-   * @param {number} settleMs
-   * @param {number} baudRate  The driver's declared BAUD_RATE.
-   * @returns {Promise<{prepared: true, baudRate: number, baudRateChanged: boolean, settleMs: number}>}
+   * @param baudRate The driver's declared BAUD_RATE.
    */
-  async prepareClone(wantsDtr, wantsRts, settleMs, baudRate) {
+  async prepareClone(wantsDtr: boolean, wantsRts: boolean, settleMs: number, baudRate: number): Promise<{ prepared: true; baudRate: number; baudRateChanged: boolean; settleMs: number }> {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }
@@ -520,17 +481,11 @@ export class SerialBridge {
   // raises RTS after the radio enters PROGRAM mode -- and those toggles must
   // reach the port rather than only being remembered in Python. A null line is
   // left as it is, so a driver changing one line does not clear the other.
-  /**
-   * @param {boolean|null|undefined} dataTerminalReady
-   * @param {boolean|null|undefined} requestToSend
-   * @returns {Promise<{applied: boolean} & SerialSignals>}
-   */
-  async setSignals(dataTerminalReady, requestToSend) {
+  async setSignals(dataTerminalReady: boolean | null | undefined, requestToSend: boolean | null | undefined): Promise<{ applied: boolean } & SerialSignals> {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }
-    /** @type {SerialSignals} */
-    const signals = {};
+    const signals: SerialSignals = {};
     if (dataTerminalReady !== null && dataTerminalReady !== undefined) {
       signals.dataTerminalReady = Boolean(dataTerminalReady);
     }
@@ -557,10 +512,9 @@ export class SerialBridge {
   // PROGRAM handshake), and by then the radio has already switched. Options the
   // caller leaves out keep their current value.
   /**
-   * @param {Partial<SerialOpenOptions>} [options]  A null or absent option is left as it is.
-   * @returns {Promise<{reconfigured: boolean, options: Partial<SerialOpenOptions>, changed: string[]}>}
+   * @param options A null or absent option is left as it is.
    */
-  async reconfigure(options = {}) {
+  async reconfigure(options: Partial<SerialOpenOptions> = {}): Promise<{ reconfigured: boolean; options: Partial<SerialOpenOptions>; changed: string[] }> {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }
@@ -685,8 +639,8 @@ export class SerialBridge {
   // way -- once, as {transport, port} -- so there is no per-transport event to
   // decode here; the identity check only guards against a report from a port
   // this bridge has already let go of.
-  /** @param {SerialTransport} port  The port connect() has just installed. */
-  _watchForPortLoss(port) {
+  /** @param port The port connect() has just installed. */
+  _watchForPortLoss(port: SerialTransport) {
     this._unwatchPortLoss();
     this._stopLossWatch = port.onDisconnect((payload) => {
       if (payload?.port === port) {
@@ -738,8 +692,7 @@ export class SerialBridge {
   // start reading. Web Serial promises both streams once the port is open; a
   // transport that breaks that is named here instead of failing as a TypeError
   // on null halfway through connecting.
-  /** @param {SerialTransport} port */
-  _takeStreams(port) {
+  _takeStreams(port: SerialTransport) {
     const { readable, writable } = port;
     if (!readable || !writable) {
       throw new Error(`The ${port.transport} port opened without its readable and writable streams`);
@@ -753,8 +706,7 @@ export class SerialBridge {
   // The reader is pinned by the caller rather than re-read each pass: a reopen
   // installs a new reader while this loop may still be unwinding, and an
   // unpinned loop would then read from the successor's stream.
-  /** @param {ReadableStreamDefaultReader<Uint8Array>} reader */
-  async _startReadLoop(reader) {
+  async _startReadLoop(reader: ReadableStreamDefaultReader<Uint8Array>) {
     let endReason = "port closed";
     while (this.port && this.reader === reader) {
       try {

@@ -4,11 +4,11 @@ import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
 import { seedPyodideRuntime } from "../../web/js/python-sources.ts";
 import { rpcDispatcherFor } from "../../web/js/rpc-dispatch.ts";
-import { SerialBridge } from "../../web/js/serial-bridge.mjs";
+import { SerialBridge } from "../../web/js/serial-bridge.ts";
 import {
   createSerialRpcHandler,
   installSerialBridgeGlobals,
-} from "../../web/js/serial-globals.mjs";
+} from "../../web/js/serial-globals.ts";
 import { createLocalPythonSource } from "./chirp-bundle-source.mjs";
 import { NodeSerialPort } from "./node-serial-port.mjs";
 import { startPythonCoverage } from "./python-coverage.mjs";
@@ -33,7 +33,7 @@ function encodeBytesToBase64(bytesLike) {
 }
 
 // The serial bridge behind the agent CLI and serialMode "node": the browser's
-// SerialBridge (web/js/serial-bridge.mjs) with a transport factory that opens
+// SerialBridge (web/js/serial-bridge.ts) with a transport factory that opens
 // the tty through node-serialport (tests/support/node-serial-port.mjs) instead
 // of showing a chooser. Everything else -- buffering, re-rating, mid-clone
 // reconfigure, control lines -- is the same code the browser runs.
@@ -118,7 +118,7 @@ class StubSerialBridge {
 }
 
 // The serial_* globals Python imports, installed by the same code the browser
-// uses (web/js/serial-globals.mjs) and answered by this harness's bridge. Log
+// uses (web/js/serial-globals.ts) and answered by this harness's bridge. Log
 // lines go to stdout, where the CLI's user and a failing test's output show
 // them; clone progress has no UI here.
 function installSerialGlobals(serialBridge, target = globalThis) {
@@ -145,7 +145,7 @@ export class TestRadioHarness {
   // serialBridge lets a caller supply its own bridge object - a simulated
   // radio, say - in place of the stub or the real serial port. It only has to
   // answer the bridge methods createSerialRpcHandler() calls
-  // (web/js/serial-globals.mjs).
+  // (web/js/serial-globals.ts).
   /** @param {TestRadioHarnessOptions} [options] */
   constructor({
     repoRoot,

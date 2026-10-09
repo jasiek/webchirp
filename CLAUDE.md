@@ -4,19 +4,19 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - `web/app.js`: Browser entry point: wires the UI, the runtime RPC client and
   the browser serial bridge together.
 - `web/js/runtime-rpc.ts`: Main-thread runtime RPC layer and Pyodide bootstrap.
-- Serial layer: `web/js/serial-transport.mjs` declares the port contract every
+- Serial layer: `web/js/serial-transport.ts` declares the port contract every
   transport satisfies (Web Serial's surface plus `transport`, `capabilities` --
   framing, signals, reopen-or-update reconfigure -- `usbDevice` and
   `onDisconnect`, which reports `{transport, port}` once per loss);
   `assertSerialTransport()` checks it at open. Implementations: the four WebUSB
-  chip drivers on `web/js/webusb-transport.js`, the CDC polyfill wrapper in
-  `web/js/webusb-serial.js`, `web/js/native-serial-port.js` (wraps, never
-  patches, native Web Serial), `web/js/webbluetooth-serial.js`, and
+  chip drivers on `web/js/webusb-transport.ts`, the CDC polyfill wrapper in
+  `web/js/webusb-serial.ts`, `web/js/native-serial-port.ts` (wraps, never
+  patches, native Web Serial), `web/js/webbluetooth-serial.ts`, and
   `tests/support/node-serial-port.mjs` for node-serialport. One `SerialBridge`
-  (`web/js/serial-bridge.mjs`, no DOM or navigator) owns buffering, clone
+  (`web/js/serial-bridge.ts`, no DOM or navigator) owns buffering, clone
   preparation, re-rating and reconfigure for both environments, given a
-  transport factory: `web/js/serial.js` adds the browser chooser,
-  `tests/support/radio-harness.mjs` the tty. `web/js/serial-globals.mjs`
+  transport factory: `web/js/serial.ts` adds the browser chooser,
+  `tests/support/radio-harness.mjs` the tty. `web/js/serial-globals.ts`
   installs the `serial_*` globals Python imports (declared in
   `web/python/typings/js.pyi`) for both. A transport that cannot do something
   declares it in `capabilities`; the bridge never probes.

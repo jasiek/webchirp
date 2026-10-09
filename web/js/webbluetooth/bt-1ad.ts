@@ -6,8 +6,16 @@ const RX = "0000ff01-0000-1000-8000-00805f9b34fb";
 const BAUD = "0000ae10-0000-1000-8000-00805f9b34fb";
 
 // Keep device-specific framing, baud control and packet limits out of the
-// shared Web Bluetooth stream lifecycle in web/js/webbluetooth-serial.js.
+// shared Web Bluetooth stream lifecycle in web/js/webbluetooth-serial.ts.
 class Bt1adProtocol {
+  name: string;
+  supportsFraming: boolean;
+  supportsSignals: boolean;
+  rx: any;
+  tx: any;
+  baud: any;
+  settleMs: number;
+
   // Retain discovered characteristics without changing the device during probing.
   constructor(tx, rx, baud, { settleMs = 1000 } = {}) {
     this.name = "BT-1AD";

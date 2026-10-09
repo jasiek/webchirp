@@ -1,5 +1,5 @@
 // Silicon Labs CP2102 USB-UART driver implemented over WebUSB, implementing
-// the same serial transport contract (web/js/serial-transport.mjs) as the
+// the same serial transport contract (web/js/serial-transport.ts) as the
 // FTDI, PL2303 and CH340 drivers -- plus getSignals, which only this chip can
 // answer -- so the serial bridge can use any of them interchangeably.
 //
@@ -15,9 +15,8 @@
 // and the bulk IN endpoint carries raw UART payload with no status header,
 // provided event-insertion mode is off. This driver never turns event mode on
 // and clears any it inherited at open, so 0xEC is an ordinary data byte.
-import { WebUsbTransport } from "./webusb-transport.js";
-
-/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+import { WebUsbTransport } from "./webusb-transport.ts";
+import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
 
 // Silicon Labs' vendor id. The chooser filters on it vendor-wide, because ~150
 // of the kernel id_table's entries are OEM cables that ship a CP210x under a
@@ -255,12 +254,24 @@ export function cp2102QuantizeBaudRate(baudRate, {
   return baud;
 }
 
-/** @implements {SerialTransport} */
-export class Cp2102SerialPort extends WebUsbTransport {
+export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport {
+  readable: ReadableStream<any> | null;
+  writable: WritableStream<any> | null;
+  partNumber: number;
+  baudRate: number;
+  _interfaceNumber: number;
+  _inEndpoint: number;
+  _outEndpoint: number;
+  _inPacketSize: number;
+  _dtr: boolean;
+  _rts: boolean;
+  _claimed: boolean;
+  _closed: boolean;
+
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: SET_LINE_CTL is issued as LINE_CTL_8N1 unconditionally.
   // It therefore declares capabilities.framing false (WEBUSB_CHIP_CAPABILITIES
-  // in web/js/webusb-transport.js), so the bridge refuses a framing change
+  // in web/js/webusb-transport.ts), so the bridge refuses a framing change
   // rather than reopening and reporting a success the wire does not have.
 
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
@@ -288,14 +299,8 @@ export class Cp2102SerialPort extends WebUsbTransport {
   }
 
   // Vendor request to the interface, value carried entirely in wValue.
-  /**
-   * @param {number} request
-   * @param {number} value
-   * @param {BufferSource} [data]
-   */
-  async _controlOut(request, value, data) {
-    /** @type {USBControlTransferParameters} */
-    const setup = {
+  async _controlOut(request: number, value: number, data?: BufferSource) {
+    const setup: USBControlTransferParameters = {
       requestType: "vendor",
       recipient: "interface",
       request,
@@ -312,13 +317,7 @@ export class Cp2102SerialPort extends WebUsbTransport {
     }
   }
 
-  /**
-   * @param {number} request
-   * @param {number} length
-   * @param {{recipient?: USBRecipient, value?: number}} [options]
-   * @returns {Promise<DataView|null>}
-   */
-  async _controlIn(request, length, { recipient = "interface", value = 0 } = {}) {
+  async _controlIn(request: number, length: number, { recipient = "interface", value = 0 }: { recipient?: USBRecipient; value?: number } = {}): Promise<DataView | null> {
     const result = await this.device.controlTransferIn({
       requestType: "vendor",
       recipient,
@@ -451,7 +450,7 @@ export class Cp2102SerialPort extends WebUsbTransport {
     }
   }
 
-  async open(options = {}) {
+  async open(options: Partial<SerialOpenOptions> = {}): Promise<void> {
     const baudRate = Number(options.baudRate) || 9600;
     // close() latches _closed and the read loop exits as soon as it is set;
     // reopening the same port object needs it cleared or no byte ever arrives.
@@ -554,7 +553,7 @@ export class Cp2102SerialPort extends WebUsbTransport {
   }
 
   // Web Serial-style signal control: only the provided keys change.
-  async setSignals(signals = {}) {
+  async setSignals(signals: SerialSignals = {}): Promise<void> {
     const dtr = signals.dataTerminalReady;
     const rts = signals.requestToSend;
     // A line the caller did not name, or named at the value it already holds,
@@ -598,7 +597,7 @@ export class Cp2102SerialPort extends WebUsbTransport {
     // Bulk IN transfers queued on the endpoint, oldest first. Transfers on one
     // endpoint complete in the order they were issued, so draining this as a
     // FIFO keeps the byte order intact.
-    let inFlight = [];
+    let inFlight: Promise<USBInTransferResult>[] = [];
     const topUp = () => {
       while (inFlight.length < READ_PIPELINE_DEPTH && !isClosed()) {
         const transfer = device.transferIn(inEndpoint, packetSize);

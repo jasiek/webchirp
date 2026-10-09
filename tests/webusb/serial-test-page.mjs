@@ -7,7 +7,7 @@ import {
   BAUD_CHECKBOX_SELECTOR,
   ELEMENT_IDS,
   describePort,
-} from "../../web/js/serial-test-page.js";
+} from "../../web/js/serial-test-page.ts";
 
 // serial-test.html is a hand-maintained page with no framework between it and
 // its controller, so the same drift that motivated test-dom-selectors.mjs
@@ -104,7 +104,7 @@ test("the report names the commit it ran on, from keys the build actually writes
   // on the build side is invisible until a report says "unknown" — which is
   // exactly when the commit is needed and no longer recoverable.
   const controller = fs.readFileSync(
-    path.join(process.cwd(), "web", "js", "serial-test-page.js"),
+    path.join(process.cwd(), "web", "js", "serial-test-page.ts"),
     "utf8",
   );
   const builder = fs.readFileSync(

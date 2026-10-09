@@ -5,8 +5,8 @@ import {
   Ch340SerialPort,
   ch340GetDivisor,
   isCh340Device,
-} from "../../web/js/ch340-webusb.js";
-import { createWebUsbSerial } from "../../web/js/webusb-serial.js";
+} from "../../web/js/ch340-webusb.ts";
+import { createWebUsbSerial } from "../../web/js/webusb-serial.ts";
 import { makeFakeUsbDevice } from "../support/fake-usb.mjs";
 import { withNavigator } from "../support/globals.mjs";
 import {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSerialRpcHandler } from "../../web/js/serial-globals.mjs";
+import { createSerialRpcHandler } from "../../web/js/serial-globals.ts";
 import { installFakeDom } from "../support/fake-dom.mjs";
 
 test("progress op forwards CHIRP status reports to onProgress", async () => {

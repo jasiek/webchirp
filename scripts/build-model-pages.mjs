@@ -33,7 +33,7 @@ const FIRMWARE_PATH = path.join(REPO_ROOT, "radio-firmware.json");
 const SPECS_PATH = path.join(REPO_ROOT, "radio-specs.json");
 const CNAME_PATH = path.join(REPO_ROOT, "CNAME");
 
-// The USB-serial chips WebUSB drivers exist for (web/js/ch340-webusb.js and
+// The USB-serial chips WebUSB drivers exist for (web/js/ch340-webusb.ts and
 // its siblings). Named on every page because "which driver do I install" is
 // the single most common thing these searches ask, and the answer here is
 // "none" -- but only because these four are handled in the browser.

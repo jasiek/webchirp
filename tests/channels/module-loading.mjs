@@ -54,8 +54,8 @@ function installBrowserGlobals() {
     vivify: (selector) => selector.trim().match(/^([a-zA-Z][\w-]*)/)?.[1] || "div",
     navigator: {
       userAgent: "FakeBrowser/1.0",
-      // No serial or usb key at all. web/js/serial.js and
-      // web/js/serial-test-page.js test for support with the `in` operator, so
+      // No serial or usb key at all. web/js/serial.ts and
+      // web/js/serial-test-page.ts test for support with the `in` operator, so
       // a key present with the value undefined reads as supported -- the
       // opposite of what is wanted here. web/app.js branches on that at import
       // time and logs down either path; with both absent it takes the

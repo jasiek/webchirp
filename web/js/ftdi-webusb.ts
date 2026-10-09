@@ -1,15 +1,14 @@
 // FTDI USB-UART driver implemented over WebUSB, implementing the serial
-// transport contract (web/js/serial-transport.mjs) the serial bridge drives:
+// transport contract (web/js/serial-transport.ts) the serial bridge drives:
 // Web Serial's open, readable, writable, setSignals, getInfo and close, plus
-// the members WebUsbTransport (web/js/webusb-transport.js) supplies. This lets
+// the members WebUsbTransport (web/js/webusb-transport.ts) supplies. This lets
 // browsers that have WebUSB but not Web Serial (e.g. Chrome on Android) talk
 // to FTDI adapters such as the FT231X, which are vendor-specific USB devices
 // the generic CDC-ACM polyfill cannot drive.
 //
 // Protocol constants and the baud-rate divisor math follow libftdi.
-import { WebUsbTransport } from "./webusb-transport.js";
-
-/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+import { WebUsbTransport } from "./webusb-transport.ts";
+import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
 
 export const FTDI_VENDOR_ID = 0x0403;
 
@@ -102,12 +101,19 @@ export function stripFtdiStatusBytes(bytes) {
   return bytes.slice(2);
 }
 
-/** @implements {SerialTransport} */
-export class FtdiSerialPort extends WebUsbTransport {
+export class FtdiSerialPort extends WebUsbTransport implements SerialTransport {
+  readable: ReadableStream<any> | null;
+  writable: WritableStream<any> | null;
+  _interfaceNumber: number;
+  _inEndpoint: number;
+  _outEndpoint: number;
+  _inPacketSize: number;
+  _closed: boolean;
+
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: SIO_SET_DATA is issued as DATA_8N1 unconditionally.
   // It therefore declares capabilities.framing false (WEBUSB_CHIP_CAPABILITIES
-  // in web/js/webusb-transport.js), so the bridge refuses a framing change
+  // in web/js/webusb-transport.ts), so the bridge refuses a framing change
   // rather than reopening and reporting a success the wire does not have.
 
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
@@ -142,7 +148,7 @@ export class FtdiSerialPort extends WebUsbTransport {
     }
   }
 
-  async open(options = {}) {
+  async open(options: Partial<SerialOpenOptions> = {}): Promise<void> {
     const baudRate = Number(options.baudRate) || 9600;
     // close() latches _closed, and the read loop below exits the moment it is
     // set. Reopening the same port object without clearing it yields streams
@@ -203,7 +209,7 @@ export class FtdiSerialPort extends WebUsbTransport {
 
   // Map Web Serial control-signal requests onto FTDI SIO_SET_MODEM_CTRL. The
   // high byte of wValue is a write mask; the low byte carries the bit values.
-  async setSignals(signals = {}) {
+  async setSignals(signals: SerialSignals = {}): Promise<void> {
     let value = 0;
     if (signals.dataTerminalReady !== undefined) {
       value |= 0x0100;
@@ -234,7 +240,7 @@ export class FtdiSerialPort extends WebUsbTransport {
     // FIFO keeps the byte order intact — and each one carries its own status
     // header, so they stay independently strippable. See READ_PIPELINE_DEPTH
     // for why more than one has to be outstanding.
-    let inFlight = [];
+    let inFlight: Promise<USBInTransferResult>[] = [];
     const topUp = () => {
       while (inFlight.length < READ_PIPELINE_DEPTH && !isClosed()) {
         const transfer = device.transferIn(inEndpoint, packetSize);

@@ -24,7 +24,7 @@ import {
   PORT_SELECTION_CANCELLED_MESSAGE,
   createPortSelectionCancelledError,
   isPortSelectionCancelled,
-} from "../../web/js/serial-errors.js";
+} from "../../web/js/serial-errors.ts";
 import { classifyErrorKind, errorTypeName } from "../../web/js/ui/analytics.js";
 import { createDebugLog } from "../../web/js/ui/debug-log.js";
 import { errorSummary } from "../../web/js/ui/format.js";

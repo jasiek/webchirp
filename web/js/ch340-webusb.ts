@@ -1,5 +1,5 @@
 // WCH CH340/CH341 USB-UART driver implemented over WebUSB, implementing the
-// same serial transport contract (web/js/serial-transport.mjs) as the FTDI
+// same serial transport contract (web/js/serial-transport.ts) as the FTDI
 // and PL2303 drivers, so the serial bridge can use any of them
 // interchangeably.
 //
@@ -8,9 +8,8 @@
 // speaks vendor control requests on the default endpoint; the bulk IN endpoint
 // carries raw UART payload with no status header (modem status arrives on a
 // separate interrupt endpoint, which this driver does not read).
-import { WebUsbTransport } from "./webusb-transport.js";
-
-/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+import { WebUsbTransport } from "./webusb-transport.ts";
+import type { SerialOpenOptions, SerialSignals, SerialTransport } from "./serial-transport.ts";
 
 // The CH340/CH341 family ships under several vendor/product id pairs — WCH's
 // own, plus the QinHeng/clone ids the kernel's id_table also claims.
@@ -151,12 +150,22 @@ export function ch340GetDivisor(baudRate, { limitedPrescaler = false } = {}) {
   return ((0x100 - div) << 8) | (fact << 2) | ps;
 }
 
-/** @implements {SerialTransport} */
-export class Ch340SerialPort extends WebUsbTransport {
+export class Ch340SerialPort extends WebUsbTransport implements SerialTransport {
+  readable: ReadableStream<any> | null;
+  writable: WritableStream<any> | null;
+  version: number;
+  _interfaceNumber: number;
+  _inEndpoint: number;
+  _outEndpoint: number;
+  _inPacketSize: number;
+  _modemControl: number;
+  limitedPrescaler: boolean;
+  _closed: boolean;
+
   // This driver programs the line at 8N1 and nothing reads open()'s
   // dataBits/stopBits/parity: the LCR pair is written LCR_8N1 unconditionally.
   // It therefore declares capabilities.framing false (WEBUSB_CHIP_CAPABILITIES
-  // in web/js/webusb-transport.js), so the bridge refuses a framing change
+  // in web/js/webusb-transport.ts), so the bridge refuses a framing change
   // rather than reopening and reporting a success the wire does not have.
 
   // options.usb is the WebUSB loss-event source (navigator.usb by default).
@@ -258,7 +267,7 @@ export class Ch340SerialPort extends WebUsbTransport {
     this._modemControl = lines;
   }
 
-  async open(options = {}) {
+  async open(options: Partial<SerialOpenOptions> = {}): Promise<void> {
     const baudRate = Number(options.baudRate) || 9600;
     // close() latches _closed and the read loop exits as soon as it is set;
     // reopening the same port object needs it cleared or no byte ever arrives.
@@ -314,7 +323,7 @@ export class Ch340SerialPort extends WebUsbTransport {
 
   // Web Serial-style signal control: only the provided keys change; the chip
   // takes an absolute DTR|RTS value, so unspecified lines keep cached state.
-  async setSignals(signals = {}) {
+  async setSignals(signals: SerialSignals = {}): Promise<void> {
     let lines = this._modemControl;
     if (signals.dataTerminalReady !== undefined) {
       lines = signals.dataTerminalReady ? lines | MCR_DTR : lines & ~MCR_DTR;
@@ -338,7 +347,7 @@ export class Ch340SerialPort extends WebUsbTransport {
     // Bulk IN transfers queued on the endpoint, oldest first. Transfers on one
     // endpoint complete in the order they were issued, so draining this as a
     // FIFO keeps the byte order intact.
-    let inFlight = [];
+    let inFlight: Promise<USBInTransferResult>[] = [];
     const topUp = () => {
       while (inFlight.length < READ_PIPELINE_DEPTH && !isClosed()) {
         const transfer = device.transferIn(inEndpoint, packetSize);

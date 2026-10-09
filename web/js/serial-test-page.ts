@@ -5,9 +5,10 @@
 // also what the Node tests drive against fake hardware. This file is the
 // hardware harness for the same suite: port selection, progress and reporting.
 
-import { buildLoopbackIssueUrl } from "./loopback-issue.js";
-import { formatLoopbackReport, runLoopbackSuite } from "./loopback-suite.js";
-import { createWebUsbSerial } from "./webusb-serial.js";
+import { buildLoopbackIssueUrl } from "./loopback-issue.ts";
+import { formatLoopbackReport, runLoopbackSuite } from "./loopback-suite.ts";
+import { createWebUsbSerial } from "./webusb-serial.ts";
+import type { SerialTransport } from "./serial-transport.ts";
 
 // Which driver a port object represents. Nothing in the build minifies, so the
 // constructor name is stable; the CDC polyfill and native Web Serial both call
@@ -44,43 +45,39 @@ export const BAUD_CHECKBOX_SELECTOR = ".loopback-bauds input[type=checkbox]";
 // the field blank, which reads as "nobody bothered".
 const UNKNOWN_VERSION = "unknown (version.json not served)";
 
-/**
- * The page's elements by ELEMENT_IDS key, plus the baud checkboxes.
- * @typedef {Object} LoopbackPageDom
- * @property {NodeListOf<HTMLInputElement>} bauds
- * @property {HTMLElement} unsupported
- * @property {HTMLSelectElement} transport
- * @property {HTMLInputElement} controlLines
- * @property {HTMLButtonElement} choose
- * @property {HTMLButtonElement} run
- * @property {HTMLElement} adapter
- * @property {HTMLElement} status
- * @property {HTMLElement} results
- * @property {HTMLElement} resultsBody
- * @property {HTMLElement} reportWrap
- * @property {HTMLElement} report
- * @property {HTMLButtonElement} copy
- * @property {HTMLButtonElement} issue
- */
+/** The page's elements by ELEMENT_IDS key, plus the baud checkboxes. */
+export interface LoopbackPageDom {
+  bauds: NodeListOf<HTMLInputElement>;
+  unsupported: HTMLElement;
+  transport: HTMLSelectElement;
+  controlLines: HTMLInputElement;
+  choose: HTMLButtonElement;
+  run: HTMLButtonElement;
+  adapter: HTMLElement;
+  status: HTMLElement;
+  results: HTMLElement;
+  resultsBody: HTMLElement;
+  reportWrap: HTMLElement;
+  report: HTMLElement;
+  copy: HTMLButtonElement;
+  issue: HTMLButtonElement;
+}
 /**
  * A chosen port: native Web Serial, the CDC polyfill or a chip driver, which
  * also reports its USB packet size.
- * @typedef {(SerialPort|import("./serial-transport.mjs").SerialTransport) & {packetSize?: number}} ChosenPort
  */
+export type ChosenPort = (SerialPort | SerialTransport) & {packetSize?: number};
 
 // Assigned by init(), which verifies every element exists, before it binds the
 // handlers that are the only way into the functions reading it.
-/** @type {LoopbackPageDom} */
-let dom;
-/** @type {ChosenPort|null} */
-let chosenPort = null;
+let dom: LoopbackPageDom;
+let chosenPort: ChosenPort | null = null;
 let chosenDescription = "";
 let running = false;
 // The run currently on screen: its totals, so the issue title can say how many
 // cases failed without re-parsing the report, and the adapter it ran against,
 // because choosing a different adapter afterwards must not relabel it.
-/** @type {{summary: Awaited<ReturnType<typeof runLoopbackSuite>>, adapter: string}|null} */
-let lastRun = null;
+let lastRun: { summary: Awaited<ReturnType<typeof runLoopbackSuite>>; adapter: string } | null = null;
 // Which commit of WebCHIRP is serving this page, from the build-time
 // version.json. A report that does not name the code it came from cannot be
 // checked against a fix, and the site updates under the tester's feet.
@@ -327,9 +324,8 @@ function onReportIssue() {
 }
 
 function init() {
-  /** @type {Record<string, unknown>} */
-  const found = { bauds: document.querySelectorAll(BAUD_CHECKBOX_SELECTOR) };
-  const missing = [];
+  const found: Record<string, unknown> = { bauds: document.querySelectorAll(BAUD_CHECKBOX_SELECTOR) };
+  const missing: string[] = [];
   for (const [key, id] of Object.entries(ELEMENT_IDS)) {
     found[key] = document.getElementById(id);
     if (!found[key]) {
@@ -342,7 +338,7 @@ function init() {
     throw new Error(`serial-test.html is missing elements: ${missing.join(", ")}`);
   }
   // Every id resolved, and the tags are the ones serial-test.html declares.
-  dom = /** @type {LoopbackPageDom} */ (found);
+  dom = found as unknown as LoopbackPageDom;
 
   if (!hasNativeSerial() && !hasWebUsb()) {
     dom.unsupported.hidden = false;

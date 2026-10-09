@@ -19,7 +19,7 @@ import {
   PORT_SELECTION_CANCELLED_MESSAGE,
   isPortSelectionCancelled,
   isSerialUnsupported,
-} from "../serial-errors.js";
+} from "../serial-errors.ts";
 import { requireRuntimeApi } from "./state.js";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */

@@ -84,7 +84,7 @@ function parseCompound(compound) {
       continue;
     }
     // Attribute values may be quoted or bare -- input[type=checkbox] is what
-    // web/js/serial-test-page.js actually ships, and rejecting it made the
+    // web/js/serial-test-page.ts actually ships, and rejecting it made the
     // module impossible to import under this DOM.
     match = rest.match(/^\[([\w-]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\]]*)))?\]/);
     if (match) {
@@ -506,7 +506,7 @@ export class FakeDocument {
 
   // The id lookup, in terms of the selector lookup, so an element resolved
   // either way is the same object and the vivify rule applies to both.
-  // web/js/version-info.js and web/js/serial-test-page.js reach for the DOM
+  // web/js/version-info.js and web/js/serial-test-page.ts reach for the DOM
   // this way rather than by selector.
   getElementById(id) {
     return this.querySelector(`#${id}`);

@@ -4,7 +4,7 @@ import {
   PORT_SELECTION_CANCELLED_MESSAGE,
   createPortSelectionCancelledError,
   isPortSelectionCancelled,
-} from "./serial-errors.js";
+} from "./serial-errors.ts";
 import {
   findCatalogRadioForImageMetadata,
   loadImageWithDriverFallback,
@@ -14,7 +14,7 @@ import {
   markBootstrapFailure,
 } from "./runtime-bootstrap.ts";
 import { createSelectedDriverRuntime } from "./selected-driver-runtime.ts";
-import { installSerialBridgeGlobals } from "./serial-globals.mjs";
+import { installSerialBridgeGlobals } from "./serial-globals.ts";
 import { rpcDispatcherFor } from "./rpc-dispatch.ts";
 import { runtimeErrorDetail } from "./runtime-errors.ts";
 import { RUNTIME_PYTHON_URLS } from "./runtime-python-urls.ts";
@@ -29,7 +29,7 @@ import {
 } from "./python-sources.ts";
 import type { RuntimeInfo } from "./python-sources.ts";
 import type { RpcMethodName, RpcParams } from "./rpc-dispatch.ts";
-import type { SerialRpcHandler } from "./serial-globals.mjs";
+import type { SerialRpcHandler } from "./serial-globals.ts";
 import type { RadioMetadata } from "./ui/channel-values.js";
 import type { PyodideInterface } from "pyodide";
 

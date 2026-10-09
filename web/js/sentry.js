@@ -18,7 +18,7 @@
 // below. tests/channels/sentry.mjs fails the build if the two drift apart.
 
 import { isPythonError, isRuntimeCallError } from "./runtime-errors.ts";
-import { isSerialUnsupported } from "./serial-errors.js";
+import { isSerialUnsupported } from "./serial-errors.ts";
 
 // The SDK's namespace as the CDN's +esm build exports it, typed from the npm
 // package package.json pins to the same version (tests/channels/sentry.mjs

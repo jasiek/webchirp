@@ -95,8 +95,8 @@ dispatched to a chip-specific driver:
   CDC-ACM.
 - Other vendor-specific UART bridges are **not supported** over WebUSB; they
   need chip-specific drivers that have not been written yet (see
-  `web/js/ftdi-webusb.js`, `web/js/pl2303-webusb.js`, `web/js/ch340-webusb.js`
-  and `web/js/cp2102-webusb.js` for the pattern) and still require native Web
+  `web/js/ftdi-webusb.ts`, `web/js/pl2303-webusb.ts`, `web/js/ch340-webusb.ts`
+  and `web/js/cp2102-webusb.ts` for the pattern) and still require native Web
   Serial on desktop.
 
 `npm run dev` serves with cross-origin isolation headers (`COOP`/`COEP`) so
@@ -172,9 +172,9 @@ wrong one still echoes perfectly. The same cases run against fake hardware in
   client, and serial bridge.
 - UI controller: `web/js/ui.js` (channel table, settings editor, clipboard,
   status/debug panels).
-- Serial bridge: `web/js/serial.js` (native Web Serial) with WebUSB chip drivers
-  in `web/js/ftdi-webusb.js`, `web/js/pl2303-webusb.js`,
-  `web/js/ch340-webusb.js` and `web/js/cp2102-webusb.js`.
+- Serial bridge: `web/js/serial.ts` (native Web Serial) with WebUSB chip drivers
+  in `web/js/ftdi-webusb.ts`, `web/js/pl2303-webusb.ts`,
+  `web/js/ch340-webusb.ts` and `web/js/cp2102-webusb.ts`.
 - Main-thread runtime RPC client + Pyodide bootstrap: `web/js/runtime-rpc.ts`
   (runs on the main thread — there is no Web Worker).
 - Python source providers: `web/js/python-sources.ts`.
