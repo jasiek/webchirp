@@ -2,6 +2,9 @@
   "name": "webchirp",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "25.2.1"
+  },
   "scripts": {
     "dev": "npm run build:version && npm run build:chirp && npm run build:pages && node scripts/dev-server.ts",
     "build:catalog": "node scripts/build-catalog.ts",
