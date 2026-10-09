@@ -144,19 +144,16 @@ const KNOWN_DIFFERENCES = {
     },
   },
   // A D-STAR repeater with an access tone the radio's table lacks, on a radio
-  // without DV: it fails twice, and the one builder checks the mode first
-  // (RSGB's order), where buildPrzemiennikiRows checked the tone first.
+  // without DV: it fails twice, and the one builder checks the tone first
+  // (the RXF builder's order, which SR9TL keeps), where buildRsgbRows checked
+  // the mode first.
   "Baofeng UV-5R": {
-    SR9TL(before, after) {
-      assert.equal(skipOf(before, "SR9TL").reason, "tone");
-      assert.deepEqual(skipOf(after, "SR9TL"), { repeater: "SR9TL", reason: "mode", mode: "DSTAR" });
+    GB7TZ(before, after) {
+      assert.deepEqual(skipOf(before, "GB7TZ"), { repeater: "GB7TZ", reason: "mode" });
+      assert.deepEqual(skipOf(after, "GB7TZ"), { repeater: "GB7TZ", reason: "tone", tone: "159.0" });
     },
   },
   "Kenwood TK-690": {
-    SR9TL(before, after) {
-      assert.equal(skipOf(before, "SR9TL").reason, "tone");
-      assert.deepEqual(skipOf(after, "SR9TL"), { repeater: "SR9TL", reason: "mode", mode: "DSTAR" });
-    },
     // A 25 kHz analogue RSGB repeater on a narrow-only radio. buildRsgbRows
     // offered a wide channel only FM/WFM and skipped it; analogue FM now takes
     // NFM as the fallback for every source, as the RXF builder always did --

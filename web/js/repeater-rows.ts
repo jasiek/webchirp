@@ -198,11 +198,12 @@ function commentFor(record: RepeaterRecord): string {
 //     so a 70cm repeater on a 2m-only radio would otherwise reach the grid with
 //     a blank Frequency and an accepted -7.6 MHz Offset -- and on upload a
 //     blank Frequency reads as "erase this memory".
-//   - "mode": the radio offers none of the record's modes (`mode` carries the
-//     directory's spelling when it gave one).
 //   - "tone": the radio's tone table lacks the access tone, or it has no tone
 //     mode at all, so the repeater could never be opened (`tone` carries the
-//     frequency the directory published).
+//     frequency the directory published). Checked before the mode, as the
+//     RXF builder this replaced did, so a record failing both is a tone skip.
+//   - "mode": the radio offers none of the record's modes (`mode` carries the
+//     directory's spelling when it gave one).
 // Each row carries the driver's highest power tier: a repeater channel reaches
 // for a distant machine (setHighestPower, web/js/row-power.ts).
 export function buildRepeaterRows(
@@ -222,14 +223,6 @@ export function buildRepeaterRows(
       continue;
     }
 
-    const mode = resolveMode(record, findEnumOption, preferredModes);
-    if (!mode) {
-      skipped.push(record.modeLabel
-        ? { repeater: name, reason: "mode", mode: record.modeLabel }
-        : { repeater: name, reason: "mode" });
-      continue;
-    }
-
     if (record.inputHz === null) {
       setRowValue(row, "Duplex", "");
       setRowValue(row, "Offset", "0.000000");
@@ -245,6 +238,13 @@ export function buildRepeaterRows(
       continue;
     }
 
+    const mode = resolveMode(record, findEnumOption, preferredModes);
+    if (!mode) {
+      skipped.push(record.modeLabel
+        ? { repeater: name, reason: "mode", mode: record.modeLabel }
+        : { repeater: name, reason: "mode" });
+      continue;
+    }
     setRowValue(row, "Mode", mode);
     setHighestPower(row, { setRowValue, findEnumOption });
     setRowValue(row, "Comment", commentFor(record));
