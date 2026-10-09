@@ -2,8 +2,8 @@
   "//": [
     "Type-checks the browser sources (npm run check:js). Nothing is emitted:",
     "Node runs the TypeScript sources by stripping their types, the dev server",
-    "(scripts/dev-server.mjs) strips them per request with esbuild, and",
-    "scripts/build-dist.mjs bundles them with esbuild. That is why",
+    "(scripts/dev-server.ts) strips them per request with esbuild, and",
+    "scripts/build-dist.ts bundles them with esbuild. That is why",
     "erasableSyntaxOnly and verbatimModuleSyntax are on: a file must mean the same",
     "thing once its types are blanked out, so no enums, namespaces or parameter",
     "properties, and an import used only as a type says import type, or a strip",

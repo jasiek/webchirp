@@ -5,7 +5,7 @@ import test from "node:test";
 
 import { repoRoot, webDir } from "../support/repo-paths.mjs";
 
-// Both files are written by one run of scripts/build-catalog.mjs. Committing
+// Both files are written by one run of scripts/build-catalog.ts. Committing
 // them means the per-model page generator does not need a Pyodide boot, but it
 // also means either can go stale on its own -- adding a radio and rebuilding
 // only the catalog would leave the new model with no page and no error.

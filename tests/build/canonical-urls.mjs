@@ -7,7 +7,7 @@ import { htmlPages, repoRoot, webDir } from "../support/repo-paths.mjs";
 
 // Guards the self-referential absolute URLs on the static pages against the
 // host drifting away from CNAME. sitemap.xml and robots.txt cannot drift --
-// build-model-pages.mjs reads CNAME and writes them -- but these tags are
+// scripts/build-model-pages.ts reads CNAME and writes them -- but these tags are
 // hand-written strings that no build step rewrites, so moving the site leaves
 // them naming the old domain. A canonical pointing at a host we no longer
 // serve tells a crawler to index that one instead, and an og:image on a dead

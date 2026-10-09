@@ -1,6 +1,6 @@
 // Switch between the two complete static licensing views without changing the
 // default native-language page that visitors and crawlers receive.
-// The generated pages (scripts/build-licensing-pages.mjs) put these attributes
+// The generated pages (scripts/build-licensing-pages.ts) put these attributes
 // on HTML elements only, so each match has dataset, hidden, lang and dir.
 const buttons = [...document.querySelectorAll("[data-licensing-language]") as NodeListOf<HTMLElement>];
 const panels = [...document.querySelectorAll("[data-licensing-panel]") as NodeListOf<HTMLElement>];
@@ -15,7 +15,7 @@ function showLanguage(language) {
   }
   document.documentElement.lang = selected.lang;
   document.documentElement.dir = selected.dir;
-  // scripts/build-licensing-pages.mjs gives every panel one; a panel without
+  // scripts/build-licensing-pages.ts gives every panel one; a panel without
   // it keeps the current title rather than retitling the tab "undefined".
   const title = selected.dataset.pageTitle;
   if (title) {

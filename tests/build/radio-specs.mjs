@@ -9,7 +9,7 @@ import { repoRoot, webDir } from "../support/repo-paths.mjs";
 // radio-firmware.json, and so has the same failure modes: keys that drift from
 // the catalog's spelling, radios nobody looked at, and entries whose shape the
 // generator does not expect. The generator itself rejects values it cannot
-// render (validateSpecs in scripts/build-model-pages.mjs); these check the rest.
+// render (validateSpecs in scripts/build-model-pages.ts); these check the rest.
 const FIELDS = [
   "formFactor",
   "batteryMah",

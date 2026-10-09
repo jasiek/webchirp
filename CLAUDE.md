@@ -66,7 +66,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   (the `RPC_METHODS` table and `rpc_dispatch`). `__init__.py` only installs
   the shims CHIRP needs before import. No embedded Python in JS files.
 - `chirp/`: Upstream CHIRP source as a git submodule. The runtime never reads it
-  file by file: `scripts/build-chirp-bundle.mjs` (`npm run build:chirp`, run by `dev`
+  file by file: `scripts/build-chirp-bundle.ts` (`npm run build:chirp`, run by `dev`
   and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,
   `sources`, `locale`, `share` and `stock_configs`, which nothing imports -- into the
   ignored `web/chirp/chirp-<pin>.zip` with a `chirp-<pin>.json` manifest (pin, driver
@@ -81,7 +81,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   runs (`rsgb-live` needs the network, `hw-radio` needs a radio on a serial
   port). `support` holds shared fixtures and the two harnesses, not tests.
 - `scripts/`: Build, coverage and CLI tooling only. No tests live here.
-- `scripts/build-dist.mjs` (`npm run build:dist`) builds the Pages tree. The
+- `scripts/build-dist.ts` (`npm run build:dist`) builds the Pages tree. The
   entry points are the module scripts and stylesheets the HTML pages load, and
   esbuild bundles them: ESM with code splitting, unminified, linked source maps,
   and every JS output in `dist/js/` named `name.<hash>.js`. Pages are pointed at
@@ -89,7 +89,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `name.<sha256:10>.py`, and the bundle gets their URLs from a generated
   replacement for `web/js/runtime-python-urls.ts`. The CHIRP archive pair and
   every other file are copied as they are. The jsDelivr modules (Pyodide,
-  Sentry, web-serial-polyfill) stay external. `scripts/retain-deployed-assets.mjs`
+  Sentry, web-serial-polyfill) stay external. `scripts/retain-deployed-assets.ts`
   knows both hashed name shapes.
 - `tsconfig.json` (browser code, lib.dom, no Node types) and
   `scripts/tsconfig.json` (tooling, with `@types/node`) are the two projects
@@ -103,7 +103,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 ### Test conventions
 - Each suite is globbed, not listed: `npm run test:channels` runs
   `tests/channels/*.mjs`. **Adding a test is dropping a file into a suite
-  directory — never edit `package.json` for it.** `scripts/coverage.mjs`
+  directory — never edit `package.json` for it.** `scripts/coverage.ts`
   discovers the same directories, and fails if a suite exists that no npm
   script runs.
 - Name a test for what it covers, without a `test-` prefix; the directory
@@ -159,7 +159,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   - Use sub-agents to produce a summary for a commit message.
 - Whether a radio's firmware can be updated is not in the catalog and cannot be:
   no CHIRP driver knows it. `radio-firmware.json` (repo root) records it by hand,
-  keyed by vendor with `vendor|model` overrides, and `scripts/build-model-pages.mjs`
+  keyed by vendor with `vendor|model` overrides, and `scripts/build-model-pages.ts`
   turns it into a section on each model page. Never state a claim more strongly than
   its evidence: a vendor-level answer points at that vendor's download page, and only
   a model-level entry promises a download for that model. Record `unknown` rather than

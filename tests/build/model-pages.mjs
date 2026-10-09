@@ -18,7 +18,7 @@ import path from "node:path";
 import { repoRoot, webDir } from "../support/repo-paths.mjs";
 import { withTempDir } from "../support/temp-dir.mjs";
 
-const SCRIPT = path.join(repoRoot, "scripts", "build-model-pages.mjs");
+const SCRIPT = path.join(repoRoot, "scripts", "build-model-pages.ts");
 
 // The script resolves every path from its cwd, so a temp tree holding these
 // four inputs is a complete stand-in for the repo.

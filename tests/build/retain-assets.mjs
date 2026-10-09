@@ -19,7 +19,7 @@ import { createServer } from "node:http";
 import { repoRoot } from "../support/repo-paths.mjs";
 import { withTempDir } from "../support/temp-dir.mjs";
 
-const SCRIPT = path.join(repoRoot, "scripts", "retain-deployed-assets.mjs");
+const SCRIPT = path.join(repoRoot, "scripts", "retain-deployed-assets.ts");
 
 // The script resolves CNAME and dist/ relative to its cwd, so each case gets a
 // throwaway repo rather than running against the real tree. Runs fn with the
@@ -83,11 +83,11 @@ test("the workflow passes no host, so CNAME stays the single source", async () =
   const workflow = await readFile(path.join(repoRoot, ".github/workflows/pages.yml"), "utf8");
   const invocation = workflow
     .split("\n")
-    .find((line) => line.includes("retain-deployed-assets.mjs"));
+    .find((line) => line.includes("retain-deployed-assets.ts"));
   assert.ok(invocation, "pages.yml must still run the retention step");
   assert.match(
     invocation.trim(),
-    /^- run: node scripts\/retain-deployed-assets\.mjs$/,
+    /^- run: node scripts\/retain-deployed-assets\.ts$/,
     "the retention step must take its host from CNAME, not an inline URL",
   );
 
@@ -185,7 +185,7 @@ test("esbuild's hashed bundles, chunks, maps and styles are retained", async () 
 });
 
 // The previous deploy's CHIRP archive is named by its submodule pin rather
-// than a content digest (scripts/build-chirp-bundle.mjs). A cached page from
+// than a content digest (scripts/build-chirp-bundle.ts). A cached page from
 // that deploy boots from it, so it has to be carried forward like a hashed
 // asset -- while a plain, mutable name in the same directory still must not.
 test("the previous pin's CHIRP archive and manifest are retained", async () => {

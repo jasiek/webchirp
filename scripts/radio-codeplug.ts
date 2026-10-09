@@ -3,9 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestRadioHarness } from "../tests/support/radio-harness.mjs";
 
-function parseArgs(argv = process.argv.slice(2)) {
-  const positionals = [];
-  const flags = {};
+function parseArgs(argv: string[] = process.argv.slice(2)): {
+  positionals: string[];
+  flags: Record<string, string>;
+} {
+  const positionals: string[] = [];
+  const flags: Record<string, string> = {};
   for (let i = 0; i < argv.length; i += 1) {
     const raw = String(argv[i] || "");
     if (!raw.startsWith("--")) {

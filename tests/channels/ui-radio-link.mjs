@@ -5,7 +5,7 @@ import { installFakeDom } from "../support/fake-dom.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // A ?radio= link is how a per-model page (web/radios/, built by
-// scripts/build-model-pages.mjs) hands its visitor an app already pointed at
+// scripts/build-model-pages.ts) hands its visitor an app already pointed at
 // the radio the page was about. The key in the link is the catalog's own
 // module:class, which is what makes the two generated things agree.
 const CATALOG = {

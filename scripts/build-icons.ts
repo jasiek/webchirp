@@ -8,7 +8,7 @@
 //
 // No extra dependencies: drives a locally installed Chrome in headless mode
 // over the DevTools protocol using Node's built-in WebSocket client, the same
-// approach as scripts/update-screenshots.mjs.
+// approach as scripts/update-screenshots.ts.
 //
 // These are placeholder icons. The emoji is drawn from the system emoji font,
 // so the exact glyph shape depends on the machine that runs this script —
@@ -111,6 +111,10 @@ async function launchChrome(chromeBinary, profileDir) {
 }
 
 class CdpClient {
+  socket: any;
+  nextId: number;
+  pending: Map<any, any>;
+
   constructor(socket) {
     this.socket = socket;
     this.nextId = 1;

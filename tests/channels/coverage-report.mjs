@@ -1,4 +1,4 @@
-// The coverage viewer (scripts/coverage-report.mjs) decides what a reader is
+// The coverage viewer (scripts/coverage-report.ts) decides what a reader is
 // told about each line, so its classification has to be right where the two
 // languages differ: Node's lcov records every physical line, coverage.py
 // records only statements, and a comment must never be painted as a gap.
@@ -10,7 +10,7 @@ import {
   escapeHtml,
   renderFileSection,
   uncoveredRuns,
-} from "../../scripts/coverage-report.mjs";
+} from "../../scripts/coverage-report.ts";
 
 // One file's worth of report input, with only the fields the renderer reads.
 function fileFixture(overrides = {}) {

@@ -108,12 +108,12 @@ test("the report names the commit it ran on, from keys the build actually writes
     "utf8",
   );
   const builder = fs.readFileSync(
-    path.join(process.cwd(), "scripts", "build-version.mjs"),
+    path.join(process.cwd(), "scripts", "build-version.ts"),
     "utf8",
   );
   for (const key of ["webchirpShaShort", "lastUpdated"]) {
     assert.ok(controller.includes(key), `the page no longer reads version.${key}`);
-    assert.ok(builder.includes(key), `build-version.mjs no longer writes version.${key}`);
+    assert.ok(builder.includes(key), `scripts/build-version.ts no longer writes version.${key}`);
   }
   assert.match(controller, /WebCHIRP: \$\{webchirpVersion\}/, "the report must carry the version");
 });

@@ -18,7 +18,7 @@
 // for share/ only from the desktop frontend); tests/build/chirp-bundle.mjs
 // keeps that check alive on every pin bump.
 //
-// Usage: node scripts/build-chirp-bundle.mjs
+// Usage: node scripts/build-chirp-bundle.ts
 // Writes web/chirp/chirp-<pin>.zip and web/chirp/chirp-<pin>.json. The
 // functions are exported so the Node test harness (tests/support/
 // chirp-bundle-source.mjs) can build the same archive in-process from the
@@ -73,9 +73,11 @@ export async function resolveChirpPackageDir(inputDir) {
 
 // Every file the archive carries, as archive-relative POSIX paths under
 // chirp/ with their bytes, sorted so the archive is reproducible.
-export async function collectChirpBundleFiles(chirpPackageDir) {
+export async function collectChirpBundleFiles(
+  chirpPackageDir: string,
+): Promise<Array<{ archivePath: string; bytes: Uint8Array }>> {
   const excluded = new Set(CHIRP_BUNDLE_EXCLUDED_DIRS);
-  const files = [];
+  const files: Array<{ archivePath: string; bytes: Uint8Array }> = [];
   async function walk(dir, rel) {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
@@ -171,7 +173,7 @@ async function main() {
     process.env.WEBCHIRP_CHIRP_DIR || path.join(repoRoot, "chirp"),
   );
   const checkedOut = await resolveChirpRevision(chirpPackageDir);
-  // Same rule as scripts/build-catalog.mjs: the archive is named after the
+  // Same rule as scripts/build-catalog.ts: the archive is named after the
   // pin, so building it from any other checkout would publish the wrong
   // sources under an immutable URL.
   if (checkedOut !== "local" && checkedOut !== DEFAULT_CHIRP_REVISION) {

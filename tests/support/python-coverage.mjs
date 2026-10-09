@@ -9,7 +9,7 @@
 // this module only seeds it and moves data across the JS boundary.
 //
 // node:test gives each test file its own process, and each process boots its
-// own Pyodide, so every one writes a fragment and scripts/coverage.mjs merges
+// own Pyodide, so every one writes a fragment and scripts/coverage.ts merges
 // them. Merging is a union of executed lines over a union of statements: a
 // module one process never imported still carries its full statement list from
 // that process's fragment, so nothing drops out of the denominator.

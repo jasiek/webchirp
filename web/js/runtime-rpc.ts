@@ -80,10 +80,10 @@ const CHIRP_REVISION = DEFAULT_CHIRP_REVISION;
 const DRIVER_SET = driverSetFromSearch(globalThis.location?.search);
 
 // The CHIRP archive and its manifest live beside the app under web/chirp/
-// (scripts/build-chirp-bundle.mjs), named by the pin rather than hashed, so
+// (scripts/build-chirp-bundle.ts), named by the pin rather than hashed, so
 // the directory is resolved from this module's own URL the way the static
 // catalog is below and needs no entry in RUNTIME_PYTHON_URLS
-// (web/js/runtime-python-urls.ts). scripts/build-dist.mjs puts every bundled
+// (web/js/runtime-python-urls.ts). scripts/build-dist.ts puts every bundled
 // module in dist/js/, the depth this file has in web/js/, so the relative
 // URL resolves the same in whichever chunk this code lands in.
 const pythonSource = createBrowserPythonSource({

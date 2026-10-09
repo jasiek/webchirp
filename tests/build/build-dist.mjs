@@ -8,7 +8,7 @@
 // The real script runs as a child process against a throwaway web/ tree, so
 // what is under test is exactly what CI runs: esbuild bundling the pages'
 // module scripts and stylesheets, plus the Python hashing and the page
-// rewrite scripts/build-dist.mjs does itself.
+// rewrite scripts/build-dist.ts does itself.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -28,7 +28,7 @@ import {
 } from "../../web/js/python-sources.ts";
 import { RUNTIME_PYTHON_URLS } from "../../web/js/runtime-python-urls.ts";
 
-const SCRIPT = path.join(repoRoot, "scripts", "build-dist.mjs");
+const SCRIPT = path.join(repoRoot, "scripts", "build-dist.ts");
 // esbuild's names (name.<8 base32>.js, .css, and .js.map beside each) and the
 // Python files' (name.<10 hex>.py), the two shapes build-dist.mjs emits.
 const HASHED_NAME_RE = /\.([A-Z2-7]{8}|[0-9a-f]{10})\.[a-z]+(?:\.map)?$/;
@@ -258,7 +258,7 @@ test("an unchanged tree builds to byte-identical assets", async () => {
 
 // The archive is immutable by pin, not by digest: it must reach dist/ under
 // its own name, unhashed, and be listed in the asset manifest so retention
-// (scripts/retain-deployed-assets.mjs) carries the previous pin forward. Every
+// (scripts/retain-deployed-assets.ts) carries the previous pin forward. Every
 // hashed output is listed the same way.
 test("the CHIRP archive and every hashed output are listed for retention", async () => {
   await withTempDir("build-dist-", async (dir) => {

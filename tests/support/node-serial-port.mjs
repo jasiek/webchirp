@@ -1,5 +1,5 @@
 // node-serialport wrapped to the serial transport contract
-// (web/js/serial-transport.ts), so the agent CLI (scripts/radio-codeplug.mjs)
+// (web/js/serial-transport.ts), so the agent CLI (scripts/radio-codeplug.ts)
 // and the Pyodide suites drive a tty through the same SerialBridge
 // (web/js/serial-bridge.ts) the browser uses. Lives with the harness because
 // it is Node-only: it imports serialport, which no browser module may.

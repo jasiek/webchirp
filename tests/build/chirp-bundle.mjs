@@ -17,7 +17,7 @@ import {
   collectChirpBundleFiles,
   createZipArchive,
   resolveChirpPackageDir,
-} from "../../scripts/build-chirp-bundle.mjs";
+} from "../../scripts/build-chirp-bundle.ts";
 import {
   chirpBundleFileNames,
   DEFAULT_CHIRP_REVISION,

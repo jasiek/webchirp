@@ -2,7 +2,7 @@
 
 The whole pinned CHIRP package is on the Pyodide filesystem before this
 package loads: ``seedPyodideRuntime()`` (``web/js/python-sources.ts``)
-unpacks the archive built by ``scripts/build-chirp-bundle.mjs`` under
+unpacks the archive built by ``scripts/build-chirp-bundle.ts`` under
 ``/webchirp_runtime``, so every ``chirp.*`` module -- the ~190 drivers
 included -- imports through Python's ordinary path finder, with no network
 and no interpreter suspension. The helpers here import drivers on demand or

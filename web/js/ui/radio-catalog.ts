@@ -421,7 +421,7 @@ export function createRadioCatalog(ctx: UiContext) {
   }
 
   // Preselect the radio a ?radio=<catalog key> link names, so a per-model page
-  // (web/radios/, built by scripts/build-model-pages.mjs) can hand its visitor
+  // (web/radios/, built by scripts/build-model-pages.ts) can hand its visitor
   // an app already pointed at the radio the page is about. The key is the
   // catalog's own module:class, which is what those pages are generated from,
   // so an unknown one means the driver went away between the two -- fall

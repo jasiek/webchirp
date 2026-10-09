@@ -5,7 +5,7 @@
 // exists to serve ("baofeng uv-5r programming software", "bf-888s driver").
 // These pages carry that text instead, and every fact on them comes from the
 // driver: radio-catalog.json says which radios exist and what they are called,
-// radio-features.json (scripts/build-catalog.mjs) says what each one can do.
+// radio-features.json (scripts/build-catalog.ts) says what each one can do.
 // Nothing here invents a capability, which is also what keeps 535 pages from
 // being 535 copies of one template. The two exceptions are hand-researched and
 // kept in their own files so they are never mistaken for driver output:
@@ -32,6 +32,80 @@ const FIRMWARE_PATH = path.join(REPO_ROOT, "radio-firmware.json");
 // and manuals, keyed vendor|model like the firmware file's model entries.
 const SPECS_PATH = path.join(REPO_ROOT, "radio-specs.json");
 const CNAME_PATH = path.join(REPO_ROOT, "CNAME");
+
+/** One driver class in web/radio-catalog.json. */
+interface CatalogEntry {
+  key: string;
+  module: string;
+  className: string;
+  vendor: string;
+  model: string;
+  baudRate?: number;
+  isLiveRadio?: boolean;
+  variant?: string;
+  aliases?: Array<{ vendor: string; model: string; variant?: string }>;
+}
+
+/** What radio-features.json records for one driver class. */
+interface RadioFeatures {
+  memoryBounds: [number, number];
+  nameLength: number;
+  modes: string[];
+  /** [low, high] in Hz. */
+  bands: Array<[number, number]>;
+  toneModes: string[];
+  /** Label to watts. */
+  powerLevels: Record<string, number>;
+  hasSettings: boolean;
+}
+
+/** One answer in radio-firmware.json. */
+interface FirmwareAnswer {
+  status: string;
+  url?: string;
+  note?: string;
+}
+
+/** A firmware answer and the scope of the entry it came from. */
+type ResolvedFirmware = FirmwareAnswer & { scope: "model" | "vendor" };
+
+interface FirmwareFile {
+  vendors: Record<string, FirmwareAnswer>;
+  models: Record<string, FirmwareAnswer>;
+}
+
+/** One stock band in radio-specs.json, each range [low, high] MHz. */
+interface SpecBand {
+  band: string;
+  rxMHz: [number, number] | null;
+  txMHz: [number, number] | null;
+}
+
+/**
+ * One radio's researched hardware in radio-specs.json; null is "not
+ * established". The yes/no flags (SPEC_FLAGS) are read by name.
+ */
+interface RadioSpecEntry {
+  formFactor: string | null;
+  batteryMah: number | null;
+  charging: string[] | null;
+  powerW: { min: number | null; max: number } | null;
+  bands: SpecBand[] | null;
+  modulations: string[] | null;
+  sources: string[];
+  caveat: string;
+  note?: string;
+  [flag: string]: unknown;
+}
+
+interface RadioSpecsFile {
+  models: Record<string, RadioSpecEntry>;
+}
+
+/** A page's radio: the surviving driver, with every variant merged into it. */
+interface PageRadio extends CatalogEntry {
+  variants: Array<{ key: string; label: string; detail: string }>;
+}
 
 // The USB-serial chips WebUSB drivers exist for (web/js/ch340-webusb.ts and
 // its siblings). Named on every page because "which driver do I install" is
@@ -129,7 +203,7 @@ const FIRMWARE_DISCLAIMER =
 // are not the same answer -- and the exception is the thing worth recording.
 // A radio with neither entry, or one recorded as unknown, resolves to null and
 // gets no section.
-function firmwareFor(radio, firmware) {
+function firmwareFor(radio: CatalogEntry, firmware: FirmwareFile): ResolvedFirmware | null {
   const byModel = firmware.models[`${radio.vendor}|${radio.model}`];
   const entry = byModel || firmware.vendors[radio.vendor];
   if (!entry || entry.status === "unknown") {
@@ -245,10 +319,10 @@ const OPTIONAL_FLAGS = new Set(["aprs", "gps", "bluetoothProgramming"]);
 // Rejects anything in radio-specs.json the page could not state truthfully,
 // naming the key, so a bad hand edit fails the build where it was made rather
 // than as a garbled table on some page nobody opens.
-function validateSpecs(specs) {
+function validateSpecs(specs: RadioSpecsFile): void {
   // Every rejection names the file and key, so the build log points at the
   // line to fix instead of at the template that tripped over it.
-  const fail = (key, message) => {
+  const fail = (key: string, message: string) => {
     throw new Error(`radio-specs.json models["${key}"] ${message}`);
   };
   // A range is one [low, high] MHz pair, ascending. Anything else would print
@@ -317,7 +391,7 @@ function validateSpecs(specs) {
 
 // The researched entry for one page, or null. Keyed by the name the page is
 // about, which is the merged survivor's own vendor and model.
-function specsFor(radio, specs) {
+function specsFor(radio: CatalogEntry, specs: RadioSpecsFile): RadioSpecEntry | null {
   return specs.models[`${radio.vendor}|${radio.model}`] || null;
 }
 
@@ -341,8 +415,8 @@ function formatFlag(value) {
 // not established. An empty charging list or transmit range is a mobile or a
 // receiver saying "not applicable", which the Type row already tells a reader,
 // so it contributes no row either rather than an empty cell.
-function specRows(entry) {
-  const rows = [];
+function specRows(entry: RadioSpecEntry): Array<[string, string]> {
+  const rows: Array<[string, string]> = [];
   if (entry.formFactor) {
     rows.push(["Type", FORM_FACTOR_LABELS[entry.formFactor]]);
   }
@@ -381,10 +455,10 @@ function specRows(entry) {
 // deserves to know which is which. The caveat follows the table because many
 // entries only hold for one version of the radio (a US model's ranges, the Mk3
 // of an AR8200), and the table without it would overstate the evidence.
-function specsSection(radio, entry) {
+function specsSection(radio: CatalogEntry, entry: RadioSpecEntry | null): string {
   const rows = entry ? specRows(entry) : [];
   const bands = entry?.bands || [];
-  if ((!rows.length && !bands.length) || !entry.sources.length) {
+  if (!entry || (!rows.length && !bands.length) || !entry.sources.length) {
     return "";
   }
   const table = rows
@@ -401,7 +475,9 @@ function specsSection(radio, entry) {
   const sources = hosts.length
     ? `
         <p class="radio-specs-sources">Sources: ${hosts
-          .map(([url, host]) => `<a href="${escapeHtml(url)}" rel="nofollow noopener">${escapeHtml(host)}</a>`)
+          .map((
+            [url, host],
+          ) => `<a href="${escapeHtml(url)}" rel="nofollow noopener">${escapeHtml(host)}</a>`)
           .join(" · ")}</p>`
     : "";
   // One row per band rather than one line per direction, because a radio's
@@ -486,8 +562,8 @@ function formatPowerLevels(powerLevels) {
 // does not advertise something contributes no bullet rather than an empty one:
 // a driver that cannot report its power levels blank is not a radio with no
 // power levels (FINDINGS: blank-instances-misreport-state).
-function specBullets(radio, features) {
-  const bullets = [];
+function specBullets(radio: CatalogEntry, features: RadioFeatures): string[] {
+  const bullets: string[] = [];
   const [low, high] = features.memoryBounds;
   const channels = high - low + 1;
   bullets.push(`${channels} memory channels, numbered ${low} to ${high}`);
@@ -518,7 +594,7 @@ function specBullets(radio, features) {
 // tell a Retevis RT-5R owner that their radio is covered here.
 function aliasLabels(radio) {
   const own = `${radio.vendor} ${radio.model}`;
-  const labels = [];
+  const labels: string[] = [];
   for (const alias of radio.aliases || []) {
     const label = `${alias.vendor} ${alias.model}`.trim();
     if (label !== own && !labels.includes(label)) {
@@ -547,8 +623,8 @@ function aliasLabels(radio) {
 // The variants do not merely relabel one radio -- a Leixen VV-898E holds 199
 // channels as stock and 99 as Dual Bank -- so variantsOf keeps them all and the
 // page lists them under its own figures rather than quietly speaking for them.
-function mergeBySlug(radios, features) {
-  const groups = new Map();
+function mergeBySlug(radios: CatalogEntry[], features: Record<string, RadioFeatures>): PageRadio[] {
+  const groups = new Map<string, CatalogEntry[]>();
   for (const radio of radios) {
     const slug = slugFor(radio);
     const group = groups.get(slug);
@@ -559,7 +635,7 @@ function mergeBySlug(radios, features) {
     }
   }
 
-  const merged = [];
+  const merged: PageRadio[] = [];
   for (const group of groups.values()) {
     const ranked = [...group].sort((a, b) => {
       const byStock = Number(Boolean(a.variant)) - Number(Boolean(b.variant));
@@ -578,8 +654,8 @@ function mergeBySlug(radios, features) {
     });
     // Rebadge names are the main thing making one page's text unlike another's,
     // so the merged page keeps every variant's aliases, not only the survivor's.
-    const aliases = [];
-    const seen = new Set();
+    const aliases: NonNullable<CatalogEntry["aliases"]> = [];
+    const seen = new Set<string>();
     for (const radio of ranked) {
       for (const alias of radio.aliases || []) {
         const id = `${alias.vendor}|${alias.model}|${alias.variant ?? ""}`;
@@ -597,7 +673,7 @@ function mergeBySlug(radios, features) {
 // The drivers behind one merged page, each as a label and the two facts that
 // most often differ between them. Only built when there is more than one, so an
 // unmerged radio carries no variant list and its page is unchanged.
-function variantsOf(ranked, features) {
+function variantsOf(ranked: CatalogEntry[], features: Record<string, RadioFeatures>): PageRadio["variants"] {
   if (ranked.length < 2) {
     return [];
   }
@@ -964,15 +1040,21 @@ Sitemap: ${baseUrl}/sitemap.xml
 `;
 }
 
-async function readJson(file) {
+// The four inputs are this repo's own JSON files; T names the shape each one
+// is written in, which validateSpecs and the firmware check below hold the
+// hand-maintained two to.
+async function readJson<T>(file: string): Promise<T> {
   return JSON.parse(await readFile(file, "utf8"));
 }
 
 async function main() {
-  const catalog = await readJson(CATALOG_PATH);
-  const { features, chirpRevision } = await readJson(FEATURES_PATH);
-  const firmware = await readJson(FIRMWARE_PATH);
-  const specs = await readJson(SPECS_PATH);
+  const catalog = await readJson<{ chirpRevision: string; radios: CatalogEntry[] }>(CATALOG_PATH);
+  const { features, chirpRevision } = await readJson<{
+    chirpRevision: string;
+    features: Record<string, RadioFeatures>;
+  }>(FEATURES_PATH);
+  const firmware = await readJson<FirmwareFile>(FIRMWARE_PATH);
+  const specs = await readJson<RadioSpecsFile>(SPECS_PATH);
   if (chirpRevision !== catalog.chirpRevision) {
     throw new Error(
       `radio-features.json is from CHIRP ${chirpRevision} but the catalog is from `
@@ -983,7 +1065,7 @@ async function main() {
   // crash deep inside a template, or -- worse -- as a section that quietly says
   // nothing. Checked once, over both maps, so a typo in a hand-maintained file
   // fails the build at the point it is introduced.
-  for (const [scope, entries] of [["vendors", firmware.vendors], ["models", firmware.models]]) {
+  for (const [scope, entries] of [["vendors", firmware.vendors], ["models", firmware.models]] as const) {
     for (const [key, entry] of Object.entries(entries)) {
       if (entry.status !== "unknown" && !(entry.status in FIRMWARE_SENTENCES)) {
         throw new Error(
@@ -1002,8 +1084,8 @@ async function main() {
   }
   const baseUrl = `https://${host}`;
 
-  const skipped = [];
-  const describable = [];
+  const skipped: string[] = [];
+  const describable: CatalogEntry[] = [];
   for (const radio of catalog.radios) {
     const entry = features[radio.key];
     // A radio whose driver cannot describe itself would get a page saying
@@ -1017,7 +1099,7 @@ async function main() {
   }
   const radios = mergeBySlug(describable, features);
 
-  const byVendor = new Map();
+  const byVendor = new Map<string, PageRadio[]>();
   for (const radio of radios) {
     const list = byVendor.get(radio.vendor);
     if (list) {
@@ -1040,7 +1122,9 @@ async function main() {
   // repeat that model page's own subject, so the two would compete for the same
   // search with the weaker of them carrying less. The directory links straight
   // to the model page in that case.
-  const hubVendors = vendorNames.filter((vendor) => byVendor.get(vendor).length > 1);
+  // Every vendor name below is one of byVendor's own keys.
+  const radiosOf = (vendor: string) => byVendor.get(vendor) ?? [];
+  const hubVendors = vendorNames.filter((vendor) => radiosOf(vendor).length > 1);
   const hubSlugs = new Map(hubVendors.map((vendor) => [vendor, vendorSlugFor(vendor)]));
 
   // Hubs and model pages share one directory, so a vendor whose slug matched a
@@ -1062,7 +1146,7 @@ async function main() {
   await mkdir(PAGES_DIR, { recursive: true });
 
   for (const vendor of vendorNames) {
-    const siblings = byVendor.get(vendor);
+    const siblings = radiosOf(vendor);
     const hubSlug = hubSlugs.get(vendor);
     const vendorHref = hubSlug ? `./${hubSlug}.html` : "./index.html";
     const vendorLabel = hubSlug ? `All ${vendor} radios` : "All supported radios";
@@ -1090,7 +1174,7 @@ async function main() {
   }
 
   const directory = vendorNames.map((vendor) => {
-    const siblings = byVendor.get(vendor);
+    const siblings = radiosOf(vendor);
     const hubSlug = hubSlugs.get(vendor);
     return {
       vendor,
@@ -1120,7 +1204,9 @@ async function main() {
     + `across ${vendorNames.length} vendors, ${hubVendors.length} of which got a hub, `
     + `${answered} of which answer whether their firmware can be updated, `
     + `${specified} of which list researched hardware specs`
-    + `${merged.length ? `, merging ${merged.length} model(s) whose drivers share one name: ${merged.map((radio) => radio.variants.map((variant) => variant.key).join(" + ")).join("; ")}` : ""}`
+    + `${merged.length ? `, merging ${merged.length} model(s) whose drivers share one name: ${merged.map((
+      radio,
+    ) => radio.variants.map((variant) => variant.key).join(" + ")).join("; ")}` : ""}`
     + `${skipped.length ? `, skipping ${skipped.length} radio(s) that describe themselves too thinly: ${skipped.join(", ")}` : ""}.`,
   );
 }

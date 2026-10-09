@@ -18,7 +18,7 @@
 // so on a clean checkout the catalog would never load and the capture would
 // time out waiting for it.
 //
-// No extra dependencies: serves web/ with scripts/dev-server.mjs, drives a
+// No extra dependencies: serves web/ with scripts/dev-server.ts, drives a
 // locally installed Chrome in headless mode over the DevTools protocol using
 // Node's built-in WebSocket client, waits until the selected radio schema has
 // loaded, and queries live RSGB channels around IO82MM before capturing.
@@ -29,6 +29,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import type { AddressInfo } from "node:net";
 
 const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -94,7 +95,7 @@ function findFreePort() {
     probe.once("error", reject);
     probe.listen(0, "127.0.0.1", () => {
       // A TCP listener's address() is an AddressInfo; only pipes give a string.
-      const { port } = /** @type {import("node:net").AddressInfo} */ (probe.address());
+      const { port } = probe.address() as AddressInfo;
       probe.close(() => resolve(port));
     });
   });
@@ -121,7 +122,7 @@ function findChromeBinary() {
 }
 
 async function startDevServer(port) {
-  const child = spawn(process.execPath, [path.join(repoRootDir, "scripts", "dev-server.mjs")], {
+  const child = spawn(process.execPath, [path.join(repoRootDir, "scripts", "dev-server.ts")], {
     cwd: repoRootDir,
     env: { ...process.env, HOST: "127.0.0.1", PORT: String(port) },
     stdio: ["ignore", "pipe", "pipe"],
@@ -185,6 +186,10 @@ async function launchChrome(chromeBinary, profileDir) {
 }
 
 class CdpClient {
+  socket: any;
+  nextId: number;
+  pending: Map<any, any>;
+
   constructor(socket) {
     this.socket = socket;
     this.nextId = 1;

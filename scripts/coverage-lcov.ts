@@ -1,21 +1,28 @@
-// lcov parsing, shared by scripts/coverage.mjs (which wants per-file totals)
-// and scripts/coverage-patch.mjs (which wants per-line hits). One parser so the
+// lcov parsing, shared by scripts/coverage.ts (which wants per-file totals)
+// and scripts/coverage-patch.ts (which wants per-line hits). One parser so the
 // two can never disagree about what a file's coverage is.
 //
 // Both lcov files this repo produces are read here: coverage/js.lcov, written
 // by Node's own lcov test reporter, and coverage/python.lcov, written by
-// scripts/coverage.mjs from the coverage.py fragments.
+// scripts/coverage.ts from the coverage.py fragments.
+
+/** One SF record: its totals and the hit count of every line it lists. */
+export interface LcovFile {
+  lines: number;
+  linesHit: number;
+  branches: number;
+  branchesHit: number;
+  functions: number;
+  functionsHit: number;
+  lineHits: Map<number, number>;
+}
 
 // Totals and per-line hit counts per source file, keyed by the path in SF.
 // lineHits holds one entry per DA record: for JavaScript that is every physical
 // line of the file, for Python only the executable statements.
-export function parseLcov(text) {
-  const files = new Map();
-  /**
-   * @type {{lines: number, linesHit: number, branches: number, branchesHit: number,
-   *   functions: number, functionsHit: number, lineHits: Map<number, number>}|null}
-   */
-  let current = null;
+export function parseLcov(text: string): Map<string, LcovFile> {
+  const files = new Map<string, LcovFile>();
+  let current: LcovFile | null = null;
   for (const line of String(text).split("\n")) {
     const separator = line.indexOf(":");
     if (separator === -1) {

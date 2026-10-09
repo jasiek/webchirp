@@ -47,7 +47,7 @@ jobs:
       # keeps resolving during the ~10 minutes after a deploy. The host is read
       # from ./CNAME rather than repeated here, so a hostname change cannot
       # leave this step pointing at a dead site.
-      - run: node scripts/retain-deployed-assets.mjs
+      - run: node scripts/retain-deployed-assets.ts
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -5,7 +5,7 @@
 // code needs more, rather than reaching for `any`.
 //
 // Read by tsc only (tsconfig.json includes web/js); nothing loads this file at
-// runtime and scripts/build-dist.mjs leaves *.d.ts out of dist/.
+// runtime and scripts/build-dist.ts leaves *.d.ts out of dist/.
 
 export {};
 

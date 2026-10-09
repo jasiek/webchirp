@@ -19,7 +19,7 @@
 //     web/js/runtime-python-urls.ts is replaced wholesale with a literal table
 //     of the hashed URLs (pythonUrlsPlugin below), so the source keeps
 //     deriving the unhashed URLs the dev server serves.
-//   * The CHIRP archive and manifest (web/chirp/, scripts/build-chirp-bundle.mjs)
+//   * The CHIRP archive and manifest (web/chirp/, scripts/build-chirp-bundle.ts)
 //     are named after the pin, so they are copied as they are, required, and
 //     listed in the asset manifest for retention.
 //   * Everything else -- the web manifest and icons, the radio catalogs,
@@ -30,7 +30,7 @@
 //     dynamic imports.
 //
 // asset-manifest.json lists every immutable name this build emits, which
-// scripts/retain-deployed-assets.mjs carries into the next deploy.
+// scripts/retain-deployed-assets.ts carries into the next deploy.
 import { createHash } from "node:crypto";
 import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -62,7 +62,7 @@ const EXTERNAL_URLS = ["https://cdn.jsdelivr.net/*"];
 // The CHIRP archive and manifest for the pinned revision. Immutable by name like
 // the hashed assets, but named after the pin rather than their content, so they
 // are neither hashed nor rewritten here -- only required, and listed in the
-// asset manifest so scripts/retain-deployed-assets.mjs carries the previous pin
+// asset manifest so scripts/retain-deployed-assets.ts carries the previous pin
 // forward.
 const CHIRP_BUNDLE_FILES = Object.values(chirpBundleFileNames(DEFAULT_CHIRP_REVISION))
   .map((name) => `${CHIRP_BUNDLE_DIR}/${name}`);
@@ -102,9 +102,9 @@ function contentHash(value) {
   return createHash("sha256").update(value).digest("hex").slice(0, 10);
 }
 
-async function walkFiles(dir) {
+async function walkFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
-  const files = [];
+  const files: string[] = [];
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.name === "__pycache__") {
@@ -125,8 +125,17 @@ async function walkFiles(dir) {
 // never mistaken for a reference. Only as much HTML as the generated and
 // hand-written pages use: quoted and unquoted attribute values, void and
 // self-closing tags.
-function startTags(html) {
-  const tags = [];
+/** One attribute of a start tag, with where its value sits in the page. */
+interface TagAttr {
+  name: string;
+  value: string;
+  /** -1 for an attribute with no value. */
+  valueStart: number;
+  valueEnd: number;
+}
+
+function startTags(html: string): Array<{ name: string; attrs: TagAttr[] }> {
+  const tags: Array<{ name: string; attrs: TagAttr[] }> = [];
   let i = 0;
   while (i < html.length) {
     const lt = html.indexOf("<", i);
@@ -145,7 +154,7 @@ function startTags(html) {
     }
     const name = nameMatch[1].toLowerCase();
     let j = lt + nameMatch[0].length;
-    const attrs = [];
+    const attrs: TagAttr[] = [];
     while (j < html.length) {
       while (/\s/.test(html[j])) {
         j += 1;
@@ -167,7 +176,7 @@ function startTags(html) {
       while (/\s/.test(html[j])) {
         j += 1;
       }
-      const attr = { name: attrName[0].toLowerCase(), value: "", valueStart: -1, valueEnd: -1 };
+      const attr: TagAttr = { name: attrName[0].toLowerCase(), value: "", valueStart: -1, valueEnd: -1 };
       if (html[j] === "=") {
         j += 1;
         while (/\s/.test(html[j])) {
@@ -204,7 +213,7 @@ function startTags(html) {
 }
 
 // A reference to a file this build serves, as opposed to a CDN or data URL.
-function isLocalRef(value) {
+function isLocalRef(value: string): boolean {
   return Boolean(value) && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(value);
 }
 
@@ -212,10 +221,13 @@ function isLocalRef(value) {
 // that names it: module scripts and stylesheets. A classic script, or an inline
 // module script, is refused rather than shipped unbundled -- its imports would
 // name source files dist/ does not have.
-function pageAssetRefs(html, pageRel) {
-  const refs = [];
+function pageAssetRefs(
+  html: string,
+  pageRel: string,
+): Array<{ kind: "js" | "css"; attr: TagAttr; source: string }> {
+  const refs: Array<{ kind: "js" | "css"; attr: TagAttr }> = [];
   for (const tag of startTags(html)) {
-    const attr = (name) => tag.attrs.find((candidate) => candidate.name === name);
+    const attr = (name: string) => tag.attrs.find((candidate) => candidate.name === name);
     if (tag.name === "script") {
       const src = attr("src");
       const type = (attr("type")?.value || "").trim().toLowerCase();
@@ -252,10 +264,10 @@ function pageAssetRefs(html, pageRel) {
 // Copy every runtime Python file under its content hash and return the URL
 // table the bundle gets, keyed by path under web/python/ the way
 // RUNTIME_PYTHON_FILES (web/js/python-sources.ts) names them.
-async function emitPythonFiles() {
-  const urls = {};
-  const emitted = [];
-  let files = [];
+async function emitPythonFiles(): Promise<{ urls: Record<string, string>; emitted: Array<[string, string]> }> {
+  const urls: Record<string, string> = {};
+  const emitted: Array<[string, string]> = [];
+  let files: string[] = [];
   try {
     files = (await walkFiles(PYTHON_DIR)).filter((file) => file.endsWith(".py"));
   } catch (error) {
@@ -282,7 +294,7 @@ async function emitPythonFiles() {
 // source spells it.
 function pythonUrlsPlugin(urls) {
   const contents = [
-    "// Generated by scripts/build-dist.mjs: each runtime Python file's",
+    "// Generated by scripts/build-dist.ts: each runtime Python file's",
     "// content-hashed URL in dist/.",
     `export const RUNTIME_PYTHON_URLS = Object.freeze(${JSON.stringify(urls, null, 2)});`,
     "",

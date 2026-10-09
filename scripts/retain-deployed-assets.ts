@@ -8,7 +8,7 @@
 // Hashed names are immutable (name == content), so
 // carrying the old files forward is always safe.
 //
-// Usage: node scripts/retain-deployed-assets.mjs [deployed-site-base-url]
+// Usage: node scripts/retain-deployed-assets.ts [deployed-site-base-url]
 // Run in CI after `npm run build:dist`, before uploading the Pages artifact.
 // With no argument the host comes from ./CNAME, which is what Pages actually
 // serves the site as — passing it separately let the two drift for a week when
@@ -41,14 +41,14 @@ const RETAINED_LIST = "retained-assets.json";
 // Keep prior generations for 30 days so long-lived tabs can still load their
 // pinned CHIRP archives and the matching hashed runtime assets.
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-// An immutable asset has one of three name shapes (see scripts/build-dist.mjs):
+// An immutable asset has one of three name shapes (see scripts/build-dist.ts):
 //   * esbuild's bundled JS and CSS, name.<8 base32 chars>.js|css, and the
 //     source map beside each (name.<hash>.js.map);
 //   * a runtime Python file, or any asset the pre-esbuild build emitted,
 //     name.<10 hex chars>.ext, so the first esbuild deploy still carries the
 //     last textual build's assets forward;
 //   * the CHIRP archive and manifest named after their 40-hex submodule pin
-//     (see scripts/build-chirp-bundle.mjs): a pin bump is a new name, so an
+//     (see scripts/build-chirp-bundle.ts): a pin bump is a new name, so an
 //     old name always means the old bytes and is as safe to carry forward as
 //     a hashed one. The previous pin's archive is the one worth keeping most
 //     -- a cached page from the last deploy boots from it, and without it
@@ -64,24 +64,12 @@ function normalizeAssetPath(ref) {
 // Retry complete reads (including interrupted bodies) before failing the build;
 // publishing a partial retention set would permanently lose older generations.
 // Only a caller that allows a missing file can get null back.
-/**
- * @overload
- * @param {string} url
- * @param {{allowMissing: true}} options
- * @returns {Promise<Buffer|null>}
- */
-/**
- * @overload
- * @param {string} url
- * @param {{allowMissing?: false}} [options]
- * @returns {Promise<Buffer>}
- */
-/**
- * @param {string} url
- * @param {{allowMissing?: boolean}} [options]
- * @returns {Promise<Buffer|null>}
- */
-async function fetchBytes(url, { allowMissing = false } = {}) {
+async function fetchBytes(url: string, options: { allowMissing: true }): Promise<Buffer | null>;
+async function fetchBytes(url: string, options?: { allowMissing?: false }): Promise<Buffer>;
+async function fetchBytes(
+  url: string,
+  { allowMissing = false }: { allowMissing?: boolean } = {},
+): Promise<Buffer | null> {
   // The third failed attempt throws, so the loop never runs off its end.
   for (let attempt = 1; ; attempt += 1) {
     try {
@@ -106,7 +94,9 @@ async function fetchBytes(url, { allowMissing = false } = {}) {
 
 // Only a real 404 means an older deployment has no inventory yet; other
 // failures must not masquerade as an empty history.
-async function fetchJson(url) {
+// The value is JSON from the deployed site: any shape at all, so each caller
+// checks the fields it reads before trusting them.
+async function fetchJson(url: string): Promise<Record<string, any> | null> {
   const body = await fetchBytes(url, { allowMissing: true });
   if (body === null) return null;
   const value = JSON.parse(body.toString("utf8"));
@@ -180,7 +170,7 @@ async function main() {
   }
 
   const now = Date.now();
-  const candidates = new Map(); // asset path -> firstSeen ISO timestamp
+  const candidates = new Map<string, string>(); // asset path -> firstSeen ISO timestamp
   for (const ref of Object.values(manifest.assets)) {
     candidates.set(normalizeAssetPath(ref), new Date(now).toISOString());
   }

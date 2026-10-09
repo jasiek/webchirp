@@ -5,7 +5,7 @@ import test from "node:test";
 import {
   collectChirpBundleFiles,
   resolveChirpPackageDir,
-} from "../../scripts/build-chirp-bundle.mjs";
+} from "../../scripts/build-chirp-bundle.ts";
 import { sharedHarness } from "../support/chirp.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 

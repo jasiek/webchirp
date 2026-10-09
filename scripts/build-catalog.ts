@@ -27,7 +27,7 @@ const QUANSHENG_OUTPUT_PATH = path.join(
 const FEATURES_PATH = path.join(REPO_ROOT, "radio-features.json");
 
 // Match the catalog ordering used by the browser runtime (web/js/runtime-rpc.ts).
-function sortRadioCatalog(radios) {
+function sortRadioCatalog(radios: CatalogRadio[]): CatalogRadio[] {
   return radios.slice().sort((a, b) => {
     const av = `${a.vendor}\u0000${a.model}`;
     const bv = `${b.vendor}\u0000${b.model}`;
@@ -44,8 +44,29 @@ async function resolveChirpRevision(chirpPackageDir) {
   }
 }
 
+/**
+ * A radio as list_registered_radios reports it. The browser types the full
+ * entry (CatalogRadio in web/js/runtime-rpc.ts); this script only sorts and
+ * relabels entries, and checking that browser module under Node's types is
+ * what the separate projects exist to avoid.
+ */
+interface CatalogRadio {
+  vendor: string;
+  model: string;
+  [field: string]: unknown;
+}
+
+/** One driver collection's catalog, as a build (or a worker) produces it. */
+interface DriverCatalog {
+  modules: string[];
+  radios: CatalogRadio[];
+  chirpRevision: string;
+  /** Module name to the reason it would not import. */
+  importFailures: Record<string, string>;
+}
+
 // Import one configured driver collection and return its catalog and failures.
-async function buildDriverCatalog(driverSet, selectedModules) {
+async function buildDriverCatalog(driverSet: string, selectedModules?: string[]) {
   const harness = await createTestRadioHarness({ repoRoot: REPO_ROOT, driverSet });
   // init() sets it before the harness is handed out.
   const { pythonSource } = harness;
@@ -73,7 +94,7 @@ async function buildDriverCatalog(driverSet, selectedModules) {
 }
 
 // Give each release its own Python registry and release its runtime memory on exit.
-async function buildIsolatedDriverCatalog(moduleName) {
+async function buildIsolatedDriverCatalog(moduleName: string): Promise<DriverCatalog> {
   return new Promise((resolve, reject) => {
     const child = fork(fileURLToPath(import.meta.url), ["--driver-module", moduleName], {
       stdio: ["ignore", "inherit", "inherit", "ipc"],
@@ -93,10 +114,10 @@ async function buildIsolatedDriverCatalog(moduleName) {
 
 // Keep firmware release labels in the catalog without changing CHIRP identities.
 async function buildUnofficialCatalog() {
-  const radios = [];
-  const importFailures = {};
-  const modules = [];
-  let chirpRevision;
+  const radios: CatalogRadio[] = [];
+  const importFailures: Record<string, string> = {};
+  const modules: string[] = [];
+  let chirpRevision: string | undefined;
   for (const driver of QUANSHENG_UNOFFICIAL_DRIVERS) {
     const catalog = await buildIsolatedDriverCatalog(driver.module);
     if (catalog.radios.length === 0 || Object.keys(catalog.importFailures).length) {
@@ -120,7 +141,9 @@ async function main() {
     // Node defines both exactly when the process was spawned with an IPC channel.
     const send = process.send?.bind(process);
     const disconnect = process.disconnect?.bind(process);
-    if (!send || !disconnect || !QUANSHENG_UNOFFICIAL_DRIVERS.some((driver) => driver.module === moduleName)) {
+    if (!send || !disconnect || !QUANSHENG_UNOFFICIAL_DRIVERS.some((
+      driver,
+    ) => driver.module === moduleName)) {
       throw new Error("The isolated catalog worker requires a known bundled driver and IPC");
     }
     const { harness: _harness, ...catalog } = await buildDriverCatalog(

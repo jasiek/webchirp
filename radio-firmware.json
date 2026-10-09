@@ -1,5 +1,5 @@
 {
-  "documentation": "Whether each radio's firmware can be updated, and where the firmware lives. Hand-maintained: no CHIRP driver knows this, so it cannot be generated like radio-catalog.json or radio-features.json. A models entry (keyed vendor|model, exactly as the catalog spells it) overrides its vendors entry. status is one of official, service, community, none, unknown; unknown renders nothing. scripts/build-model-pages.mjs turns these into page copy.",
+  "documentation": "Whether each radio's firmware can be updated, and where the firmware lives. Hand-maintained: no CHIRP driver knows this, so it cannot be generated like radio-catalog.json or radio-features.json. A models entry (keyed vendor|model, exactly as the catalog spells it) overrides its vendors entry. status is one of official, service, community, none, unknown; unknown renders nothing. scripts/build-model-pages.ts turns these into page copy.",
   "vendors": {
     "AOR": {
       "status": "none",

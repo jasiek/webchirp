@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { isJsCodeLine, parseLcov } from "./coverage-lcov.mjs";
+import { isJsCodeLine, parseLcov } from "./coverage-lcov.ts";
 import { repoRoot } from "../tests/support/repo-paths.mjs";
 
 const COVERAGE_DIR = path.join(repoRoot, "coverage");
@@ -33,7 +33,24 @@ const CONTEXT_LINES = 2;
 // blank or comment line in JavaScript, or in Python anything coverage.py did
 // not record as a statement. Rendering those as uncovered would paint whole
 // comment blocks red and bury the real gaps.
-export function classifyFile(sourceLines, lineHits, isJavaScript) {
+export type LineVerdict = "covered" | "uncovered" | "neutral";
+
+/** A measured file as the report shows it. */
+interface ReportFile {
+  path: string;
+  language: "javascript" | "python";
+  sourceLines: string[];
+  verdicts: LineVerdict[];
+  measured: number;
+  covered: number;
+  percent: number;
+}
+
+export function classifyFile(
+  sourceLines: string[],
+  lineHits: Map<number, number>,
+  isJavaScript: boolean,
+): LineVerdict[] {
   return sourceLines.map((text, index) => {
     const hits = lineHits.get(index + 1);
     if (hits === undefined) {
@@ -47,12 +64,12 @@ export function classifyFile(sourceLines, lineHits, isJavaScript) {
 }
 
 // Every measured file, with its source, per-line verdicts and totals.
-function collectFiles() {
+function collectFiles(): ReportFile[] {
   const present = LCOV_FILES.filter((name) => fs.existsSync(path.join(COVERAGE_DIR, name)));
   if (present.length === 0) {
     throw new Error("no coverage data in coverage/; run npm run coverage first");
   }
-  const files = [];
+  const files: ReportFile[] = [];
   for (const name of present) {
     const parsed = parseLcov(fs.readFileSync(path.join(COVERAGE_DIR, name), "utf8"));
     for (const [repoPath, data] of parsed) {
@@ -87,7 +104,7 @@ function collectFiles() {
 // Runs of consecutive uncovered lines, which is how a reader thinks about a
 // gap -- one untested function, not thirty untested lines.
 export function uncoveredRuns(verdicts) {
-  const runs = [];
+  const runs: Array<{ start: number; end: number }> = [];
   verdicts.forEach((verdict, index) => {
     if (verdict !== "uncovered") {
       return;

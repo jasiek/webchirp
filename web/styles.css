@@ -220,7 +220,7 @@ body {
   font-weight: 600;
 }
 
-/* Static per-model pages (web/radios/, built by scripts/build-model-pages.mjs),
+/* Static per-model pages (web/radios/, built by scripts/build-model-pages.ts),
    which reuse the about-page shell above. Only the parts the about page has no
    equivalent for live here: the call to action into the app, the model list and
    the sibling-model footer. */

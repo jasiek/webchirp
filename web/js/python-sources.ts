@@ -2,8 +2,8 @@ import type { PyodideInterface } from "pyodide";
 
 // Single source of truth for the CHIRP revision the app runs against. The
 // chirp/ submodule, the committed web/radio-catalog.json and the CHIRP archive
-// (web/chirp/chirp-<pin>.zip, built by scripts/build-chirp-bundle.mjs) must
-// all match this revision; scripts/build-catalog.mjs and the bundle build
+// (web/chirp/chirp-<pin>.zip, built by scripts/build-chirp-bundle.ts) must
+// all match this revision; scripts/build-catalog.ts and the bundle build
 // enforce it at build time and the runtime rejects a mismatched static catalog
 // or bundle manifest.
 export const DEFAULT_CHIRP_REVISION = "29592824286f836b2ee281d8cd85132f8a8f4cc0";
@@ -52,7 +52,7 @@ export const QUANSHENG_UNOFFICIAL_DRIVER_MODULES = Object.freeze(
 // Pyodide's globals, and rpc_dispatch (web/python/webchirp_bridge/rpc.py) is
 // the only one JS reads back. Where the browser fetches each file from is the caller's
 // business (RUNTIME_PYTHON_URLS in web/js/runtime-python-urls.ts, which
-// scripts/build-dist.mjs replaces in the bundle with the hashed URLs), so a
+// scripts/build-dist.ts replaces in the bundle with the hashed URLs), so a
 // URL written here would name the unhashed file, which dist/ does not have.
 export const RUNTIME_BRIDGE_ENTRY = "runtime_bridge.py";
 export const RUNTIME_PYTHON_FILES = Object.freeze([
@@ -78,9 +78,9 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
 
 // Where the CHIRP archive lives under web/ (and so under dist/), and the two
 // files it consists of for a given pin. Named by the pin rather than by
-// content so the URL is immutable on GitHub Pages without scripts/build-dist.mjs
-// learning a new hashing rule; scripts/build-chirp-bundle.mjs writes them and
-// scripts/retain-deployed-assets.mjs carries the previous pin's pair forward.
+// content so the URL is immutable on GitHub Pages without scripts/build-dist.ts
+// learning a new hashing rule; scripts/build-chirp-bundle.ts writes them and
+// scripts/retain-deployed-assets.ts carries the previous pin's pair forward.
 // The names are not hashed by the build, so unlike the runtime files above
 // they can be spelled here and resolved against the page's own origin.
 export const CHIRP_BUNDLE_DIR = "chirp";
@@ -169,7 +169,7 @@ export function driverModulesFromManifest(
 
 // The browser's source of every Python file the runtime needs: the CHIRP
 // archive and manifest from chirpBundleBaseUrl (our own origin, see
-// scripts/build-chirp-bundle.mjs) and the bridge package and bundled drivers
+// scripts/build-chirp-bundle.ts) and the bridge package and bundled drivers
 // from runtimeFileUrls. tests/support/chirp-bundle-source.mjs is the Node
 // counterpart with the same shape, building the archive from the submodule.
 /** What the runtime reports about the Python it was seeded with. */

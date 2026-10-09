@@ -25,6 +25,7 @@ import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
 import { CUSTOM_DIMENSIONS, MEASUREMENT_ID } from "../web/js/analytics.ts";
+import type { CustomDimension } from "../web/js/analytics.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,9 +43,19 @@ const RESERVED_PREFIXES = ["ga_", "google_", "firebase_"];
 // Pure logic — everything below main() is I/O, everything here is testable.
 // ---------------------------------------------------------------------------
 
-export function validateDeclarations(declarations) {
-  const errors = [];
-  const seen = new Set();
+/**
+ * A custom dimension as CUSTOM_DIMENSIONS declares it, or as the Admin API
+ * reports one, which may omit the description and adds its resource name.
+ */
+export interface GaDimension extends Omit<CustomDimension, "description"> {
+  description?: string;
+  /** The API's resource name, on dimensions the property already has. */
+  name?: string;
+}
+
+export function validateDeclarations(declarations: readonly GaDimension[]): string[] {
+  const errors: string[] = [];
+  const seen = new Set<string>();
 
   for (const dimension of declarations) {
     const { parameterName, displayName, description = "", scope } = dimension;
@@ -98,14 +109,11 @@ export function validateDeclarations(declarations) {
 
 // Diff declarations against what the property already has. Never decides to
 // archive on its own: extras are reported and the caller opts in.
-export function planSync(declarations, existing) {
-  const byKey = new Map(existing.map((dimension) => [`${dimension.scope}:${dimension.parameterName}`, dimension]));
-  /**
-   * @type {{create: Array<Record<string, any>>, update: Array<Record<string, any>>,
-   *   unchanged: Array<Record<string, any>>, conflicts: Array<Record<string, any>>,
-   *   extra: Array<Record<string, any>>}}
-   */
-  const plan = { create: [], update: [], unchanged: [], conflicts: [], extra: [] };
+export function planSync(declarations: readonly GaDimension[], existing: readonly GaDimension[]) {
+  const byKey = new Map(existing.map((
+    dimension,
+  ) => [`${dimension.scope}:${dimension.parameterName}`, dimension]));
+  const plan: { create: Array<Record<string, any>>; update: Array<Record<string, any>>; unchanged: Array<Record<string, any>>; conflicts: Array<Record<string, any>>; extra: Array<Record<string, any>> } = { create: [], update: [], unchanged: [], conflicts: [], extra: [] };
 
   for (const declared of declarations) {
     const current = byKey.get(`${declared.scope}:${declared.parameterName}`);
@@ -125,7 +133,7 @@ export function planSync(declarations, existing) {
       continue;
     }
 
-    const changes = {};
+    const changes: { displayName?: string; description?: string } = {};
     if (current.displayName !== declared.displayName) {
       changes.displayName = declared.displayName;
     }
@@ -139,7 +147,9 @@ export function planSync(declarations, existing) {
     }
   }
 
-  const declaredKeys = new Set(declarations.map((dimension) => `${dimension.scope}:${dimension.parameterName}`));
+  const declaredKeys = new Set(declarations.map((
+    dimension,
+  ) => `${dimension.scope}:${dimension.parameterName}`));
   for (const dimension of existing) {
     if (!declaredKeys.has(`${dimension.scope}:${dimension.parameterName}`)) {
       plan.extra.push(dimension);
@@ -149,8 +159,13 @@ export function planSync(declarations, existing) {
   return plan;
 }
 
-export function parseArgs(argv) {
-  const options = { property: process.env.GA_PROPERTY_ID || "", apply: false, archiveExtra: false, json: false };
+export function parseArgs(argv: readonly string[]) {
+  const options: { property: string; apply: boolean; archiveExtra: boolean; json: boolean; help?: boolean } = {
+    property: process.env.GA_PROPERTY_ID || "",
+    apply: false,
+    archiveExtra: false,
+    json: false,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--apply") {
@@ -239,11 +254,13 @@ async function accessToken() {
 }
 
 /**
- * @param {string} token
- * @param {string} path  Under ADMIN_API.
- * @param {{method?: string, body?: unknown, query?: Record<string, string>}} [options]
+ * @param path Under ADMIN_API.
  */
-async function api(token, path, { method = "GET", body, query } = {}) {
+async function api(
+  token: string,
+  path: string,
+  { method = "GET", body, query }: { method?: string; body?: unknown; query?: Record<string, string> } = {},
+) {
   const url = new URL(`${ADMIN_API}/${path}`);
   for (const [key, value] of Object.entries(query || {})) {
     url.searchParams.set(key, value);
@@ -265,8 +282,10 @@ async function api(token, path, { method = "GET", body, query } = {}) {
   return parsed;
 }
 
-async function listAll(token, path, key, query = {}) {
-  const items = [];
+// Items are the Admin API's JSON resources, whatever the listing holds; the
+// callers read the few fields they need.
+async function listAll(token, path, key, query = {}): Promise<any[]> {
+  const items: any[] = [];
   let pageToken;
   do {
     const page = await api(token, path, { query: { pageSize: "200", ...query, ...(pageToken ? { pageToken } : {}) } });
@@ -316,7 +335,7 @@ web/js/analytics.ts. Prints the diff and changes nothing unless --apply.
 `;
 
 function describe(plan) {
-  const lines = [];
+  const lines: string[] = [];
   for (const dimension of plan.create) {
     lines.push(`  create   ${dimension.parameterName} (${dimension.scope}) — "${dimension.displayName}"`);
   }

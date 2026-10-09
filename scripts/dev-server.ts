@@ -6,7 +6,7 @@
 // pages name the .ts entries they load (<script type="module"
 // src="./app.ts">) and the modules import each other by their .ts names, so
 // the URL a browser asks for is always the file on disk: nothing maps a .js
-// request onto a .ts file. scripts/build-dist.mjs reads the same script tags
+// request onto a .ts file. scripts/build-dist.ts reads the same script tags
 // and hands the same entries to esbuild for dist/.
 import fs from "node:fs";
 import path from "node:path";

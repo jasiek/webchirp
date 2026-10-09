@@ -7,7 +7,7 @@ import path from "node:path";
 import { repoRoot } from "../support/repo-paths.mjs";
 import { withTempDir } from "../support/temp-dir.mjs";
 
-const SCRIPT = path.join(repoRoot, "scripts", "build-licensing-pages.mjs");
+const SCRIPT = path.join(repoRoot, "scripts", "build-licensing-pages.ts");
 
 // Stage the curated inputs and an existing sitemap, as the real page build does.
 async function withGuides(callback) {

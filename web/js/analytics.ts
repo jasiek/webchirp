@@ -45,6 +45,15 @@ export const ANALYTICS_HOSTS = Object.freeze([
   "webchirp.org",
 ]);
 
+/** One GA4 custom dimension, in the Admin API's own field names. */
+export interface CustomDimension {
+  parameterName: string;
+  displayName: string;
+  description: string;
+  /** EVENT, USER or ITEM; every one here is EVENT. */
+  scope: string;
+}
+
 // Every event parameter this app sends, declared once here so the GA property
 // can be brought in line with the code rather than the other way round — see
 // `npm run ga:dimensions`. GA4 drops unregistered parameters from reports
@@ -53,7 +62,7 @@ export const ANALYTICS_HOSTS = Object.freeze([
 //
 // parameterName and scope are immutable in the API: changing either means a new
 // dimension and a new, empty history. displayName and description are patchable.
-export const CUSTOM_DIMENSIONS = Object.freeze([
+export const CUSTOM_DIMENSIONS: readonly Readonly<CustomDimension>[] = Object.freeze([
   {
     parameterName: "display_mode",
     displayName: "Display mode",
@@ -222,7 +231,7 @@ export const CUSTOM_DIMENSIONS = Object.freeze([
     description: "CHIRP settings group opened in the radio settings editor.",
     scope: "EVENT",
   },
-].map(Object.freeze));
+].map((dimension) => Object.freeze(dimension)));
 
 // Display modes reported through the display-mode media feature, most app-like
 // first: a window-controls-overlay window also matches standalone, so the first

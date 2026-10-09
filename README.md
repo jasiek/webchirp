@@ -181,7 +181,7 @@ wrong one still echoes perfectly. The same cases run against fake hardware in
 - Versioned Python runtime code: the `web/python/webchirp_bridge/` package, executed
   into Pyodide's globals by the `web/python/runtime_bridge.py` entry point.
 - The browser runtime mounts the pinned CHIRP package into Pyodide as one archive
-  served from the app's own origin: `scripts/build-chirp-bundle.mjs` (`npm run
+  served from the app's own origin: `scripts/build-chirp-bundle.ts` (`npm run
   build:chirp`, run by `npm run dev` and `npm run build:dist`) zips `chirp/chirp` from
   the submodule -- without `wxui`, `cli`, `sources`, `locale`, `share` and
   `stock_configs`, which the runtime never imports -- into `web/chirp/chirp-<pin>.zip`

@@ -12,7 +12,7 @@
 //   summary.json   machine-readable totals, uploaded so a later run can diff
 //   summary.md     the GitHub Actions job summary
 //
-// For which lines rather than how many, scripts/coverage-report.mjs turns the
+// For which lines rather than how many, scripts/coverage-report.ts turns the
 // same lcov into an annotated source view (npm run coverage:report).
 //
 // Usage:
@@ -34,7 +34,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { parseLcov } from "./coverage-lcov.mjs";
+import { parseLcov } from "./coverage-lcov.ts";
 import { toRepoPath } from "../tests/support/python-coverage.mjs";
 import { repoRoot } from "../tests/support/repo-paths.mjs";
 
@@ -83,7 +83,7 @@ export function suitesRunByNpmTest(pkg) {
 export function testFiles() {
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
   const gated = suitesRunByNpmTest(pkg);
-  const files = [];
+  const files: string[] = [];
   for (const entry of fs.readdirSync(path.join(repoRoot, "tests"), { withFileTypes: true })) {
     if (!entry.isDirectory() || NON_SUITE_DIRS.has(entry.name)) {
       continue;
@@ -151,12 +151,16 @@ function mergePythonFragments() {
   if (!fs.existsSync(FRAGMENT_DIR)) {
     return new Map();
   }
-  const merged = new Map();
+  const merged = new Map<string, { statements: Set<number>; executed: Set<number> }>();
   for (const name of fs.readdirSync(FRAGMENT_DIR)) {
     if (!name.endsWith(".json")) {
       continue;
     }
-    const fragment = JSON.parse(fs.readFileSync(path.join(FRAGMENT_DIR, name), "utf8"));
+    // Written by tests/support/python-coverage.mjs: per runtime path, the
+    // statement and executed line numbers coverage.py reported.
+    const fragment: Record<string, { statements: number[]; executed: number[] }> = JSON.parse(
+      fs.readFileSync(path.join(FRAGMENT_DIR, name), "utf8"),
+    );
     for (const [runtimePath, data] of Object.entries(fragment)) {
       const key = toRepoPath(runtimePath);
       const existing = merged.get(key) || { statements: new Set(), executed: new Set() };
@@ -242,11 +246,17 @@ function renderMarkdown(summary, jsFiles, pythonFiles, floors, failures, baselin
     "| --- | ---: | ---: | ---: | ---: |",
     `| JavaScript (\`web/**\`) `
       + `| ${js.lines.percent.toFixed(2)}%${delta(baseline, (b) => b.js?.lines?.percent, js.lines.percent)} `
-      + `| ${js.branches.percent.toFixed(2)}%${delta(baseline, (b) => b.js?.branches?.percent, js.branches.percent)} `
-      + `| ${js.functions.percent.toFixed(2)}%${delta(baseline, (b) => b.js?.functions?.percent, js.functions.percent)} `
+      + `| ${js.branches.percent.toFixed(2)}%${delta(baseline, (
+        b,
+      ) => b.js?.branches?.percent, js.branches.percent)} `
+      + `| ${js.functions.percent.toFixed(2)}%${delta(baseline, (
+        b,
+      ) => b.js?.functions?.percent, js.functions.percent)} `
       + `| ${js.files} |`,
     `| Python (\`webchirp_bridge\`) `
-      + `| ${python.lines.percent.toFixed(2)}%${delta(baseline, (b) => b.python?.lines?.percent, python.lines.percent)} `
+      + `| ${python.lines.percent.toFixed(2)}%${delta(baseline, (
+        b,
+      ) => b.python?.lines?.percent, python.lines.percent)} `
       + `| — | — | ${python.files} |`,
     "",
     `Floors: JS lines ${floors.js.lines}%, JS branches ${floors.js.branches}%, `

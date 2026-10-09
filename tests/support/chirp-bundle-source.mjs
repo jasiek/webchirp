@@ -1,8 +1,8 @@
 // The Node counterpart of createBrowserPythonSource (web/js/python-sources.ts):
 // the same provider shape, fed from disk. The CHIRP archive is built
-// in-process from the submodule by scripts/build-chirp-bundle.mjs, the very
-// function the deploy runs, so the test harness, scripts/build-catalog.mjs
-// and scripts/radio-codeplug.mjs mount exactly what a browser would -- there
+// in-process from the submodule by scripts/build-chirp-bundle.ts, the very
+// function the deploy runs, so the test harness, scripts/build-catalog.ts
+// and scripts/radio-codeplug.ts mount exactly what a browser would -- there
 // is no second code path that reads chirp/ file by file and no fetch global
 // to fake.
 import fs from "node:fs/promises";
@@ -11,7 +11,7 @@ import path from "node:path";
 import {
   buildChirpBundle,
   resolveChirpPackageDir,
-} from "../../scripts/build-chirp-bundle.mjs";
+} from "../../scripts/build-chirp-bundle.ts";
 import {
   DEFAULT_CHIRP_REVISION,
   DEFAULT_DRIVER_SET,

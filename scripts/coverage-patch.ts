@@ -6,13 +6,13 @@
 // answer the question a reviewer is actually asking. This can: "you added 40
 // lines, 12 of them are never executed, here they are."
 //
-// Reads the lcov files scripts/coverage.mjs has already written, so it measures
+// Reads the lcov files scripts/coverage.ts has already written, so it measures
 // the same run rather than re-testing. Writes coverage/patch.md, and emits
 // GitHub workflow commands so the uncovered lines appear as annotations on the
 // pull request's own diff.
 //
 // Usage:
-//   node scripts/coverage-patch.mjs [--base <ref>]
+//   node scripts/coverage-patch.ts [--base <ref>]
 // COVERAGE_DIFF_BASE is the same setting as --base; it defaults to
 // origin/master. CI passes the pull request's base branch as a ref, never a
 // SHA -- see changedLinesByFile() below for why that distinction matters.
@@ -20,7 +20,8 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { isJsCodeLine, parseLcov } from "./coverage-lcov.mjs";
+import { isJsCodeLine, parseLcov } from "./coverage-lcov.ts";
+import type { LcovFile } from "./coverage-lcov.ts";
 import { repoRoot } from "../tests/support/repo-paths.mjs";
 
 const COVERAGE_DIR = path.join(repoRoot, "coverage");
@@ -87,6 +88,12 @@ export function changedLinesFromDiff(diff) {
 
 // --- deciding what counts ---------------------------------------------------
 
+/** One changed line that the coverage data measured. */
+interface ChangedLine {
+  file: string;
+  line: number;
+}
+
 function readSourceLines(repoRelativePath) {
   const full = path.join(repoRoot, repoRelativePath);
   return fs.existsSync(full) ? fs.readFileSync(full, "utf8").split("\n") : [];
@@ -96,9 +103,13 @@ function readSourceLines(repoRelativePath) {
 // covered and uncovered. A changed line with no DA record is ignored: for
 // JavaScript that means it is outside anything V8 measured, and for Python that
 // it is not a statement.
-export function classifyChangedLines(changed, coverage, { filterComments }) {
-  const covered = [];
-  const uncovered = [];
+export function classifyChangedLines(
+  changed: Map<string, Set<number>>,
+  coverage: Map<string, LcovFile>,
+  { filterComments }: { filterComments: boolean },
+): { covered: ChangedLine[]; uncovered: ChangedLine[] } {
+  const covered: ChangedLine[] = [];
+  const uncovered: ChangedLine[] = [];
   for (const [file, lines] of changed) {
     const fileCoverage = coverage.get(file);
     if (!fileCoverage) {
@@ -127,8 +138,10 @@ export function percent(covered, total) {
 
 // Consecutive uncovered lines in one file collapse to a range, so a whole
 // untested function reads as one entry instead of thirty.
-export function toRanges(entries) {
-  const ranges = [];
+export function toRanges(
+  entries: readonly ChangedLine[],
+): Array<{ file: string; start: number; end: number }> {
+  const ranges: Array<{ file: string; start: number; end: number }> = [];
   for (const { file, line } of entries) {
     const last = ranges[ranges.length - 1];
     if (last && last.file === file && line === last.end + 1) {
