@@ -556,6 +556,9 @@ export function createChannelBulkEdit(ctx: UiContext) {
         // the same mapping.
         setRowExtras(row, { ...extraWrites });
       }
+      // The driver judges a channel with its extras, so a check in flight for
+      // one of these rows answers for a row that no longer exists.
+      ctx.table.rowsRewritten(rows);
     }
     ctx.table.render();
     setModalOpen(false);

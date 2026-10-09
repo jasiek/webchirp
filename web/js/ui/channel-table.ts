@@ -69,6 +69,9 @@ export function createChannelTable(ctx: UiContext) {
   // cell held before it, which is the fallback a rejected edit keeps and what
   // the row is sent with so a resend applies every pending edit again.
   const pendingEdits = new WeakMap<ChannelRow, Map<string, { edit: RowEdit; base: unknown }>>();
+  // How many checks are in flight per row, so a row rewritten while one is
+  // can be checked again as it now stands (rowsRewritten).
+  const checksInFlight = new WeakMap<ChannelRow, number>();
   // How many runtime calls buildRows() may make before giving up on a builder
   // whose branches keep asking new questions. Each call answers every write a
   // run made, so a builder settles in one or two; this only stops a loop.
@@ -337,6 +340,7 @@ export function createChannelTable(ctx: UiContext) {
       claimed.add(location);
     }
     let next = lo;
+    const relocated: ChannelRow[] = [];
     for (const row of needsSlot) {
       while (claimed.has(next)) {
         next += 1;
@@ -344,9 +348,14 @@ export function createChannelTable(ctx: UiContext) {
       // A full codeplug leaves the surplus rows without a slot. Blanking is
       // what keeps that visible: the upload preflight flags an empty Location
       // rather than the runtime rejecting an out-of-bounds one mid-transfer.
-      row.Location = next > hi ? "" : String(next);
+      const location = next > hi ? "" : String(next);
+      if (row.Location !== location) {
+        relocated.push(row);
+      }
+      row.Location = location;
       claimed.add(next);
     }
+    rowsRewritten(relocated);
   }
 
   // The grid is a view of the radio's memories, so its order is the radio's
@@ -435,6 +444,28 @@ export function createChannelTable(ctx: UiContext) {
     return { row: confirmed, edits: [...edits, ...extra] };
   }
 
+  // Record that rows were changed outside the check path: a move or a slot
+  // assignment gave them another Location, a radio change cleared a Power, an
+  // extras editor rewrote their sidecar. The driver's findings depend on all
+  // of that, so an answer in flight for one of these rows describes a row
+  // that no longer exists and its version moves on. A row with edits still
+  // pending, or with a check in flight, is checked again as it now stands --
+  // otherwise it would stay pending, or lose findings the dropped answer
+  // carried.
+  /**
+   * @param rows The rows that were rewritten.
+   */
+  function rowsRewritten(rows: Iterable<ChannelRow>): void {
+    const recheck: ChannelRow[] = [];
+    for (const row of new Set(rows)) {
+      bumpRowVersion(row);
+      if ((pendingEdits.get(row)?.size ?? 0) > 0 || (checksInFlight.get(row) ?? 0) > 0) {
+        recheck.push(row);
+      }
+    }
+    void checkRows(recheck);
+  }
+
   // One normalize_and_validate_rows call for the session a handle names, or
   // for no radio.
   async function runRowCheck(handle: RadioSessionHandle | null, requests: RowEditRequest[]) {
@@ -483,6 +514,13 @@ export function createChannelTable(ctx: UiContext) {
     }
   }
 
+  // A check for these rows has answered, or failed.
+  function settleInFlight(rows: readonly ChannelRow[]): void {
+    for (const row of rows) {
+      checksInFlight.set(row, Math.max(0, (checksInFlight.get(row) ?? 1) - 1));
+    }
+  }
+
   // Send rows to the runtime and apply each answer that is still current.
   // One call for the whole batch. An answer for a session that is no longer
   // state.radioSession is dropped, and the rows still waiting on it are sent
@@ -497,10 +535,14 @@ export function createChannelTable(ctx: UiContext) {
     const handle = state.radioSession;
     const versions = rows.map(rowVersion);
     const stillWaiting = () => rows.filter((row, index) => rowVersion(row) === versions[index]);
+    for (const row of rows) {
+      checksInFlight.set(row, (checksInFlight.get(row) ?? 0) + 1);
+    }
     let response: Awaited<ReturnType<typeof runRowCheck>> | null = null;
     try {
       response = await runRowCheck(handle, rows.map((row) => editRequestFor(row)));
     } catch (error) {
+      settleInFlight(rows);
       if (state.radioSession !== handle) {
         return checkRows(stillWaiting());
       }
@@ -511,6 +553,7 @@ export function createChannelTable(ctx: UiContext) {
       renderRowWindow();
       return;
     }
+    settleInFlight(rows);
     if (state.radioSession !== handle) {
       return checkRows(stillWaiting());
     }
@@ -757,15 +800,16 @@ export function createChannelTable(ctx: UiContext) {
       return 0;
     }
     const spoken = new Set(options.map(String));
-    let cleared = 0;
+    const cleared: ChannelRow[] = [];
     for (const row of state.currentRows) {
       const value = String(row.Power ?? "");
       if (value !== "" && !spoken.has(value)) {
         row.Power = "";
-        cleared += 1;
+        cleared.push(row);
       }
     }
-    return cleared;
+    rowsRewritten(cleared);
+    return cleared.length;
   }
 
   // A row counts as a real channel when it has a usable frequency or a name;
@@ -895,9 +939,14 @@ export function createChannelTable(ctx: UiContext) {
     const movedRows = selectedIndexes.map((idx) => state.currentRows[idx]);
     state.currentRows = order.map((idx) => state.currentRows[idx]);
     if (state.currentHeaders.includes("Location")) {
+      const relocated: ChannelRow[] = [];
       state.currentRows.forEach((row, idx) => {
+        if (row.Location !== locationsByPosition[idx]) {
+          relocated.push(row);
+        }
         row.Location = locationsByPosition[idx];
       });
+      rowsRewritten(relocated);
     }
     // Slots were reassigned along the already-ascending positions, so the
     // list is still in memory order and this sort is a no-op — it runs so the
@@ -1838,6 +1887,7 @@ export function createChannelTable(ctx: UiContext) {
     buildRows,
     submitRowEdits,
     previewRowEdits,
+    rowsRewritten,
     channelShortcutsActive,
     moveSelectedChannelRows,
     refreshVisibleRows: renderRowWindow,

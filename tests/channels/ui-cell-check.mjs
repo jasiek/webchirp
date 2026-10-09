@@ -16,6 +16,7 @@ import test from "node:test";
 // controls, so what is tested is what the grid does with them.
 import {
   channelRows,
+  clickLocationButton,
   flushMicrotasks,
   importSampleCsv,
   installFakeDom,
@@ -219,6 +220,35 @@ test("a paste is checked in one call, however many rows and cells it writes", as
   // The runtime's answer is what the grid shows.
   const names = channelRows(document).map((tr) => tr.children[1].children[0].value);
   assert.deepEqual(names, ["ALPHA", "BRAVO", "CHARL", "DELTA", "ECHO"]);
+});
+
+test("an answer for a row that moved to another memory is discarded and the edit checked again", async () => {
+  // Review of #224: Move Up/Down hands the channel a different memory, and
+  // the driver's findings depend on the memory the row lands on, so an answer
+  // computed for the old one must not be applied.
+  const { document, rowCheck } = await grid({ held: true });
+
+  commit(document, 0, "Name", "LONGNAME");
+  await flushMicrotasks();
+  assert.equal(rowCheck.calls[0].rows[0].row.Location, "0");
+
+  clickLocationButton(document, 0);
+  document.querySelector("#channel-move-down").dispatchEvent({ type: "click" });
+  await flushMicrotasks();
+
+  rowCheck.release(0);
+  await flushMicrotasks();
+  const moved = () => cell(document, 1, "Name");
+  assert.equal(moved().children[0].value, "LONGNAME", "the answer for memory 0 did not land");
+  assert.equal(moved().classList.contains("is-pending"), true);
+  assert.equal(rowCheck.calls.length, 2, "the edit is checked again where the channel now is");
+  assert.equal(rowCheck.calls[1].rows[0].row.Location, "1");
+  assert.deepEqual(rowCheck.calls[1].rows[0].edits, [{ column: "Name", value: "LONGNAME" }]);
+
+  rowCheck.release();
+  await flushMicrotasks();
+  assert.equal(moved().children[0].value, "LONGN");
+  assert.equal(moved().classList.contains("is-pending"), false);
 });
 
 test("a band plan built against a radio no longer selected is built again for the new one", async () => {

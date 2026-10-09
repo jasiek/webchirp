@@ -141,18 +141,20 @@ function frequencyVerdict(column, value, previous) {
 
 // rowFindings(row) is what the driver says about a row once the bulk edit's
 // values are in it, as the runtime's per-row check would report it.
+// heldRowChecks holds every row check until the test calls rowCheck.release().
 async function boot({
   rows = IMAGE_ROWS,
   getChannelExtra,
   radios = [RADIO],
   uploadIssues = [],
   rowFindings = () => ({ issues: [], warnings: [] }),
+  heldRowChecks = false,
 } = {}) {
   const { document } = installFakeDom();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const extraCalls = [];
-  const rowCheck = fakeRowCheck({ verdict: frequencyVerdict, findings: rowFindings });
+  const rowCheck = fakeRowCheck({ verdict: frequencyVerdict, findings: rowFindings, held: heldRowChecks });
   ui.setRuntimeApi(withRadioSessions({
     normalizeAndValidateRows: rowCheck.normalizeAndValidateRows,
     listRadios: async () => ({ radios }),
@@ -729,4 +731,33 @@ test("a bulk edit of extras alone leaves every highlight in place", async () => 
   await applyModal(document);
 
   assert.deepEqual(markedCells(document), ["1:Mode"]);
+});
+
+// Review of #224: the driver judges a channel with its extras, so a cell
+// check still in flight when a bulk edit rewrites the row's extras answers for
+// a row that no longer exists. It must be dropped and the edit checked again
+// with the new extras, rather than its findings landing on the rewritten row.
+test("a bulk edit of extras makes a cell check in flight for those rows stale", async () => {
+  const { document, rowCheck, rows } = await boot({ heldRowChecks: true });
+  const nameEditor = channelRows(document)[0].children[HEADERS.indexOf("Name")].children[0];
+  nameEditor.value = "ZULU";
+  document.querySelector("#mem-table tbody").dispatchEvent({ type: "focusout", target: nameEditor });
+  await flushMicrotasks();
+  assert.equal(rowCheck.calls.length, 1);
+
+  await openBulkEditor(document, [0, 1]);
+  setField(extraField(document, "scode"), "2");
+  await applyModal(document);
+  assert.equal(modalIsOpen(document), false);
+
+  rowCheck.release(0);
+  await flushMicrotasks();
+  assert.equal(rowCheck.calls.length, 2, "the pending edit is checked again");
+  const resent = rowCheck.calls[1].rows[0];
+  assert.deepEqual(resent.edits, [{ column: "Name", value: "ZULU" }]);
+  assert.equal(resent.row.__extra.scode, "2", "with the extras the row now carries");
+
+  rowCheck.release();
+  await flushMicrotasks();
+  assert.equal(rows()[0].Name, "ZULU");
 });
