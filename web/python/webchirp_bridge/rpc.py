@@ -49,7 +49,10 @@ from webchirp_bridge.images import (
     read_image_metadata_base64,
 )
 from webchirp_bridge.radio_settings import get_radio_settings, validate_radio_settings
-from webchirp_bridge.row_validation import validate_rows_for_upload
+from webchirp_bridge.row_validation import (
+    normalize_and_validate_rows,
+    validate_rows_for_upload,
+)
 from webchirp_bridge.serial_pipe import (
     webserial_connect,
     webserial_disconnect,
@@ -91,6 +94,7 @@ RPC_METHODS: dict[str, Callable[..., Any]] = {
     "normalize_rows": normalize_rows,
     # web/python/webchirp_bridge/row_validation.py
     "validate_rows_for_upload": validate_rows_for_upload,
+    "normalize_and_validate_rows": normalize_and_validate_rows,
     # web/python/webchirp_bridge/channel_extra.py
     "get_channel_extra": get_channel_extra,
     # web/python/webchirp_bridge/radio_settings.py

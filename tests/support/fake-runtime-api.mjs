@@ -18,6 +18,7 @@
 const SESSION_BOUND_METHODS = [
   "normalizeRows",
   "validateRowsForUpload",
+  "normalizeAndValidateRows",
   "exportImage",
   "downloadSelectedRadio",
   "uploadSelectedRadio",

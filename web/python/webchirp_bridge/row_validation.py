@@ -23,7 +23,10 @@ from webchirp_bridge.channel_rows import (
     _row_from_memory,
     _row_text_values,
 )
+from webchirp_bridge.column_metadata import _cached_column_metadata
+from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.power_levels import _level_map_for_radio
+from webchirp_bridge.row_normalization import normalize_cell
 from webchirp_bridge.session import resolve_optional_session
 
 if TYPE_CHECKING:
@@ -34,6 +37,11 @@ if TYPE_CHECKING:
     # One invalid cell reported by the upload preflight: which row, which column,
     # and CHIRP's own message for it.
     ValidationIssue = dict[str, Any]
+    # One finding before it is tied to a row: the grid column and the message.
+    CellFinding = tuple[str, str]
+    # One row's edits as the grid sends them: the stored row and the ordered
+    # {"column", "value", "allowReadOnly"} writes to apply to it.
+    RowEditRequest = dict[str, Any]
     ValidationMessage = str | Exception
     RowChangeAction = Literal["skip", "erase", "set"]
 
@@ -323,45 +331,144 @@ def _issue(row_index: int, column: str, message: ValidationMessage) -> Validatio
     return {"rowIndex": int(row_index), "column": column, "message": str(message)}
 
 
+def _row_location(row: Row) -> Optional[int]:
+    """The row's memory number, or None when its Location is not an integer."""
+    try:
+        return int(str((row or {}).get("Location", "") or "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _row_findings(
+    radio: Optional[chirp_common.Radio],
+    level_map: dict[str, Any],
+    bounds: Optional[tuple[int, int]],
+    row: Row,
+) -> tuple[list[CellFinding], list[CellFinding]]:
+    """Everything one row's own values say about it, as (column, message) errors and warnings.
+
+    The per-row half of the preflight, shared by the upload
+    (``validate_rows_for_upload``) and the grid's per-edit check
+    (``normalize_and_validate_rows``) so the two can never disagree about a
+    row: the memory bounds, CHIRP's own parse of the row, then -- with a radio
+    and an in-bounds Location -- the change classification, the driver's
+    ``validate_memory``, the immutable-field policy and the extras. What needs
+    the whole grid (one Location used twice) stays with the upload.
+    """
+    errors: list[CellFinding] = []
+    warnings: list[CellFinding] = []
+    location = _row_location(row)
+    in_bounds = location is not None and (
+        not bounds or bounds[0] <= location <= bounds[1]
+    )
+    # Location is checked here as well as in _apply_rows_to_radio_instance,
+    # because that one raises partway through a clone: the radio is already
+    # open and some memories written. Preflight is the only place a bad
+    # Location can be reported while it is still just a highlighted cell.
+    if location is not None and bounds and not in_bounds:
+        errors.append(
+            (
+                "Location",
+                f"Channel Location {location} is outside radio "
+                f"memory bounds {bounds[0]}-{bounds[1]}",
+            )
+        )
+    vals = [str((row or {}).get(header, "") or "") for header in CSV_HEADERS]
+    vals = _coerce_csv_vals_for_chirp(vals)
+    # A non-integer Location already raises out of _memory_from_row_values, so
+    # only its range was checked above.
+    try:
+        mem = _memory_from_row_values(vals, level_map)
+    except Exception as exc:
+        error_text = str(exc)
+        errors.append((_infer_csv_error_column(error_text), error_text))
+        return errors, warnings
+
+    if radio is None or location is None or not in_bounds:
+        return errors, warnings
+    try:
+        existing = radio.get_memory(location)
+        action, mem, row_warnings, row_errors = _prepare_row_change(
+            radio, row, existing, mem
+        )
+        # Extras ride on the row, not in a column, so they are checked against
+        # the memory they will land on rather than through the column
+        # machinery above -- including for a row the change classification
+        # skipped, which an extras-only edit always is.
+        extra_errors, extra_warnings = _row_extra_findings(
+            radio, row, existing, action
+        )
+        errors.extend((EXTRA_COLUMN, message) for message in extra_errors)
+        warnings.extend((EXTRA_COLUMN, message) for message in extra_warnings)
+        if action == "skip":
+            return errors, warnings
+    except Exception as exc:
+        row_warnings = []
+        row_errors = [exc]
+    errors.extend((_validation_column(message), str(message)) for message in row_errors)
+    warnings.extend(
+        (_validation_column(message), str(message)) for message in row_warnings
+    )
+    return errors, warnings
+
+
+def _session_radio_context(
+    session: Optional[RadioSession],
+) -> tuple[Optional[chirp_common.Radio], dict[str, Any], Optional[tuple[int, int]]]:
+    """The radio, power-level map and memory bounds a row is checked against.
+
+    The same image-backed radio a later upload or export will write to; None
+    with no session, which checks rows against CHIRP's generic limits only.
+    """
+    radio = session.radio_instance() if session else None
+    return radio, _level_map_for_radio(radio, session), _memory_bounds_for_driver(session)
+
+
+def _edit_check_context(
+    session: Optional[RadioSession],
+) -> tuple[Optional[chirp_common.Radio], dict[str, Any], Optional[tuple[int, int]]]:
+    """``_session_radio_context`` for the per-edit check, built once per image.
+
+    Shared across calls because it is only read: ``_row_findings`` asks the
+    radio for memories, validates copies of them and never writes one back.
+    A live-mode radio is left out -- its memories are on the radio, so reading
+    one would need the serial link the editor does not hold -- and so is a
+    radio whose image will not build, which the upload preflight reports in
+    full; either way the edit still gets the column rules.
+    """
+    if session is None:
+        return _session_radio_context(None)
+
+    def build() -> tuple[Optional[chirp_common.Radio], dict[str, Any], Optional[tuple[int, int]]]:
+        if issubclass(session.image_cls, chirp_common.LiveRadio):
+            return None, _level_map_for_radio(None, session), _memory_bounds_for_driver(session)
+        try:
+            return _session_radio_context(session)
+        except Exception as exc:
+            _log_debug(f"ROW CHECK no radio instance for {session.session_id}: {exc}")
+            return None, _level_map_for_radio(None, session), _memory_bounds_for_driver(session)
+
+    return session.image_memo("edit_check_context", build)
+
+
 def validate_rows_for_upload(rows: Rows, session_id: str = "") -> dict[str, Any]:
     """RPC: validate rows with the session's driver and return errors and warnings.
 
     An empty ``session_id`` means no radio is selected; the rows are then
     checked against CHIRP's generic limits only, since nothing more specific
-    is known yet.
+    is known yet. Each row goes through ``_row_findings``, the same check a
+    grid edit gets; only the duplicate-Location check, which needs every row,
+    is done here.
     """
     session = resolve_optional_session(session_id)
-    # The same image-backed radio a later upload or export will write to.
-    radio = session.radio_instance() if session else None
-    level_map = _level_map_for_radio(radio, session)
-    # Location is checked here as well as in _apply_rows_to_radio_instance,
-    # because that one raises partway through a clone: the radio is already
-    # open and some memories written. Preflight is the only place a bad
-    # Location can be reported while it is still just a highlighted cell.
-    bounds = _memory_bounds_for_driver(session)
+    radio, level_map, bounds = _session_radio_context(session)
     seen_locations: dict[int, int] = {}
     issues: list[ValidationIssue] = []
     warnings: list[ValidationIssue] = []
     for row_index, row in enumerate(rows or []):
-        vals = [str((row or {}).get(header, "") or "") for header in CSV_HEADERS]
-        vals = _coerce_csv_vals_for_chirp(vals)
-        # A non-integer Location already raises out of _memory_from_row_values
-        # below, so only range and uniqueness are checked here.
-        try:
-            location = int(str((row or {}).get("Location", "") or "").strip())
-        except (TypeError, ValueError):
-            location = None
-        if location is not None:
-            if bounds and not (bounds[0] <= location <= bounds[1]):
-                issues.append(
-                    _issue(
-                        row_index,
-                        "Location",
-                        f"Channel Location {location} is outside radio "
-                        f"memory bounds {bounds[0]}-{bounds[1]}",
-                    )
-                )
-            elif location in seen_locations:
+        location = _row_location(row)
+        if location is not None and (not bounds or bounds[0] <= location <= bounds[1]):
+            if location in seen_locations:
                 issues.append(
                     _issue(
                         row_index,
@@ -372,42 +479,64 @@ def validate_rows_for_upload(rows: Rows, session_id: str = "") -> dict[str, Any]
                 )
             else:
                 seen_locations[location] = row_index
-        try:
-            mem = _memory_from_row_values(vals, level_map)
-        except Exception as exc:
-            error_text = str(exc)
-            issues.append(_issue(row_index, _infer_csv_error_column(error_text), error_text))
-            continue
-
-        if (
-            radio is None
-            or location is None
-            or (bounds and not (bounds[0] <= location <= bounds[1]))
-        ):
-            continue
-        try:
-            existing = radio.get_memory(location)
-            action, mem, row_warnings, row_errors = _prepare_row_change(
-                radio, row, existing, mem
-            )
-            # Extras ride on the row, not in a column, so they are checked
-            # against the memory they will land on rather than through the
-            # column machinery above -- including for a row the change
-            # classification skipped, which an extras-only edit always is.
-            extra_errors, extra_warnings = _row_extra_findings(
-                radio, row, existing, action
-            )
-            for message in extra_errors:
-                issues.append(_issue(row_index, EXTRA_COLUMN, message))
-            for message in extra_warnings:
-                warnings.append(_issue(row_index, EXTRA_COLUMN, message))
-            if action == "skip":
-                continue
-        except Exception as exc:
-            row_warnings: list[str] = []
-            row_errors: list[ValidationMessage] = [exc]
-        for message in row_errors:
-            issues.append(_issue(row_index, _validation_column(message), message))
-        for message in row_warnings:
-            warnings.append(_issue(row_index, _validation_column(message), message))
+        row_errors, row_warnings = _row_findings(radio, level_map, bounds, row)
+        issues.extend(_issue(row_index, column, message) for column, message in row_errors)
+        warnings.extend(
+            _issue(row_index, column, message) for column, message in row_warnings
+        )
     return {"valid": len(issues) == 0, "issues": issues, "warnings": warnings}
+
+
+def normalize_and_validate_rows(
+    session_id: str, rows: list[RowEditRequest]
+) -> dict[str, Any]:
+    """RPC: apply the grid's edits to rows by the radio's rules, then check each row.
+
+    Each request is ``{"row": <the row as stored>, "edits": [{"column",
+    "value", "allowReadOnly"}, ...]}``. The edits are applied in order, each
+    through ``normalize_cell`` (web/python/webchirp_bridge/row_normalization.py)
+    against the column metadata the grid shows for this session, with the
+    cell's current value as the fallback a rejected write keeps. The row that
+    results is then checked by ``_row_findings``, the per-row half of the
+    upload preflight, so a driver's objection reaches the cell when it is
+    committed rather than when the radio is written.
+
+    Per row rather than per cell because the driver judges a memory, not a
+    field: whether a duplex, offset, mode or tone is acceptable can depend on
+    the rest of the channel. Returns ``{"rows": [...]}`` in request order, each
+    ``{"cells": [{column, value, accepted, note}], "issues": [{column,
+    message}], "warnings": [...]}``. An empty ``session_id`` means no radio:
+    the default schema's rules apply and no driver is consulted.
+    """
+    session = resolve_optional_session(session_id)
+    columns = _cached_column_metadata(session)["columns"]
+    radio, level_map, bounds = _edit_check_context(session)
+    results: list[dict[str, Any]] = []
+    for request in rows or []:
+        row: Row = dict((request or {}).get("row") or {})
+        cells: list[dict[str, Any]] = []
+        for edit in (request or {}).get("edits") or []:
+            column = str((edit or {}).get("column") or "")
+            outcome = normalize_cell(
+                column,
+                (edit or {}).get("value"),
+                columns.get(column),
+                row.get(column),
+                bool((edit or {}).get("allowReadOnly")),
+            )
+            row[column] = outcome.value
+            cells.append({"column": column, **outcome.as_json()})
+        errors, warnings = _row_findings(radio, level_map, bounds, row)
+        results.append(
+            {
+                "cells": cells,
+                "issues": [
+                    {"column": column, "message": message} for column, message in errors
+                ],
+                "warnings": [
+                    {"column": column, "message": message}
+                    for column, message in warnings
+                ],
+            }
+        )
+    return {"rows": results}

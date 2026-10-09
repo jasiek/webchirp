@@ -69,6 +69,7 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
   "webchirp_bridge/power_levels.py",
   "webchirp_bridge/radio_memories.py",
   "webchirp_bridge/radio_settings.py",
+  "webchirp_bridge/row_normalization.py",
   "webchirp_bridge/row_validation.py",
   "webchirp_bridge/rpc.py",
   "webchirp_bridge/runtime_errors.py",
