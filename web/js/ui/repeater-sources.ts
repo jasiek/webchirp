@@ -82,7 +82,7 @@ export function unmetRequirement(source, values) {
 export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints: RepeaterEndpoints }) {
   const { log } = ctx;
 
-  function countryOptions(codes) {
+  function countryOptions(codes: Iterable<string> | null | undefined): FieldOption[] {
     return Array.from(codes || [])
       .map((code) => {
         const name = countryDisplayName(code);

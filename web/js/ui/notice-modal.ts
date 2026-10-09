@@ -38,7 +38,7 @@ export function createNoticeModal(ctx: Pick<UiContext, "dom">) {
   // a queue would make the user dismiss a message about something they have
   // since moved on from, and these are not events to be accounted for -- each
   // one describes the state the app is in right now.
-  function show({ title, message }) {
+  function show({ title, message }: { title: string; message: string }) {
     if (!isModalOpen()) {
       previousFocus = document.activeElement;
     }

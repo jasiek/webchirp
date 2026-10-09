@@ -4,16 +4,17 @@
 
 import { errorDetails as nativeErrorDetails } from "../error-details.ts";
 import { isRuntimeCallError, runtimeErrorDetail } from "../runtime-errors.ts";
+import type { CatalogRadio } from "../runtime-rpc.ts";
 
-function sanitizeFileNamePart(text) {
+function sanitizeFileNamePart(text: string | null | undefined): string {
   return String(text || "")
     .trim()
     .replace(/[^\w.-]+/g, "_")
     .replace(/^_+|_+$/g, "") || "radio";
 }
 
-function dateStampForFileName(date) {
-  const pad2 = (n) => String(n).padStart(2, "0");
+function dateStampForFileName(date: Date): string {
+  const pad2 = (n: number) => String(n).padStart(2, "0");
   const y = date.getFullYear();
   const m = pad2(date.getMonth() + 1);
   const d = pad2(date.getDate());
@@ -22,13 +23,18 @@ function dateStampForFileName(date) {
 
 // Derive an export file name like Baofeng_BF-888_20231218.img
 // (<brand>_<model>_<date>.<format>).
-export function buildExportFileName(vendor, model, extension, date = new Date()) {
+export function buildExportFileName(
+  vendor: string | null | undefined,
+  model: string | null | undefined,
+  extension: string,
+  date = new Date(),
+): string {
   const vendorPart = sanitizeFileNamePart(vendor);
   const modelPart = sanitizeFileNamePart(model);
   return `${vendorPart}_${modelPart}_${dateStampForFileName(date)}.${extension}`;
 }
 
-export function base64ToBytes(base64) {
+export function base64ToBytes(base64: string | null | undefined): Uint8Array {
   const binary = atob(String(base64 || ""));
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) {
@@ -37,7 +43,7 @@ export function base64ToBytes(base64) {
   return out;
 }
 
-export function bytesToBase64(bytes) {
+export function bytesToBase64(bytes: Uint8Array): string {
   let out = "";
   const chunkSize = 0x8000;
   for (let i = 0; i < bytes.length; i += chunkSize) {
@@ -52,7 +58,7 @@ export function bytesToBase64(bytes) {
 // web/js/runtime-errors.ts): its message is one sentence and its JS stack
 // only says which RPC call failed, so without this the debug panel would lose
 // the frames that say where CHIRP broke.
-export function errorDetails(error) {
+export function errorDetails(error: unknown): string {
   if (!error) {
     return "Unknown error";
   }
@@ -68,7 +74,7 @@ export function errorDetails(error) {
 // Extract a short first-line summary from a detailed error payload. For a
 // runtime failure that is "RadioError: Radio did not respond", the line
 // runtimeErrorDetail puts above the traceback.
-export function errorSummary(error) {
+export function errorSummary(error: unknown): string {
   const firstLine = errorDetails(error).split("\n")[0].trim();
   return firstLine || "Unknown error";
 }
@@ -83,7 +89,7 @@ export function detectUserAgent() {
 // `userAgent` is passed explicitly by callers outside the app shell (the
 // diagnostics page builds its report where there is no navigator to read in
 // tests); everything in the app keeps calling it with no argument.
-export function detectBrowserVersion(userAgent) {
+export function detectBrowserVersion(userAgent?: string | null): string {
   const ua = userAgent ?? navigator.userAgent ?? "";
   const matchers = [
     [/Edg\/([\d.]+)/, "Microsoft Edge"],
@@ -114,7 +120,7 @@ export function detectBrowserVersion(userAgent) {
 // before Chrome for the opposite reason -- Chrome's user agent says "Chrome/"
 // and never "Chromium/", so a plain Chromium build is the only thing that
 // matches it.
-const BROWSER_TOKENS = Object.freeze([
+const BROWSER_TOKENS: ReadonlyArray<readonly [string, RegExp]> = Object.freeze([
   // Edg/ on desktop, EdgA/ on Android, EdgiOS/ on iOS; Edge/ was the old
   // pre-Chromium EdgeHTML browser, which is worth keeping as its own answer.
   ["edge", /\bEdg(?:e|A|iOS)?\//],
@@ -137,7 +143,7 @@ const BROWSER_TOKENS = Object.freeze([
 // unambiguous in their user agent anyway. The list also carries GREASE entries
 // ("Not:A-Brand") designed to break naive parsers, which fall through to no
 // match rather than needing to be filtered out.
-const BRAND_TOKENS = Object.freeze([
+const BRAND_TOKENS: ReadonlyArray<readonly [string, RegExp]> = Object.freeze([
   ["edge", /microsoft edge/i],
   ["opera", /\bopera\b/i],
   ["samsung", /samsung/i],
@@ -192,7 +198,7 @@ export function resetBrowserProbeForTests() {
 // Ordered rather than a lookup because the tables above encode precedence:
 // every Chromium browser matches the Chrome pattern, so the first match has to
 // win and the derivatives have to come first.
-function matchToken(table, value) {
+function matchToken(table: ReadonlyArray<readonly [string, RegExp]>, value: string): string {
   for (const [name, pattern] of table) {
     if (pattern.test(value)) {
       return name;
@@ -226,7 +232,7 @@ export function detectBrowserName() {
 // there is one definition of each: iOS first because iPadOS reports a desktop
 // Macintosh user agent and would otherwise land in macos, and Android before
 // the table because its user agent also says Linux.
-const PLATFORM_TOKENS = Object.freeze([
+const PLATFORM_TOKENS: ReadonlyArray<readonly [string, RegExp]> = Object.freeze([
   ["chromeos", /\bCrOS\b/],
   ["windows", /\bWindows\b/i],
   ["macos", /\bMac OS X\b|\bMacintosh\b/i],
@@ -261,7 +267,7 @@ export function isIosPlatform() {
   return /Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1;
 }
 
-export function flagEmojiFromCountryCode(countryCode) {
+export function flagEmojiFromCountryCode(countryCode: string | null | undefined): string {
   const code = String(countryCode || "").trim().toUpperCase();
   const emojiCode = code === "UK" ? "GB" : code;
   if (!/^[A-Z]{2}$/.test(emojiCode)) {
@@ -272,7 +278,7 @@ export function flagEmojiFromCountryCode(countryCode) {
     .join("");
 }
 
-export function countryDisplayName(countryCode) {
+export function countryDisplayName(countryCode: string): string {
   if (countryCode === "UK" || countryCode === "GB") {
     return "United Kingdom";
   }
@@ -285,7 +291,7 @@ export function countryDisplayName(countryCode) {
 }
 
 // Build a short user-facing label for a selected radio catalog entry.
-export function makeModelLabel(radio) {
+export function makeModelLabel(radio: CatalogRadio & { releaseLabel?: string }): string {
   const base = `${radio.vendor} ${radio.model}`;
   const variant = String(radio.releaseLabel || radio.variant || "").trim();
   return variant ? `${base} — ${variant}` : base;
@@ -294,7 +300,7 @@ export function makeModelLabel(radio) {
 // Summarise channels the driver could not decode during a download or image
 // load. Those slots are absent from the grid through no action of the user, so
 // the status line has to say so; the tracebacks stay in Debug Output.
-export function undecodedChannelsNote(unreadableChannels) {
+export function undecodedChannelsNote(unreadableChannels: readonly unknown[] | null | undefined): string {
   const count = Array.isArray(unreadableChannels) ? unreadableChannels.length : 0;
   if (!count) {
     return "";
@@ -307,10 +313,11 @@ export function undecodedChannelsNote(unreadableChannels) {
 // oldest. Used by every preview cache in web/js/ui/repeater-sources.ts and by
 // the city autocomplete's answer cache in web/js/ui/query-fields.ts, so the
 // eviction rule is written once.
-export function rememberBounded(map, key, value, limit) {
+export function rememberBounded<K, V>(map: Map<K, V>, key: K, value: V, limit: number): V {
   map.set(key, value);
   while (map.size > limit) {
-    map.delete(map.keys().next().value);
+    // The map holds more than limit >= 0 entries, so it has a first key.
+    map.delete(map.keys().next().value as K);
   }
   return value;
 }

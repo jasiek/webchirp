@@ -20,7 +20,7 @@ const TRUNCATION_NOTE =
 // Drop the date and sub-second precision from log stamps: within one report the
 // date never varies and the wall clock only matters for ordering, so this buys
 // ~30 encoded characters a line of excerpt budget for free.
-function compactDebugLines(tail) {
+function compactDebugLines(tail: string): string[] {
   return String(tail || "")
     .split("\n")
     .filter(Boolean)
@@ -33,7 +33,10 @@ function compactDebugLines(tail) {
 // the built URL still fits. `measure` builds the real URL rather than estimating
 // the encoded size, because the estimate and URLSearchParams disagree on every
 // space, and a debug tail is mostly spaces.
-function fitDebugExcerpt(lines, { measure, limit, alreadyTrimmed }) {
+function fitDebugExcerpt(
+  lines: string[],
+  { measure, limit, alreadyTrimmed }: { measure: (text: string) => number; limit: number; alreadyTrimmed: boolean },
+): string {
   if (!lines.length) {
     return NO_DEBUG_PLACEHOLDER;
   }
@@ -72,7 +75,7 @@ export function createIssueReporter({ state, log }: Pick<UiContext, "state" | "l
 
     // The template renders debug_log as a code block already, so the excerpt
     // goes in bare — fences here would double-wrap it.
-    const buildUrl = (debugExcerpt) => {
+    const buildUrl = (debugExcerpt: string) => {
       const params = new URLSearchParams({
         template: ISSUE_TEMPLATE_NAME,
         title: issueTitle.slice(0, 240),
@@ -97,7 +100,7 @@ export function createIssueReporter({ state, log }: Pick<UiContext, "state" | "l
     // summary in the title, in which case no debug line fits and only the
     // truncation note survives — the report is still worth filing without it.
     const excerpt = fitDebugExcerpt(available.slice(cutByLineCount ? 1 : 0), {
-      measure: (debugExcerpt) => buildUrl(debugExcerpt).length,
+      measure: (debugExcerpt: string) => buildUrl(debugExcerpt).length,
       limit: ISSUE_URL_LIMIT,
       alreadyTrimmed: cutByLineCount,
     });

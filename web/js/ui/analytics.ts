@@ -20,6 +20,8 @@
 import { errorDetails } from "./format.ts";
 import { isRuntimeCallError, jsErrorName } from "../runtime-errors.ts";
 import { isPortSelectionCancelled } from "../serial-errors.ts";
+import type { CatalogRadio, RowIssue, SettingIssue } from "../runtime-rpc.ts";
+import type { UiState } from "./state.ts";
 
 export { trackEvent } from "../analytics.ts";
 
@@ -27,7 +29,9 @@ export { trackEvent } from "../analytics.ts";
 // radios do people own", module/class answer "which CHIRP driver ran", and the
 // two differ often enough (one driver serves many models) to be worth sending
 // both.
-export function radioEventParams(radio) {
+export function radioEventParams(
+  radio: Pick<CatalogRadio, "vendor" | "model" | "module" | "className"> | null | undefined,
+): Record<string, string> {
   if (!radio) {
     return {};
   }
@@ -42,7 +46,7 @@ export function radioEventParams(radio) {
 // average; a bucket is a dimension every report can group by, which is what
 // answers "how big are the codeplugs people actually work with" — and so which
 // sizes the channel grid has to stay usable at.
-export function channelCountBucket(count) {
+export function channelCountBucket(count: unknown): string {
   const n = Number(count);
   if (!Number.isInteger(n) || n < 0) {
     return "unknown";
@@ -66,7 +70,9 @@ export function channelCountBucket(count) {
 // the part that is not derivable from anything else: it says whether the
 // codeplug someone is about to write to a radio came off that radio, out of a
 // file, or from the sample.
-export function codeplugParams(state) {
+export function codeplugParams(
+  state: Pick<UiState, "currentRows" | "codeplugSource"> | null | undefined,
+): { channel_count: number; channel_count_bucket: string; codeplug_source: string } {
   const count = Array.isArray(state?.currentRows) ? state.currentRows.length : 0;
   return {
     channel_count: count,
@@ -111,7 +117,7 @@ const TEXT_ERROR_KINDS: Array<[string, RegExp]> = [
 // messages of the Python exceptions it was chained from -- a driver that
 // re-raises "Block failed checksum!" as "Failed to read block" has said
 // checksum -- and the JS error it wraps; or any other error's full detail.
-function classifiableText(error) {
+function classifiableText(error: unknown): string {
   if (isRuntimeCallError(error)) {
     const causes = (error.pythonCauses || []).map((cause) => `${cause.type}: ${cause.message}`);
     if (error.jsCause) {
@@ -124,7 +130,7 @@ function classifiableText(error) {
 
 // Map a failure onto the fixed error_kind vocabulary: by type first, then, for
 // the causes that have no type, by what the failure said.
-export function classifyErrorKind(error) {
+export function classifyErrorKind(error: unknown): string {
   if (isPortSelectionCancelled(error)) {
     return "port_not_selected";
   }
@@ -151,7 +157,7 @@ export function classifyErrorKind(error) {
 // PythonError raised while seeding the runtime, before the dispatcher exists,
 // reaches here as the original PythonError (web/js/runtime-rpc.ts) whose text
 // names the exception on the traceback's last line.
-export function errorTypeName(error) {
+export function errorTypeName(error: unknown): string {
   if (isRuntimeCallError(error)) {
     return error.pythonType;
   }
@@ -176,16 +182,18 @@ export function errorTypeName(error) {
     }
     return "";
   }
-  const name = typeof error?.name === "string" ? error.name : "";
+  const name = typeof (error as Error | null)?.name === "string" ? (error as Error).name : "";
   return /(?:Error|Exception)$/.test(name) ? name : "";
 }
 
 // The column of the first preflight issue, for reporting which fields block
 // uploads most often. Column names come from CHIRP's own schema, so they are a
 // bounded set; the rejected value itself is never sent.
-export function firstIssueColumn(issues) {
+export function firstIssueColumn(
+  issues: ReadonlyArray<RowIssue | SettingIssue | null> | null | undefined,
+): string {
   for (const issue of issues || []) {
-    const column = String(issue?.column || "");
+    const column = String((issue && "column" in issue ? issue.column : "") || "");
     if (column) {
       return column;
     }

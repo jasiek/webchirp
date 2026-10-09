@@ -19,7 +19,7 @@ export function createProgress({ dom }: Pick<UiContext, "dom">) {
   let activeToken: number | null = null;
   let nextToken = 0;
 
-  function render(label, cur, max) {
+  function render(label: string | null, cur: number, max: number) {
     dom.appProgressLabelEl.textContent = String(label || "Working...");
     // A count is only meaningful once we know the total; drivers report one,
     // clone-style byte loops may not.

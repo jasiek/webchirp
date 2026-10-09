@@ -21,7 +21,7 @@ export function createDebugLog(
     return dom.debugToggleEl.getAttribute("aria-expanded") === "true";
   }
 
-  function setExpanded(expanded) {
+  function setExpanded(expanded: boolean) {
     const nextExpanded = Boolean(expanded);
     dom.debugToggleEl.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
     dom.debugActionsEl.hidden = !nextExpanded;
@@ -32,7 +32,7 @@ export function createDebugLog(
   // not reset it later, because an error may arrive before listeners bind.
   setExpanded(false);
 
-  function captureErrorSummary(line) {
+  function captureErrorSummary(line: string) {
     const text = String(line || "");
     lastErrorSummary = text.replace(/\s+/g, " ").trim().slice(0, 180);
     // Routine diagnostics stay out of the way, but errors should never be
@@ -47,7 +47,7 @@ export function createDebugLog(
   // line the user must see that is not a defect -- an action they cancelled
   // themselves. Filing that as the latest error would title their next bug
   // report after something they chose to do.
-  function logDebug(line, { isError = false, reveal = false } = {}) {
+  function logDebug(line: string, { isError = false, reveal = false }: { isError?: boolean; reveal?: boolean } = {}) {
     const stamp = new Date().toISOString();
     const text = `[${stamp}] ${String(line || "")}`;
     const current = dom.debugOutputEl.value ? `${dom.debugOutputEl.value}\n` : "";
@@ -62,17 +62,17 @@ export function createDebugLog(
     dom.debugOutputEl.scrollTop = dom.debugOutputEl.scrollHeight;
   }
 
-  function logError(line) {
+  function logError(line: string) {
     logDebug(line, { isError: true });
   }
 
   // Emit status updates into the debug output stream.
-  function setStatus(text) {
+  function setStatus(text: string) {
     logDebug(`STATUS ${text}`);
   }
 
   // Record serial-related events in the central debug output stream.
-  function logSerial(line) {
+  function logSerial(line: string) {
     logDebug(`SERIAL ${String(line || "")}`);
   }
 
@@ -89,7 +89,7 @@ export function createDebugLog(
   //
   // Cancellations deliberately do not come through here: reportActionCancelled
   // below is what a user calling something off reaches, and that is not a bug.
-  function reportActionError(action, error) {
+  function reportActionError(action: string, error: unknown) {
     const details = errorDetails(error);
     if (isUserPreconditionFailure(error)) {
       reportActionBlocked(action, error, details);
@@ -124,7 +124,7 @@ export function createDebugLog(
   // UI makes of a failure, the panel is where all of it lands. details is
   // errorDetails() (web/js/ui/format.ts), which for a runtime failure is its
   // Python traceback rather than the one-line message the error carries.
-  function reportActionBlocked(action, error, details) {
+  function reportActionBlocked(action: string, error: unknown, details: string) {
     const sentence = runtimeErrorSentence(error);
     logDebug(`${action.toUpperCase()} BLOCKED\n${details}`);
     setStatus(`${action} blocked: ${sentence}`);
@@ -143,7 +143,7 @@ export function createDebugLog(
   // anything readable off the error: the class that marks one
   // (RepeaterInputError, web/js/ui/repeater-sources.ts) is local to the module
   // that throws it.
-  function reportActionRejected(action, error) {
+  function reportActionRejected(action: string, error: unknown) {
     reportActionBlocked(action, error, errorDetails(error));
   }
 
@@ -153,12 +153,12 @@ export function createDebugLog(
   // indistinguishable from a Connect click that never registered -- but it is
   // not a failure: it carries the plain sentence rather than a traceback, and
   // stays out of the Report Bug prefill.
-  function reportActionCancelled(action, message) {
+  function reportActionCancelled(action: string, message: string) {
     logDebug(`${action.toUpperCase()} CANCELLED ${message}`, { reveal: true });
     setStatus(`${action} cancelled.`);
   }
 
-  function latestDebugTail(lineCount) {
+  function latestDebugTail(lineCount: number): string {
     const lines = String(dom.debugOutputEl.value || "")
       .split("\n")
       .filter(Boolean);
