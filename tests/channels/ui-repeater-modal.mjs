@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.js";
+import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.ts";
 import { createRepeaterQuery } from "../../web/js/ui/repeater-query.js";
 import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
 import { fakeXmlGlobals } from "../support/fake-xml.mjs";

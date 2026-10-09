@@ -9,7 +9,7 @@
 // always over 4-character squares, never the 6-character square the user is
 // standing in.
 
-import { REPEATER_REQUEST_TIMEOUT_MS, withRequestTimeout } from "./request-timeout.js";
+import { REPEATER_REQUEST_TIMEOUT_MS, withRequestTimeout } from "./request-timeout.ts";
 import { setHighestPower } from "./row-power.js";
 
 // No CORS proxy is involved: the API sends Access-Control-Allow-Origin: * on

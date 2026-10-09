@@ -19,7 +19,7 @@ export const REPEATER_REQUEST_TIMEOUT_MS = 10000;
 // Render the deadline the way the user should read it. Seconds are the natural
 // unit for the shipped value; the millisecond form only shows up when a test or
 // a caller passes a sub-second deadline, where "0 s" would be a lie.
-function describeDeadline(timeoutMs) {
+function describeDeadline(timeoutMs: number): string {
   return timeoutMs >= 1000 ? `${Math.round(timeoutMs / 1000)} s` : `${timeoutMs} ms`;
 }
 
@@ -53,7 +53,11 @@ function describeDeadline(timeoutMs) {
 // naming what stalled. That sentence says "timed out" on purpose —
 // classifyErrorKind() in web/js/ui/analytics.js matches it to report the failure
 // as a timeout rather than "other".
-export async function withRequestTimeout(label, run, timeoutMs = REPEATER_REQUEST_TIMEOUT_MS) {
+export async function withRequestTimeout<T>(
+  label: string,
+  run: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number = REPEATER_REQUEST_TIMEOUT_MS,
+): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

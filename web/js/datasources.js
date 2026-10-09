@@ -1,4 +1,4 @@
-import { withRequestTimeout } from "./request-timeout.js";
+import { withRequestTimeout } from "./request-timeout.ts";
 import { highestPowerOption, setHighestPower } from "./row-power.js";
 import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.js";
 

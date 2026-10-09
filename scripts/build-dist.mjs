@@ -89,7 +89,10 @@ const REQUIRED_WEB_FILES = [
 // Source files that reach dist/ only through esbuild or the Python hashing, so
 // the verbatim copy skips them (as it skips type declarations, which only tsc
 // reads, and the pages, which are written once rewritten).
-const BUILT_EXTS = new Set([".js", ".mjs", ".css", ".py"]);
+const BUILT_EXTS = new Set([".js", ".mjs", ".ts", ".css", ".py"]);
+// The source modules esbuild bundles, and so the ones a page might leave
+// unshipped. A .d.ts is not one: tsc reads it, nothing imports it.
+const SOURCE_MODULE_EXTS = new Set([".js", ".mjs", ".ts"]);
 
 function toPosix(relPath) {
   return relPath.split(path.sep).join("/");
@@ -392,7 +395,8 @@ async function main() {
   }
   const bundled = new Set([...js.inputs, ...css.inputs]);
   const unbundled = webFiles
-    .filter((file) => [".js", ".mjs", ".css"].includes(path.extname(file)))
+    .filter((file) => (SOURCE_MODULE_EXTS.has(path.extname(file)) && !file.endsWith(".d.ts"))
+      || path.extname(file) === ".css")
     .filter((file) => !bundled.has(file) && file !== PYTHON_URLS_MODULE)
     .map((file) => toPosix(path.relative(ROOT, file)));
   if (unbundled.length > 0) {

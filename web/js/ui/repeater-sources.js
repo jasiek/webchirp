@@ -18,7 +18,7 @@ import {
   haversineKm,
   squaresForRadius,
 } from "../rsgb.js";
-import { withRequestTimeout } from "../request-timeout.js";
+import { withRequestTimeout } from "../request-timeout.ts";
 import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from "./format.js";
 import { trackEvent } from "./analytics.js";
 
