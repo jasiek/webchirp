@@ -368,7 +368,11 @@ export function createRepeaterSources(
     // the selected radio cannot express (plottable, not inserted). Both are
     // counted. Only in-range repeaters go through the row builder, which
     // allocates rows but inserts nothing.
-    function summarizeRemote(body: RemotePreviewBody, position: QueryPosition, radiusKm: number): PreviewSummary {
+    async function summarizeRemote(
+      body: RemotePreviewBody,
+      position: QueryPosition,
+      radiusKm: number,
+    ): Promise<PreviewSummary> {
       // Each plotted entry carries the repeater it came from, because the point
       // list is not index-aligned with the repeater list -- the unmapped ones
       // have no point at all.
@@ -377,9 +381,9 @@ export function createRepeaterSources(
         .filter((entry, index) => points[index].inRange)
         .map((entry) => entry.repeater)
         .concat(body.unmapped);
-      const { skipped } = buildPrzemiennikiRows(importable, ctx.table.rowBuilderHooks(), {
+      const { skipped } = await ctx.table.buildRows((hooks) => buildPrzemiennikiRows(importable, hooks, {
         perspective: body.perspective,
-      });
+      }));
       return { points, unmapped: body.unmapped.length, unsupported: skipped.length };
     }
 
@@ -532,11 +536,11 @@ export function createRepeaterSources(
           return response.text();
         });
         const parsed = parsePrzemiennikiXml(text);
-        const { rows, skipped } = buildPrzemiennikiRows(
+        const { rows, skipped } = await ctx.table.buildRows((hooks) => buildPrzemiennikiRows(
           parsed.repeaters,
-          ctx.table.rowBuilderHooks(),
+          hooks,
           { perspective: parsed.perspective },
-        );
+        ));
         for (const entry of skipped) {
           log.logDebug(`${actionLabel.toUpperCase()} SKIPPED ${entry.repeater} (${skippedReason(entry)})`);
         }
@@ -688,11 +692,11 @@ export function createRepeaterSources(
       // ones beyond the ring are context for widening the search, not results
       // the query would insert. Every RSGB position comes from a locator, so
       // there is nothing unmapped here.
-      const { skipped } = buildRsgbRows(
+      const { skipped } = await ctx.table.buildRows((hooks) => buildRsgbRows(
         entries.filter((entry) => entry.distanceKm <= radiusKm),
-        ctx.table.rowBuilderHooks(),
+        hooks,
         { modes },
-      );
+      ));
       return { points, truncated: plan.truncated, unmapped: 0, unsupported: skipped.length };
     }
 
@@ -819,7 +823,7 @@ export function createRepeaterSources(
         // The mode selection goes to the builder as well as the filter, so a
         // D-STAR query gets the DV side of a mixed-mode repeater, not its FM
         // one.
-        const { rows, skipped } = buildRsgbRows(entries, ctx.table.rowBuilderHooks(), { modes });
+        const { rows, skipped } = await ctx.table.buildRows((hooks) => buildRsgbRows(entries, hooks, { modes }));
         // Repeaters the radio cannot express are dropped rather than written
         // as something they are not; a shorter list than the match count needs
         // saying out loud, or it reads as results going missing.

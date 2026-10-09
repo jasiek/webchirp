@@ -1,4 +1,3 @@
-import { normalizeCellValue } from "./channel-values.ts";
 import { rowExtras, setRowExtras } from "../row-extra.ts";
 import { createSettingControl, readSettingControl } from "./setting-fields.ts";
 import type { ExtraField } from "./setting-fields.ts";
@@ -103,10 +102,9 @@ export function createChannelBulkEdit(ctx: UiContext) {
   // reloadForSelectedRadio in web/js/ui/radio-catalog.ts keeps them and swaps
   // the schema underneath, asynchronously -- so the rows-still-present check in
   // apply() cannot see it. What it changes is exactly what the fields were
-  // derived from: a column the new driver does not publish is written by
-  // setRowValueIfPresent as a silent no-op and still counted as applied, and a
-  // column it marks read-only is written anyway, because the validation here
-  // passes allowReadOnly.
+  // derived from: a column the new driver does not publish would be counted as
+  // applied without landing anywhere, and a column it marks read-only would be
+  // written anyway, because the check here passes allowReadOnly.
   function schemaSnapshot() {
     return {
       radioKey: state.selectedRadio?.key || "",
@@ -420,21 +418,11 @@ export function createChannelBulkEdit(ctx: UiContext) {
     return loadExtraFields(rows, token);
   }
 
-  // Write the ticked values onto every selected channel.
-  //
-  // Everything is validated before anything is written. A bulk edit that gave
-  // up half way would leave the selection in two states with nothing to say
-  // which channels took the value, and the grid's own per-cell rejection is
-  // invisible in a row (see normalizeCellValue in
-  // web/js/ui/channel-values.ts) -- a tone the radio's table lacks becomes
-  // 67.0 Hz rather than an error. So a value this radio will not take stops the
-  // whole apply and is reported on its own field.
-  function apply() {
-    const rows = editedRows;
-    if (rows.length === 0) {
-      setModalOpen(false);
-      return;
-    }
+  // Whether the editor's rows or the schema its fields were built from have
+  // moved since it opened, closing it with a status line if so. Asked before
+  // the values are checked and again once the runtime has answered, because
+  // the check waits its turn in the runtime's queue.
+  function abandonedBecauseStale(rows: readonly ChannelRow[]): boolean {
     // A download or an image load replaces state.currentRows wholesale without
     // closing this modal, which would leave the apply mutating rows that are no
     // longer in the editor -- reported as success, absent from what is later
@@ -442,7 +430,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
     if (rows.some((row) => !state.currentRows.includes(row))) {
       setModalOpen(false);
       log.setStatus("The channel list changed while the bulk editor was open; nothing was changed.");
-      return;
+      return true;
     }
     // The same refusal for the other half of what these fields were built from:
     // the driver and its schema. See schemaSnapshot for what a late metadata
@@ -451,6 +439,30 @@ export function createChannelBulkEdit(ctx: UiContext) {
     if (schema.radioKey !== editedSchema?.radioKey || schema.metadata !== editedSchema?.metadata) {
       setModalOpen(false);
       log.setStatus("The selected radio changed while the bulk editor was open; nothing was changed.");
+      return true;
+    }
+    return false;
+  }
+
+  // Write the ticked values onto every selected channel.
+  //
+  // Everything is checked before anything is written. A bulk edit that gave
+  // up half way would leave the selection in two states with nothing to say
+  // which channels took the value, and a rejected value is invisible in a row
+  // -- a tone the radio's table lacks keeps the cell's old tone rather than
+  // raising an error. So the ticked values for every selected row go to the
+  // runtime in one call (previewRowEdits in web/js/ui/channel-table.ts, which
+  // applies the radio's own rules, web/python/webchirp_bridge/row_normalization.py),
+  // and a value this radio will not take stops the whole apply and is reported
+  // on its own field. What the driver says about the rows it does take is
+  // highlighted in the grid, as for any committed cell.
+  async function apply(): Promise<void> {
+    const rows = editedRows;
+    if (rows.length === 0) {
+      setModalOpen(false);
+      return;
+    }
+    if (abandonedBecauseStale(rows)) {
       return;
     }
 
@@ -459,20 +471,9 @@ export function createChannelBulkEdit(ctx: UiContext) {
     let invalid = 0;
     for (const entry of columnFields) {
       entry.setError("");
-      if (!entry.apply.checked) {
-        continue;
+      if (entry.apply.checked) {
+        columnWrites.push({ column: entry.column, value: String(entry.control.value ?? "") });
       }
-      const value = String(entry.control.value ?? "");
-      const meta: Partial<ColumnMeta> = state.radioMetadata.columns?.[entry.column] || {};
-      // Checked against a blank previous value on purpose: what matters is
-      // whether the column can hold this value at all, not what it held before.
-      const check = normalizeCellValue(entry.column, value, meta, "", { allowReadOnly: true });
-      if (!check.accepted) {
-        entry.setError(`The selected radio does not accept this ${entry.column}.`);
-        invalid += 1;
-        continue;
-      }
-      columnWrites.push({ column: entry.column, value });
     }
     for (const entry of extraFields) {
       entry.setError("");
@@ -493,34 +494,69 @@ export function createChannelBulkEdit(ctx: UiContext) {
       }
       extraWrites[entry.field.name] = value;
     }
-    if (invalid > 0) {
-      setMessage(`Fix ${invalid} highlighted value${invalid === 1 ? "" : "s"} before applying.`);
-      return;
-    }
     const extraCount = Object.keys(extraWrites).length;
     const fieldCount = columnWrites.length + extraCount;
-    if (fieldCount === 0) {
+    if (invalid === 0 && fieldCount === 0) {
       setMessage("Tick at least one attribute to change, or cancel.");
       return;
     }
 
-    for (const row of rows) {
-      for (const { column, value } of columnWrites) {
-        ctx.table.setRowValueIfPresent(row, column, value);
+    let preview: Awaited<ReturnType<UiContext["table"]["previewRowEdits"]>> = null;
+    if (columnWrites.length > 0) {
+      dom.channelBulkEditApplyEl.disabled = true;
+      setMessage("Checking the values with the selected radio...");
+      const edits = columnWrites.map(({ column, value }) => ({ column, value, allowReadOnly: true }));
+      preview = await ctx.table.previewRowEdits(rows.map((row) => ({ row, edits })));
+      if (!isModalOpen() || editedRows !== rows || abandonedBecauseStale(rows)) {
+        return;
       }
-      if (extraCount > 0) {
+      dom.channelBulkEditApplyEl.disabled = false;
+      if (!preview) {
+        setMessage("The values could not be checked; see Debug Output.");
+        return;
+      }
+      // A value is refused when any selected row refuses it. The column rules
+      // do not depend on the row, so in practice that is all of them.
+      const refused = new Set<string>();
+      for (const result of preview.results) {
+        for (const cell of result.cells) {
+          if (!cell.accepted) {
+            refused.add(cell.column);
+          }
+        }
+      }
+      for (const entry of columnFields) {
+        if (refused.has(entry.column)) {
+          entry.setError(`The selected radio does not accept this ${entry.column}.`);
+          invalid += 1;
+        }
+      }
+    }
+    if (invalid > 0) {
+      setMessage(`Fix ${invalid} highlighted value${invalid === 1 ? "" : "s"} before applying.`);
+      return;
+    }
+
+    // The values the preflight objected to in these cells are no longer the
+    // values in them, so their highlights no longer describe anything. Every
+    // other flagged cell is left marked: a failed upload highlights issues
+    // across the whole grid, and one bulk edit is no reason to stop showing the
+    // ones it did not touch. Cleared before the answers are applied, which put
+    // back whatever the driver says about the rows as they now stand.
+    ctx.table.clearInvalidHighlightsForCells(rows, columnWrites.map(({ column }) => column));
+    if (preview && !preview.apply()) {
+      setModalOpen(false);
+      log.setStatus("The channels changed while their values were being checked; nothing was changed.");
+      return;
+    }
+    if (extraCount > 0) {
+      for (const row of rows) {
         // A fresh object per row: setRowExtras merges into whatever the row
         // already carries, and one shared object would leave every row holding
         // the same mapping.
         setRowExtras(row, { ...extraWrites });
       }
     }
-    // The values the preflight objected to in these cells are no longer the
-    // values in them, so their highlights no longer describe anything. Every
-    // other flagged cell is left marked: a failed upload highlights issues
-    // across the whole grid, and one bulk edit is no reason to stop showing the
-    // ones it did not touch.
-    ctx.table.clearInvalidHighlightsForCells(rows, columnWrites.map(({ column }) => column));
     ctx.table.render();
     setModalOpen(false);
     trackEvent("channels_bulk_edited", {
@@ -548,7 +584,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
     });
     dom.channelBulkEditFormEl.addEventListener("submit", (event) => {
       event.preventDefault();
-      apply();
+      void apply();
     });
   }
 

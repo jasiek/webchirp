@@ -31,9 +31,21 @@ import {
 } from "../support/fake-dom.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
+// The runtime the grid checks its writes with: the real one, through the
+// harness, with no radio selected -- so the default schema's rules apply, as
+// they do in the app before a radio is picked.
+async function harnessRuntimeApi() {
+  const harness = await sharedHarness();
+  return {
+    normalizeAndValidateRows: ({ sessionId, rows }) =>
+      harness.rpc("normalize_and_validate_rows", { session_id: sessionId, rows }),
+  };
+}
+
 // The grid with the driver metadata a caller passes in. `columns` undefined is
-// the state before the startup schema has been fetched.
-async function tableWithMetadata(columns, rows = []) {
+// the state before the startup schema has been fetched. Its row builders ask
+// runtimeApi for every verdict (buildRows in web/js/ui/channel-table.ts).
+async function tableWithMetadata(columns, rows = [], runtimeApi = null) {
   installFakeDom();
   const { createChannelTable } = await import("../../web/js/ui/channel-table.ts");
   const dom = {
@@ -46,6 +58,8 @@ async function tableWithMetadata(columns, rows = []) {
     currentHeaders: CSV_FORMAT_HEADERS.slice(),
     currentRows: rows,
     radioMetadata: columns ? { headers: CSV_FORMAT_HEADERS.slice(), columns } : {},
+    radioSession: null,
+    runtimeApi: runtimeApi ?? await harnessRuntimeApi(),
   };
   return createChannelTable({
     dom,
@@ -53,6 +67,8 @@ async function tableWithMetadata(columns, rows = []) {
     log: { setStatus() {}, logDebug() {} },
     // render() reports the selection outward; the bulk editor is what listens.
     actions: { channelSelectionChanged() {} },
+    // No radio selected: the runtime is asked with an empty session id.
+    session: { idOf: async (handle) => handle?.id ?? "" },
   });
 }
 
@@ -195,7 +211,7 @@ test("a repeater imported before a radio was picked passes that radio's prefligh
   const schema = await harness.runPythonJson("json.dumps(get_default_schema())");
   const table = await tableWithMetadata(schema.columns);
 
-  const { rows } = buildRsgbRows(
+  const { rows } = await table.buildRows((hooks) => buildRsgbRows(
     [{
       record: {
         repeater: "GB3XP", tx: 145687500, rx: 145087500,
@@ -203,9 +219,9 @@ test("a repeater imported before a radio was picked passes that radio's prefligh
       },
       distanceKm: 12,
     }],
-    table.rowBuilderHooks(),
+    hooks,
     { modes: ["A"] },
-  );
+  ));
   assert.equal(rows[0].Power, "50W", "honest under the schema that built it");
   rows[0].Location = "0";
 
@@ -264,7 +280,7 @@ test("the startup schema imports every repeater a directory offers", async () =>
   const schema = await harness.runPythonJson("json.dumps(get_default_schema())");
   const table = await tableWithMetadata(schema.columns);
 
-  const { rows, skipped } = buildPrzemiennikiRows([SR4X], table.rowBuilderHooks());
+  const { rows, skipped } = await table.buildRows((hooks) => buildPrzemiennikiRows([SR4X], hooks));
 
   assert.deepEqual(skipped, []);
   assert.equal(rows[0].Frequency, "145.600000");
@@ -373,14 +389,15 @@ test("selecting a radio is what clears a power level it cannot hold", async () =
 
 // Everything below is the state before the startup schema resolves, and after
 // a CSV load whose headers come from the file: headers in place, no columns
-// behind them. setRowValue writes anything through there, so findEnumOption
-// has to agree — reading the absent option list as "the radio refuses this"
-// is what made every builder skip every record it was handed.
+// behind them in the grid. The runtime still checks each write against the
+// default schema, which is permissive, so findEnumOption has to agree that an
+// absent option list constrains nothing — reading it as "the radio refuses
+// this" is what made every builder skip every record it was handed.
 
 test("a przemienniki query with no column metadata inserts its repeaters", async () => {
   const table = await tableWithMetadata();
 
-  const { rows, skipped } = buildPrzemiennikiRows([SR4X], table.rowBuilderHooks());
+  const { rows, skipped } = await table.buildRows((hooks) => buildPrzemiennikiRows([SR4X], hooks));
 
   assert.deepEqual(skipped, [], "nothing constrains the row, so nothing may be dropped");
   assert.equal(rows.length, 1);
@@ -396,7 +413,7 @@ test("a przemienniki query with no column metadata inserts its repeaters", async
 test("an RSGB query with no column metadata inserts its repeaters", async () => {
   const table = await tableWithMetadata();
 
-  const { rows, skipped } = buildRsgbRows(
+  const { rows, skipped } = await table.buildRows((hooks) => buildRsgbRows(
     [{
       record: {
         repeater: "GB3XP", tx: 145687500, rx: 145087500,
@@ -404,9 +421,9 @@ test("an RSGB query with no column metadata inserts its repeaters", async () => 
       },
       distanceKm: 12,
     }],
-    table.rowBuilderHooks(),
+    hooks,
     { modes: ["A"] },
-  );
+  ));
 
   assert.deepEqual(skipped, []);
   assert.equal(rows.length, 1);
@@ -421,7 +438,7 @@ test("an RSGB query with no column metadata inserts its repeaters", async () => 
 test("a band-plan preset with no column metadata still gets its mode", async () => {
   const table = await tableWithMetadata();
 
-  const rows = buildPmr446Rows(table.rowBuilderHooks());
+  const rows = await table.buildRows(buildPmr446Rows);
 
   assert.equal(rows.length, 16);
   assert.equal(rows[0].Mode, "NFM", "the first choice the preset ranks");
@@ -430,17 +447,42 @@ test("a band-plan preset with no column metadata still gets its mode", async () 
 test("a selected radio still constrains what an import may write", async () => {
   // The relaxation must not turn the driver check off: this radio's tables are
   // the ones that decide, and they lack both the repeater's mode and its tone.
+  // The tone verdict is the runtime's (normalize_cell in
+  // web/python/webchirp_bridge/row_normalization.py, pinned by
+  // tests/channels/row-normalization.mjs); this stand-in gives the answer that
+  // radio's table would, which is enough to prove the builder heeds it.
+  const calls = [];
+  const runtimeApi = {
+    async normalizeAndValidateRows({ rows }) {
+      calls.push(rows);
+      return {
+        rows: rows.map(({ row, edits }) => {
+          const current = { ...row };
+          return {
+            cells: edits.map(({ column, value }) => {
+              const refused = column === "rToneFreq" && !["67.0", "94.8"].includes(value);
+              current[column] = refused ? String(current[column] ?? "") : value;
+              return { column, value: current[column], accepted: !refused, note: "" };
+            }),
+            issues: [],
+            warnings: [],
+          };
+        }),
+      };
+    },
+  };
   const table = await tableWithMetadata({
     Frequency: { kind: "freq", editable: true, bands: [[144000000, 148000000]] },
     Tone: { kind: "enum", editable: true, options: ["", "Tone", "TSQL", "Cross"] },
     rToneFreq: { kind: "enum", editable: true, options: ["67.0", "94.8"] },
     Mode: { kind: "enum", editable: true, options: ["DV"] },
-  });
+  }, [], runtimeApi);
 
-  const { rows, skipped } = buildPrzemiennikiRows([SR4X], table.rowBuilderHooks());
+  const { rows, skipped } = await table.buildRows((hooks) => buildPrzemiennikiRows([SR4X], hooks));
 
   assert.deepEqual(rows, []);
   assert.deepEqual(skipped, [{ repeater: "SR4X", reason: "tone", tone: "88.5" }]);
+  assert.equal(calls.length, 1, "one runtime call answered every write the first run made");
 });
 
 test("a driver that publishes an empty option list still means 'cannot'", async () => {

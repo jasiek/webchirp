@@ -18,7 +18,7 @@ import {
   selectRadioBySearch,
   tableNames,
 } from "../support/fake-dom.mjs";
-import { withRadioSessions } from "../support/fake-runtime-api.mjs";
+import { fakeRowCheck, withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 const SAMPLE_ROWS = [
   { Location: "0", Name: "Alpha", Frequency: "146.520000" },
@@ -72,7 +72,11 @@ test("cut deletes the rows captured at copy time, not the selection at write com
 
 // Regression: radios with has_tuning_step=False (e.g. Baofeng UV-5R) mark
 // TStep read-only; paste must still restore the copied value instead of
-// silently resetting it to the first enum option.
+// silently resetting it to the first enum option. The runtime decides both
+// halves (normalize_cell in web/python/webchirp_bridge/row_normalization.py,
+// pinned by tests/channels/row-normalization.mjs) when a write is marked
+// allowReadOnly; what the grid owes it is that mark, and one call for the
+// whole paste.
 test("paste preserves read-only column values and matches unpadded numeric enums", async () => {
   const { document, navigator } = installFakeDom();
   const { createUiController } = await import("../../web/js/ui.ts");
@@ -86,6 +90,17 @@ test("paste preserves read-only column values and matches unpadded numeric enums
       options: ["2.50", "5.00", "6.25", "10.00", "12.50", "25.00"],
     },
   };
+  // The runtime's answer for this radio's read-only TStep: refused from a
+  // cell edit, matched by numeric value from a paste.
+  const rowCheck = fakeRowCheck({
+    verdict(column, value, previous, { allowReadOnly }) {
+      if (column !== "TStep") {
+        return { value, accepted: true };
+      }
+      const match = columns.TStep.options.find((option) => Number.parseFloat(option) === Number.parseFloat(value));
+      return allowReadOnly && match ? { value: match, accepted: true } : { value: previous, accepted: false };
+    },
+  });
   ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({
       radios: [
@@ -95,6 +110,7 @@ test("paste preserves read-only column values and matches unpadded numeric enums
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
     getRadioMetadata: async () => ({ headers, columns }),
+    normalizeAndValidateRows: rowCheck.normalizeAndValidateRows,
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers, rows: [], errors: [] }),
   }));
@@ -117,4 +133,14 @@ test("paste preserves read-only column values and matches unpadded numeric enums
   const tstepValues = channelRows(document).map((tr) => tr.children[3]?.children[0]?.value ?? "");
   assert.deepEqual(tableNames(document), ["Alpha", "Bravo"]);
   assert.deepEqual(tstepValues, ["5.00", "12.50"]);
+
+  // One runtime call for the paste, carrying both rows, every write marked as
+  // a builder's so the read-only column may take it.
+  assert.equal(rowCheck.calls.length, 1);
+  assert.equal(rowCheck.calls[0].rows.length, 2);
+  const tstepEdits = rowCheck.calls[0].rows.map(({ edits }) => edits.find((edit) => edit.column === "TStep"));
+  assert.deepEqual(tstepEdits, [
+    { column: "TStep", value: "5.00", allowReadOnly: true },
+    { column: "TStep", value: "12.5", allowReadOnly: true },
+  ]);
 });

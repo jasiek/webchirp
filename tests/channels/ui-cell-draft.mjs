@@ -17,7 +17,7 @@ import {
   installFakeDom,
   selectRadioBySearch,
 } from "../support/fake-dom.mjs";
-import { withRadioSessions } from "../support/fake-runtime-api.mjs";
+import { fakeRowCheck, withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 const SAMPLE_ROWS = [
   { Location: "0", Name: "Alpha", Frequency: "146.520000" },
@@ -32,6 +32,16 @@ const SCHEMA = {
     Frequency: { kind: "freq", editable: true, bands: [[144_000_000, 148_000_000]] },
   },
 };
+
+// What the runtime answers for this radio's Frequency column: a value that is
+// not a frequency in its band keeps the previous one. The rule itself is the
+// runtime's (tests/channels/row-normalization.mjs); this is its answer.
+function frequencyVerdict(column, value, previous) {
+  if (column === "Frequency" && !/^14[4-7]\.\d+$/.test(value.trim())) {
+    return { value: String(previous ?? ""), accepted: false };
+  }
+  return { value, accepted: true };
+}
 
 // Bring the grid up on a radio whose Frequency column really has bands, so the
 // band check the bug depended on is live.
@@ -50,6 +60,7 @@ async function gridWithTwoChannels() {
     getRadioMetadata: async () => SCHEMA,
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
     parseCsv: async () => ({ headers: SCHEMA.headers, rows: SAMPLE_ROWS, errors: [] }),
+    normalizeAndValidateRows: fakeRowCheck({ verdict: frequencyVerdict }).normalizeAndValidateRows,
   }));
   await ui.init(true);
   await selectRadioBySearch(document, "Acme One");
@@ -101,8 +112,10 @@ test("leaving the cell still commits, and still rejects an invalid value", async
   document.activeElement = editor;
 
   document.querySelector("#mem-table tbody").dispatchEvent({ type: "focusout", target: editor });
+  document.activeElement = null;
+  await flushMicrotasks();
 
-  assert.equal(editor.value, "146.520000");
+  assert.equal(frequencyEditor(document, 0).value, "146.520000");
 });
 
 test("an accepted edit committed on blur outlives the next re-render", async () => {

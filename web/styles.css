@@ -2656,6 +2656,15 @@ button:disabled {
   background: var(--error-bg);
 }
 
+/* A committed value the runtime has not answered for yet (submitRowEdits in
+   web/js/ui/channel-table.ts): shown as typed, dimmed and italic until the
+   radio's rules have been applied to it. The editor stays usable. */
+#mem-table td.is-pending input,
+#mem-table td.is-pending select {
+  font-style: italic;
+  opacity: 0.6;
+}
+
 #mem-table td input:focus {
   outline: 1px solid var(--accent);
   background: var(--focus-bg);
