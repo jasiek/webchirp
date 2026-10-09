@@ -12,6 +12,7 @@ import {
 } from "../clipboard.ts";
 import { rowExtras } from "../row-extra.ts";
 import { requireRuntimeApi } from "./state.ts";
+import { errorDetails } from "./format.ts";
 import { callsignFromName } from "../callsign-lookup.ts";
 import { radioEventParams, trackEvent } from "./analytics.ts";
 import type { UiContext } from "../types/ui-context.js";
@@ -76,6 +77,8 @@ export function createChannelTable(ctx: UiContext) {
   // whose branches keep asking new questions. Each call answers every write a
   // run made, so a builder settles in one or two; this only stops a loop.
   const MAX_BUILD_ROUNDS = 6;
+  // What a cell whose check failed says on hover.
+  const UNCHECKED_NOTE = "Could not be checked against the radio's rules; see Debug Output.";
 
   // --- Grid rendering -----------------------------------------------------
   // This grid is the heaviest DOM in the app: every enum cell carries a full
@@ -521,13 +524,22 @@ export function createChannelTable(ctx: UiContext) {
     }
   }
 
+  // Put a failed row check in Debug Output in full -- for a runtime failure
+  // errorDetails() is the Python traceback, not the one-line message -- and
+  // say so in the status line, which stays short.
+  function reportRowCheckFailure(error: unknown): void {
+    log.logError(`ROW CHECK ERROR\n${errorDetails(error)}`);
+    log.setStatus("Channel values could not be checked (see Debug Output).");
+  }
+
   // Send rows to the runtime and apply each answer that is still current.
   // One call for the whole batch. An answer for a session that is no longer
   // state.radioSession is dropped, and the rows still waiting on it are sent
   // again for the radio now selected, so a radio change never leaves a cell
-  // pending or normalized by the wrong driver. A failed call leaves the
-  // values as typed, unmarked; the runtime client has already put the
-  // traceback in Debug Output.
+  // pending or normalized by the wrong driver. A failed call is reported with
+  // its traceback and settles the cells it was for: each keeps the value as
+  // typed, is no longer pending, and says on hover that it was not checked,
+  // so the upload preflight is what will judge it.
   async function checkRows(rows: readonly ChannelRow[]): Promise<void> {
     if (rows.length === 0) {
       return;
@@ -546,8 +558,14 @@ export function createChannelTable(ctx: UiContext) {
       if (state.radioSession !== handle) {
         return checkRows(stillWaiting());
       }
-      log.logDebug(`ROW CHECK failed: ${(error as Error | null)?.message || error}`);
+      reportRowCheckFailure(error);
       for (const row of stillWaiting()) {
+        const rowIdx = state.currentRows.indexOf(row);
+        for (const column of pendingEdits.get(row)?.keys() ?? []) {
+          if (rowIdx >= 0) {
+            cellNotes.set(invalidCellKey(rowIdx, column), UNCHECKED_NOTE);
+          }
+        }
         pendingEdits.delete(row);
       }
       renderRowWindow();
@@ -615,7 +633,7 @@ export function createChannelTable(ctx: UiContext) {
     try {
       response = await runRowCheck(handle, requests.map(({ row, edits }) => editRequestFor(row, edits)));
     } catch (error) {
-      log.logDebug(`ROW CHECK failed: ${(error as Error | null)?.message || error}`);
+      reportRowCheckFailure(error);
       return null;
     }
     const results = rows.map((_row, index) => response?.rows?.[index] ?? { cells: [], issues: [], warnings: [] });

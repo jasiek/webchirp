@@ -222,6 +222,31 @@ test("a paste is checked in one call, however many rows and cells it writes", as
   assert.deepEqual(names, ["ALPHA", "BRAVO", "CHARL", "DELTA", "ECHO"]);
 });
 
+test("a check that fails in the runtime puts its traceback in Debug Output and leaves the cell settled", async () => {
+  // Review of #224: the failure used to be logged as its one-line message,
+  // which for a driver's exception is the least useful part of it.
+  const { RuntimeCallError } = await import("../../web/js/runtime-errors.ts");
+  const failure = new RuntimeCallError({
+    type: "AttributeError",
+    bases: ["Exception"],
+    module: "builtins",
+    message: "'NoneType' object has no attribute 'memory'",
+    traceback: "Traceback (most recent call last):\n  File \"drivers/example.py\", line 42, in get_memory\nAttributeError: 'NoneType' object has no attribute 'memory'\n",
+    causes: [],
+    js: null,
+  }, { method: "normalize_and_validate_rows" });
+  const { document } = await grid({ verdict: () => { throw failure; } });
+
+  commit(document, 0, "Name", "ZULU");
+  await flushMicrotasks();
+
+  assert.match(document.querySelector("#debug-output").value, /drivers\/example\.py", line 42, in get_memory/);
+  const name = cell(document, 0, "Name");
+  assert.equal(name.classList.contains("is-pending"), false, "a failed check does not leave the cell pending");
+  assert.equal(name.children[0].value, "ZULU", "the typed value stays");
+  assert.match(name.title, /could not be checked/i);
+});
+
 test("an answer for a row that moved to another memory is discarded and the edit checked again", async () => {
   // Review of #224: Move Up/Down hands the channel a different memory, and
   // the driver's findings depend on the memory the row lands on, so an answer
