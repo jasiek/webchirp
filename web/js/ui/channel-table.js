@@ -18,6 +18,7 @@ import { radioEventParams, trackEvent } from "./analytics.js";
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 /** @typedef {import("./channel-values.js").ColumnMeta} ColumnMeta */
 /** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
+/** @typedef {import("./channel-values.js").RadioMetadata} RadioMetadata */
 
 // The editable channel grid: rendering, row selection, the row operations
 // (insert/remove/move/copy/cut/paste), the band-plan presets, and the
@@ -29,6 +30,7 @@ import { radioEventParams, trackEvent } from "./analytics.js";
  */
 export function createChannelTable({ dom, state, log, actions }) {
   let selectedRowIndexes = new Set();
+  /** @type {number|null} */
   let selectionAnchorIndex = null;
   const invalidCellKeys = new Set();
 
@@ -89,10 +91,12 @@ export function createChannelTable({ dom, state, log, actions }) {
   // The schema the current row elements were built for; a change to either
   // invalidates every editor.
   let renderedColumns = [];
+  /** @type {RadioMetadata|null} */
   let renderedMetadata = null;
   let locationColumnIndex = -1;
   // The window: rowElements[i] shows channel windowStart + i.
   let rowElements = [];
+  /** @type {{above: SpacerRow, below: SpacerRow}|null} */
   let spacers = null;
   let windowStart = 0;
   let measuredRowHeight = 0;
@@ -1012,6 +1016,8 @@ export function createChannelTable({ dom, state, log, actions }) {
 
   // A spacer row stands in for the rows kept out of the DOM, so the scrollbar
   // and the scroll position match the full channel list.
+  /** @typedef {{tr: HTMLTableRowElement, cell: HTMLTableCellElement}} SpacerRow */
+  /** @returns {SpacerRow} */
   function createSpacerRow() {
     const tr = document.createElement("tr");
     tr.className = "mem-row-spacer";

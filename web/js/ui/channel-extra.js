@@ -4,6 +4,8 @@ import { createSettingControl, readSettingControl } from "./setting-fields.js";
 import { requireRuntimeApi } from "./state.js";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+/** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
+/** @typedef {import("../runtime-rpc.js").RuntimeApi} RuntimeApi */
 
 // The per-channel extras editor: the modal behind the grid's Extra column.
 //
@@ -29,9 +31,11 @@ export function createChannelExtra(ctx) {
   // The row currently being edited, and one entry per rendered field. Both are
   // dropped on close, which is also what makes a late response harmless: it
   // finds a different row (or none) and returns.
+  /** @type {ChannelRow|null} */
   let editedRow = null;
   let fieldControls = [];
   // The grid button the open came from, refocused when the modal closes.
+  /** @type {HTMLElement|null} */
   let triggerElement = null;
   // Bumped on every open so the response to a superseded open cannot render
   // over the one the user is looking at.
@@ -142,6 +146,10 @@ export function createChannelExtra(ctx) {
   // asked anything, so a slow first call (this can be the one that boots
   // Pyodide) shows a dialog that is loading rather than a click that did
   // nothing.
+  /**
+   * @param {number} rowIdx
+   * @param {HTMLElement|null} [trigger]
+   */
   async function openForRow(rowIdx, trigger = null) {
     const row = state.currentRows[rowIdx];
     if (!row) {
@@ -175,6 +183,7 @@ export function createChannelExtra(ctx) {
       return;
     }
 
+    /** @type {Awaited<ReturnType<RuntimeApi["getChannelExtra"]>>|null} */
     let payload = null;
     try {
       payload = await requireRuntimeApi(state).getChannelExtra({
