@@ -32,7 +32,6 @@ import {
 import { parseRxfRecords } from "../../web/js/rxf.ts";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
 import { installIndexPage, pageElement } from "../support/index-page.mjs";
-import { fakeXmlGlobals } from "../support/fake-xml.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
 function fixture(name) {
@@ -96,7 +95,7 @@ async function radioState(radio) {
 async function gridFor(radio, { beforeAnswer = async () => {} } = {}) {
   const harness = await sharedHarness();
   const selected = await radioState(radio);
-  installIndexPage({ globals: fakeXmlGlobals() });
+  installIndexPage();
   const { createChannelTable } = await import("../../web/js/ui/channel-table.ts");
   const state = {
     ...selected,

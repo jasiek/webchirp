@@ -4,7 +4,6 @@ import test from "node:test";
 import { OSM_ATTRIBUTION, OSM_COPYRIGHT_URL } from "../../web/js/staticmap.ts";
 import { installIndexPage, pageElement } from "../support/index-page.mjs";
 import { dispatch, setLayout } from "../support/ui-interactions.mjs";
-import { fakeXmlGlobals } from "../support/fake-xml.mjs";
 
 // One repeater's RXF entry, the shape api.codeplug.org/lookup/<CALLSIGN>
 // answers with.
@@ -49,8 +48,6 @@ function installMapDom({ hoverCapable = false } = {}) {
       // on a touch device.
       matchMedia: () => ({ matches: hoverCapable }),
     },
-    // The lookup parses RXF, which runs on DOMParser in the browser.
-    globals: fakeXmlGlobals(),
   });
 }
 

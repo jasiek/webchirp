@@ -16,7 +16,6 @@ import { buildRepeaterEndpoints } from "../../web/js/datasources.ts";
 import { REPEATER_MODES, repeaterRecordProblem } from "../../web/js/repeater-record.ts";
 import { createRepeaterAdapters } from "../../web/js/ui/repeater-sources.ts";
 import { installIndexPage } from "../support/index-page.mjs";
-import { fakeXmlGlobals } from "../support/fake-xml.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
 function fixture(name) {
@@ -38,7 +37,7 @@ const FIXTURES = {
 const POSITION = { latitude: 52.708, longitude: -2.754 };
 
 function adapters() {
-  installIndexPage({ globals: fakeXmlGlobals() });
+  installIndexPage();
   const ctx = { log: { setStatus() {}, logDebug() {} } };
   return createRepeaterAdapters(ctx, { endpoints: buildRepeaterEndpoints("https://api.example.test") });
 }

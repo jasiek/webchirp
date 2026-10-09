@@ -8,7 +8,6 @@ import { createRepeaterQuery } from "../../web/js/ui/repeater-query.ts";
 import { REQUIRED_ELEMENTS } from "../../web/js/ui/dom.ts";
 import { installIndexPage } from "../support/index-page.mjs";
 import { dispatch } from "../support/ui-interactions.mjs";
-import { fakeXmlGlobals } from "../support/fake-xml.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
 // The unified query modal is driven directly rather than through
@@ -126,8 +125,7 @@ function buildHarness({
   // whose table is missing the directory's tone.
   toneOptions = null,
 } = {}) {
-  // parseRxfRecords reaches for DOMParser; the RXF stand-in replaces the page's.
-  const { document } = installIndexPage({ globals: fakeXmlGlobals() });
+  const { document } = installIndexPage();
   // index.html ships the meta tag; undefined stands for a deployment without
   // one, so the tag is removed rather than blanked.
   const meta = document.querySelector('meta[name="webchirp-repeater-api-base"]');
