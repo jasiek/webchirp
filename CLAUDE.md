@@ -91,12 +91,23 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   every other file are copied as they are. The jsDelivr modules (Pyodide,
   Sentry, web-serial-polyfill) stay external. `scripts/retain-deployed-assets.ts`
   knows both hashed name shapes.
+- The browser code and the tooling are TypeScript (`web/app.ts`,
+  `web/js/**/*.ts`, `scripts/*.ts`); `tests/` stays `.mjs` and imports the `.ts`
+  modules. Nothing compiles them: Node runs them by stripping the types, the
+  dev server (`scripts/dev-server.ts`, `npm run dev`) answers a request for a
+  `.ts` file with that file type-stripped by esbuild's transform API
+  (`text/javascript`, inline source map) and serves everything else static,
+  and `scripts/build-dist.ts` bundles them with esbuild. Pages load their `.ts`
+  entries by name (`<script type="module" src="./app.ts">`); no `.js` request
+  is mapped onto a `.ts` file.
 - `tsconfig.json` (browser code, lib.dom, no Node types) and
-  `scripts/tsconfig.json` (tooling, with `@types/node`) are the two projects
-  `npm run check:js` runs, both with `strictNullChecks` on (`strict` and
-  `noImplicitAny` are still off): a null-initialised variable carries its
-  `T|null` type, and a value that can be null is checked before use rather
-  than cast. `web/js/types/browser-globals.d.ts` declares the
+  `scripts/tsconfig.json` (tooling, with `@types/node`, plus `allowJs` for the
+  `tests/support` modules the scripts import) are the two projects
+  `npm run check:js` runs, both with `strict` on: every parameter is typed, a
+  null-initialised variable carries its `T|null` type, and a value that can be
+  null is checked before use rather than cast. A caught value is `unknown`;
+  read its fields through `errorFields()` (`web/js/error-details.ts`).
+  `web/js/types/browser-globals.d.ts` declares the
   browser APIs lib.dom lacks (Web Serial, WebUSB, Web Bluetooth, JSPI, gtag);
   `web/js/types/ui-context.d.ts` names every member of the UI `ctx`.
 
@@ -143,13 +154,20 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Do not reintroduce radio-specific RPC methods when generic selected-radio methods can be used.
 - Preserve debug visibility: full errors/tracebacks should be logged to the bottom debug panel.
 - Newly added functions need a comment as to what they do and why.
-- New exported JavaScript functions carry JSDoc types (`@param`, `@returns`)
-  that `npm run check:js` accepts. Sources stay plain `.js`/`.mjs`: no `.ts`.
+- Sources are TypeScript with erasable syntax only (`erasableSyntaxOnly`), so
+  Node and the dev server run them by stripping types: no `enum` (use an
+  `as const` object), no `namespace`, no constructor parameter properties, and
+  an import used only as a type is `import type` (`verbatimModuleSyntax`).
+  Relative imports name the `.ts` file (`import { x } from "./y.ts"`), because
+  Node resolves the specifier as written; `allowImportingTsExtensions` lets tsc
+  accept it. New exported functions have typed signatures (parameters and
+  return type). An explicit `any` belongs only where data arrives untyped --
+  JSON from Python, the network or a file, a Pyodide proxy -- with a comment
+  saying so; prefer a real type, then `unknown`.
 - Nothing in the dist build reads comments: esbuild resolves the imports and
   the page rewrite touches only the `src`/`href` of the tags that load a module
   or stylesheet. So the old rule about spelling module paths in comments (and
-  its test) is retired; see FINDINGS `build-dist-rewrites-are-textual`. A JSDoc
-  `import("./x.js")` type is a module specifier and stays relative.
+  its test) is retired; see FINDINGS `build-dist-rewrites-are-textual`.
 - Python functions must have type signatures.
 - An import used only in annotations goes under `if TYPE_CHECKING:` so it adds no
   runtime dependency; every module has `from __future__ import annotations`, which is
@@ -215,8 +233,9 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 
 ## Validation
 Before committing, run syntax checks, typechecking and all tests.
-`npm test` covers syntax, Python types (`check:types`, pyright), JavaScript
-types (`check:js`, tsc over the JSDoc with `strictNullChecks`) and the four
+`npm test` covers syntax (`check:syntax`, `node --check` over the `.mjs`
+tests; tsc parses the `.ts` sources), Python types (`check:types`, pyright),
+TypeScript types (`check:js`, tsc with `strict` over both projects) and the four
 automatic suites.
 
 
