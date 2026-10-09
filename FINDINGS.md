@@ -328,6 +328,7 @@ only through a driver that opts in to legacy or external-format detection. Count
 *Pinned by tests:*
 - Every element `web/js/ui/dom.js` declares exists in `index.html`, every collection selector matches markup, `queryUiElements` reports all missing elements at once, and the UI tests' own stubs stay inside what `web/js/ui/dom.js` declares — `tests/channels/dom-selectors.mjs`, `tests/channels/ui-radio-loading.mjs`.
 - No script names an individual test file, nothing sits loose in `tests/`, no test file is git-ignored, and coverage measures exactly the suites `npm test` runs — `tests/build/suite-wiring.mjs`.
+- Nested pages resolve site-root assets from the web root, decode URL paths for lookup, and preserve query strings and fragments on hashed outputs — `tests/build/build-dist.mjs` (2026-10-09).
 
 ## api.codeplug.org /cities (gazetteer)
 

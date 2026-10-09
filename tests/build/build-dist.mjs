@@ -318,6 +318,34 @@ test("pages point at their entries' outputs and nothing else in them changes", a
   }
 });
 
+// Exercise URL resolution through the real build, including a nested decoy
+// that would silently be bundled if a site-root URL were joined as a path.
+test("nested pages resolve asset URLs from the web root and retain URL suffixes", async () => {
+  const emitted = await build({
+    "index.html": "<!doctype html>",
+    "radios/model.html":
+      '<link rel="stylesheet" href="/styles.css?theme=light#sheet">'
+      + '<script type="module" src="/js/app.js?version=1#entry"></script>'
+      + '<script type="module" src="../js/other%20entry.js?version=2#other"></script>',
+    "styles.css": "body { color: red; }",
+    "js/app.js": 'console.log("root entry");',
+    "js/other entry.js": 'console.log("relative entry");',
+    "radios/styles.css": "body { color: blue; }",
+    "radios/js/app.js": 'console.log("wrong nested entry");',
+  });
+  const app = hashedNameOf(emitted, "js/app");
+  const styles = hashedNameOf(emitted, "styles");
+  const html = text(emitted, "radios/model.html");
+  assert.ok(html.includes('../' + app + '?version=1#entry'));
+  assert.ok(html.includes('../' + styles + '?theme=light#sheet'));
+  assert.match(text(emitted, app), /root entry/);
+  assert.doesNotMatch(text(emitted, app), /wrong nested entry/);
+  assert.match(text(emitted, styles), /color: red/);
+  const otherRef = html.match(/src="([^"]+\?version=2#other)"/)[1];
+  const otherPath = decodeURIComponent(new URL(otherRef, "https://build.invalid/radios/model.html").pathname).slice(1);
+  assert.match(text(emitted, otherPath), /relative entry/);
+});
+
 test("a page loading a module that does not exist fails the build", async () => {
   await withTempDir("build-dist-", async (dir) => {
     await writeTree(path.join(dir, "web"), {

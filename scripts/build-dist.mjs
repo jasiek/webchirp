@@ -234,10 +234,16 @@ function pageAssetRefs(html, pageRel) {
       }
     }
   }
-  return refs.map((ref) => ({
-    ...ref,
-    source: path.join(WEB_DIR, path.dirname(pageRel), ref.attr.value),
-  }));
+  return refs.map((ref) => {
+    // Resolve browser URLs before filesystem lookup: leading slashes name the
+    // web root, and query strings/fragments belong only on the emitted URL.
+    const url = new URL(ref.attr.value, new URL(pageRel, "https://build.invalid/"));
+    return {
+      ...ref,
+      source: path.join(WEB_DIR, decodeURIComponent(url.pathname)),
+      suffix: url.search + url.hash,
+    };
+  });
 }
 
 // Copy every runtime Python file under its content hash and return the URL
@@ -408,7 +414,7 @@ async function main() {
       if (!target.startsWith(".")) {
         target = `./${target}`;
       }
-      out = out.slice(0, ref.attr.valueStart) + target + out.slice(ref.attr.valueEnd);
+      out = out.slice(0, ref.attr.valueStart) + target + ref.suffix + out.slice(ref.attr.valueEnd);
     }
     await mkdir(pageDir, { recursive: true });
     await writeFile(page.replace(WEB_DIR, DIST_DIR), out, "utf8");
