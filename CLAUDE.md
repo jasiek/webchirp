@@ -136,6 +136,16 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `web/js/types/ui-context.d.ts` names every member of the UI `ctx`.
 
 ### Test conventions
+- `tests/e2e` is the browser suite: Playwright (`playwright.config.mjs`),
+  Chromium only, against `dist/` built by `npm run build:dist` and served by
+  `scripts/dev-server.ts` in its Pages mode (`WEB_ROOT=dist SERVE_AS=pages`).
+  Run it with `npm run test:e2e` after a one-time
+  `npx playwright install chromium`. `npm test` and coverage leave it out on
+  purpose (`NON_SUITE_DIRS` in `scripts/coverage.ts`): it needs the browser
+  and the network, because Pyodide comes from jsDelivr. CI runs it in its own
+  workflow (`.github/workflows/e2e.yml`). Drive the app with the page-side
+  steps in `scripts/app-driver.ts`, which `scripts/update-screenshots.ts` uses
+  too, and route any third-party API to a fixture with `page.route()`.
 - Each suite is globbed, not listed: `npm run test:channels` runs
   `tests/channels/*.mjs`. **Adding a test is dropping a file into a suite
   directory — never edit `package.json` for it.** `scripts/coverage.ts`
