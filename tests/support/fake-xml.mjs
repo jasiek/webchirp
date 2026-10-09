@@ -47,6 +47,7 @@ export class FakeXmlDocument {
     if (selector === "repeaters > repeater") {
       return this.repeaterDocs().map((doc) => {
         const values = new Map([
+          ["id", doc.textOf("id")],
           ["qra", doc.textOf("qra")],
           ["mode", doc.textOf("mode")],
           ['qrg[type="rx"]', doc.attributedText("qrg", "rx")],
