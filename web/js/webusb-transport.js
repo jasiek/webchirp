@@ -7,10 +7,21 @@
 // and reports its own loss is written once here.
 import { createDisconnectNotifier, watchUsbDisconnect } from "./serial-transport.mjs";
 
+/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+/** @typedef {import("./serial-transport.mjs").SerialTransportCapabilities} SerialTransportCapabilities */
+
+/**
+ * What every WebUSB port takes besides its device.
+ * @typedef {Object} WebUsbTransportOptions
+ * @property {EventTarget|null} [usb]  Where device loss is reported;
+ *   navigator.usb when absent. Tests pass a stand-in, or null for none.
+ */
+
 // What the chip drivers can do. They program 8N1 whatever open() asks for
 // (none of them reads dataBits/stopBits/parity), so a framing change has to be
 // refused rather than reopened and reported as done; a rate change goes
 // through close() and open() like Web Serial's; DTR/RTS reach the chip.
+/** @type {Readonly<SerialTransportCapabilities>} */
 export const WEBUSB_CHIP_CAPABILITIES = Object.freeze({
   framing: false,
   signals: true,
@@ -23,10 +34,17 @@ export class WebUsbTransport {
   // constructed where no navigator exists; tests pass a stand-in. The streams
   // are the subclass's to define: the chip drivers hold their own, the CDC
   // wrapper forwards the polyfill's.
+  /**
+   * @param {USBDevice} device
+   * @param {WebUsbTransportOptions} [options]
+   */
   constructor(device, { usb } = {}) {
     this.device = device;
     this._usbEvents = usb;
-    this._lossNotifier = createDisconnectNotifier(this);
+    // The subclass is the whole port; the notifier only reads its transport
+    // name and hands it back as the payload's port.
+    this._lossNotifier = createDisconnectNotifier(/** @type {SerialTransport} */ (/** @type {unknown} */ (this)));
+    /** @type {(() => void)|null} */
     this._stopUsbWatch = null;
   }
 
@@ -38,17 +56,20 @@ export class WebUsbTransport {
 
   // The chip default; the CDC wrapper overrides it because the polyfill does
   // honour framing.
+  /** @returns {Readonly<SerialTransportCapabilities>} */
   get capabilities() {
     return WEBUSB_CHIP_CAPABILITIES;
   }
 
   // The USBDevice this port drives, under the one name the contract gives it,
   // so nothing has to probe for where a port class keeps it.
+  /** @returns {USBDevice|null} */
   get usbDevice() {
     return this.device || null;
   }
 
   // Web Serial's getInfo(), answered from the device descriptor.
+  /** @returns {{usbVendorId: number, usbProductId: number}} */
   getInfo() {
     return {
       usbVendorId: Number(this.device.vendorId),
@@ -57,6 +78,7 @@ export class WebUsbTransport {
   }
 
   // Contract: register a loss callback, get its unsubscribe back.
+  /** @type {SerialTransport["onDisconnect"]} */
   onDisconnect(callback) {
     return this._lossNotifier.subscribe(callback);
   }

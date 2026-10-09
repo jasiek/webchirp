@@ -78,7 +78,7 @@ jobs:
             gh run download "$run_id" --name coverage --dir baseline
           fi
 
-      # check:syntax, check:types, check:python, then the whole suite under
+      # check:syntax, check:types, check:js, check:python, then the whole suite under
       # coverage. Same test files npm test runs, measured rather than repeated.
       - name: Test with coverage
         env:
@@ -146,7 +146,7 @@ jobs:
           MARKER: <!-- webchirp-coverage -->
         run: |
           # coverage/ is created by coverage.mjs, which a failing check:syntax,
-          # check:types or check:python aborts before reaching -- and then this
+          # check:types, check:js or check:python aborts before reaching -- and then this
           # redirect would fail and the fallback message never post.
           mkdir -p coverage
           {

@@ -3,6 +3,8 @@ import { rowExtras, setRowExtras } from "../row-extra.js";
 import { createSettingControl, readSettingControl } from "./setting-fields.js";
 import { requireRuntimeApi } from "./state.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 // The per-channel extras editor: the modal behind the grid's Extra column.
 //
 // A driver hangs settings off a memory that no CSV column can hold -- Busy
@@ -18,6 +20,9 @@ import { requireRuntimeApi } from "./state.js";
 // fetched per open from the memory the row occupies. Overlaying the row's
 // stored values on that schema is what makes a moved or edited channel show its
 // own settings rather than the ones sitting in the slot it now occupies.
+/**
+ * @param {UiContext} ctx
+ */
 export function createChannelExtra(ctx) {
   const { dom, state, log } = ctx;
 

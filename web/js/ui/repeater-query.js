@@ -22,6 +22,8 @@ import {
   createSelectField,
 } from "./query-fields.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 // The key every source gives its "repeaters within N km" filter. The position
 // field's map preview draws that radius, so the shell has to know which field
 // carries it; a source that named it something else would simply preview no
@@ -68,6 +70,9 @@ const GEOLOCATION_FAILURE_TEXT = Object.freeze({
 // stick forever). The position is the deliberate exception: it survives
 // closes and source switches alike, because where the user is does not change
 // with the directory they ask.
+/**
+ * @param {UiContext} ctx
+ */
 export function createRepeaterQuery(ctx) {
   const { dom, state, log } = ctx;
 
@@ -479,7 +484,7 @@ export function createRepeaterQuery(ctx) {
       const code = Number(error?.code);
       const failureText = GEOLOCATION_FAILURE_TEXT[code];
       if (failureText) {
-        const refusal = new Error(failureText);
+        const refusal = /** @type {Error & {code?: number}} */ (new Error(failureText));
         refusal.code = code;
         throw refusal;
       }

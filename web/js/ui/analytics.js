@@ -96,6 +96,7 @@ const JS_ERROR_KINDS = new Map([
 // ("timeout.py", "_do_ident") would otherwise match patterns meant for the
 // sentence. First match wins, so the specific patterns come before the general
 // ones.
+/** @type {Array<[string, RegExp]>} */
 const TEXT_ERROR_KINDS = [
   ["permission_denied", /permission (?:was )?denied|access denied/i],
   ["serial_disconnect", /device has been lost|device lost|port is (?:closed|already open)/i],

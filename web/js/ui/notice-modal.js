@@ -1,3 +1,5 @@
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 // One modal for the messages the user has to read and act on, as opposed to the
 // failures a developer has to read.
 //
@@ -12,6 +14,9 @@
 // sentence, which is all a notice ever is; web/js/ui/debug-log.js decides which
 // failures get one (RuntimePreconditionError, recognised by
 // web/js/runtime-errors.mjs).
+/**
+ * @param {Pick<UiContext, "dom">} ctx
+ */
 export function createNoticeModal(ctx) {
   const { dom } = ctx;
   // What had focus when the notice opened, so dismissing it puts the user back

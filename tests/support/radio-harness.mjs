@@ -39,6 +39,10 @@ function encodeBytesToBase64(bytesLike) {
 // reconfigure, control lines -- is the same code the browser runs.
 // SerialPortClass is for tests, which pass serialport's SerialPortMock.
 export class NodeSerialBridge extends SerialBridge {
+  /**
+   * @param {string} portPath  The tty, e.g. /dev/ttyUSB0.
+   * @param {{SerialPortClass?: typeof import("serialport").SerialPort}} [options]
+   */
   constructor(portPath, { SerialPortClass } = {}) {
     super({
       requestTransport: async () => new NodeSerialPort(portPath, { SerialPortClass }),
@@ -125,11 +129,24 @@ function installSerialGlobals(serialBridge, target = globalThis) {
   }));
 }
 
+/**
+ * @typedef {Object} TestRadioHarnessOptions
+ * @property {string} [repoRoot]  The process's cwd by default.
+ * @property {string} [chirpDir]
+ * @property {string} [driverSet]
+ * @property {string} [portPath]  The tty serialMode "node" opens.
+ * @property {string} [serialMode]  "stub" or "node".
+ * @property {{close(): Promise<unknown>}|null} [serialBridge]  A bridge of the
+ *   caller's own; anything answering what createSerialRpcHandler() calls.
+ * @property {boolean} [isolated]  createTestRadioHarness(): never share a boot.
+ */
+
 export class TestRadioHarness {
   // serialBridge lets a caller supply its own bridge object - a simulated
   // radio, say - in place of the stub or the real serial port. It only has to
   // answer the bridge methods createSerialRpcHandler() calls
   // (web/js/serial-globals.mjs).
+  /** @param {TestRadioHarnessOptions} [options] */
   constructor({
     repoRoot,
     chirpDir = "",
@@ -270,6 +287,10 @@ json.dumps({
     );
   }
 
+  /**
+   * @param {{moduleName?: string, className?: string, baudRate?: number}} [options]
+   *   baudRate: the driver's own when absent.
+   */
   async connect({ moduleName, className, baudRate } = {}) {
     const radioInfo =
       moduleName && className ? await this.getRadioInfo(moduleName, className) : null;
@@ -374,6 +395,7 @@ const sharedHarnesses = new Map();
 
 // The cache key: everything that shapes the runtime and can be compared by
 // value. A custom serialBridge is an object identity, so it is never keyed.
+/** @param {TestRadioHarnessOptions} [options] */
 function harnessCacheKey({
   repoRoot,
   chirpDir = "",
@@ -402,6 +424,10 @@ function harnessCacheKey({
 // later test in the same file must not see -- importing every driver, say,
 // when the next test asserts that a driver is still absent. A custom
 // serialBridge always gets its own harness, since the bridge is the point.
+/**
+ * @param {TestRadioHarnessOptions} [options]
+ * @returns {Promise<TestRadioHarness>}
+ */
 export async function createTestRadioHarness(options = {}) {
   const { isolated = false, ...harnessOptions } = options;
   if (isolated || harnessOptions.serialBridge) {

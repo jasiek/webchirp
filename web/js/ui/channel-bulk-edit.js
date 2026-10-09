@@ -4,6 +4,10 @@ import { createSettingControl, readSettingControl } from "./setting-fields.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
 import { requireRuntimeApi } from "./state.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+/** @typedef {import("./channel-values.js").ColumnMeta} ColumnMeta */
+/** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
+
 // The bulk channel editor: one modal that writes the same value to every
 // selected channel (issue #146).
 //
@@ -26,6 +30,9 @@ import { requireRuntimeApi } from "./state.js";
 // rather than a thing the user has to arrange: a bulk edit opened on twenty
 // channels that disagree about Mode must not quietly give all twenty the first
 // one's Mode just because the control had to show something.
+/**
+ * @param {UiContext} ctx
+ */
 export function createChannelBulkEdit(ctx) {
   const { dom, state, log } = ctx;
 
@@ -145,6 +152,7 @@ export function createChannelBulkEdit(ctx) {
   // the grid's own cell editors are built from (createCellEditor in
   // web/js/ui/channel-table.js).
   function createColumnControl(column, initial) {
+    /** @type {Partial<ColumnMeta>} */
     const meta = state.radioMetadata.columns?.[column] || {};
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
       const select = document.createElement("select");
@@ -197,6 +205,11 @@ export function createChannelBulkEdit(ctx) {
   // One field row: the "apply this" checkbox with its label, then the control
   // and its error slot. Returns the entry the apply path reads the field back
   // through.
+  /**
+   * @param {HTMLElement} grid
+   * @param {{id: string, name: string, label: string, doc?: string, mixed: boolean,
+   *   control: HTMLInputElement|HTMLSelectElement}} field  doc: the driver's help text.
+   */
   function appendField(grid, { id, name, label, doc, mixed, control }) {
     const labelCell = document.createElement("div");
     labelCell.className = "bulk-edit-label";
@@ -453,6 +466,7 @@ export function createChannelBulkEdit(ctx) {
         continue;
       }
       const value = String(entry.control.value ?? "");
+      /** @type {Partial<ColumnMeta>} */
       const meta = state.radioMetadata.columns?.[entry.column] || {};
       // Checked against a blank previous value on purpose: what matters is
       // whether the column can hold this value at all, not what it held before.

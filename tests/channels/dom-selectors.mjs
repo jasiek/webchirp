@@ -134,3 +134,62 @@ test("Report Bug sits outside the collapsible debug actions", () => {
     "#debug-actions is expected to start hidden; this test's premise no longer holds",
   );
 });
+
+// The element interface each tag stands for in UiElementTypes
+// (web/js/ui/dom.js); any tag not listed is a plain HTMLElement there.
+const TAG_INTERFACES = Object.freeze({
+  a: "HTMLAnchorElement",
+  button: "HTMLButtonElement",
+  canvas: "HTMLCanvasElement",
+  details: "HTMLDetailsElement",
+  dialog: "HTMLDialogElement",
+  form: "HTMLFormElement",
+  img: "HTMLImageElement",
+  input: "HTMLInputElement",
+  label: "HTMLLabelElement",
+  ol: "HTMLOListElement",
+  pre: "HTMLPreElement",
+  progress: "HTMLProgressElement",
+  select: "HTMLSelectElement",
+  table: "HTMLTableElement",
+  tbody: "HTMLTableSectionElement",
+  textarea: "HTMLTextAreaElement",
+  thead: "HTMLTableSectionElement",
+  ul: "HTMLUListElement",
+});
+
+// The tag a REQUIRED_ELEMENTS selector lands on: the id's own element, or the
+// descendant tag a "#id tag" selector names.
+function tagOf(selector) {
+  const idWithChild = selector.match(/^#[\w-]+\s+([\w-]+)$/);
+  if (idWithChild) {
+    return idWithChild[1].toLowerCase();
+  }
+  const id = selector.match(/^#([\w-]+)$/)[1];
+  return HTML.match(new RegExp(`<([\\w-]+)[^>]*\\bid="${id}"`))[1].toLowerCase();
+}
+
+// UiElementTypes is what npm run check:js trusts for every dom.* member: a
+// button typed HTMLElement hides .disabled from the checker, and a div typed
+// HTMLButtonElement lets code call what the element does not have. It is a
+// JSDoc typedef, so nothing ties it to the markup but this test.
+test("the element types dom.js declares match index.html's tags", () => {
+  const source = fs.readFileSync(path.join(process.cwd(), "web", "js", "ui", "dom.js"), "utf8");
+  const block = source.match(/@typedef \{\{\n([\s\S]*?)\n \* \}\} UiElementTypes/);
+  assert.ok(block, "web/js/ui/dom.js no longer declares UiElementTypes in the expected shape");
+  const declared = Object.fromEntries(
+    [...block[1].matchAll(/^ \*\s+(\w+): (\w+),?$/gm)].map(([, name, type]) => [name, type]),
+  );
+  const wrong = [];
+  for (const [name, selector] of Object.entries(REQUIRED_ELEMENTS)) {
+    const tag = tagOf(selector);
+    const expected = TAG_INTERFACES[tag] || "HTMLElement";
+    const actual = declared[name] || "HTMLElement";
+    if (actual !== expected) {
+      wrong.push(`${name} (${selector}) is <${tag}>: expected ${expected}, declared ${actual}`);
+    }
+  }
+  const unknown = Object.keys(declared).filter((name) => !(name in REQUIRED_ELEMENTS));
+  assert.deepEqual(unknown, [], "UiElementTypes names elements REQUIRED_ELEMENTS does not");
+  assert.deepEqual(wrong, [], "update UiElementTypes in web/js/ui/dom.js to the markup");
+});

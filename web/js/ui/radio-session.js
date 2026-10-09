@@ -1,5 +1,9 @@
 import { requireRuntimeApi } from "./state.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+/** @typedef {import("./state.js").RadioSessionHandle} RadioSessionHandle */
+/** @typedef {import("./state.js").CatalogRadio} CatalogRadio */
+
 // The runtime session behind the selected radio.
 //
 // Every radio-bound runtime call names a session the Python runtime opened for
@@ -15,6 +19,9 @@ import { requireRuntimeApi } from "./state.js";
 // A handle is created synchronously so a selection can be made and rendered at
 // once; its id arrives when the runtime answers, and every caller awaits idOf()
 // before it needs one.
+/**
+ * @param {UiContext} ctx
+ */
 export function createRadioSession(ctx) {
   const { state, log } = ctx;
 
@@ -23,6 +30,7 @@ export function createRadioSession(ctx) {
   // it rather than on the handle; a session that never opened has nothing to
   // close, and its open's rejection was already reported by the load that
   // awaited the id.
+  /** @param {RadioSessionHandle|null} handle */
   function release(handle) {
     if (!handle || handle.closed) {
       return;
@@ -46,6 +54,11 @@ export function createRadioSession(ctx) {
   // so reselecting the radio must open a fresh one for the retry to reach the
   // runtime at all (a transient driver import or isolated-runtime boot
   // failure is otherwise stuck until another radio is picked).
+  /**
+   * @param {CatalogRadio|null} radio
+   * @param {string} [adoptedSessionId]  A session the runtime already opened.
+   * @returns {RadioSessionHandle}
+   */
   function open(radio, adoptedSessionId = "") {
     const current = state.radioSession;
     if (
@@ -58,6 +71,7 @@ export function createRadioSession(ctx) {
       return current;
     }
     release(current);
+    /** @type {RadioSessionHandle} */
     const handle = {
       radio,
       id: adoptedSessionId ? String(adoptedSessionId) : "",
@@ -105,12 +119,14 @@ export function createRadioSession(ctx) {
     state.radioSession = null;
   }
 
+  /** @returns {RadioSessionHandle|null} */
   function current() {
     return state.radioSession;
   }
 
   // Whether a handle is still the one the editor is working with; the test a
   // load runs before applying its response.
+  /** @param {RadioSessionHandle|null} handle */
   function isCurrent(handle) {
     return state.radioSession === handle;
   }
@@ -120,6 +136,10 @@ export function createRadioSession(ctx) {
   // selection has moved on, its session is being closed in the runtime, and a
   // call made for it now would only fail there and leave a runtime error in
   // the debug panel for a load nobody wants any more.
+  /**
+   * @param {RadioSessionHandle|null} handle
+   * @returns {Promise<string>}
+   */
   async function idOf(handle) {
     if (!handle) {
       return "";
@@ -133,6 +153,7 @@ export function createRadioSession(ctx) {
 
   // The current session's runtime id, for one-shot calls made on behalf of
   // whatever radio is selected at that moment.
+  /** @returns {Promise<string>} */
   async function currentId() {
     return idOf(state.radioSession);
   }
@@ -140,6 +161,7 @@ export function createRadioSession(ctx) {
   // Record that a handle's metadata and settings have been applied, so that
   // reselecting its radio is a no-op. Ignored for a handle that is no longer
   // current: its load was discarded, so nothing about it is loaded.
+  /** @param {RadioSessionHandle|null} handle */
   function markLoaded(handle) {
     if (handle && isCurrent(handle)) {
       handle.loaded = true;

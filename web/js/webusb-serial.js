@@ -18,6 +18,8 @@ import { FTDI_VENDOR_ID, FtdiSerialPort, isFtdiDevice } from "./ftdi-webusb.js";
 import { PROLIFIC_VENDOR_ID, Pl2303SerialPort, isProlificDevice } from "./pl2303-webusb.js";
 import { WebUsbTransport } from "./webusb-transport.js";
 
+/** @typedef {import("./serial-transport.mjs").SerialTransport} SerialTransport */
+
 const WEB_SERIAL_POLYFILL_URL =
   "https://cdn.jsdelivr.net/npm/web-serial-polyfill@1.0.15/+esm";
 
@@ -44,6 +46,7 @@ const USB_DEVICE_FILTERS = [
 
 // Lazily import the CDC polyfill's SerialPort class only when a non-FTDI device
 // is chosen, so the FTDI path never depends on the CDN.
+/** @returns {Promise<new (device: USBDevice) => SerialPort>} */
 async function defaultLoadCdcSerialPort() {
   const mod = await import(WEB_SERIAL_POLYFILL_URL);
   return mod.SerialPort;
@@ -52,6 +55,7 @@ async function defaultLoadCdcSerialPort() {
 // What the polyfill can do: it sends open()'s framing in SET_LINE_CODING and
 // SET_CONTROL_LINE_STATE for DTR/RTS, and like Web Serial it changes settings
 // only through close() and open().
+/** @type {Readonly<import("./serial-transport.mjs").SerialTransportCapabilities>} */
 export const CDC_CAPABILITIES = Object.freeze({
   framing: true,
   signals: true,
@@ -64,16 +68,30 @@ export const CDC_CAPABILITIES = Object.freeze({
 // chooser just returned, so the wrapper holds it in the open and the bridge
 // matches a loss by device identity instead of by vendor and product id,
 // which could not tell two identical adapters apart.
+/** @implements {SerialTransport} */
 export class CdcSerialPort extends WebUsbTransport {
+  /**
+   * @param {SerialPort} polyfillPort  web-serial-polyfill's SerialPort, which
+   *   mirrors Web Serial's.
+   * @param {USBDevice} device  The device the polyfill port drives.
+   * @param {import("./webusb-transport.js").WebUsbTransportOptions} [options]
+   */
   constructor(polyfillPort, device, options = {}) {
     super(device, options);
     this.polyfillPort = polyfillPort;
+    /** @type {(() => Promise<SerialInputSignals>)|undefined} */
+    this.getSignals = undefined;
     // Input lines, for the loopback page, exactly when the polyfill has them.
     if (typeof polyfillPort.getSignals === "function") {
       this.getSignals = () => polyfillPort.getSignals();
     }
   }
 
+  // The polyfill honours framing, unlike the chip drivers.
+  /**
+   * @override
+   * @returns {Readonly<import("./serial-transport.mjs").SerialTransportCapabilities>}
+   */
   get capabilities() {
     return CDC_CAPABILITIES;
   }
@@ -89,6 +107,7 @@ export class CdcSerialPort extends WebUsbTransport {
   }
 
   // Open the polyfill port, then start reporting the device's loss.
+  /** @param {import("./serial-transport.mjs").SerialOpenOptions} options */
   async open(options) {
     await this.polyfillPort.open(options);
     this._watchDisconnect();
@@ -101,6 +120,7 @@ export class CdcSerialPort extends WebUsbTransport {
   }
 
   // DTR/RTS go straight to the polyfill's SET_CONTROL_LINE_STATE.
+  /** @param {import("./serial-transport.mjs").SerialSignals} signals */
   async setSignals(signals) {
     await this.polyfillPort.setSignals(signals);
   }
@@ -108,6 +128,12 @@ export class CdcSerialPort extends WebUsbTransport {
 
 // usb is the WebUSB loss-event source every port it returns watches
 // (navigator.usb when omitted); tests pass a stand-in.
+/**
+ * @param {{loadCdcSerialPort?: () => Promise<new (device: USBDevice) => SerialPort>,
+ *   usb?: EventTarget|null}} [options]  loadCdcSerialPort: where the CDC
+ *   polyfill's SerialPort class comes from (the CDN by default).
+ * @returns {{requestPort(): Promise<SerialTransport>}}
+ */
 export function createWebUsbSerial({ loadCdcSerialPort, usb } = {}) {
   const loadCdc = loadCdcSerialPort || defaultLoadCdcSerialPort;
 

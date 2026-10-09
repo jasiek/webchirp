@@ -1,6 +1,11 @@
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 // Browser-reported connectivity state. This deliberately listens only to the
 // platform's online/offline signal: a failed directory request says something
 // about that service, not whether the whole device has a network connection.
+/**
+ * @param {UiContext} ctx
+ */
 export function createConnectivity(ctx) {
   const { dom } = ctx;
   let online = true;

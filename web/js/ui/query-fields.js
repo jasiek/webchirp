@@ -239,6 +239,16 @@ const PREVIEW_DRAG_SLOP = 3;
 // coordinates under the marker, which stays pinned to the centre. `onPan()`
 // fires once per drag that actually moved, so the shell can count it the way
 // it counts geolocation — where the drag ended up is not reported.
+/**
+ * @typedef {Object} PositionFieldOptions
+ * @property {string} [key]
+ * @property {string} [locatorPlaceholder]  An example locator for the source's region.
+ * @property {{latitudeText?: string, longitudeText?: string}} [initial]
+ *   The coordinate texts kept from the last open.
+ * @property {(latitudeText: string, longitudeText: string) => void} [onChange]
+ * @property {() => void} [onPan]  Once per drag of the map that moved it.
+ */
+/** @param {PositionFieldOptions} [options] */
 export function createPositionField({ key = "position", locatorPlaceholder, initial = {}, onChange, onPan } = {}) {
   const latitude = document.createElement("input");
   latitude.id = fieldId(key, "latitude");
@@ -547,7 +557,8 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
     const pinShift = dx || dy
       ? `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`
       : "";
-    for (const child of previewCanvas.children) {
+    // Every child is a tile or pin <div> this file appended.
+    for (const child of /** @type {HTMLCollectionOf<HTMLElement>} */ (previewCanvas.children)) {
       const className = String(child.className || "");
       if (className === "repeater-map-tile") {
         child.style.transform = tileShift;
@@ -801,6 +812,26 @@ function cityLabel(city) {
 // suggestion (the first starts highlighted, so "type and tab away" lands on
 // the best match); arrows move the highlight; Escape closes the list and
 // leaves the text alone.
+/**
+ * One place the gazetteer (api.codeplug.org /cities) suggests.
+ * @typedef {Object} City
+ * @property {string} name
+ * @property {string} [region]
+ * @property {string} [country]
+ * @property {number} latitude
+ * @property {number} longitude
+ */
+/**
+ * @typedef {Object} CityFieldOptions
+ * @property {string} [key]
+ * @property {string} [label]
+ * @property {string} [placeholder]
+ * @property {{city?: City|null}} [initial]  The place kept from last time.
+ * @property {(query: string) => Promise<City[]>} search
+ * @property {(error: unknown) => void} [onError]  For the debug panel.
+ * @property {(city: City) => void} [onSelect]
+ */
+/** @param {CityFieldOptions} options */
 export function createCityField({
   key = "city",
   label = "Place name",
@@ -809,7 +840,7 @@ export function createCityField({
   search,
   onError,
   onSelect,
-} = {}) {
+}) {
   const input = document.createElement("input");
   input.id = fieldId(key);
   input.name = key;

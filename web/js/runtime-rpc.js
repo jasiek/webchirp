@@ -27,6 +27,49 @@ import {
   seedPyodideRuntime,
 } from "./python-sources.mjs";
 
+/**
+ * One radio the catalog offers, as list_registered_radios
+ * (web/python/webchirp_bridge/chirp_loader.py) and the prebuilt
+ * web/radio-catalog.json describe it.
+ * @typedef {Object} CatalogRadio
+ * @property {string} key  "module:ClassName", unique per driver class.
+ * @property {string} module  The driver module's short name.
+ * @property {string} className
+ * @property {string} vendor
+ * @property {string} model
+ * @property {number} [baudRate]
+ * @property {boolean} [isLiveRadio]  Live-mode drivers have no clone image.
+ * @property {string} [variant]  Separates drivers that share vendor and model.
+ * @property {{vendor: string, model: string, variant?: string}[]} [aliases]
+ *   Rebadges of the same radio, searchable by their own names.
+ */
+
+/**
+ * A payload naming the radio session a call is for.
+ * @typedef {Object} SessionPayload
+ * @property {string} [sessionId]
+ */
+
+/**
+ * A session-bound payload that carries the grid's rows.
+ * @typedef {SessionPayload & {rows?: object[]}} RowsPayload
+ */
+
+/**
+ * A session-bound payload that carries rows and serialized radio settings.
+ * @typedef {SessionPayload & {rows?: object[], settings?: object[]}} CodeplugPayload
+ */
+
+/**
+ * What the app shell hands createRuntimeRpcClient().
+ * @typedef {Object} RuntimeRpcClientOptions
+ * @property {import("./serial-globals.mjs").SerialRpcHandler} handleSerialRpc
+ *   Answers the serial ops Python sends through the bridge globals.
+ * @property {(message: string, options?: {isError?: boolean}) => void} [logDebug]
+ * @property {(label: string, total: number) => {update(done: number): void, end(): void}} [onProgress]
+ * @property {(message: string) => void} [onRuntimeCrash]
+ */
+
 const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/";
 const CHIRP_REVISION = DEFAULT_CHIRP_REVISION;
 const DRIVER_SET = driverSetFromSearch(globalThis.location?.search);
@@ -71,16 +114,26 @@ const pythonSource = createBrowserPythonSource({
   chirpBundleBaseUrl: new URL(`../${CHIRP_BUNDLE_DIR}/`, import.meta.url),
 });
 
+/** @typedef {import("pyodide").PyodideInterface} PyodideInterface */
+/** @typedef {import("./python-sources.mjs").RuntimeInfo} RuntimeInfo */
+/** @typedef {import("./ui/channel-values.js").RadioMetadata} RadioMetadata */
+
+/** @type {PyodideInterface|undefined} */
 let pyodide;
+/** @type {CatalogRadio[]|null} */
 let radioCatalogCache = null;
 // Which path filled radioCatalogCache: "static" (prebuilt file) or "sources"
 // (every driver imported in Pyodide). Reported to callers because the fallback
 // is otherwise silent, and it costs a user the whole Pyodide boot before the
 // dropdowns can appear.
 let radioCatalogSource = "";
+/** @type {Promise<any>|null} */
 let allDriverModulesPromise = null;
+/** @type {RuntimeRpcClientOptions["handleSerialRpc"]|null} */
 let handleSerialRpc = null;
+/** @type {RuntimeRpcClientOptions["logDebug"]|null} */
 let debugLog = null;
+/** @type {RuntimeRpcClientOptions["onProgress"]|null} */
 let beginProgress = null;
 
 // One debug line per driver would bury every other diagnostic in the panel, and
@@ -282,6 +335,12 @@ async function requirePyodide() {
 
 // Call one Python runtime method on a given interpreter; the dispatcher is
 // memoized per interpreter in web/js/rpc-dispatch.mjs.
+/**
+ * @param {PyodideInterface} interpreter
+ * @param {import("./rpc-dispatch.mjs").RpcMethodName} name
+ * @param {import("./rpc-dispatch.mjs").RpcParams} [params]
+ * @returns {Promise<any>}  The method's JSON-decoded result.
+ */
 function rpcOn(interpreter, name, params = {}) {
   return rpcDispatcherFor(interpreter).call(name, params);
 }
@@ -289,6 +348,11 @@ function rpcOn(interpreter, name, params = {}) {
 // Call one Python runtime method on the current interpreter. Resolved per
 // call rather than held, because ensureSelectedRadioModules() can swap the
 // interpreter under the isolated driver set.
+/**
+ * @param {import("./rpc-dispatch.mjs").RpcMethodName} name
+ * @param {import("./rpc-dispatch.mjs").RpcParams} [params]
+ * @returns {Promise<any>}
+ */
 function rpc(name, params = {}) {
   return rpcOn(pyodide, name, params);
 }
@@ -300,6 +364,7 @@ function rpc(name, params = {}) {
 // interpreter that holds it rather than whichever is current. This map is
 // that routing; ordinary CHIRP mode has one interpreter and every entry
 // points at it.
+/** @type {Map<string, PyodideInterface>} */
 const sessionRuntimes = new Map();
 
 // Record which interpreter a freshly opened session lives in.
@@ -340,10 +405,15 @@ async function optionalSessionRpc(sessionId, name, params = {}) {
   return rpc(name, { session_id: "", ...params });
 }
 
+/** @returns {Promise<RuntimeInfo>} */
 async function handleGetRuntimeInfo() {
   return pythonSource.getRuntimeInfo();
 }
 
+/**
+ * @returns {Promise<{radios: CatalogRadio[], source: string}>}  source says
+ *   which path filled the catalog: "static" or "sources".
+ */
 async function handleListRadios() {
   const radios = await loadRadioCatalog();
   return { radios, source: radioCatalogSource };
@@ -352,11 +422,16 @@ async function handleListRadios() {
 // The schema the grid runs on before a radio is selected: CHIRP's generic CSV
 // driver reporting its own RadioFeatures, headers and columns alike. See
 // get_default_schema (web/python/webchirp_bridge/column_metadata.py).
+/** @returns {Promise<RadioMetadata>} */
 async function handleGetDefaultSchema() {
   await requirePyodide();
   return rpc("get_default_schema");
 }
 
+/**
+ * @param {{csvText?: string}} [payload]
+ * @returns {Promise<any>}  The rows and headers parse_csv found.
+ */
 async function handleParseCsv(payload = {}) {
   await requirePyodide();
   return rpc("parse_csv", { csv_text: String(payload.csvText ?? "") });
@@ -365,6 +440,10 @@ async function handleParseCsv(payload = {}) {
 // Open a radio session for a catalog entry: import its driver (which, under
 // the isolated driver set, may boot the interpreter for that release), then
 // register the session with the interpreter that holds it.
+/**
+ * @param {{module?: string, className?: string}} [payload]
+ * @returns {Promise<{sessionId: string} & Record<string, unknown>>}
+ */
 async function handleOpenRadioSession(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
@@ -380,6 +459,10 @@ async function handleOpenRadioSession(payload = {}) {
 // Close a radio session in the interpreter that holds it. Quiet for an id
 // this side never saw: the UI closes the previous selection's session without
 // waiting to learn whether it ever finished opening.
+/**
+ * @param {SessionPayload} [payload]
+ * @returns {Promise<{closed: boolean, sessionId: string}>}
+ */
 async function handleCloseRadioSession(payload = {}) {
   const sessionId = String(payload.sessionId || "");
   const owner = sessionRuntimes.get(sessionId);
@@ -390,18 +473,30 @@ async function handleCloseRadioSession(payload = {}) {
   return rpcOn(owner, "close_session", { session_id: sessionId });
 }
 
+/**
+ * @param {RowsPayload} [payload]
+ * @returns {Promise<any>}
+ */
 async function handleNormalizeRows(payload = {}) {
   return optionalSessionRpc(payload.sessionId, "normalize_rows", {
     rows: payload.rows || [],
   });
 }
 
+/**
+ * @param {RowsPayload} [payload]
+ * @returns {Promise<any>}  The preflight's per-cell findings.
+ */
 async function handleValidateRowsForUpload(payload = {}) {
   return optionalSessionRpc(payload.sessionId, "validate_rows_for_upload", {
     rows: payload.rows || [],
   });
 }
 
+/**
+ * @param {CodeplugPayload} [payload]
+ * @returns {Promise<any>}  The base64 image and its file name.
+ */
 async function handleExportImage(payload = {}) {
   return sessionRpc(payload.sessionId, "export_image_base64", {
     rows: payload.rows || [],
@@ -412,6 +507,10 @@ async function handleExportImage(payload = {}) {
 // An image load opens a session of its own in Python for the driver the
 // image names (load_image_base64 in web/python/webchirp_bridge/images.py);
 // record which interpreter it lives in before the UI adopts it.
+/**
+ * @param {string} image_b64
+ * @returns {Promise<any>}
+ */
 async function loadImageIntoSession(image_b64) {
   const owner = pyodide;
   const result = await rpcOn(owner, "load_image_base64", { image_b64 });
@@ -419,6 +518,12 @@ async function loadImageIntoSession(image_b64) {
   return result;
 }
 
+/**
+ * @param {{imageBase64?: string, module?: string, className?: string}} [payload]
+ *   module and className name the selected release under the isolated
+ *   driver set; ordinary CHIRP mode detects the driver from the image.
+ * @returns {Promise<any>}  The session the image opened, its rows and settings.
+ */
 async function handleLoadImage(payload = {}) {
   if (DRIVER_SET === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
     const selected = (await loadRadioCatalog()).find((radio) =>
@@ -478,16 +583,25 @@ async function handleLoadImage(payload = {}) {
   });
 }
 
+/**
+ * @param {{baudRate?: number}} [payload]
+ * @returns {Promise<any>}
+ */
 async function handleSerialConnect(payload = {}) {
   await requirePyodide();
   return rpc("webserial_connect", { baudrate: payload.baudRate || 9600 });
 }
 
+/** @returns {Promise<any>} */
 async function handleSerialDisconnect() {
   await requirePyodide();
   return rpc("webserial_disconnect");
 }
 
+/**
+ * @param {{txHex?: string, rxBytes?: number, timeoutMs?: number}} [payload]
+ * @returns {Promise<any>}
+ */
 async function handleSerialTxRx(payload = {}) {
   await requirePyodide();
   return rpc("webserial_txrx_hex", {
@@ -497,10 +611,18 @@ async function handleSerialTxRx(payload = {}) {
   });
 }
 
+/**
+ * @param {SessionPayload} [payload]
+ * @returns {Promise<any>}  The downloaded rows, settings and image.
+ */
 async function handleDownloadSelectedRadio(payload = {}) {
   return sessionRpc(payload.sessionId, "download_selected_radio");
 }
 
+/**
+ * @param {CodeplugPayload} [payload]
+ * @returns {Promise<any>}
+ */
 async function handleUploadSelectedRadio(payload = {}) {
   return sessionRpc(payload.sessionId, "upload_selected_radio", {
     rows: payload.rows || [],
@@ -508,6 +630,10 @@ async function handleUploadSelectedRadio(payload = {}) {
   });
 }
 
+/**
+ * @param {SessionPayload} [payload]
+ * @returns {Promise<RadioMetadata>}
+ */
 async function handleGetRadioMetadata(payload = {}) {
   return sessionRpc(payload.sessionId, "get_radio_column_metadata");
 }
@@ -515,16 +641,28 @@ async function handleGetRadioMetadata(payload = {}) {
 // The driver's own per-channel extra settings for one memory slot, typed the
 // way the radio-wide settings are, so the extras modal can render real controls
 // instead of guessing from the bare values a row carries.
+/**
+ * @param {SessionPayload & {location?: string|number}} [payload]
+ * @returns {Promise<any>}
+ */
 async function handleGetChannelExtra(payload = {}) {
   return sessionRpc(payload.sessionId, "get_channel_extra", {
     location: String(payload.location ?? ""),
   });
 }
 
+/**
+ * @param {SessionPayload} [payload]
+ * @returns {Promise<any>}  The settings groups get_radio_settings serialized.
+ */
 async function handleGetRadioSettings(payload = {}) {
   return sessionRpc(payload.sessionId, "get_radio_settings");
 }
 
+/**
+ * @param {SessionPayload & {settings?: object[]}} [payload]
+ * @returns {Promise<any>}
+ */
 async function handleValidateRadioSettings(payload = {}) {
   return sessionRpc(payload.sessionId, "validate_radio_settings", {
     settings_groups: payload.settings || [],
@@ -562,6 +700,19 @@ export const RUNTIME_METHODS = Object.freeze({
 // while a queued call is stuck; every other method must wait its turn.
 const UNQUEUED_METHODS = new Set(["getRuntimeInfo"]);
 
+/**
+ * The runtime client the UI holds (state.runtimeApi): every RUNTIME_METHODS
+ * handler under its own name and signature, queued and with its failures
+ * logged.
+ * @typedef {{readonly [K in keyof typeof RUNTIME_METHODS]: (typeof RUNTIME_METHODS)[K]}} RuntimeApi
+ */
+
+// Build the client: install the host's callbacks for the module's lifetime and
+// wrap every RUNTIME_METHODS handler in the queue and the failure funnel.
+/**
+ * @param {RuntimeRpcClientOptions} options
+ * @returns {RuntimeApi}
+ */
 export function createRuntimeRpcClient({
   handleSerialRpc: nextHandleSerialRpc,
   logDebug,
@@ -627,10 +778,13 @@ export function createRuntimeRpcClient({
     };
   }
 
+  /** @type {Record<string, Function>} */
   const runtimeApi = {};
   for (const [name, handler] of Object.entries(RUNTIME_METHODS)) {
     runtimeApi[name] = wrapRuntimeMethod(name, handler);
   }
 
-  return Object.freeze(runtimeApi);
+  // Built key by key from RUNTIME_METHODS, each wrapper keeping its handler's
+  // signature, which is what the cast states.
+  return /** @type {RuntimeApi} */ (/** @type {unknown} */ (Object.freeze(runtimeApi)));
 }

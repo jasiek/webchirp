@@ -82,6 +82,10 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
 // The names are not hashed by the build, so unlike the runtime files above
 // they can be spelled here and resolved against the page's own origin.
 export const CHIRP_BUNDLE_DIR = "chirp";
+/**
+ * @param {string} chirpRevision  A full 40-hex git sha; anything else throws.
+ * @returns {Readonly<{archive: string, manifest: string}>}
+ */
 export function chirpBundleFileNames(chirpRevision) {
   const pin = String(chirpRevision || "");
   if (!/^[0-9a-f]{40}$/.test(pin)) {
@@ -99,11 +103,19 @@ export function chirpBundleFileNames(chirpRevision) {
 export const RUNTIME_MOUNT_DIR = "/webchirp_runtime";
 
 // Resolve a URL value to one of the two supported driver collections.
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 export function normalizeDriverSet(value) {
   return DRIVER_SETS.includes(String(value || "")) ? String(value) : DEFAULT_DRIVER_SET;
 }
 
 // Read the driver collection from a query string, defaulting to upstream CHIRP.
+/**
+ * @param {string|null|undefined} search  A location.search string.
+ * @returns {string}
+ */
 export function driverSetFromSearch(search) {
   return normalizeDriverSet(new URLSearchParams(String(search || "")).get("drivers"));
 }
@@ -139,6 +151,11 @@ async function fetchBytes(url) {
 // with another pin's archive would otherwise import drivers that do not match
 // the catalog the user picked from. Exported so the Node provider
 // (tests/support/chirp-bundle-source.mjs) applies the same check.
+/**
+ * @param {{chirpRevision?: string, drivers?: unknown[]}|null|undefined} manifest
+ * @param {string} chirpRevision  The pin the runtime expects.
+ * @returns {string[]}  The driver module names, sorted.
+ */
 export function driverModulesFromManifest(manifest, chirpRevision) {
   if (manifest?.chirpRevision !== chirpRevision) {
     throw new Error(
@@ -157,6 +174,44 @@ export function driverModulesFromManifest(manifest, chirpRevision) {
 // scripts/build-chirp-bundle.mjs) and the bridge package and bundled drivers
 // from runtimeFileUrls. tests/support/chirp-bundle-source.mjs is the Node
 // counterpart with the same shape, building the archive from the submodule.
+/**
+ * What the runtime reports about the Python it was seeded with.
+ * @typedef {Object} RuntimeInfo
+ * @property {string} chirpRevision  The CHIRP pin.
+ * @property {string} chirpSourceKind  "bundle" in the browser.
+ * @property {string} [chirpBundleUrl]  Where the archive was fetched from.
+ * @property {string} driverSet  DEFAULT_DRIVER_SET or QUANSHENG_UNOFFICIAL_DRIVER_SET.
+ */
+
+/**
+ * Where seedPyodideRuntime() gets every Python file from. The browser builds
+ * one with createBrowserPythonSource(); tests/support/chirp-bundle-source.mjs
+ * builds the Node one.
+ * @typedef {Object} PythonSourceProvider
+ * @property {() => Promise<Uint8Array>} fetchChirpArchive  The CHIRP zip.
+ * @property {() => Promise<any>} [fetchChirpManifest]  Its JSON manifest.
+ * @property {(relPath: string) => Promise<string>} fetchRuntimeFile
+ *   One file named the way RUNTIME_PYTHON_FILES names it.
+ * @property {() => Promise<string[]>} listDriverModules
+ * @property {() => RuntimeInfo} getRuntimeInfo
+ */
+
+/**
+ * @typedef {Object} BrowserPythonSourceOptions
+ * @property {string} [chirpRevision]
+ * @property {string} [driverSet]
+ * @property {Readonly<Record<string, string>>} runtimeFileUrls
+ *   The URL of every runtime file, keyed like RUNTIME_PYTHON_FILES.
+ * @property {URL|string} chirpBundleBaseUrl  The directory holding the archive.
+ * @property {(url: string) => Promise<string>} [fetchTextImpl]
+ * @property {(url: string) => Promise<any>} [fetchJsonImpl]
+ * @property {(url: string) => Promise<Uint8Array>} [fetchBytesImpl]
+ */
+
+/**
+ * @param {BrowserPythonSourceOptions} options
+ * @returns {PythonSourceProvider}
+ */
 export function createBrowserPythonSource({
   chirpRevision = DEFAULT_CHIRP_REVISION,
   driverSet = DEFAULT_DRIVER_SET,
@@ -165,7 +220,7 @@ export function createBrowserPythonSource({
   fetchTextImpl = fetchText,
   fetchJsonImpl = fetchJson,
   fetchBytesImpl = fetchBytes,
-} = {}) {
+}) {
   const selectedDriverSet = normalizeDriverSet(driverSet);
   // Checked up front rather than at fetch time so a declared local Python
   // source without a URL fails construction loudly, not the first user who
@@ -247,6 +302,11 @@ async function mkdirp(pyodide, dir) {
 // next to it and run the entry point. No import hook is involved any more --
 // every chirp.* module is a file on the mounted tree, so imports resolve
 // through Python's ordinary path finder and never suspend the interpreter.
+/**
+ * @param {import("pyodide").PyodideInterface} pyodide  A freshly loaded interpreter.
+ * @param {PythonSourceProvider} sourceProvider
+ * @returns {Promise<void>}
+ */
 export async function seedPyodideRuntime(pyodide, sourceProvider) {
   ensureProvider(sourceProvider);
   await mkdirp(pyodide, RUNTIME_MOUNT_DIR);
@@ -263,11 +323,9 @@ export async function seedPyodideRuntime(pyodide, sourceProvider) {
     await Promise.all(
       QUANSHENG_UNOFFICIAL_DRIVERS.map(async (driver) => {
         const text = await sourceProvider.fetchRuntimeFile(driver.relPath);
-        pyodide.FS.writeFile(
-          `${RUNTIME_MOUNT_DIR}/chirp/drivers/${driver.module}.py`,
-          text,
-          { encoding: "utf8" },
-        );
+        // Emscripten's FS.writeFile encodes a string as UTF-8 by itself; its
+        // options are flags and canOwn only (encoding belongs to readFile).
+        pyodide.FS.writeFile(`${RUNTIME_MOUNT_DIR}/chirp/drivers/${driver.module}.py`, text);
       }),
     );
   }
@@ -280,7 +338,7 @@ export async function seedPyodideRuntime(pyodide, sourceProvider) {
         const text = await sourceProvider.fetchRuntimeFile(relPath);
         const target = `${RUNTIME_MOUNT_DIR}/${relPath}`;
         await mkdirp(pyodide, target.slice(0, target.lastIndexOf("/")));
-        pyodide.FS.writeFile(target, text, { encoding: "utf8" });
+        pyodide.FS.writeFile(target, text);
       }),
   );
 
@@ -288,6 +346,11 @@ export async function seedPyodideRuntime(pyodide, sourceProvider) {
   await pyodide.runPythonAsync(runtimePython);
 }
 
+// Every driver module the provider's archive (or driver set) offers.
+/**
+ * @param {PythonSourceProvider} sourceProvider
+ * @returns {Promise<string[]>}
+ */
 export async function listDriverModules(sourceProvider) {
   ensureProvider(sourceProvider);
   return sourceProvider.listDriverModules();

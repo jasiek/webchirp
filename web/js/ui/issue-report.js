@@ -1,5 +1,7 @@
 import { detectUserAgent } from "./format.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 const ISSUE_TEMPLATE_NAME = "radio_bug_report.yml";
 const ISSUE_NEW_URL = "https://github.com/jasiek/webchirp/issues/new";
 // How much of the debug panel rides along. This is the knob that decides the
@@ -58,6 +60,9 @@ function fitDebugExcerpt(lines, { measure, limit, alreadyTrimmed }) {
 // tail of
 // the debug panel in its own Debug Log field — so a report arrives with the
 // diagnostics already attached.
+/**
+ * @param {Pick<UiContext, "state"|"log">} deps
+ */
 export function createIssueReporter({ state, log }) {
   function buildIssueUrl() {
     // Read the selection from state, never from the sidebar readout: every

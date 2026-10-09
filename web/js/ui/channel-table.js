@@ -15,11 +15,18 @@ import { rowExtras } from "../row-extra.js";
 import { callsignFromName } from "../callsign-lookup.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+/** @typedef {import("./channel-values.js").ColumnMeta} ColumnMeta */
+/** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
+
 // The editable channel grid: rendering, row selection, the row operations
 // (insert/remove/move/copy/cut/paste), the band-plan presets, and the
 // invalid-cell highlighting the upload preflight drives. Owns the selection
 // and invalid-cell state; the rows themselves live in the shared state so
 // export, upload and import paths can read them.
+/**
+ * @param {UiContext} ctx
+ */
 export function createChannelTable({ dom, state, log, actions }) {
   let selectedRowIndexes = new Set();
   let selectionAnchorIndex = null;
@@ -217,6 +224,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (column === "Location") {
       return "";
     }
+    /** @type {Partial<ColumnMeta>} */
     const meta = state.radioMetadata.columns?.[column] || {};
     if (meta.kind === "enum" && Array.isArray(meta.options) && meta.options.length > 0) {
       // CHIRP's own starting value for the column when the driver offers it
@@ -238,6 +246,7 @@ export function createChannelTable({ dom, state, log, actions }) {
   // 0 floor. With no radio selected (the generic-CSV schema) there are no
   // bounds and 0.. applies.
   function locationBounds() {
+    /** @type {Partial<ColumnMeta>} */
     const meta = state.radioMetadata.columns?.Location || {};
     return {
       lo: Number.isFinite(meta.min) ? Number(meta.min) : 0,
@@ -357,6 +366,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (!state.currentHeaders.includes(column)) {
       return false;
     }
+    /** @type {Partial<ColumnMeta>} */
     const meta = state.radioMetadata.columns?.[column] || {};
     const result = normalizeCellValue(column, value, meta, row[column], { allowReadOnly: true });
     row[column] = result.value;
@@ -828,6 +838,7 @@ export function createChannelTable({ dom, state, log, actions }) {
   // (vx6's 220MHz list) advertises only one of the two wattages — so this describes
   // the levels the driver offers, not what a given channel transmits.
   function columnLegend(column) {
+    /** @type {Partial<ColumnMeta>} */
     const meta = state.radioMetadata.columns?.[column] || {};
     const watts = meta.optionWatts;
     if (!watts || typeof watts !== "object") {
@@ -844,6 +855,7 @@ export function createChannelTable({ dom, state, log, actions }) {
   // never on a row — so the element stays valid for any row until the schema
   // changes. bindCellEditor() is what puts a row's data into it.
   function createCellEditor(column) {
+    /** @type {Partial<ColumnMeta>} */
     const meta = state.radioMetadata.columns?.[column] || {};
     const readOnly = column === "Location" || meta.editable === false;
 
@@ -1029,6 +1041,7 @@ export function createChannelTable({ dom, state, log, actions }) {
       th.textContent = label;
       // Mirror the cell treatment: grey + tooltip on headers of columns the
       // selected radio marks read-only (Location stays the selection handle).
+      /** @type {Partial<ColumnMeta>} */
       const meta = state.radioMetadata.columns?.[column] || {};
       const legend = columnLegend(column);
       if (legend) {
@@ -1151,13 +1164,16 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (!cell) {
       return null;
     }
+    // Narrowed by the tagName test above.
+    const editor = /** @type {HTMLInputElement|HTMLSelectElement} */ (active);
     return {
       ...cell,
       // Only a text editor carries an uncommitted draft; a select commits on
       // change, so there is nothing of its own to put back.
-      draft: active.tagName === "INPUT" ? String(active.value ?? "") : null,
-      selectionStart: active.selectionStart,
-      selectionEnd: active.selectionEnd,
+      draft: active.tagName === "INPUT" ? String(editor.value ?? "") : null,
+      // A select has no caret: these read undefined there, as they always did.
+      selectionStart: /** @type {HTMLInputElement} */ (editor).selectionStart,
+      selectionEnd: /** @type {HTMLInputElement} */ (editor).selectionEnd,
     };
   }
 
@@ -1299,6 +1315,7 @@ export function createChannelTable({ dom, state, log, actions }) {
     if (!row) {
       return null;
     }
+    /** @type {Partial<ColumnMeta>} */
     const meta = state.radioMetadata.columns?.[column] || {};
     const next = normalizeValue(column, text, meta, row[column]);
     row[column] = next;
@@ -1313,9 +1330,12 @@ export function createChannelTable({ dom, state, log, actions }) {
   }
 
   // One listener per event type for the whole grid, instead of three per cell.
+  // Each handler reads its event's target as the element inside the tbody
+  // that fired it -- a cell editor or one of the row's buttons.
   function bindGridEvents() {
     dom.tableBody.addEventListener("click", (event) => {
-      const extraButton = event.target?.closest?.(".channel-extra-button");
+      const target = /** @type {HTMLElement} */ (event.target);
+      const extraButton = /** @type {HTMLButtonElement|null} */ (target?.closest?.(".channel-extra-button"));
       const extraCell = extraButton && cellReferenceFor(extraButton);
       if (extraCell) {
         // The button travels with the call so the editor can hand the keyboard
@@ -1323,7 +1343,7 @@ export function createChannelTable({ dom, state, log, actions }) {
         actions.openChannelExtra(extraCell.rowIdx, extraButton);
         return;
       }
-      const button = event.target?.closest?.(".channel-location-button");
+      const button = target?.closest?.(".channel-location-button");
       const cell = button && cellReferenceFor(button);
       if (cell) {
         updateRowSelectionFromLocationClick(event, cell.rowIdx);
@@ -1331,32 +1351,35 @@ export function createChannelTable({ dom, state, log, actions }) {
     });
 
     dom.tableBody.addEventListener("input", (event) => {
-      const cell = cellReferenceFor(event.target);
+      const target = /** @type {HTMLElement} */ (event.target);
+      const cell = cellReferenceFor(target);
       if (cell) {
         clearInvalidCell(cell.rowIdx, cell.column);
       }
     });
 
     dom.tableBody.addEventListener("change", (event) => {
-      if (event.target?.tagName !== "SELECT") {
+      const target = /** @type {HTMLElement} */ (event.target);
+      if (target?.tagName !== "SELECT") {
         return;
       }
       const cell = cellReferenceFor(event.target);
       if (cell) {
         clearInvalidCell(cell.rowIdx, cell.column);
-        commitCellValue(cell, event.target);
+        commitCellValue(cell, target);
       }
     });
 
     // Text cells normalize when they lose focus. blur does not bubble, so the
     // delegated equivalent is focusout.
     dom.tableBody.addEventListener("focusout", (event) => {
-      if (event.target?.tagName !== "INPUT") {
+      const target = /** @type {HTMLElement} */ (event.target);
+      if (target?.tagName !== "INPUT") {
         return;
       }
       const cell = cellReferenceFor(event.target);
       if (cell) {
-        commitCellValue(cell, event.target);
+        commitCellValue(cell, target);
       }
     });
 

@@ -105,7 +105,11 @@ const LOOKUP_TIMEOUT_MS = 5000;
 //
 // `fetchImpl` exists for the headless tests, which have no network and need to
 // count requests to prove the cache works.
-export function createCallsignLookup(lookupUrl, { fetchImpl = (...args) => fetch(...args) } = {}) {
+/**
+ * @param {string} lookupUrl  The per-callsign endpoint (RepeaterEndpoints.lookup).
+ * @param {{fetchImpl?: typeof fetch}} [options]
+ */
+export function createCallsignLookup(lookupUrl, { fetchImpl = (input, init) => fetch(input, init) } = {}) {
   // Callsign -> in-flight or settled promise of that callsign's entries. It
   // serves two purposes the HTTP cache cannot: it collapses the burst of
   // hovers a pointer crossing one cell produces into a single request, and it

@@ -6,6 +6,8 @@ import {
 import { trackEvent } from "./analytics.js";
 import { errorDetails } from "./format.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 // The toolbar's Install button: this app's own install affordance, standing in
 // for the browser one that web/js/install-prompt.js suppresses. See that module
 // for why -- in short, Chrome's Android install badge is throttled to the point
@@ -16,6 +18,9 @@ import { errorDetails } from "./format.js";
 // (every browser on iOS, Firefox), or a visit the browser has not yet judged
 // installable. A permanently dead control in the toolbar would say the app
 // cannot be installed here, which is usually the opposite of the truth.
+/**
+ * @param {UiContext} ctx
+ */
 export function createInstallButton(ctx) {
   const { dom, log } = ctx;
 

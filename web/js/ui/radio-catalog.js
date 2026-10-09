@@ -3,6 +3,8 @@ import { makeModelLabel } from "./format.js";
 import { radioEventParams, trackEvent } from "./analytics.js";
 import { DEFAULT_DRIVER_SET, QUANSHENG_UNOFFICIAL_DRIVER_SET } from "../python-sources.mjs";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
 const NO_RADIO_SELECTED_TEXT = "No radio model selected";
@@ -16,6 +18,9 @@ const RADIO_SEARCH_OPTION_ID_PREFIX = "radio-search-option-";
 // radio, so nothing is selected until the user picks one (or the cookie
 // restores their last). Owns the search-result state; the catalog and the
 // selected entry live in the shared state because export/upload read them.
+/**
+ * @param {UiContext} ctx
+ */
 export function createRadioCatalog(ctx) {
   const { dom, state, log, actions } = ctx;
   let searchMatches = [];
@@ -562,7 +567,7 @@ export function createRadioCatalog(ctx) {
     dom.radioSearchResultsEl.addEventListener("mousedown", (event) => {
       // Prevent the input blur so the click handler below sees the list open.
       event.preventDefault();
-      const li = event.target.closest("li[role='option']");
+      const li = /** @type {HTMLLIElement|null} */ (/** @type {Element} */ (event.target).closest("li[role='option']"));
       if (!li) {
         return;
       }

@@ -3,9 +3,14 @@ import { radioEventParams, trackEvent } from "./analytics.js";
 import { normalizeSettingValue } from "./setting-values.js";
 import { requireRuntimeApi } from "./state.js";
 
+/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+
 // Radio-wide settings: the tabbed editor, its per-value validation, and the
 // load/merge path from the Python runtime. Owns the settings tree and the
 // invalid-value bookkeeping; other modules reach it through the returned API.
+/**
+ * @param {UiContext} ctx
+ */
 export function createSettingsPanel(ctx) {
   const { dom, state, log, actions } = ctx;
   let settingsState = {
