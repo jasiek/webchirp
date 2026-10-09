@@ -1,7 +1,7 @@
 import { BrowserSerialBridge } from "./js/serial.ts";
 import { createSerialRpcHandler } from "./js/serial-globals.ts";
 import { createRuntimeRpcClient } from "./js/runtime-rpc.ts";
-import { createUiController } from "./js/ui.js";
+import { createUiController } from "./js/ui.ts";
 import { installTooltips } from "./js/tooltip.ts";
 import { WEBUSB_SUPPORTED_ADAPTERS } from "./js/webusb-serial.ts";
 

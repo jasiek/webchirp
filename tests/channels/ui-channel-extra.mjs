@@ -77,7 +77,7 @@ const IMAGE_ROWS = [
 
 async function boot({ rows = IMAGE_ROWS, getChannelExtra } = {}) {
   const { document } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const calls = [];
   ui.setRuntimeApi(withRadioSessions({

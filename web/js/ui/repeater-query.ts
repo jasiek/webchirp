@@ -2,8 +2,8 @@ import {
   buildRepeaterEndpoints,
   fetchCitySuggestions,
   resolveRepeaterApiBase,
-} from "../datasources.js";
-import { encodeMaidenhead } from "../rsgb.js";
+} from "../datasources.ts";
+import { encodeMaidenhead } from "../rsgb.ts";
 import { classifyErrorKind, errorTypeName, trackEvent } from "./analytics.ts";
 import { errorDetails } from "./format.ts";
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.ts";
@@ -11,7 +11,7 @@ import {
   RepeaterInputError,
   createRepeaterSources,
   unmetRequirement,
-} from "./repeater-sources.js";
+} from "./repeater-sources.ts";
 import {
   createCheckboxField,
   createCheckboxGroupField,
@@ -20,9 +20,9 @@ import {
   createNumberField,
   createPositionField,
   createSelectField,
-} from "./query-fields.js";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+} from "./query-fields.ts";
+import type { UiContext } from "../types/ui-context.js";
+import type { QueryField } from "./query-fields.ts";
 
 // The key every source gives its "repeaters within N km" filter. The position
 // field's map preview draws that radius, so the shell has to know which field
@@ -63,17 +63,14 @@ const GEOLOCATION_FAILURE_TEXT = Object.freeze({
 });
 
 // Online repeater directory imports. One modal serves every source: each
-// source config (web/js/ui/repeater-sources.js) declares its fields, and the grid is
+// source config (web/js/ui/repeater-sources.ts) declares its fields, and the grid is
 // rebuilt from them on every open — which is also the reset policy: filters
 // always come back at their per-source defaults, so the modal always opens in
 // the state it documents (a once-ticked "include off-air" cannot silently
 // stick forever). The position is the deliberate exception: it survives
 // closes and source switches alike, because where the user is does not change
 // with the directory they ask.
-/**
- * @param {UiContext} ctx
- */
-export function createRepeaterQuery(ctx) {
+export function createRepeaterQuery(ctx: UiContext) {
   const { dom, state, log } = ctx;
 
   // przemienniki.net and RepeaterBook depend on the configured proxy base; a
@@ -97,11 +94,9 @@ export function createRepeaterQuery(ctx) {
   // clicks apart through a menu — so the slow first click would otherwise
   // rebuild the modal the second click had already opened.
   let openGeneration = 0;
-  let fieldInstances = [];
-  /** @type {ReturnType<typeof createPositionField>|null} */
-  let positionField = null;
-  /** @type {ReturnType<typeof createCityField>|null} */
-  let cityField = null;
+  let fieldInstances: QueryField[] = [];
+  let positionField: ReturnType<typeof createPositionField> | null = null;
+  let cityField: ReturnType<typeof createCityField> | null = null;
   const positionState = { latitudeText: "", longitudeText: "" };
   // What the Place name box last settled on. Kept for the same reason
   // the coordinates are: it is where the user is, which does not change with
@@ -121,7 +116,7 @@ export function createRepeaterQuery(ctx) {
   // wide enough to hit by double-clicking.
   let queryInFlight = false;
   // Browser-reported connectivity only. Request failures do not change this;
-  // web/js/ui/connectivity.js updates it from online/offline events.
+  // web/js/ui/connectivity.ts updates it from online/offline events.
   let online = true;
   // Why the form as it stands cannot be queried, or "" when it can. Held
   // beside queryInFlight because both disable the same button and either can
@@ -168,7 +163,7 @@ export function createRepeaterQuery(ctx) {
   }
 
   // Whether the active source can be queried with what is in the form. Each
-  // source declares what it needs (requires, web/js/ui/repeater-sources.js)
+  // source declares what it needs (requires, web/js/ui/repeater-sources.ts)
   // and the rule differs: RSGB fans out around a point and has nothing to do
   // without one, while the three country-filtered directories accept either a
   // country or a location and answer a query with neither by sending their
@@ -221,7 +216,7 @@ export function createRepeaterQuery(ctx) {
     // in the config order. Only the position field's map preview uses this: it
     // pictures the whole query, range circle included, so it belongs after the
     // range control and not above it.
-    const tailNodes = [];
+    const tailNodes: Node[] = [];
     for (const config of source.fields) {
       let instance;
       if (config.kind === "city") {
@@ -316,11 +311,7 @@ export function createRepeaterQuery(ctx) {
   async function runPreview(source, values) {
     const generation = previewGeneration;
     positionField?.setMarkers(null, "loading");
-    /**
-     * @type {{points: Array<Object>, truncated?: boolean, unmapped?: number,
-     *   unsupported?: number}|null}
-     */
-    let result = null;
+    let result: { points: Array<object>; truncated?: boolean; unmapped?: number; unsupported?: number } | null = null;
     try {
       result = await source.previewQuery(values);
     } catch (error) {
@@ -404,8 +395,8 @@ export function createRepeaterQuery(ctx) {
     }, PREVIEW_QUERY_DEBOUNCE_MS);
   }
 
-  function collectValues() {
-    const values = {};
+  function collectValues(): Record<string, any> {
+    const values: Record<string, any> = {};
     for (const instance of fieldInstances) {
       values[instance.key] = instance.value();
     }
@@ -416,10 +407,10 @@ export function createRepeaterQuery(ctx) {
     dom.repeaterQueryModalEl.classList.toggle("hidden", !open);
     if (open) {
       const focusable = fieldInstances.find((instance) => instance.focusTarget);
-      focusable?.focusTarget.focus();
+      focusable?.focusTarget?.focus();
       // Only now does the position field's map canvas have a width to measure:
       // buildFields() ran while the overlay was still display:none, where every
-      // element is zero-sized. Same reason web/js/ui/repeater-map.js shows its
+      // element is zero-sized. Same reason web/js/ui/repeater-map.ts shows its
       // modal before sizing the map inside it.
       positionField?.refreshPreview();
       // The position survives a close, so a reopened modal usually already has
@@ -446,8 +437,7 @@ export function createRepeaterQuery(ctx) {
       return;
     }
     const generation = ++openGeneration;
-    /** @type {Record<string, Array<Object>>|null} */
-    let loadedOptions = null;
+    let loadedOptions: Record<string, Array<object>> | null = null;
     if (source.loadOptions) {
       log.setStatus(`Loading ${source.label} query options...`);
       loadedOptions = await source.loadOptions();
@@ -478,7 +468,7 @@ export function createRepeaterQuery(ctx) {
       throw new Error("Geolocation API is not available in this browser.");
     }
     log.setStatus("Requesting browser geolocation...");
-    const position = await new Promise((resolve, reject) => {
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
         enableHighAccuracy: true,
         timeout: 10000,
@@ -494,7 +484,7 @@ export function createRepeaterQuery(ctx) {
       const code = Number(error?.code);
       const failureText = GEOLOCATION_FAILURE_TEXT[code];
       if (failureText) {
-        const refusal = /** @type {Error & {code?: number}} */ (new Error(failureText));
+        const refusal = new Error(failureText) as Error & {code?: number};
         refusal.code = code;
         throw refusal;
       }

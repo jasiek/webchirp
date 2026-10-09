@@ -1,10 +1,10 @@
-// The ctx object web/js/ui.js builds and hands every UI module factory
+// The ctx object web/js/ui.ts builds and hands every UI module factory
 // (create<Area>(ctx), see CLAUDE.md's UI module conventions), named member by
 // member. Each module reads it through a JSDoc import type:
 //
 //   /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 //
-// It lives in a declaration file, not in web/js/ui.js, so the type that names
+// It lives in a declaration file, not in web/js/ui.ts, so the type that names
 // every module's factory sits outside the module graph it describes: no UI
 // module has to type-import the composer that imports it. Nothing loads this
 // file at runtime, and *.d.ts never reaches dist/.
@@ -14,20 +14,20 @@ import type { UiState } from "../ui/state.ts";
 import type { createDebugLog } from "../ui/debug-log.ts";
 import type { createNoticeModal } from "../ui/notice-modal.ts";
 import type { createProgress } from "../ui/progress.ts";
-import type { createRadioSession } from "../ui/radio-session.js";
-import type { createSettingsPanel } from "../ui/settings-panel.js";
+import type { createRadioSession } from "../ui/radio-session.ts";
+import type { createSettingsPanel } from "../ui/settings-panel.ts";
 import type { createChannelTable } from "../ui/channel-table.ts";
 import type { createChannelExtra } from "../ui/channel-extra.ts";
 import type { createChannelBulkEdit } from "../ui/channel-bulk-edit.ts";
-import type { createRadioCatalog } from "../ui/radio-catalog.js";
-import type { createRepeaterQuery } from "../ui/repeater-query.js";
-import type { createRepeaterMap } from "../ui/repeater-map.js";
-import type { createCodeplugIo } from "../ui/codeplug-io.js";
-import type { createSerialActions } from "../ui/serial-actions.js";
-import type { createInstallButton } from "../ui/install-button.js";
-import type { createConnectivity } from "../ui/connectivity.js";
+import type { createRadioCatalog } from "../ui/radio-catalog.ts";
+import type { createRepeaterQuery } from "../ui/repeater-query.ts";
+import type { createRepeaterMap } from "../ui/repeater-map.ts";
+import type { createCodeplugIo } from "../ui/codeplug-io.ts";
+import type { createSerialActions } from "../ui/serial-actions.ts";
+import type { createInstallButton } from "../ui/install-button.ts";
+import type { createConnectivity } from "../ui/connectivity.ts";
 
-// The cross-module registry web/js/ui.js builds: calls that would otherwise
+// The cross-module registry web/js/ui.ts builds: calls that would otherwise
 // make a module import a sibling that imports it back.
 export interface UiActions {
   updateSerialActionState(): void;

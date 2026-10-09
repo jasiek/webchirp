@@ -1,6 +1,6 @@
 // Pure coercion/validation for radio-wide setting values, driven by the value
 // metadata the Python runtime reports for each CHIRP RadioSetting. Kept apart
-// from web/js/ui/settings-panel.js so the rules can be exercised without a DOM
+// from web/js/ui/settings-panel.ts so the rules can be exercised without a DOM
 // or a loaded image. denotesInteger is exported because the per-channel extras
 // read integers from their own controls (readSettingControl in
 // web/js/ui/setting-fields.ts) and the rule has to be one rule: it was written

@@ -11,7 +11,7 @@ import {
   planStaticMap,
   worldPixelToLatLon,
   zoomForRadius,
-} from "../../web/js/staticmap.js";
+} from "../../web/js/staticmap.ts";
 
 test("latLonToWorldPixel puts 0,0 at the center of the world map", () => {
   const zoom = 3;

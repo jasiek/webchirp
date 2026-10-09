@@ -2,22 +2,27 @@ import { errorSummary } from "./format.ts";
 import { radioEventParams, trackEvent } from "./analytics.ts";
 import { normalizeSettingValue } from "./setting-values.ts";
 import { requireRuntimeApi } from "./state.ts";
+import type { UiContext } from "../types/ui-context.js";
+import type { SettingValueMeta } from "./setting-fields.ts";
 
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+/**
+ * One value of one setting, flattened out of the settings tree: where it is
+ * (the setting's path and the value's index in it) and the tree's own value
+ * object, which a merge writes current back into.
+ */
+interface FlatSettingField {
+  path: unknown[];
+  valueIndex: number;
+  current: unknown;
+  valueRef: SettingValueMeta;
+}
 
 // Radio-wide settings: the tabbed editor, its per-value validation, and the
 // load/merge path from the Python runtime. Owns the settings tree and the
 // invalid-value bookkeeping; other modules reach it through the returned API.
-/**
- * @param {UiContext} ctx
- */
-export function createSettingsPanel(ctx) {
+export function createSettingsPanel(ctx: UiContext) {
   const { dom, state, log, actions } = ctx;
-  /**
-   * @type {{supported: boolean, available: boolean, requiresImage: boolean,
-   *   message: string, groups: Array<Record<string, any>>}}
-   */
-  let settingsState = {
+  let settingsState: { supported: boolean; available: boolean; requiresImage: boolean; message: string; groups: Array<Record<string, any>> } = {
     supported: false,
     available: false,
     requiresImage: false,
@@ -25,8 +30,8 @@ export function createSettingsPanel(ctx) {
     groups: [],
   };
   let activeTab = "";
-  const invalidKeys = new Set();
-  const invalidMessages = new Map();
+  const invalidKeys = new Set<string>();
+  const invalidMessages = new Map<string, string>();
 
   function cloneGroups(groups) {
     return JSON.parse(JSON.stringify(Array.isArray(groups) ? groups : []));
@@ -84,8 +89,8 @@ export function createSettingsPanel(ctx) {
     actions.updateSerialActionState();
   }
 
-  function flattenSettingsFields(groups) {
-    const out = [];
+  function flattenSettingsFields(groups): FlatSettingField[] {
+    const out: FlatSettingField[] = [];
     function walk(node) {
       if (!node) {
         return;
@@ -349,7 +354,7 @@ export function createSettingsPanel(ctx) {
     return nextState;
   }
 
-  function applyLoadedState(nextState, options = {}) {
+  function applyLoadedState(nextState, options: { preserveCurrent?: boolean } = {}) {
     const preserveCurrent = Boolean(options.preserveCurrent);
     if (preserveCurrent && radioHasSettings() && nextState.supported) {
       const currentByKey = new Map();
@@ -376,7 +381,7 @@ export function createSettingsPanel(ctx) {
 
   // Load the selected radio's settings, applied only if its session is still
   // the current one when the runtime answers.
-  async function load(options = {}) {
+  async function load(options: { preserveCurrent?: boolean } = {}) {
     const session = ctx.session.current();
     const nextState = await fetchForSession(session);
     if (!ctx.session.isCurrent(session)) {

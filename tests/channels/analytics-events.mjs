@@ -63,7 +63,7 @@ test("Python traceback wrappers do not masquerade as the exception type", () => 
 });
 
 test("classifyErrorKind recognizes the geolocation failure sentences", () => {
-  // The sentences web/js/ui/repeater-query.js writes for GeolocationPositionError
+  // The sentences web/js/ui/repeater-query.ts writes for GeolocationPositionError
   // codes must land in the bucket the GA event promises, or a deny would read
   // as the catch-all "other" next to the ones that mapped.
   assert.equal(

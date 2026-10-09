@@ -2,7 +2,7 @@ import {
   buildFrsRows,
   buildGmrsRows,
   buildPmr446Rows,
-} from "../datasources.js";
+} from "../datasources.ts";
 import {
   buildRowsFromClipboardText,
   computeMovedRowOrder,
@@ -12,7 +12,7 @@ import {
 } from "../clipboard.ts";
 import { normalizeCellValue, normalizeValue } from "./channel-values.ts";
 import { rowExtras } from "../row-extra.ts";
-import { callsignFromName } from "../callsign-lookup.js";
+import { callsignFromName } from "../callsign-lookup.ts";
 import { radioEventParams, trackEvent } from "./analytics.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { ChannelRow, ColumnMeta, RadioMetadata } from "./channel-values.ts";
@@ -376,7 +376,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     const meta = state.radioMetadata.columns?.[column];
     // A column with no driver metadata behind it is unconstrained, not
     // unsupported. Until a radio is selected the grid runs on the startup
-    // schema (loadEmptySchema in web/js/ui/codeplug-io.js), which seeds
+    // schema (loadEmptySchema in web/js/ui/codeplug-io.ts), which seeds
     // CHIRP's generic CSV headers with no columns to validate against, and
     // setRowValueIfPresent writes anything through in that state. This has to
     // agree with it: reading the absent option list as "the radio refuses
@@ -976,7 +976,7 @@ export function createChannelTable({ dom, state, log, actions }: UiContext) {
     const locationButton = locationButtonIn(tr);
     if (locationButton) {
       locationButton.setAttribute("aria-pressed", isSelected ? "true" : "false");
-      // Mark the cells the context map (web/js/ui/repeater-map.js) will look up
+      // Mark the cells the context map (web/js/ui/repeater-map.ts) will look up
       // on hover -- the ones whose channel name is a callsign. Whether the
       // directory actually knows that callsign is only answerable over the
       // network, so this marks what is worth hovering, not what has a map.

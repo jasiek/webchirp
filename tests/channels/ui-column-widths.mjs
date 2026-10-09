@@ -31,7 +31,7 @@ const HEADERS = ["Location", "Name", "Frequency", "Duplex", "Comment"];
 
 async function renderGrid(rows, columns = {}) {
   const { document } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({

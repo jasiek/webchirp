@@ -452,7 +452,7 @@ function vivifyIdsOnly(selector) {
 
 // Every modal overlay index.html ships carries the hidden class. The stub
 // vivifies elements with no classes at all, so a booted UI finds all of them
-// "open" -- and the global Escape handler in web/js/ui.js, which closes the
+// "open" -- and the global Escape handler in web/js/ui.ts, which closes the
 // topmost open surface and stops, then swallows the key before it reaches the
 // modal a test is actually driving. Listed here rather than in each boot helper
 // so that adding a modal to index.html does not break unrelated tests one at a

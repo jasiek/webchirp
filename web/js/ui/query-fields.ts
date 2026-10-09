@@ -1,7 +1,7 @@
-import { decodeMaidenheadBox, encodeMaidenhead } from "../rsgb.js";
-import { latLonToWorldPixel, worldPixelToLatLon, zoomForRadius } from "../staticmap.js";
+import { decodeMaidenheadBox, encodeMaidenhead } from "../rsgb.ts";
+import { latLonToWorldPixel, worldPixelToLatLon, zoomForRadius } from "../staticmap.ts";
 import { rememberBounded } from "./format.ts";
-import { createMapAttribution, renderStaticMap } from "./static-map-view.js";
+import { createMapAttribution, renderStaticMap } from "./static-map-view.ts";
 
 // Field components for the shared repeater-query modal. Each factory builds
 // its own DOM from a config and returns the same shape:
@@ -22,6 +22,29 @@ import { createMapAttribution, renderStaticMap } from "./static-map-view.js";
 // between one modal open and the next, so nothing outside this file may look
 // them up.
 const FIELD_ID_PREFIX = "repeater-query-field-";
+
+/** One choice in a select or checkbox field. */
+export interface FieldOption {
+  value: string;
+  label?: string;
+  title?: string;
+  /** Shown but never selectable; its title says why. */
+  disabled?: boolean;
+}
+
+/**
+ * What every factory here returns (see above). A field that exposes more to
+ * the shell -- the range filter's input, nodes that go after every field --
+ * adds it.
+ */
+export interface QueryField {
+  key: string;
+  nodes: Node[];
+  focusTarget: HTMLElement | null;
+  value: () => unknown;
+  input?: HTMLInputElement;
+  tailNodes?: Node[];
+}
 
 function fieldId(key, suffix = "") {
   return `${FIELD_ID_PREFIX}${key}${suffix ? `-${suffix}` : ""}`;
@@ -62,7 +85,14 @@ function numericFieldValue(el) {
 // Single-choice dropdown with an empty-valued placeholder option first
 // ("Any country"), so the blank choice is always available and always means
 // "no filter".
-export function createSelectField({ key, label, placeholder, options = [] }) {
+export function createSelectField(
+  { key, label, placeholder, options = [] }: {
+    key: string;
+    label: string;
+    placeholder: string;
+    options?: readonly FieldOption[];
+  },
+): QueryField {
   const select = document.createElement("select");
   select.id = fieldId(key);
   select.name = key;
@@ -74,7 +104,7 @@ export function createSelectField({ key, label, placeholder, options = [] }) {
   for (const option of options) {
     const opt = document.createElement("option");
     opt.value = option.value;
-    opt.textContent = option.label;
+    opt.textContent = option.label ?? null;
     if (option.title) {
       opt.title = option.title;
     }
@@ -91,7 +121,9 @@ export function createSelectField({ key, label, placeholder, options = [] }) {
 // A label/value pair with no control at all, for a fact the source fixes (the
 // RSGB directory is UK-only, and a picker with one entry is a control that
 // cannot do anything).
-export function createFixedField({ key, label, text, value = "" }) {
+export function createFixedField(
+  { key, label, text, value = "" }: { key: string; label: string; text: string; value?: string },
+): QueryField {
   const span = document.createElement("span");
   span.className = "modal-fixed-value";
   span.textContent = text;
@@ -107,11 +139,19 @@ export function createFixedField({ key, label, text, value = "" }) {
 // case normalization is a per-source concern, not a component one. An option
 // with `disabled: true` is shown but not selectable (its title says why) and
 // can never reach `value()`.
-export function createCheckboxGroupField({ key, label, name, options = [], defaults = [] }) {
+export function createCheckboxGroupField(
+  { key, label, name, options = [], defaults = [] }: {
+    key: string;
+    label: string;
+    name: string;
+    options?: readonly FieldOption[];
+    defaults?: readonly string[];
+  },
+): QueryField {
   const preselected = new Set(defaults);
   const container = document.createElement("div");
   container.className = "modal-modes";
-  const checkboxes = [];
+  const checkboxes: HTMLInputElement[] = [];
   for (const option of options) {
     const optionLabel = document.createElement("label");
     optionLabel.className = "modal-mode-option";
@@ -219,6 +259,17 @@ const LONGITUDE_PLACEHOLDER = "Longitude -2.2426";
 // impossible to merely look at.
 const PREVIEW_DRAG_SLOP = 3;
 
+export interface PositionFieldOptions {
+  key?: string;
+  /** An example locator for the source's region. */
+  locatorPlaceholder?: string;
+  /** The coordinate texts kept from the last open. */
+  initial?: {latitudeText?: string, longitudeText?: string};
+  onChange?: (latitudeText: string, longitudeText: string) => void;
+  /** Once per drag of the map that moved it. */
+  onPan?: () => void;
+}
+
 // A latitude/longitude pair on one row, and a Maidenhead locator sharing its
 // row with the geolocate and clear buttons. The locator is a two-way
 // alternative way to enter the position, not a filter of its own — every
@@ -239,17 +290,9 @@ const PREVIEW_DRAG_SLOP = 3;
 // coordinates under the marker, which stays pinned to the centre. `onPan()`
 // fires once per drag that actually moved, so the shell can count it the way
 // it counts geolocation — where the drag ended up is not reported.
-/**
- * @typedef {Object} PositionFieldOptions
- * @property {string} [key]
- * @property {string} [locatorPlaceholder]  An example locator for the source's region.
- * @property {{latitudeText?: string, longitudeText?: string}} [initial]
- *   The coordinate texts kept from the last open.
- * @property {(latitudeText: string, longitudeText: string) => void} [onChange]
- * @property {() => void} [onPan]  Once per drag of the map that moved it.
- */
-/** @param {PositionFieldOptions} [options] */
-export function createPositionField({ key = "position", locatorPlaceholder, initial = {}, onChange, onPan } = {}) {
+export function createPositionField(
+  { key = "position", locatorPlaceholder, initial = {}, onChange, onPan }: PositionFieldOptions = {},
+) {
   const latitude = document.createElement("input");
   latitude.id = fieldId(key, "latitude");
   latitude.name = "latitude";
@@ -545,11 +588,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // The in-progress drag: where the pointer went down, the position the map
   // was drawn around at that moment, and whether it has yet moved far enough
   // to count. Null whenever no drag is running.
-  /**
-   * @type {{pointerId: number, startX: number, startY: number, latitude: number,
-   *   longitude: number, zoom: number, moved: boolean}|null}
-   */
-  let drag = null;
+  let drag: { pointerId: number; startX: number; startY: number; latitude: number; longitude: number; zoom: number; moved: boolean } | null = null;
 
   // Offset the map without redrawing it. The tiles and the repeater squares
   // move (they mark places on the ground); the centre marker and the range
@@ -562,7 +601,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       ? `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`
       : "";
     // Every child is a tile or pin <div> this file appended.
-    for (const child of /** @type {HTMLCollectionOf<HTMLElement>} */ (previewCanvas.children)) {
+    for (const child of (previewCanvas.children as HTMLCollectionOf<HTMLElement>)) {
       const className = String(child.className || "");
       if (className === "repeater-map-tile") {
         child.style.transform = tileShift;
@@ -575,11 +614,9 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // Where the centre lands once the map has been dragged by (dx, dy): dragging
   // the map right moves the point under the marker west, hence the subtraction.
   /**
-   * @param {{latitude: number, longitude: number, zoom: number}} from  The drag's origin.
-   * @param {number} dx
-   * @param {number} dy
+   * @param from The drag's origin.
    */
-  function positionAfterPan(from, dx, dy) {
+  function positionAfterPan(from: { latitude: number; longitude: number; zoom: number }, dx: number, dy: number) {
     const origin = latLonToWorldPixel(from.latitude, from.longitude, from.zoom);
     return worldPixelToLatLon(origin.x - dx, origin.y - dy, from.zoom);
   }
@@ -733,7 +770,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       geoRow,
     ],
     // Appended after every other field rather than in place (see buildFields in
-    // web/js/ui/repeater-query.js). The preview draws the whole query -- the
+    // web/js/ui/repeater-query.ts). The preview draws the whole query -- the
     // position, and the range circle a later field supplies -- so a range
     // control below the picture of itself was the one field the user had to
     // scroll past the map to reach.
@@ -807,6 +844,26 @@ function cityLabel(city) {
   return context ? `${city.name}, ${context}` : city.name;
 }
 
+/** One place the gazetteer (api.codeplug.org /cities) suggests. */
+export interface City {
+  name: string;
+  region?: string;
+  country?: string;
+  latitude: number;
+  longitude: number;
+}
+export interface CityFieldOptions {
+  key?: string;
+  label?: string;
+  placeholder?: string;
+  /** The place kept from last time. */
+  initial?: {city?: City | null};
+  search: (query: string) => Promise<City[]>;
+  /** For the debug panel. */
+  onError?: (error: unknown) => void;
+  onSelect?: (city: City) => void;
+}
+
 // Text input that suggests place names. It stores no position itself: it
 // reports the chosen city through `onSelect(city)` and the modal shell pushes
 // the coordinates into the position field, which owns latitude, longitude,
@@ -821,26 +878,6 @@ function cityLabel(city) {
 // suggestion (the first starts highlighted, so "type and tab away" lands on
 // the best match); arrows move the highlight; Escape closes the list and
 // leaves the text alone.
-/**
- * One place the gazetteer (api.codeplug.org /cities) suggests.
- * @typedef {Object} City
- * @property {string} name
- * @property {string} [region]
- * @property {string} [country]
- * @property {number} latitude
- * @property {number} longitude
- */
-/**
- * @typedef {Object} CityFieldOptions
- * @property {string} [key]
- * @property {string} [label]
- * @property {string} [placeholder]
- * @property {{city?: City|null}} [initial]  The place kept from last time.
- * @property {(query: string) => Promise<City[]>} search
- * @property {(error: unknown) => void} [onError]  For the debug panel.
- * @property {(city: City) => void} [onSelect]
- */
-/** @param {CityFieldOptions} options */
 export function createCityField({
   key = "city",
   label = "Place name",
@@ -849,7 +886,7 @@ export function createCityField({
   search,
   onError,
   onSelect,
-}) {
+}: CityFieldOptions) {
   const input = document.createElement("input");
   input.id = fieldId(key);
   input.name = key;
@@ -916,7 +953,7 @@ export function createCityField({
   list.addEventListener("pointerup", endListPointer);
   list.addEventListener("pointercancel", endListPointer);
 
-  let suggestions = [];
+  let suggestions: City[] = [];
   // The text the visible list answers. The previous prefix's results stay on
   // screen while the next lookup runs, and committing them then would be wrong.
   let suggestionsQuery = "";
@@ -1062,7 +1099,7 @@ export function createCityField({
 
   async function runSearch(text) {
     const generation = searchGeneration;
-    let results = [];
+    let results: City[] = [];
     try {
       results = await search(text);
     } catch (error) {
@@ -1143,7 +1180,7 @@ export function createCityField({
     }
     if (event.key === "Escape") {
       // Escape on the document closes the whole modal
-      // (web/js/ui.js); with a list open it should only close the list.
+      // (web/js/ui.ts); with a list open it should only close the list.
       event.preventDefault?.();
       event.stopPropagation?.();
       searchGeneration += 1;

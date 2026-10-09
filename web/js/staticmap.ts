@@ -1,6 +1,6 @@
 // Static OSM map maths: pure functions that turn a coordinate into the tile
 // grid a fixed-size viewport needs, with the point dead-center. The UI module
-// (web/js/ui/repeater-map.js) owns the DOM; nothing here touches it, so the
+// (web/js/ui/repeater-map.ts) owns the DOM; nothing here touches it, so the
 // projection and tile plan are testable headless.
 
 export const OSM_TILE_SIZE = 256;
@@ -40,11 +40,24 @@ export function worldPixelToLatLon(x, y, zoom) {
   return { latitude, longitude };
 }
 
+/** One OSM tile of a planned map, with the CSS offset that places it. */
+export interface PlannedTile {
+  x: number;
+  y: number;
+  z: number;
+  left: number;
+  top: number;
+}
+
 // Plan the tiles a width x height viewport centered on the coordinate needs.
 // Tiles carry the CSS offset that puts them in place inside the (relatively
 // positioned, overflow-hidden) viewport; x wraps around the antimeridian and
 // rows outside the map (polar regions) are dropped.
-export function planStaticMap(latitude, longitude, { zoom, width, height }) {
+export function planStaticMap(
+  latitude: number,
+  longitude: number,
+  { zoom, width, height }: { zoom: number; width: number; height: number },
+) {
   const tileCount = Math.pow(2, zoom);
   const center = latLonToWorldPixel(latitude, longitude, zoom);
   const viewLeft = center.x - width / 2;
@@ -55,7 +68,7 @@ export function planStaticMap(latitude, longitude, { zoom, width, height }) {
   const firstTileY = Math.floor(viewTop / OSM_TILE_SIZE);
   const lastTileY = Math.floor((viewTop + height - 1) / OSM_TILE_SIZE);
 
-  const tiles = [];
+  const tiles: PlannedTile[] = [];
   for (let tileY = firstTileY; tileY <= lastTileY; tileY += 1) {
     if (tileY < 0 || tileY >= tileCount) {
       continue;

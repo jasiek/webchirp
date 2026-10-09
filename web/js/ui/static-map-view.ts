@@ -6,18 +6,26 @@ import {
   metresPerPixel,
   osmTileUrl,
   planStaticMap,
-} from "../staticmap.js";
+} from "../staticmap.ts";
 
-// The DOM half of the static OSM maps. web/js/staticmap.js does the
+// The DOM half of the static OSM maps. web/js/staticmap.ts does the
 // projection maths and hands back a tile plan; this turns one plan into
 // positioned <img> tiles with a centre marker, and builds the attribution
 // strip the OSM tile policy requires on every rendered map.
 //
 // Two surfaces draw the same map and must draw it identically — the
-// imported-channel context map (web/js/ui/repeater-map.js) and the coordinate
-// preview in the repeater-query modal (web/js/ui/query-fields.js) — so the
+// imported-channel context map (web/js/ui/repeater-map.ts) and the coordinate
+// preview in the repeater-query modal (web/js/ui/query-fields.ts) — so the
 // tile element details (crossOrigin, class names, absolute placement) live
 // here once instead of being copied per caller.
+
+/** A station to pin on the map. inRange false draws it as out of range. */
+export interface MapMarker {
+  latitude: number;
+  longitude: number;
+  inRange?: boolean;
+  approximate?: boolean;
+}
 
 // Fill a map viewport element with positioned tile images, an optional
 // search-radius ring, and the centered marker. Tiles that fail to load just
@@ -42,7 +50,18 @@ import {
 // show what widening would add; `approximate` marks a locator-box position
 // rather than a surveyed point. Drawn as squares, not dots, because half the
 // RSGB directory publishes only a 4-character locator (a box ~111 km across).
-export function renderStaticMap(canvasEl, geo, { zoom, width, height, radiusMetres = 0, overscan = 0, markers = [] }) {
+export function renderStaticMap(
+  canvasEl: HTMLElement,
+  geo: { latitude: number; longitude: number },
+  { zoom, width, height, radiusMetres = 0, overscan = 0, markers = [] }: {
+    zoom: number;
+    width: number;
+    height: number;
+    radiusMetres?: number;
+    overscan?: number;
+    markers?: readonly MapMarker[];
+  },
+) {
   canvasEl.innerHTML = "";
   canvasEl.style.width = `${width}px`;
   canvasEl.style.height = `${height}px`;

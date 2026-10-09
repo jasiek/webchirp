@@ -2,8 +2,8 @@ import { requireRuntimeApi } from "./state.ts";
 import { makeModelLabel } from "./format.ts";
 import { radioEventParams, trackEvent } from "./analytics.ts";
 import { DEFAULT_DRIVER_SET, QUANSHENG_UNOFFICIAL_DRIVER_SET } from "../python-sources.ts";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+import type { UiContext } from "../types/ui-context.js";
+import type { CatalogRadio } from "../runtime-rpc.ts";
 
 const LAST_RADIO_COOKIE = "webchirp_last_radio";
 const RADIO_SEARCH_MAX_RESULTS = 50;
@@ -18,12 +18,9 @@ const RADIO_SEARCH_OPTION_ID_PREFIX = "radio-search-option-";
 // radio, so nothing is selected until the user picks one (or the cookie
 // restores their last). Owns the search-result state; the catalog and the
 // selected entry live in the shared state because export/upload read them.
-/**
- * @param {UiContext} ctx
- */
-export function createRadioCatalog(ctx) {
+export function createRadioCatalog(ctx: UiContext) {
   const { dom, state, log, actions } = ctx;
-  let searchMatches = [];
+  let searchMatches: CatalogRadio[] = [];
   let searchActiveIndex = -1;
   // Overrides the readout while the catalog is loading or failed to load, so a
   // cold start does not claim the user simply has not chosen a radio yet.
@@ -341,7 +338,7 @@ export function createRadioCatalog(ctx) {
     ctx.table.clearInvalidHighlights();
     ctx.settings.clearInvalid();
     // The session for the selection just committed. Reselecting the radio the
-    // current session is for keeps that session (web/js/ui/radio-session.js),
+    // current session is for keeps that session (web/js/ui/radio-session.ts),
     // so one that has already loaded needs no new runtime calls and keeps the
     // user's edits, and one still loading will apply its result when it lands.
     const session = ctx.session.current();
@@ -567,7 +564,7 @@ export function createRadioCatalog(ctx) {
     dom.radioSearchResultsEl.addEventListener("mousedown", (event) => {
       // Prevent the input blur so the click handler below sees the list open.
       event.preventDefault();
-      const li = /** @type {HTMLLIElement|null} */ (/** @type {Element} */ (event.target).closest("li[role='option']"));
+      const li = (event.target as Element).closest("li[role='option']") as HTMLLIElement | null;
       if (!li) {
         return;
       }

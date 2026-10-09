@@ -33,7 +33,7 @@ function describeDeadline(timeoutMs: number): string {
 // because a race leaves the underlying connection open and still streaming. A
 // signal is also the one mechanism that adds nothing to the request — it is not
 // a header, so a simple CORS request stays simple and the OPTIONS preflight that
-// api-beta.rsgb.online answers with 405 is never provoked (see web/js/rsgb.js).
+// api-beta.rsgb.online answers with 405 is never provoked (see web/js/rsgb.ts).
 //
 // AbortSignal.timeout() would express the deadline in one line, and its
 // TimeoutError reason would attribute the abort just as well as signal.aborted

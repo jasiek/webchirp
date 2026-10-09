@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { initAnalytics } from "../../web/js/analytics.js";
 import { bindInstallPrompt } from "../../web/js/install-prompt.js";
-import { createInstallButton } from "../../web/js/ui/install-button.js";
+import { createInstallButton } from "../../web/js/ui/install-button.ts";
 import { FakeElement } from "../support/fake-dom.mjs";
 import { makeWindow } from "../support/fake-window.mjs";
 
@@ -13,7 +13,7 @@ import { makeWindow } from "../support/fake-window.mjs";
 // tapped. Neither shows up in a page load — beforeinstallprompt fires only on a
 // device the app is installable on — so it is pinned here.
 
-// The two members web/js/ui/install-button.js reads off ctx. A full UI harness
+// The two members web/js/ui/install-button.ts reads off ctx. A full UI harness
 // would only add the rest of the app to a module that touches one element.
 function makeContext() {
   const installAppEl = new FakeElement("button", null, "install-app");

@@ -128,7 +128,7 @@ const IMAGE_ROWS = [
 
 async function boot({ rows = IMAGE_ROWS, getChannelExtra, radios = [RADIO], uploadIssues = [] } = {}) {
   const { document } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const extraCalls = [];
   ui.setRuntimeApi(withRadioSessions({
@@ -152,7 +152,7 @@ async function boot({ rows = IMAGE_ROWS, getChannelExtra, radios = [RADIO], uplo
     }),
     // The upload preflight, which is what marks cells invalid. Only interesting
     // when a test asks for issues; the early return in uploadToRadio
-    // (web/js/ui/serial-actions.js) means a blocked upload never reaches the
+    // (web/js/ui/serial-actions.ts) means a blocked upload never reaches the
     // serial port, so driving it needs no connection.
     validateRowsForUpload: async () => ({ valid: uploadIssues.length === 0, issues: uploadIssues, warnings: [] }),
     validateRadioSettings: async () => ({ valid: true, issues: [], settings: [] }),
@@ -512,7 +512,7 @@ test("an apply is refused once the channel list has been replaced under it", asy
 });
 
 // The other half of what the fields were built from. Picking a radio leaves the
-// rows alone -- reloadForSelectedRadio in web/js/ui/radio-catalog.js mutates
+// rows alone -- reloadForSelectedRadio in web/js/ui/radio-catalog.ts mutates
 // them in place and swaps only the schema -- so the rows-still-present check
 // above cannot see this one, and without its own check the apply would write
 // Mode through a driver that has no Mode column (silently skipped, still

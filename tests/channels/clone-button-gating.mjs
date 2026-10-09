@@ -60,7 +60,7 @@ async function loadSerialActions(userAgent = "FakeBrowser/1.0") {
     configurable: true,
     value: { userAgent, maxTouchPoints: 0 },
   });
-  const { createSerialActions } = await import("../../web/js/ui/serial-actions.js");
+  const { createSerialActions } = await import("../../web/js/ui/serial-actions.ts");
   return createSerialActions;
 }
 

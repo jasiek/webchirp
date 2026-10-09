@@ -52,7 +52,7 @@ function tableLocations(document) {
 // Location column's range, then load `rows` through the CSV import path.
 async function bootWithRows(rows, bounds = { min: 0, max: 127 }) {
   const { document, navigator } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const columns = { Location: { kind: "int", editable: false, ...bounds } };
   ui.setRuntimeApi(withRadioSessions({

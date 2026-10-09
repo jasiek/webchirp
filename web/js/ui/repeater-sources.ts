@@ -2,7 +2,7 @@ import {
   buildPrzemiennikiRows,
   parsePrzemiennikiMetaJson,
   parsePrzemiennikiXml,
-} from "../datasources.js";
+} from "../datasources.ts";
 import {
   RSGB_BANDS,
   RSGB_COUNTRY_CODE,
@@ -17,16 +17,18 @@ import {
   filterRsgbRecords,
   haversineKm,
   squaresForRadius,
-} from "../rsgb.js";
+} from "../rsgb.ts";
 import { withRequestTimeout } from "../request-timeout.ts";
 import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from "./format.ts";
 import { trackEvent } from "./analytics.ts";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
-/** @typedef {import("../rsgb.js").RsgbRecord} RsgbRecord */
+import type { PrzemiennikiRepeater, RepeaterEndpoints } from "../datasources.ts";
+import type { RsgbRecord } from "../rsgb.ts";
+import type { UiContext } from "../types/ui-context.js";
+import type { FieldOption } from "./query-fields.ts";
+import type { MapMarker } from "./static-map-view.ts";
 
 // Per-source configuration for the shared repeater-query modal
-// (web/js/ui/repeater-query.js). Each source declares which fields its form contains,
+// (web/js/ui/repeater-query.ts). Each source declares which fields its form contains,
 // how its filter options are obtained, and how a query actually runs — the
 // flows differ at the root and stay per-source here: przemienniki.net,
 // RepeaterBook and IRTS take the filter as query parameters (via the configured
@@ -38,7 +40,7 @@ import { trackEvent } from "./analytics.ts";
 // repeater-query.js, which passes it the constructed ctx.
 // A query rejected by this module's own checks, before any request is made --
 // an unset location, a distance that is not a positive number. Marked as its
-// own type so the one catch in web/js/ui/repeater-query.js can tell it from a
+// own type so the one catch in web/js/ui/repeater-query.ts can tell it from a
 // directory that is actually down: both reach the user the same way, but
 // counting form input the user can fix as a service failure inflates the rate
 // an alert would watch, and does it most on the sources with the most fields.
@@ -51,7 +53,7 @@ export class RepeaterInputError extends Error {}
 
 // What a source says when the form has not narrowed the search enough to run
 // it. Exported because two places say each sentence: the shared modal
-// (web/js/ui/repeater-query.js) puts it on the disabled Query API button
+// (web/js/ui/repeater-query.ts) puts it on the disabled Query API button
 // before the click, and the backstop check in runQuery throws it if a query
 // ever reaches there anyway. One sentence each, so the button's explanation
 // and the error can never drift apart.
@@ -77,11 +79,7 @@ export function unmetRequirement(source, values) {
   return "";
 }
 
-/**
- * @param {UiContext} ctx
- * @param {{endpoints: import("../datasources.js").RepeaterEndpoints}} options
- */
-export function createRepeaterSources(ctx, { endpoints }) {
+export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints: RepeaterEndpoints }) {
   const { log } = ctx;
 
   function countryOptions(codes) {
@@ -98,7 +96,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
       .sort((a, b) => a.title.localeCompare(b.title));
   }
 
-  function bandOptions(bands) {
+  function bandOptions(bands: Iterable<string> | null | undefined): FieldOption[] {
     return Array.from(bands || [])
       .map((band) => ({ value: band, label: band, title: band }))
       .sort((a, b) => a.value.localeCompare(b.value));
@@ -145,7 +143,11 @@ export function createRepeaterSources(ctx, { endpoints }) {
   // `inRange` is what the ring is for: a station just outside it is the answer
   // to "would a wider search find me anything", which the numbers in the form
   // cannot say on their own.
-  function previewPoint(latitude, longitude, { inRange = true, approximate = false } = {}) {
+  function previewPoint(
+    latitude: number,
+    longitude: number,
+    { inRange = true, approximate = false }: { inRange?: boolean; approximate?: boolean } = {},
+  ): MapMarker | null {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return null;
     }
@@ -187,9 +189,9 @@ export function createRepeaterSources(ctx, { endpoints }) {
   const UNSUPPORTED_MODE_TOOLTIP = "Only analogue modes and dstar are supported fully";
 
   // Tag dictionary modes the import cannot offer. `parsed.modes` is already
-  // `{ value, label, title }` (web/js/datasources.js); disabled ones keep
+  // `{ value, label, title }` (web/js/datasources.ts); disabled ones keep
   // their label and swap their title for the shared tooltip.
-  function markUnsupportedModes(modes) {
+  function markUnsupportedModes(modes: Iterable<FieldOption> | null | undefined): FieldOption[] {
     return Array.from(modes || []).map((mode) => {
       const value = String(mode.value || "").trim().toLowerCase();
       if (SUPPORTED_DIRECTORY_MODES.has(value)) {
@@ -216,8 +218,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
     // The dictionary is fetched once and cached for the session; a failed
     // fetch clears the cache so the next open retries instead of staying
     // bricked behind a rejected promise.
-    /** @type {Promise<Record<string, Array<Object>>>|null} */
-    let optionsPromise = null;
+    let optionsPromise: Promise<Record<string, Array<object>>> | null = null;
 
     // The query URL for one set of form values, with the range taken as an
     // argument so the preview can ask for a wider area than the query will keep
@@ -315,8 +316,8 @@ export function createRepeaterSources(ctx, { endpoints }) {
         return response.text();
       });
       const parsed = parsePrzemiennikiXml(text);
-      const plotted = [];
-      const unmapped = [];
+      const plotted: Array<{ point: MapMarker; repeater: PrzemiennikiRepeater }> = [];
+      const unmapped: PrzemiennikiRepeater[] = [];
       for (const repeater of parsed.repeaters) {
         const point = previewPoint(repeater.latitude, repeater.longitude);
         if (point) {
@@ -462,7 +463,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
   const RSGB_MODE_LABELS = { A: "fm", D: "dstar" };
 
   // Modes the directory carries but the import does not offer, because a
-  // channel row cannot express them usefully (see RSGB_MODES in web/js/rsgb.js).
+  // channel row cannot express them usefully (see RSGB_MODES in web/js/rsgb.ts).
   // Shown disabled rather than hidden, so their absence reads as a decision
   // and not a gap; the values are the API's mode flags.
   const RSGB_UNSUPPORTED_MODES = [
@@ -498,13 +499,12 @@ export function createRepeaterSources(ctx, { endpoints }) {
     // `onSquare` is called once per square of the plan, whether it was fetched
     // now or served from the cache, and says which, so the debug panel keeps a
     // line per square however little of the plan cost a request this time.
-    /**
-     * @param {string[]} squares
-     * @param {{onSquare?: (square: {locator: string, count: number, cached: boolean}) => void}} [options]
-     */
-    async function recordsForSquares(squares, { onSquare } = {}) {
-      const held = new Map();
-      const missing = [];
+    async function recordsForSquares(
+      squares: string[],
+      { onSquare }: { onSquare?: (square: { locator: string; count: number; cached: boolean }) => void } = {},
+    ) {
+      const held = new Map<string, RsgbRecord[]>();
+      const missing: string[] = [];
       for (const locator of squares) {
         if (squareCache.has(locator)) {
           held.set(locator, squareCache.get(locator));
@@ -521,10 +521,9 @@ export function createRepeaterSources(ctx, { endpoints }) {
         // outside the request is filed under the first square asked for rather
         // than dropped on an assumption about the API nothing here verifies;
         // it is outside the radius either way, so the distance filter drops it.
-        /** @type {Map<string, RsgbRecord[]>} */
-        const buckets = new Map(missing.map((locator) => [locator, []]));
+        const buckets: Map<string, RsgbRecord[]> = new Map(missing.map((locator) => [locator, []]));
         // missing is non-empty in this branch, so its first square has a bucket.
-        const firstBucket = /** @type {RsgbRecord[]} */ (buckets.get(missing[0]));
+        const firstBucket = buckets.get(missing[0]) as RsgbRecord[];
         for (const record of fetched) {
           const locator = String(record?.locator || "").slice(0, 4).toUpperCase();
           (buckets.get(locator) || firstBucket).push(record);
@@ -538,12 +537,13 @@ export function createRepeaterSources(ctx, { endpoints }) {
         for (const locator of squares) {
           onSquare({
             locator,
-            count: held.get(locator).length,
+            // Every square asked for is held by now: cached, or filed above.
+            count: held.get(locator)?.length ?? 0,
             cached: !missing.includes(locator),
           });
         }
       }
-      return squares.flatMap((locator) => held.get(locator));
+      return squares.flatMap((locator) => held.get(locator) ?? []);
     }
 
     // RSGB filters client-side, so the preview is the real filter run over the
@@ -599,7 +599,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
       // The one source with no second way to narrow a search: the fan-out is
       // over the locator squares around a point, so with nothing to centre on
       // there is no request to make. The shared modal
-      // (web/js/ui/repeater-query.js) reads this and keeps Query API disabled
+      // (web/js/ui/repeater-query.ts) reads this and keeps Query API disabled
       // until the form has one, which is why the guard in runQuery below is
       // now only a backstop.
       requires: [{ keys: ["position"], message: POSITION_REQUIRED_MESSAGE }],
@@ -622,7 +622,9 @@ export function createRepeaterSources(ctx, { endpoints }) {
           key: "bands",
           label: "Band",
           name: "band",
-          options: RSGB_BANDS.map((band) => ({ value: band, label: band.toLowerCase(), title: band.toLowerCase() })),
+          options: RSGB_BANDS.map((
+            band,
+          ) => ({ value: band, label: band.toLowerCase(), title: band.toLowerCase() })),
           defaults: RSGB_DEFAULT_BANDS,
         },
         {

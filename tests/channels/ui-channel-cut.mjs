@@ -28,7 +28,7 @@ const SAMPLE_ROWS = [
 
 test("cut deletes the rows captured at copy time, not the selection at write completion", async () => {
   const { document, navigator } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   ui.setRuntimeApi(withRadioSessions({
@@ -75,7 +75,7 @@ test("cut deletes the rows captured at copy time, not the selection at write com
 // silently resetting it to the first enum option.
 test("paste preserves read-only column values and matches unpadded numeric enums", async () => {
   const { document, navigator } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   const headers = ["Location", "Name", "Frequency", "TStep"];

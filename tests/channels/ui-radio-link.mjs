@@ -28,7 +28,7 @@ function stubRuntimeApi(ui) {
 
 async function bootWith(search) {
   const { document, restore } = installFakeDom({ window: { location: { search } } });
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   stubRuntimeApi(ui);
   await ui.init(true);

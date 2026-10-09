@@ -100,7 +100,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
   // metadata object itself.
   //
   // Picking another radio while this modal is open does not disturb the rows --
-  // reloadForSelectedRadio in web/js/ui/radio-catalog.js keeps them and swaps
+  // reloadForSelectedRadio in web/js/ui/radio-catalog.ts keeps them and swaps
   // the schema underneath, asynchronously -- so the rows-still-present check in
   // apply() cannot see it. What it changes is exactly what the fields were
   // derived from: a column the new driver does not publish is written by

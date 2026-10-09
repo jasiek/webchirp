@@ -22,7 +22,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   declares it in `capabilities`; the bridge never probes.
   `tests/webusb/serial-transport-conformance.mjs` runs one set of cases against
   every implementation -- a new transport joins its table.
-- `web/js/ui.js`: Composes the UI modules and exposes `createUiController()`.
+- `web/js/ui.ts`: Composes the UI modules and exposes `createUiController()`.
 - `web/js/ui/`: One module per UI area — `channel-table`, `settings-panel`,
   `radio-catalog`, `radio-session`, `repeater-query`, `codeplug-io`,
   `serial-actions`, plus the shared `dom`, `state`, `debug-log`, `issue-report`,
@@ -34,8 +34,8 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   applied only while its handle is still `state.radioSession` -- identity, not
   a counter, is what discards a stale load. `repeater-query` is one modal shell for every
   repeater directory: its form is assembled per source from the field
-  components in `query-fields.js` (which build their own DOM), driven by the
-  per-source configs in `repeater-sources.js`.
+  components in `query-fields.ts` (which build their own DOM), driven by the
+  per-source configs in `repeater-sources.ts`.
 - `web/python/runtime_bridge.py`: Entry point of the Python runtime. It is executed (not
   imported) into Pyodide's globals and binds exactly one name there, `rpc_dispatch`
   (`web/python/webchirp_bridge/rpc.py`): the single callable JS uses, taking a method
@@ -121,7 +121,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Call siblings through `ctx` (`ctx.table.render()`) or `ctx.actions`, never by
   importing them — that keeps the module graph free of cycles. Such calls must
   happen after construction, never in a factory body.
-- Modules bind their own DOM listeners in a `bindEvents()`; `ui.js` only binds
+- Modules bind their own DOM listeners in a `bindEvents()`; `ui.ts` only binds
   what no single module owns.
 - Query document elements in `web/js/ui/dom.ts`, not in feature modules.
 

@@ -1,6 +1,8 @@
 import { withRequestTimeout } from "./request-timeout.ts";
 import { highestPowerOption, setHighestPower } from "./row-power.ts";
-import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.js";
+import type { RepeaterRowsResult, RowBuilderHooks, SkippedRepeater } from "./row-power.ts";
+import type { ChannelRow } from "./ui/channel-values.ts";
+import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.ts";
 
 const PMR446_FREQUENCIES_MHZ = Array.from(
   { length: 16 },
@@ -80,25 +82,25 @@ const DEFAULT_REPEATER_API_BASE = "https://api.codeplug.org";
 // disables the two proxy-dependent directories, but IRTS remains on the
 // default API: that first-party route is part of the hosted app's contract and
 // a transport failure should surface to the user rather than hide the action.
-/**
- * Where one repeater directory is queried: its rows and its filter metadata.
- * @typedef {{apiUrl: string, metaUrl: string}} DirectoryEndpoint
- */
+/** Where one repeater directory is queried: its rows and its filter metadata. */
+export type DirectoryEndpoint = {apiUrl: string, metaUrl: string};
 /**
  * Every remote endpoint the app queries; a directory the deployment switched
  * off is null.
- * @typedef {Object} RepeaterEndpoints
- * @property {DirectoryEndpoint|null} przemienniki
- * @property {DirectoryEndpoint|null} repeaterbook
- * @property {DirectoryEndpoint} irts
- * @property {string} cities  The place-name gazetteer.
- * @property {string} lookup  The per-callsign position lookup.
  */
+export interface RepeaterEndpoints {
+  przemienniki: DirectoryEndpoint | null;
+  repeaterbook: DirectoryEndpoint | null;
+  irts: DirectoryEndpoint;
+  /** The place-name gazetteer. */
+  cities: string;
+  /** The per-callsign position lookup. */
+  lookup: string;
+}
 /**
- * @param {string} [apiBase]  Blank switches off the proxied directories.
- * @returns {RepeaterEndpoints}
+ * @param apiBase Blank switches off the proxied directories.
  */
-function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
+function buildRepeaterEndpoints(apiBase: string = DEFAULT_REPEATER_API_BASE): RepeaterEndpoints {
   const base = String(apiBase ?? "").trim().replace(/\/+$/, "");
   const irtsBase = base || DEFAULT_REPEATER_API_BASE;
   return {
@@ -122,7 +124,7 @@ function buildRepeaterEndpoints(apiBase = DEFAULT_REPEATER_API_BASE) {
     // city lookup.
     cities: `${irtsBase}/cities`,
     // Per-callsign position lookup for the channel grid's context map
-    // (web/js/callsign-lookup.js). Same rule as cities and IRTS: a first-party
+    // (web/js/callsign-lookup.ts). Same rule as cities and IRTS: a first-party
     // api.codeplug.org route rather than a proxied directory, so a deployment
     // that blanks the base to switch off przemienniki.net and RepeaterBook
     // keeps its maps.
@@ -160,12 +162,11 @@ const CITY_SUGGEST_MAX = 20;
 // takes lat and lon together or not at all, so a half-known position is sent
 // as no hint. Results are normalized to this app's { latitude, longitude }
 // shape, and an entry without a usable coordinate pair is dropped.
-/**
- * @param {string} citiesUrl
- * @param {string} query
- * @param {{latitude?: number, longitude?: number}|null} [near]
- */
-export async function fetchCitySuggestions(citiesUrl, query, near = null) {
+export async function fetchCitySuggestions(
+  citiesUrl: string,
+  query: string,
+  near: { latitude?: number; longitude?: number } | null = null,
+) {
   const text = String(query ?? "").trim();
   if (!citiesUrl || text.length === 0) {
     return [];
@@ -342,7 +343,27 @@ function formatFrequencyMhz(value) {
   return numeric.toFixed(6);
 }
 
-export function parsePrzemiennikiXml(xmlText) {
+/** One <repeater> of an RXF response, its frequencies in MHz. */
+export interface PrzemiennikiRepeater {
+  qra: string;
+  mode: string;
+  qrgRx: number;
+  qrgTx: number;
+  qth: string;
+  remarks: string;
+  link: string;
+  ctcssRx: string;
+  ctcssTx: string;
+  /** NaN when the directory published no position. */
+  latitude: number;
+  longitude: number;
+}
+
+export function parsePrzemiennikiXml(xmlText: string): {
+  perspective: string;
+  countries: string[];
+  repeaters: PrzemiennikiRepeater[];
+} {
   const xmlDoc = parseXmlDocument(xmlText);
   const perspective = firstText(xmlDoc, "rxf > perspective").toLowerCase();
   if (!perspective) {
@@ -389,19 +410,19 @@ export function parsePrzemiennikiMetaJson(jsonText) {
   }
   const filters = payload?.filters && typeof payload.filters === "object" ? payload.filters : {};
 
-  const countries = Array.isArray(filters.country)
+  const countries: string[] = Array.isArray(filters.country)
     ? filters.country
       .map((value) => String(value || "").trim().toUpperCase())
       .filter((value) => /^[A-Z]{2}$/.test(value))
     : [];
 
-  const bands = Array.isArray(filters.band)
+  const bands: string[] = Array.isArray(filters.band)
     ? filters.band
       .map((value) => String(value || "").trim().toLowerCase())
       .filter((value) => value.length > 0)
     : [];
 
-  const modes = Array.isArray(filters.mode)
+  const modes: Array<{ value: string; label: string; title: string }> = Array.isArray(filters.mode)
     ? filters.mode
       .map((value) => String(value || "").trim().toLowerCase())
       .filter((value) => value.length > 0)
@@ -499,14 +520,14 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }) {
 // (the radio advertises no Mode the repeater can be worked in) or "tone" (the
 // radio's tone table has no such CTCSS access tone, so it could never open the
 // repeater) — so the caller can say which and why. Same contract as
-// buildRsgbRows in web/js/rsgb.js.
+// buildRsgbRows in web/js/rsgb.ts.
 export function buildPrzemiennikiRows(
   repeaters,
-  { createBlankRow, setRowValue, findEnumOption },
-  { perspective = "repeater" } = {},
-) {
-  const rows = [];
-  const skipped = [];
+  { createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks,
+  { perspective = "repeater" }: { perspective?: string } = {},
+): RepeaterRowsResult {
+  const rows: ChannelRow[] = [];
+  const skipped: SkippedRepeater[] = [];
   // RXF's <perspective> labels every rx/tx pair in the feed - frequencies and
   // CTCSS alike - as either the user's radio's or the repeater's. Under
   // "radio", rx is what the radio receives; under "repeater", rx is what the
@@ -529,7 +550,9 @@ export function buildPrzemiennikiRows(
     const receiveTone = parseCtcssFreq(fromRadio ? repeater.ctcssRx : repeater.ctcssTx);
 
     setRowValue(row, "Name", repeater.qra);
-    const commentParts = [repeater.qth, repeater.remarks, repeater.link].filter((part) => String(part || "").trim());
+    const commentParts = [repeater.qth, repeater.remarks, repeater.link].filter((
+      part,
+    ) => String(part || "").trim());
     setRowValue(row, "Comment", commentParts.join(" | "));
 
     if (Number.isFinite(receiveFrequency)) {
@@ -584,7 +607,7 @@ export function buildPrzemiennikiRows(
     setRowValue(row, "Mode", mappedMode);
     // A repeater channel reaches for a distant machine, so it carries the
     // driver's highest tier rather than whatever the blank row defaulted to -
-    // the same rule buildRsgbRows applies in web/js/rsgb.js.
+    // the same rule buildRsgbRows applies in web/js/rsgb.ts.
     setHighestPower(row, { setRowValue, findEnumOption });
     rows.push(row);
   }

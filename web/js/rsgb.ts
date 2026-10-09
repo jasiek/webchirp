@@ -1,7 +1,7 @@
 // RSGB/ETCC UK repeater directory (https://api-beta.rsgb.online).
 //
 // Everything here is pure: locator maths, the square fan-out plan, dedup,
-// filtering and row construction. The UI module (web/js/ui/repeater-query.js) owns
+// filtering and row construction. The UI module (web/js/ui/repeater-query.ts) owns
 // the modal and supplies the fetch. See FINDINGS.md **rsgb-etcc-api-shape** for
 // the API's behaviour; the two rules that shape this file are that a lookup
 // reports "nothing" as HTTP 200 with {"data":null} rather than an error, and
@@ -11,6 +11,8 @@
 
 import { REPEATER_REQUEST_TIMEOUT_MS, withRequestTimeout } from "./request-timeout.ts";
 import { setHighestPower } from "./row-power.ts";
+import type { RepeaterRowsResult, RowBuilderHooks, SkippedRepeater } from "./row-power.ts";
+import type { ChannelRow } from "./ui/channel-values.ts";
 
 // No CORS proxy is involved: the API sends Access-Control-Allow-Origin: * on
 // every response, unlike przemienniki.net and repeaterbook.com. The request
@@ -197,7 +199,12 @@ export function distanceToBoxKm(latitude, longitude, box) {
 
 // The 4-character squares a radius touches, nearest first. Squares are 1 deg of
 // latitude by 2 deg of longitude, aligned to -90/-180.
-export function squaresForRadius(latitude, longitude, radiusKm, options = {}) {
+export function squaresForRadius(
+  latitude: number,
+  longitude: number,
+  radiusKm: number,
+  options: { maxSquares?: number } = {},
+): { squares: string[]; truncated: boolean; considered: number } {
   const maxSquares = Number(options.maxSquares) > 0 ? Number(options.maxSquares) : DEFAULT_MAX_SQUARES;
   const lat = Number(latitude);
   const lon = Number(longitude);
@@ -216,7 +223,7 @@ export function squaresForRadius(latitude, longitude, radiusKm, options = {}) {
   const lonStart = Math.floor((lon - lonDelta + 180) / 2);
   const lonEnd = Math.floor((lon + lonDelta + 180) / 2);
 
-  const candidates = [];
+  const candidates: Array<{ locator: string; distanceKm: number }> = [];
   for (let latIndex = latStart; latIndex <= latEnd; latIndex += 1) {
     for (let lonRaw = lonStart; lonRaw <= lonEnd; lonRaw += 1) {
       const lonIndex = ((lonRaw % 180) + 180) % 180;
@@ -274,20 +281,21 @@ export function parseRsgbPayload(payload) {
 /**
  * One station as the RSGB directory API returns it (tx, rx, band, mode,
  * status, locator, callsign, ...), read field by field as the API spells it.
- * @typedef {Record<string, any>} RsgbRecord
  */
+export type RsgbRecord = Record<string, any>;
+export interface RsgbFetchOptions {
+  /** Four-character locator squares. */
+  squares?: Iterable<string>;
+  /** globalThis.fetch by default. */
+  fetchImpl?: typeof fetch;
+  baseUrl?: string;
+  /** Told about each square once it has answered. */
+  onRequest?: (request: {locator: string, url: string, count: number}) => void;
+  /** Per square. */
+  timeoutMs?: number;
+}
 /**
- * @typedef {Object} RsgbFetchOptions
- * @property {Iterable<string>} [squares]  Four-character locator squares.
- * @property {typeof fetch} [fetchImpl]  globalThis.fetch by default.
- * @property {string} [baseUrl]
- * @property {(request: {locator: string, url: string, count: number}) => void} [onRequest]
- *   Told about each square once it has answered.
- * @property {number} [timeoutMs]  Per square.
- */
-/**
- * @param {RsgbFetchOptions} [options]
- * @returns {Promise<RsgbRecord[]>}  Every record the squares hold.
+ * @returns Every record the squares hold.
  */
 export async function fetchRsgbRecords({
   squares,
@@ -295,7 +303,7 @@ export async function fetchRsgbRecords({
   baseUrl = RSGB_API_BASE,
   onRequest,
   timeoutMs = REPEATER_REQUEST_TIMEOUT_MS,
-} = {}) {
+}: RsgbFetchOptions = {}): Promise<RsgbRecord[]> {
   const doFetch = fetchImpl || globalThis.fetch;
   if (typeof doFetch !== "function") {
     throw new Error("No fetch implementation available for the RSGB query.");
@@ -363,34 +371,42 @@ export function isRepeaterRecord(record) {
   return Number.isFinite(tx) && Number.isFinite(rx) && tx > 0 && rx > 0 && tx !== rx;
 }
 
+/** A record that passed the filter, with where it is and how far. */
+export interface RsgbEntry {
+  record: RsgbRecord;
+  distanceKm: number;
+  /** The distance is from a locator box's centre, not a measured position. */
+  approximate: boolean;
+  latitude: number;
+  longitude: number;
+}
+
+export interface RsgbFilter {
+  latitude?: number;
+  longitude?: number;
+  radiusKm?: number;
+  /** Empty means any band. */
+  bands?: Iterable<string>;
+  /** Empty means any mode. */
+  modes?: Iterable<string>;
+  onlyOperational?: boolean;
+}
+
 // Rank and filter. An empty band or mode selection means "any", matching the
 // convention the other repeater sources use.
-/**
- * @typedef {Object} RsgbFilter
- * @property {number} [latitude]
- * @property {number} [longitude]
- * @property {number} [radiusKm]
- * @property {Iterable<string>} [bands]  Empty means any band.
- * @property {Iterable<string>} [modes]  Empty means any mode.
- * @property {boolean} [onlyOperational]
- */
-/**
- * @param {RsgbRecord[]|null|undefined} records
- * @param {RsgbFilter} [filter]
- */
-export function filterRsgbRecords(records, {
+export function filterRsgbRecords(records: RsgbRecord[] | null | undefined, {
   latitude,
   longitude,
   radiusKm,
   bands = [],
   modes = [],
   onlyOperational = true,
-} = {}) {
+}: RsgbFilter = {}) {
   const bandSet = new Set(Array.from(bands).map((band) => String(band).toUpperCase()));
   const modeSet = new Set(Array.from(modes).map((mode) => String(mode).toUpperCase()));
   const radius = Number(radiusKm);
 
-  const entries = [];
+  const entries: RsgbEntry[] = [];
   for (const record of records || []) {
     if (!isRepeaterRecord(record)) {
       continue;
@@ -464,7 +480,11 @@ const MODE_FLAG_FALLBACK_ORDER = ["A", "D", "F", "M", "P", "N", "7", "E"];
 // rather than a substitution: a D-STAR query that answered with an NFM row, or
 // a DMR-only repeater written as NFM, produces a channel that cannot work the
 // repeater it claims to be.
-function findRsgbMode(findEnumOption, record, preferredModes = []) {
+function findRsgbMode(
+  findEnumOption: RowBuilderHooks["findEnumOption"],
+  record: RsgbRecord,
+  preferredModes: Iterable<string> = [],
+): string | null {
   const flags = new Set(modeFlagsOf(record));
   const bandwidthKhz = Number(record?.txbw);
   const narrow = !Number.isFinite(bandwidthKhz) || bandwidthKhz <= 12.5;
@@ -523,9 +543,13 @@ function findRsgbMode(findEnumOption, record, preferredModes = []) {
 //
 // `modes` is the query's own mode selection, so a D-STAR search gets the DV
 // side of a mixed A/D repeater rather than its analogue one.
-export function buildRsgbRows(entries, { createBlankRow, setRowValue, findEnumOption }, { modes = [] } = {}) {
-  const rows = [];
-  const skipped = [];
+export function buildRsgbRows(
+  entries,
+  { createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks,
+  { modes = [] }: { modes?: Iterable<string> } = {},
+): RepeaterRowsResult {
+  const rows: ChannelRow[] = [];
+  const skipped: SkippedRepeater[] = [];
   for (const entry of entries) {
     const record = entry?.record || entry;
     const row = createBlankRow();

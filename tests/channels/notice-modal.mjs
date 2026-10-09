@@ -94,7 +94,7 @@ test("a second notice replaces the first rather than queueing behind it", () => 
   }
 });
 
-// Escape is bound once in web/js/ui.js rather than per module, and the notice
+// Escape is bound once in web/js/ui.ts rather than per module, and the notice
 // is checked before every other surface, so a notice raised over an open modal
 // is what Escape closes first -- and the modal underneath it stays open, which
 // is the half that would break if the notice were appended to the chain rather
@@ -102,7 +102,7 @@ test("a second notice replaces the first rather than queueing behind it", () => 
 test("Escape closes the notice first, leaving the modal underneath it open", async () => {
   const { document, restore } = installFakeDom();
   try {
-    const { createUiController } = await import("../../web/js/ui.js");
+    const { createUiController } = await import("../../web/js/ui.ts");
     const ui = createUiController();
     ui.setRuntimeApi(withRadioSessions({
       listRadios: async () => ({ radios: [] }),

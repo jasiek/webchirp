@@ -46,7 +46,7 @@ export function createNoticeModal(ctx: Pick<UiContext, "dom">) {
     dom.noticeMessageEl.textContent = String(message || "");
     dom.noticeModalEl.classList.remove("hidden");
     // The dismiss button, so Enter and Space close the notice without the user
-    // having to find the mouse. Escape is handled globally in web/js/ui.js.
+    // having to find the mouse. Escape is handled globally in web/js/ui.ts.
     dom.noticeDismissEl.focus?.();
   }
 

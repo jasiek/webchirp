@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.ts";
-import { createRepeaterQuery } from "../../web/js/ui/repeater-query.js";
+import { createRepeaterQuery } from "../../web/js/ui/repeater-query.ts";
 import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
 import { fakeXmlGlobals } from "../support/fake-xml.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
@@ -1084,7 +1084,7 @@ test("a directory still loading its options cannot replace the one opened after 
   assert.equal(log.statuses.at(-1), "Configure RSGB ETCC query.");
 });
 
-// The button is hidden by web/js/ui/repeater-query.js when a blank proxy base
+// The button is hidden by web/js/ui/repeater-query.ts when a blank proxy base
 // makes its source unavailable, which only works if the stylesheet lets it:
 // the toolbar's own display declaration outranks the browser's [hidden] rule,
 // so a visible button would sit there doing nothing when clicked.

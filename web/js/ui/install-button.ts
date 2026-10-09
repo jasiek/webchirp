@@ -5,8 +5,7 @@ import {
 } from "../install-prompt.js";
 import { trackEvent } from "./analytics.ts";
 import { errorDetails } from "./format.ts";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+import type { UiContext } from "../types/ui-context.js";
 
 // The toolbar's Install button: this app's own install affordance, standing in
 // for the browser one that web/js/install-prompt.js suppresses. See that module
@@ -18,10 +17,7 @@ import { errorDetails } from "./format.ts";
 // (every browser on iOS, Firefox), or a visit the browser has not yet judged
 // installable. A permanently dead control in the toolbar would say the app
 // cannot be installed here, which is usually the opposite of the truth.
-/**
- * @param {UiContext} ctx
- */
-export function createInstallButton(ctx) {
+export function createInstallButton(ctx: UiContext) {
   const { dom, log } = ctx;
 
   // Mirror the parked prompt into the button's visibility. Called on every

@@ -73,14 +73,15 @@ export function createBootstrapCrashReporter(
   };
 }
 
-// Build the bootstrap gate around a caller-supplied loadRuntime(), which must
-// resolve to a fully seeded runtime and reject if any step of that fails.
 export interface RuntimeBootstrap<T> {
   /** The seeded runtime, booting it if needed. */
   ensure: () => Promise<T>;
   /** The seeded runtime, or null before boot. */
   getRuntime: () => T | null;
 }
+
+// Build the bootstrap gate around a caller-supplied loadRuntime(), which must
+// resolve to a fully seeded runtime and reject if any step of that fails.
 export function createRuntimeBootstrap<T>(
   { loadRuntime }: { loadRuntime?: () => Promise<T> } = {},
 ): RuntimeBootstrap<T> {

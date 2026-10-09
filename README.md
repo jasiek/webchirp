@@ -170,7 +170,7 @@ wrong one still echoes perfectly. The same cases run against fake hardware in
 
 - Entry point / wiring: `web/app.js` connects the UI controller, runtime RPC
   client, and serial bridge.
-- UI controller: `web/js/ui.js` (channel table, settings editor, clipboard,
+- UI controller: `web/js/ui.ts` (channel table, settings editor, clipboard,
   status/debug panels).
 - Serial bridge: `web/js/serial.ts` (native Web Serial) with WebUSB chip drivers
   in `web/js/ftdi-webusb.ts`, `web/js/pl2303-webusb.ts`,
@@ -209,7 +209,7 @@ treat an untested radio as unverified.
 sequenceDiagram
   autonumber
   participant U as User
-  participant UI as ui.js
+  participant UI as ui.ts
   participant RPC as runtime-rpc.ts
   participant SRC as python-sources.ts
   participant PY as webchirp_bridge<br/>(Pyodide)

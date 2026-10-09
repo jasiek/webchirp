@@ -13,18 +13,18 @@ import { createDebugLog } from "./ui/debug-log.ts";
 import { createNoticeModal } from "./ui/notice-modal.ts";
 import { createProgress } from "./ui/progress.ts";
 import { createIssueReporter } from "./ui/issue-report.ts";
-import { createSettingsPanel } from "./ui/settings-panel.js";
+import { createSettingsPanel } from "./ui/settings-panel.ts";
 import { createChannelExtra } from "./ui/channel-extra.ts";
 import { createChannelBulkEdit } from "./ui/channel-bulk-edit.ts";
 import { createChannelTable } from "./ui/channel-table.ts";
-import { createRadioCatalog } from "./ui/radio-catalog.js";
-import { createRadioSession } from "./ui/radio-session.js";
-import { createRepeaterQuery } from "./ui/repeater-query.js";
-import { createRepeaterMap } from "./ui/repeater-map.js";
-import { createCodeplugIo } from "./ui/codeplug-io.js";
-import { createSerialActions } from "./ui/serial-actions.js";
-import { createInstallButton } from "./ui/install-button.js";
-import { createConnectivity } from "./ui/connectivity.js";
+import { createRadioCatalog } from "./ui/radio-catalog.ts";
+import { createRadioSession } from "./ui/radio-session.ts";
+import { createRepeaterQuery } from "./ui/repeater-query.ts";
+import { createRepeaterMap } from "./ui/repeater-map.ts";
+import { createCodeplugIo } from "./ui/codeplug-io.ts";
+import { createSerialActions } from "./ui/serial-actions.ts";
+import { createInstallButton } from "./ui/install-button.ts";
+import { createConnectivity } from "./ui/connectivity.ts";
 import {
   classifyErrorKind,
   errorTypeName,
@@ -33,6 +33,8 @@ import {
 } from "./ui/analytics.ts";
 import { FLOWS, OUTCOMES, recordFlow } from "./ui/metrics.ts";
 import { captureError, setContextProvider } from "./sentry.js";
+import type { RuntimeApi } from "./runtime-rpc.ts";
+import type { UiActions, UiContext } from "./types/ui-context.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
 export { buildExportFileName };
@@ -42,8 +44,6 @@ export { buildExportFileName };
 // selection, repeater imports, file import/export, serial actions); this file
 // wires them together, owns the channels/settings view switch, and runs the
 // bootstrap sequence.
-/** @typedef {import("./types/ui-context.js").UiContext} UiContext */
-/** @typedef {import("./types/ui-context.js").UiActions} UiActions */
 
 export function createUiController() {
   const dom = queryUiElements();
@@ -59,8 +59,7 @@ export function createUiController() {
   // Cross-module calls go through this registry rather than direct imports, so
   // no module has to import a sibling that imports it back. Every entry is
   // resolved when called, never at construction time.
-  /** @type {UiActions} */
-  const actions = {
+  const actions: UiActions = {
     updateSerialActionState: () => ctx.serial.updateSerialActionState(),
     setEditorView: (view) => setEditorView(view),
     // Any modal that owns the keyboard: the channel grid's clipboard and
@@ -83,7 +82,7 @@ export function createUiController() {
   // after every module has been constructed.
   // Typed as the whole UiContext from the start: the members not set here are
   // attached by the Object.assign below, before any of them is read.
-  const ctx = /** @type {UiContext} */ ({ dom, state, log, progress, notice, actions });
+  const ctx = { dom, state, log, progress, notice, actions } as UiContext;
   const session = createRadioSession(ctx);
   const settings = createSettingsPanel(ctx);
   const table = createChannelTable(ctx);
@@ -127,8 +126,7 @@ export function createUiController() {
     ...radioEventParams(state.selectedRadio),
   }));
 
-  /** @param {import("./runtime-rpc.ts").RuntimeApi} api */
-  function setRuntimeApi(api) {
+  function setRuntimeApi(api: RuntimeApi) {
     state.runtimeApi = api;
   }
 
@@ -229,7 +227,6 @@ export function createUiController() {
       setEditorView("settings");
       settings.render();
     });
-
 
     dom.reportIssueEl.addEventListener("click", () => {
       // A frustration signal, and one that pairs with the clone failure events:

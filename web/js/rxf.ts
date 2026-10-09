@@ -1,7 +1,7 @@
 // RXF is the XML dialect przemienniki.net publishes and api.codeplug.org
 // re-serves for every directory it fronts. Two readers parse it: the bulk
-// directory query (web/js/datasources.js) and the per-callsign hover lookup
-// (web/js/callsign-lookup.js). These are the primitives they share, kept here
+// directory query (web/js/datasources.ts) and the per-callsign hover lookup
+// (web/js/callsign-lookup.ts). These are the primitives they share, kept here
 // so the two cannot drift apart on what a <qrg> or an absent element means.
 
 export function parseXmlDocument(xmlText) {

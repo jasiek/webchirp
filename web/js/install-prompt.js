@@ -6,7 +6,7 @@
 // otherwise the "Add to Home screen" item buried in the browser menu. Almost
 // nobody finds either, so installs here are limited by discovery rather than by
 // eligibility. Cancelling the event parks it in this module instead, where the
-// toolbar button in web/js/ui/install-button.js can raise it on a tap.
+// toolbar button in web/js/ui/install-button.ts can raise it on a tap.
 //
 // Cancelling is only safe where a replacement affordance exists, so this module
 // is loaded by index.html alone: about.html keeps the browser's own prompt.

@@ -1,8 +1,7 @@
 import { requireRuntimeApi } from "./state.ts";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
-/** @typedef {import("./state.ts").RadioSessionHandle} RadioSessionHandle */
-/** @typedef {import("../runtime-rpc.ts").CatalogRadio} CatalogRadio */
+import type { CatalogRadio } from "../runtime-rpc.ts";
+import type { UiContext } from "../types/ui-context.js";
+import type { RadioSessionHandle } from "./state.ts";
 
 // The runtime session behind the selected radio.
 //
@@ -19,10 +18,7 @@ import { requireRuntimeApi } from "./state.ts";
 // A handle is created synchronously so a selection can be made and rendered at
 // once; its id arrives when the runtime answers, and every caller awaits idOf()
 // before it needs one.
-/**
- * @param {UiContext} ctx
- */
-export function createRadioSession(ctx) {
+export function createRadioSession(ctx: UiContext) {
   const { state, log } = ctx;
 
   // Close a handle's session in the runtime once its id is known. The id may
@@ -30,8 +26,7 @@ export function createRadioSession(ctx) {
   // it rather than on the handle; a session that never opened has nothing to
   // close, and its open's rejection was already reported by the load that
   // awaited the id.
-  /** @param {RadioSessionHandle|null} handle */
-  function release(handle) {
+  function release(handle: RadioSessionHandle | null) {
     if (!handle || handle.closed) {
       return;
     }
@@ -55,11 +50,9 @@ export function createRadioSession(ctx) {
   // runtime at all (a transient driver import or isolated-runtime boot
   // failure is otherwise stuck until another radio is picked).
   /**
-   * @param {CatalogRadio} radio
-   * @param {string} [adoptedSessionId]  A session the runtime already opened.
-   * @returns {RadioSessionHandle}
+   * @param adoptedSessionId A session the runtime already opened.
    */
-  function open(radio, adoptedSessionId = "") {
+  function open(radio: CatalogRadio, adoptedSessionId: string = ""): RadioSessionHandle {
     const current = state.radioSession;
     if (
       !adoptedSessionId
@@ -72,8 +65,7 @@ export function createRadioSession(ctx) {
     }
     release(current);
     const adoptedId = adoptedSessionId ? String(adoptedSessionId) : "";
-    /** @type {RadioSessionHandle} */
-    const handle = {
+    const handle: RadioSessionHandle = {
       radio,
       id: adoptedId,
       // Set once the session's metadata and settings have both been applied
@@ -120,15 +112,13 @@ export function createRadioSession(ctx) {
     state.radioSession = null;
   }
 
-  /** @returns {RadioSessionHandle|null} */
-  function current() {
+  function current(): RadioSessionHandle | null {
     return state.radioSession;
   }
 
   // Whether a handle is still the one the editor is working with; the test a
   // load runs before applying its response.
-  /** @param {RadioSessionHandle|null} handle */
-  function isCurrent(handle) {
+  function isCurrent(handle: RadioSessionHandle | null) {
     return state.radioSession === handle;
   }
 
@@ -137,11 +127,7 @@ export function createRadioSession(ctx) {
   // selection has moved on, its session is being closed in the runtime, and a
   // call made for it now would only fail there and leave a runtime error in
   // the debug panel for a load nobody wants any more.
-  /**
-   * @param {RadioSessionHandle|null} handle
-   * @returns {Promise<string>}
-   */
-  async function idOf(handle) {
+  async function idOf(handle: RadioSessionHandle | null): Promise<string> {
     if (!handle) {
       return "";
     }
@@ -154,16 +140,14 @@ export function createRadioSession(ctx) {
 
   // The current session's runtime id, for one-shot calls made on behalf of
   // whatever radio is selected at that moment.
-  /** @returns {Promise<string>} */
-  async function currentId() {
+  async function currentId(): Promise<string> {
     return idOf(state.radioSession);
   }
 
   // Record that a handle's metadata and settings have been applied, so that
   // reselecting its radio is a no-op. Ignored for a handle that is no longer
   // current: its load was discarded, so nothing about it is loaded.
-  /** @param {RadioSessionHandle|null} handle */
-  function markLoaded(handle) {
+  function markLoaded(handle: RadioSessionHandle | null) {
     if (handle && isCurrent(handle)) {
       handle.loaded = true;
     }

@@ -141,7 +141,7 @@ export function createDebugLog(
   // Separate from reportActionError rather than a branch inside it, because
   // what makes a failure user-fixable is the caller's own validation and not
   // anything readable off the error: the class that marks one
-  // (RepeaterInputError, web/js/ui/repeater-sources.js) is local to the module
+  // (RepeaterInputError, web/js/ui/repeater-sources.ts) is local to the module
   // that throws it.
   function reportActionRejected(action, error) {
     reportActionBlocked(action, error, errorDetails(error));

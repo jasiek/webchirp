@@ -1,7 +1,7 @@
-import { firstText, parseQrgMhz, parseRxfLocation, parseXmlDocument } from "./rxf.js";
+import { firstText, parseQrgMhz, parseRxfLocation, parseXmlDocument } from "./rxf.ts";
 
 // Per-callsign position lookup behind the channel grid's context map
-// (web/js/ui/repeater-map.js). Hovering a Location cell asks
+// (web/js/ui/repeater-map.ts). Hovering a Location cell asks
 // api.codeplug.org/lookup/<CALLSIGN> where that repeater is, rather than the
 // map reading a coordinate the import stamped onto the row -- so a map is
 // available for every channel whose name is a callsign, including ones typed
@@ -106,10 +106,12 @@ const LOOKUP_TIMEOUT_MS = 5000;
 // `fetchImpl` exists for the headless tests, which have no network and need to
 // count requests to prove the cache works.
 /**
- * @param {string} lookupUrl  The per-callsign endpoint (RepeaterEndpoints.lookup).
- * @param {{fetchImpl?: typeof fetch}} [options]
+ * @param lookupUrl The per-callsign endpoint (RepeaterEndpoints.lookup).
  */
-export function createCallsignLookup(lookupUrl, { fetchImpl = (input, init) => fetch(input, init) } = {}) {
+export function createCallsignLookup(
+  lookupUrl: string,
+  { fetchImpl = (input, init) => fetch(input, init) }: { fetchImpl?: typeof fetch } = {},
+) {
   // Callsign -> in-flight or settled promise of that callsign's entries. It
   // serves two purposes the HTTP cache cannot: it collapses the burst of
   // hovers a pointer crossing one cell produces into a single request, and it

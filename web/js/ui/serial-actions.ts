@@ -21,8 +21,7 @@ import {
   isSerialUnsupported,
 } from "../serial-errors.ts";
 import { requireRuntimeApi } from "./state.ts";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+import type { UiContext } from "../types/ui-context.js";
 
 const LIVE_RADIO_TITLE = "Live-mode radios are not supported in this UI yet";
 const NO_RADIO_SELECTED_TITLE = "Search for and select a radio first";
@@ -48,17 +47,10 @@ const CLONE_FLOW_OUTCOMES = Object.freeze({
   radio_upload_failure: { flow: FLOWS.RADIO_UPLOAD, outcome: OUTCOMES.FAILED },
 });
 
-/**
- * @param {UiContext} ctx
- */
-export function createSerialActions(ctx) {
+export function createSerialActions(ctx: UiContext) {
   const { dom, state, log, actions } = ctx;
 
-  /**
-   * @type {{capability?: typeof capability,
-   *   setPreferredTransport(transport: string): void}|null}
-   */
-  let transportController = null;
+  let transportController: { capability?: typeof capability; setPreferredTransport(transport: string): void } | null = null;
   let capability = { supported: false, native: false, webusb: false, webbluetooth: false };
   // Whether this browser can run a clone at all (WebAssembly JSPI). Checked
   // when a connection is started, not at init: the rest of the app works
@@ -85,7 +77,7 @@ export function createSerialActions(ctx) {
   }
 
   // Record whether a clone can run here at all; web/app.js decides from the
-  // WebAssembly feature check and web/js/ui.js passes it through init().
+  // WebAssembly feature check and web/js/ui.ts passes it through init().
   function setCloneSupported(supported) {
     cloneSupported = Boolean(supported);
   }

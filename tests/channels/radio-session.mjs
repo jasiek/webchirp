@@ -9,7 +9,7 @@
 // session failing as a precondition, the upload gate reading the image's
 // origin rather than its presence, and undecodable channels protecting only
 // the session that recorded them -- and, on the browser side
-// (web/js/ui/radio-session.js), that a response for a session the selection
+// (web/js/ui/radio-session.ts), that a response for a session the selection
 // has moved on from is dropped by identity rather than by counting.
 
 import assert from "node:assert/strict";
@@ -359,7 +359,7 @@ function tableHeaderTexts(document) {
 
 test("the UI drops a response for a session it has since closed, and reuses a loaded one", async () => {
   const { document } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const slowMetadata = createDeferred();
   const opens = [];
@@ -424,7 +424,7 @@ test("the UI drops a response for a session it has since closed, and reuses a lo
 
 test("reselecting a radio whose session failed to open opens a fresh one", async () => {
   const { document } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const opens = [];
   const closes = [];
@@ -479,7 +479,7 @@ test("reselecting a radio whose session failed to open opens a fresh one", async
 
 test("an image load hands its session to the selection it makes", async () => {
   const { document, window } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const metadataSessions = [];
   const closes = [];

@@ -104,7 +104,7 @@ test("column metadata follows the cached image, not a blank driver instance", as
 
 test("a download re-reads the schema, so the levels it just read survive", async () => {
   const { document } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   const headers = ["Location", "Name", "Frequency", "Power"];
@@ -171,7 +171,7 @@ test("a download re-reads the schema, so the levels it just read survive", async
 
 test("an import whose schema refresh fails leaves the previous channels alone", async () => {
   const { document, window } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   const headers = ["Location", "Name", "Frequency", "Power"];

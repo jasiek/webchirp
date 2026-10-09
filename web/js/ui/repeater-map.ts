@@ -1,14 +1,13 @@
-import { callsignFromName, createCallsignLookup, pickLookupEntry } from "../callsign-lookup.js";
-import { buildRepeaterEndpoints, resolveRepeaterApiBase } from "../datasources.js";
-import { formatCoordinates } from "../staticmap.js";
+import { callsignFromName, createCallsignLookup, pickLookupEntry } from "../callsign-lookup.ts";
+import { buildRepeaterEndpoints, resolveRepeaterApiBase } from "../datasources.ts";
+import { formatCoordinates } from "../staticmap.ts";
 import { trackEvent } from "./analytics.ts";
-import { fillMapAttribution, renderStaticMap } from "./static-map-view.js";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+import { fillMapAttribution, renderStaticMap } from "./static-map-view.ts";
+import type { UiContext } from "../types/ui-context.js";
 
 // Static OSM context map for repeater channels (issue #57). Hovering a
 // Location cell whose channel name is a callsign asks api.codeplug.org where
-// that repeater is (web/js/callsign-lookup.js) and draws the answer: a tooltip
+// that repeater is (web/js/callsign-lookup.ts) and draws the answer: a tooltip
 // on hover-capable (desktop) devices, a dismissable modal on tap for touch
 // devices. The map is non-interactive: tiles positioned so the repeater sits
 // dead-center under a red dot, with the coordinates as a header.
@@ -20,11 +19,12 @@ import { fillMapAttribution, renderStaticMap } from "./static-map-view.js";
 // not know answers 404 and simply gets no map; both answers are cached for 24h
 // by the endpoint, so a re-hover costs no request.
 /**
- * @param {UiContext} ctx
- * @param {{lookup?: ((callsign: string) => Promise<unknown>)|null}} [options]
- *   lookup: a stand-in for the callsign endpoint (the tests have no network).
+ * @param options lookup: a stand-in for the callsign endpoint (the tests have no network).
  */
-export function createRepeaterMap(ctx, { lookup = null } = {}) {
+export function createRepeaterMap(
+  ctx: UiContext,
+  { lookup = null }: { lookup?: ((callsign: string) => Promise<unknown>) | null } = {},
+) {
   const { dom, state } = ctx;
 
   // Injected by the tests, which have no network; production resolves the same
@@ -72,7 +72,7 @@ export function createRepeaterMap(ctx, { lookup = null } = {}) {
   }
 
   // This surface's fixed zoom, applied to both its sizes; the shared renderer
-  // (web/js/ui/static-map-view.js) owns everything below the tile plan.
+  // (web/js/ui/static-map-view.ts) owns everything below the tile plan.
   function renderMap(canvasEl, geo, width, height) {
     renderStaticMap(canvasEl, geo, { zoom: MAP_ZOOM, width, height });
   }
@@ -147,8 +147,7 @@ export function createRepeaterMap(ctx, { lookup = null } = {}) {
   // The Location button the pointer is inside. mouseover fires again for every
   // element boundary crossed within one cell, and each of those would
   // otherwise cancel and restart the lookup the first one began.
-  /** @type {Element|null} */
-  let hoverButton = null;
+  let hoverButton: Element | null = null;
 
   function cancelPendingHide() {
     if (hideTimer) {
@@ -207,8 +206,7 @@ export function createRepeaterMap(ctx, { lookup = null } = {}) {
 
   // The Location button the modal was opened from, so dismissing it puts the
   // caret back where it started instead of at the top of the document.
-  /** @type {HTMLElement|null} */
-  let modalTrigger = null;
+  let modalTrigger: HTMLElement | null = null;
 
   function openModal(geo, triggerEl) {
     modalTrigger = triggerEl || null;
@@ -251,7 +249,7 @@ export function createRepeaterMap(ctx, { lookup = null } = {}) {
       if (!hoverCapable()) {
         return;
       }
-      const button = /** @type {Element|null} */ (event.target)?.closest?.(".channel-location-button");
+      const button = (event.target as Element | null)?.closest?.(".channel-location-button");
       if (!button || button === hoverButton) {
         return;
       }
@@ -276,8 +274,8 @@ export function createRepeaterMap(ctx, { lookup = null } = {}) {
       }, HOVER_LOOKUP_DELAY_MS);
     });
     dom.tableBody.addEventListener("mouseout", (event) => {
-      const button = /** @type {Element|null} */ (event.target)?.closest?.(".channel-location-button");
-      if (button && !button.contains(/** @type {Node|null} */ (event.relatedTarget))) {
+      const button = (event.target as Element | null)?.closest?.(".channel-location-button");
+      if (button && !button.contains(event.relatedTarget as Node | null)) {
         hoverButton = null;
         scheduleHideTooltip();
       }
@@ -287,7 +285,7 @@ export function createRepeaterMap(ctx, { lookup = null } = {}) {
     // leaves for anything that is not the tooltip itself.
     dom.repeaterMapTooltipEl.addEventListener("mouseover", cancelPendingHide);
     dom.repeaterMapTooltipEl.addEventListener("mouseout", (event) => {
-      if (!dom.repeaterMapTooltipEl.contains(/** @type {Node|null} */ (event.relatedTarget))) {
+      if (!dom.repeaterMapTooltipEl.contains(event.relatedTarget as Node | null)) {
         scheduleHideTooltip();
       }
     });

@@ -37,7 +37,7 @@ const SCHEMA = {
 // band check the bug depended on is live.
 async function gridWithTwoChannels() {
   const { document } = installFakeDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   ui.setRuntimeApi(withRadioSessions({
     listRadios: async () => ({

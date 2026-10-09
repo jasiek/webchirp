@@ -1,7 +1,7 @@
 // A DOMParser stand-in for the RXF fixtures the repeater tests feed through
-// web/js/rxf.js. The real parser runs on the browser's DOMParser, which node
-// has not got; this answers the handful of selectors web/js/datasources.js and
-// web/js/callsign-lookup.js actually ask for, so transport, parsing and row
+// web/js/rxf.ts. The real parser runs on the browser's DOMParser, which node
+// has not got; this answers the handful of selectors web/js/datasources.ts and
+// web/js/callsign-lookup.ts actually ask for, so transport, parsing and row
 // construction can be exercised as one flow headless.
 //
 // Shared by the query-modal tests and the hover-map tests, so the two cannot

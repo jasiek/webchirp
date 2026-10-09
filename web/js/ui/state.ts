@@ -8,7 +8,7 @@ import type { ChannelRow, RadioMetadata } from "./channel-values.ts";
 // through its accessors.
 
 /**
- * The handle web/js/ui/radio-session.js keeps for the runtime session behind
+ * The handle web/js/ui/radio-session.ts keeps for the runtime session behind
  * the selected radio. Created synchronously at selection; its id arrives when
  * the runtime answers, through ready.
  */
@@ -64,7 +64,7 @@ export function createUiState(): UiState {
     radioCatalog: [],
     selectedRadio: null,
     // The runtime session for the selected radio, opened and replaced by
-    // web/js/ui/radio-session.js. selectedRadio and radioSession move
+    // web/js/ui/radio-session.ts. selectedRadio and radioSession move
     // together: a selection opens a session, and every radio-bound runtime
     // call carries its id. A response is applied only while the handle it was
     // made for is still this one, which is how a stale load is told from a

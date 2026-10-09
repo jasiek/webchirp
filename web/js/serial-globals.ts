@@ -209,12 +209,13 @@ function optionalBoolean(value: unknown): boolean | null {
   return value === null || value === undefined ? null : Boolean(value);
 }
 
+export type SerialGlobalOp = (...args: any[]) => [string, Record<string, any>];
+
 // Each global Python can call, by the name it imports, mapped to the op and
 // normalised payload it sends. Defaults live here, once: a read with no count
 // asks for one byte within 1200 ms, a clone settles 350 ms unless told
 // otherwise, and a driver that declares no BAUD_RATE sends 0, which the bridge
 // reads as "keep the rate the port has".
-export type SerialGlobalOp = (...args: any[]) => [string, Record<string, any>];
 const SERIAL_GLOBAL_OPS = Object.freeze({
   serial_open: (baudRate) => ["open", { baudRate: Number(baudRate) }],
   serial_close: () => ["close", {}],

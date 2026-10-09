@@ -13,8 +13,8 @@ import {
 } from "./analytics.ts";
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.ts";
 import { requireRuntimeApi } from "./state.ts";
-
-/** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+import type { UiContext } from "../types/ui-context.js";
+import type { UiState } from "./state.ts";
 
 const LOADABLE_FILE_KINDS = new Map([
   [".csv", "csv"],
@@ -40,14 +40,10 @@ export function classifyLoadableFile(fileName) {
 // Python runtime, CHIRP binary .img import/export, drag-and-drop loading of
 // either kind, and the replace-or-merge prompt shown when an import would
 // discard channels already in the editor.
-/**
- * @param {UiContext} ctx
- */
-export function createCodeplugIo(ctx) {
+export function createCodeplugIo(ctx: UiContext) {
   const { dom, state, log } = ctx;
-  /** @typedef {"replace"|"merge"|"cancel"} ImportChoice */
-  /** @type {((choice: ImportChoice) => void)|null} */
-  let importChoiceResolve = null;
+  type ImportChoice = "replace" | "merge" | "cancel";
+  let importChoiceResolve: ((choice: ImportChoice) => void) | null = null;
   let fileLoadInFlight = false;
   // dragenter/dragleave fire once per element the pointer crosses, so the
   // overlay is driven by the depth of nested enters rather than by any single
@@ -84,8 +80,7 @@ export function createCodeplugIo(ctx) {
     return !dom.importChoiceModalEl.classList.contains("hidden");
   }
 
-  /** @param {ImportChoice} choice */
-  function resolveImportChoice(choice) {
+  function resolveImportChoice(choice: ImportChoice) {
     if (!importChoiceResolve) {
       return;
     }
@@ -97,11 +92,7 @@ export function createCodeplugIo(ctx) {
 
   // Ask the user what to do with imported channels when the editor already
   // holds real ones. Resolves to "replace", "merge", or "cancel".
-  /**
-   * @param {string} message
-   * @returns {Promise<ImportChoice>}
-   */
-  function askImportChoice(message) {
+  function askImportChoice(message: string): Promise<ImportChoice> {
     dom.importChoiceMessageEl.textContent = message;
     dom.importChoiceModalEl.classList.remove("hidden");
     return new Promise((resolve) => {
@@ -120,12 +111,14 @@ export function createCodeplugIo(ctx) {
   // channels below the existing ones, where they keep the Location the file
   // gave them unless it is out of bounds or already taken by a loaded channel.
   /**
-   * @param {any} parsed  parse_csv's result.
-   * @param {"replace"|"merge"} [mode]
-   * @param {import("./state.ts").UiState["codeplugSource"]} [csvSource]
-   *   Where the rows came from, for reporting.
+   * @param parsed parse_csv's result.
+   * @param csvSource Where the rows came from, for reporting.
    */
-  function applyParsedCsv(parsed, mode = "replace", csvSource = "csv") {
+  function applyParsedCsv(
+    parsed: any,
+    mode: "replace" | "merge" = "replace",
+    csvSource: UiState["codeplugSource"] = "csv",
+  ) {
     const headersFromMeta = state.radioMetadata.headers || [];
     const parsedHeaders = parsed.headers || [];
     state.currentHeaders = headersFromMeta.length ? headersFromMeta : parsedHeaders;
@@ -185,8 +178,7 @@ export function createCodeplugIo(ctx) {
   // channels the user already has. Shared by the Load button and drops.
   async function importCsvFile(file, source = "button") {
     const parsed = await parseCsvViaRuntime(await file.text());
-    /** @type {"replace"|"merge"} */
-    let mode = "replace";
+    let mode: "replace" | "merge" = "replace";
     if (ctx.table.hasRealChannels()) {
       const choice = await askImportChoice(
         `The editor holds ${state.currentRows.length} channel(s) that will be lost if replaced. `
@@ -436,7 +428,7 @@ export function createCodeplugIo(ctx) {
     dragDepth = 0;
     setDropOverlayVisible(false);
 
-    const files = Array.from(event.dataTransfer?.files || []);
+    const files = Array.from<File>(event.dataTransfer?.files || []);
     if (files.length === 0) {
       return;
     }
@@ -534,7 +526,7 @@ export function createCodeplugIo(ctx) {
     });
 
     document.addEventListener("click", (event) => {
-      const target = /** @type {Node} */ (event.target);
+      const target = event.target as Node;
       if (isExportMenuOpen()
         && !dom.exportMenuToggleEl.contains(target)
         && !dom.exportMenuEl.contains(target)) {

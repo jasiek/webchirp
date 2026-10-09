@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createConnectivity } from "../../web/js/ui/connectivity.js";
+import { createConnectivity } from "../../web/js/ui/connectivity.ts";
 import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
 
 test("browser connectivity events drive the offline badge and repeater availability", async (t) => {

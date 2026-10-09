@@ -35,7 +35,7 @@ function suggestionLines(radioSearchResultsEl) {
 
 test("the selected-radio readout shows Loading... while CHIRP drivers are loading", async () => {
   const { radioSelectionNameEl, radioSelectionEl } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const radioListDeferred = createDeferred();
   const ui = createUiController();
 
@@ -96,7 +96,7 @@ test("the selected-radio readout shows Loading... while CHIRP drivers are loadin
 
 test("search box shows narrowing make+model suggestions", async () => {
   const { document, radioSearchEl, radioSearchResultsEl } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   ui.setRuntimeApi(withRadioSessions({
@@ -155,7 +155,7 @@ test("search box shows narrowing make+model suggestions", async () => {
 
 test("search suggestions disambiguate duplicates, cap results, and close on Escape", async () => {
   const { document, radioSearchEl, radioSearchResultsEl } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   // Two drivers sharing "Acme Twin" plus enough filler to exceed the 50-result cap.
@@ -253,7 +253,7 @@ function releaseSettings(module) {
 
 test("release labels are searchable and displayed without changing native variant or losing edits on reselection", async () => {
   const { document, radioSearchResultsEl, radioSelectionNameEl } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const metadataCalls = [];
   const settingsCalls = [];
@@ -291,7 +291,7 @@ test("release labels are searchable and displayed without changing native varian
 
 test("returning to a loaded release while another release is pending requests the original runtime again", async () => {
   const { document, radioSelectionNameEl } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const pending = createDeferred();
   const metadataCalls = [];
@@ -330,7 +330,7 @@ test("returning to a loaded release while another release is pending requests th
 });
 
 test("reselecting a release restored from a cookie or link preserves edits without loading again", async () => {
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   for (const source of ["cookie", "link"]) {
     const { document } = installUiDom();
     if (source === "cookie") {
@@ -370,7 +370,7 @@ test("reselecting a release restored from a cookie or link preserves edits witho
 
 test("reselecting a returning release while its reload is pending still applies the latest load", async () => {
   const { document } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const pending = createDeferred();
   let returning = false;
@@ -417,7 +417,7 @@ test("reselecting a returning release while its reload is pending still applies 
 
 test("stale metadata response does not overwrite a newer radio selection", async () => {
   const { document, radioSearchEl } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const slowMetadata = createDeferred();
 
@@ -456,7 +456,7 @@ test("stale metadata response does not overwrite a newer radio selection", async
 });
 
 test("reselecting the loaded radio rejects partial loads in either completion order", async () => {
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const settingsFor = (name) => ({
     supported: true,
     available: true,
@@ -534,7 +534,7 @@ test("reselecting the loaded radio rejects partial loads in either completion or
 
 test("picking a search suggestion names the radio in the readout and loads it once", async () => {
   const { document, radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const metadataCalls = [];
 
@@ -592,7 +592,7 @@ test("picking a search suggestion names the radio in the readout and loads it on
 // catalog lists the entry under its primary vendor only.
 test("search finds radios by their alias identities and names the matching alias", async () => {
   const { document, radioSearchEl, radioSearchResultsEl, radioSelectionNameEl } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   ui.setRuntimeApi(withRadioSessions({
@@ -656,7 +656,7 @@ test("search finds radios by their alias identities and names the matching alias
 // so they must not appear as choices or contribute to the searchable count.
 test("live-mode radios are omitted from radio selection", async () => {
   const { document, radioSearchEl, radioSearchResultsEl } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   ui.setRuntimeApi(withRadioSessions({
@@ -688,7 +688,7 @@ test("live-mode radios are omitted from radio selection", async () => {
 // can say which of them Connect / Load / Save will act on.
 test("the readout names the driver only when two entries share a name", async () => {
   const { document, radioSearchEl, radioSelectionNameEl } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
   ui.setRuntimeApi(withRadioSessions({
@@ -723,7 +723,7 @@ test("the readout names the driver only when two entries share a name", async ()
 // radio" rather than offer buttons that would clone against no driver.
 test("serial and clone actions stay disabled until a radio is selected", async () => {
   const { radioSearchEl, document } = installUiDom();
-  const { createUiController } = await import("../../web/js/ui.js");
+  const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   ui.setSerialController({ capability: { supported: true, native: true } });
 

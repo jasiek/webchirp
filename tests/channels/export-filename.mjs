@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildExportFileName } from "../../web/js/ui.js";
+import { buildExportFileName } from "../../web/js/ui.ts";
 
 const FIXED_DATE = new Date(2023, 11, 18); // 2023-12-18
 
