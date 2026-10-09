@@ -147,6 +147,7 @@ export function createRepeaterMap(ctx, { lookup = null } = {}) {
   // The Location button the pointer is inside. mouseover fires again for every
   // element boundary crossed within one cell, and each of those would
   // otherwise cancel and restart the lookup the first one began.
+  /** @type {Element|null} */
   let hoverButton = null;
 
   function cancelPendingHide() {
@@ -206,6 +207,7 @@ export function createRepeaterMap(ctx, { lookup = null } = {}) {
 
   // The Location button the modal was opened from, so dismissing it puts the
   // caret back where it started instead of at the top of the document.
+  /** @type {HTMLElement|null} */
   let modalTrigger = null;
 
   function openModal(geo, triggerEl) {

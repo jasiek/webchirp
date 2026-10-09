@@ -13,6 +13,7 @@ export function createProgress({ dom }) {
   // Only the operation that began the strip may update or end it. Without this
   // a slow operation finishing late would tear down the bar a newer one is
   // using, or repaint it with stale text.
+  /** @type {number|null} */
   let activeToken = null;
   let nextToken = 0;
 

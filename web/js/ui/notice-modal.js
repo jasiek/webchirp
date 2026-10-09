@@ -21,6 +21,7 @@ export function createNoticeModal(ctx) {
   const { dom } = ctx;
   // What had focus when the notice opened, so dismissing it puts the user back
   // where they were rather than at the top of the document.
+  /** @type {(Element & Partial<HTMLOrSVGElement>)|null} */
   let previousFocus = null;
 
   function isModalOpen() {

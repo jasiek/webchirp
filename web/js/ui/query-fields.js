@@ -545,6 +545,10 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
   // The in-progress drag: where the pointer went down, the position the map
   // was drawn around at that moment, and whether it has yet moved far enough
   // to count. Null whenever no drag is running.
+  /**
+   * @type {{pointerId: number, startX: number, startY: number, latitude: number,
+   *   longitude: number, zoom: number, moved: boolean}|null}
+   */
   let drag = null;
 
   // Offset the map without redrawing it. The tiles and the repeater squares
@@ -570,9 +574,14 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
 
   // Where the centre lands once the map has been dragged by (dx, dy): dragging
   // the map right moves the point under the marker west, hence the subtraction.
-  function positionAfterPan(dx, dy) {
-    const origin = latLonToWorldPixel(drag.latitude, drag.longitude, drag.zoom);
-    return worldPixelToLatLon(origin.x - dx, origin.y - dy, drag.zoom);
+  /**
+   * @param {{latitude: number, longitude: number, zoom: number}} from  The drag's origin.
+   * @param {number} dx
+   * @param {number} dy
+   */
+  function positionAfterPan(from, dx, dy) {
+    const origin = latLonToWorldPixel(from.latitude, from.longitude, from.zoom);
+    return worldPixelToLatLon(origin.x - dx, origin.y - dy, from.zoom);
   }
 
   previewCanvas.addEventListener("pointerdown", (event) => {
@@ -622,7 +631,7 @@ export function createPositionField({ key = "position", locatorPlaceholder, init
       return;
     }
     drag.moved = true;
-    const next = positionAfterPan(dx, dy);
+    const next = positionAfterPan(drag, dx, dy);
     // The fields track the map as it moves, so the numbers are part of the
     // feedback rather than something that appears at the end.
     applyPosition(next.latitude, next.longitude);

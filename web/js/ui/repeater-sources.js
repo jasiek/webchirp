@@ -23,6 +23,7 @@ import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from ".
 import { trackEvent } from "./analytics.js";
 
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
+/** @typedef {import("../rsgb.js").RsgbRecord} RsgbRecord */
 
 // Per-source configuration for the shared repeater-query modal
 // (web/js/ui/repeater-query.js). Each source declares which fields its form contains,
@@ -215,6 +216,7 @@ export function createRepeaterSources(ctx, { endpoints }) {
     // The dictionary is fetched once and cached for the session; a failed
     // fetch clears the cache so the next open retries instead of staying
     // bricked behind a rejected promise.
+    /** @type {Promise<Record<string, Array<Object>>>|null} */
     let optionsPromise = null;
 
     // The query URL for one set of form values, with the range taken as an
@@ -519,10 +521,13 @@ export function createRepeaterSources(ctx, { endpoints }) {
         // outside the request is filed under the first square asked for rather
         // than dropped on an assumption about the API nothing here verifies;
         // it is outside the radius either way, so the distance filter drops it.
+        /** @type {Map<string, RsgbRecord[]>} */
         const buckets = new Map(missing.map((locator) => [locator, []]));
+        // missing is non-empty in this branch, so its first square has a bucket.
+        const firstBucket = /** @type {RsgbRecord[]} */ (buckets.get(missing[0]));
         for (const record of fetched) {
           const locator = String(record?.locator || "").slice(0, 4).toUpperCase();
-          buckets.get(buckets.has(locator) ? locator : missing[0]).push(record);
+          (buckets.get(locator) || firstBucket).push(record);
         }
         for (const [locator, records] of buckets) {
           held.set(locator, records);

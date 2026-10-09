@@ -13,6 +13,10 @@ import { requireRuntimeApi } from "./state.js";
  */
 export function createSettingsPanel(ctx) {
   const { dom, state, log, actions } = ctx;
+  /**
+   * @type {{supported: boolean, available: boolean, requiresImage: boolean,
+   *   message: string, groups: Array<Record<string, any>>}}
+   */
   let settingsState = {
     supported: false,
     available: false,

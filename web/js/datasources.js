@@ -160,6 +160,11 @@ const CITY_SUGGEST_MAX = 20;
 // takes lat and lon together or not at all, so a half-known position is sent
 // as no hint. Results are normalized to this app's { latitude, longitude }
 // shape, and an entry without a usable coordinate pair is dropped.
+/**
+ * @param {string} citiesUrl
+ * @param {string} query
+ * @param {{latitude?: number, longitude?: number}|null} [near]
+ */
 export async function fetchCitySuggestions(citiesUrl, query, near = null) {
   const text = String(query ?? "").trim();
   if (!citiesUrl || text.length === 0) {
