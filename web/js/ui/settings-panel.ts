@@ -4,12 +4,22 @@ import { normalizeSettingValue } from "./setting-values.ts";
 import { requireRuntimeApi } from "./state.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { SettingValueMeta } from "./setting-fields.ts";
+import type { SettingNode } from "../runtime-rpc.ts";
 
 /**
  * One value of one setting, flattened out of the settings tree: where it is
  * (the setting's path and the value's index in it) and the tree's own value
  * object, which a merge writes current back into.
  */
+/** The settings tree the panel shows, and whether there is one. */
+interface SettingsState {
+  supported: boolean;
+  available: boolean;
+  requiresImage: boolean;
+  message: string;
+  groups: SettingNode[];
+}
+
 interface FlatSettingField {
   path: unknown[];
   valueIndex: number;
@@ -22,7 +32,7 @@ interface FlatSettingField {
 // invalid-value bookkeeping; other modules reach it through the returned API.
 export function createSettingsPanel(ctx: UiContext) {
   const { dom, state, log, actions } = ctx;
-  let settingsState: { supported: boolean; available: boolean; requiresImage: boolean; message: string; groups: Array<Record<string, any>> } = {
+  let settingsState: SettingsState = {
     supported: false,
     available: false,
     requiresImage: false,

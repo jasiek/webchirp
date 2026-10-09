@@ -29,8 +29,10 @@ import {
 } from "./python-sources.ts";
 import type { RuntimeInfo } from "./python-sources.ts";
 import type { RpcMethodName, RpcParams } from "./rpc-dispatch.ts";
-import type { SerialRpcHandler } from "./serial-globals.ts";
-import type { RadioMetadata } from "./ui/channel-values.ts";
+import type { SerialRpcHandler, SerialRpcMessage } from "./serial-globals.ts";
+import type { SerialConnectResult } from "./serial-bridge.ts";
+import type { ChannelRow, RadioMetadata } from "./ui/channel-values.ts";
+import type { ExtraField, SettingValueMeta } from "./ui/setting-fields.ts";
 import type { PyodideInterface } from "pyodide";
 
 /**
@@ -64,7 +66,7 @@ export interface SessionPayload {
 export type RowsPayload = SessionPayload & {rows?: object[]};
 
 /** A session-bound payload that carries rows and serialized radio settings. */
-export type CodeplugPayload = SessionPayload & {rows?: object[], settings?: object[]};
+export type CodeplugPayload = SessionPayload & { rows?: object[]; settings?: SettingNode[] };
 
 /** What the app shell hands createRuntimeRpcClient(). */
 export interface RuntimeRpcClientOptions {
@@ -73,6 +75,168 @@ export interface RuntimeRpcClientOptions {
   logDebug?: (message: string, options?: {isError?: boolean}) => void;
   onProgress?: (label: string, total: number) => {update(done: number): void, end(): void};
   onRuntimeCrash?: (message: string) => void;
+}
+
+/** A setting's place in the settings tree: the ids from the root down. */
+export type SettingPath = string[];
+
+/**
+ * One node of a radio's settings tree, as _serialize_setting_node
+ * (web/python/webchirp_bridge/radio_settings.py) writes it: a group of nodes,
+ * or a setting with one or more values.
+ */
+export type SettingNode = SettingGroupNode | SettingLeafNode;
+
+interface SettingNodeBase {
+  id: string;
+  label: string;
+  doc: string | null;
+  path: SettingPath;
+}
+
+export interface SettingGroupNode extends SettingNodeBase {
+  kind: "group";
+  children: SettingNode[];
+}
+
+export interface SettingLeafNode extends SettingNodeBase {
+  kind: "setting";
+  mutable: boolean;
+  volatile: boolean;
+  warning: string | null;
+  values: SettingValueMeta[];
+}
+
+/** One problem with one setting value: where it is and what is wrong. */
+export interface SettingIssue {
+  path: SettingPath;
+  valueIndex: number;
+  message: string;
+}
+
+/** get_radio_settings: the settings tree, or why there is none. */
+export interface RadioSettingsResult {
+  supported: boolean;
+  available: boolean;
+  requiresImage: boolean;
+  message: string;
+  error: string;
+  groups: SettingNode[];
+}
+
+/** validate_radio_settings: what the edited tree would write, and what not. */
+export interface SettingsValidationResult {
+  valid: boolean;
+  issues: SettingIssue[];
+  settings: SettingNode[];
+  available: boolean;
+  requiresImage: boolean;
+  message: string;
+  error: string;
+}
+
+/** One preflight finding: the row, the grid column to mark and the message. */
+export interface RowIssue {
+  rowIndex: number;
+  column: string;
+  message: string;
+}
+
+/** validate_rows_for_upload: errors block an upload, warnings do not. */
+export interface RowsValidationResult {
+  valid: boolean;
+  issues: RowIssue[];
+  warnings: RowIssue[];
+}
+
+/** parse_csv: the rows CHIRP's CSV driver read, and its complaints. */
+export interface ParsedCsv {
+  headers: string[];
+  rows: ChannelRow[];
+  errors: string[];
+}
+
+/** A codeplug read out of a radio instance (_read_radio_payload). */
+export interface RadioContents {
+  rows: ChannelRow[];
+  headers: string[];
+  settings: SettingNode[];
+  /** Memory numbers the driver could not decode. */
+  unreadableChannels: number[];
+}
+
+/** download_selected_radio: the codeplug read, plus its CSV text. */
+export interface DownloadResult extends RadioContents {
+  csvText: string;
+  /**
+   * Read by the download path's IDENT log line, but no runtime method sends
+   * it today (clone.py returns rows, headers, settings, unreadableChannels
+   * and csvText), so that line never prints.
+   */
+  ident?: string;
+}
+
+/** load_image_base64: the session the image opened, and its codeplug. */
+export interface LoadedImage extends RadioContents {
+  sessionId: string;
+  module: string;
+  className: string;
+  vendor: string;
+  model: string;
+  variant: string;
+}
+
+/** export_image_base64: the image the rows and settings make. */
+export interface ExportedImage {
+  imageBase64: string;
+  size: number;
+  vendor: string;
+  model: string;
+  variant: string;
+  settings: SettingNode[];
+}
+
+/** upload_selected_radio: the settings as the radio now holds them. */
+export interface UploadResult {
+  uploaded: true;
+  settings: SettingNode[];
+}
+
+/** get_channel_extra: one memory's extra settings, or why there are none. */
+export interface ChannelExtraResult {
+  available: boolean;
+  message: string;
+  fields: ExtraField[];
+}
+
+/** open_session: the session's id and what it holds (RadioSession.describe()). */
+export interface SessionDescription {
+  sessionId: string;
+  module: string;
+  className: string;
+  detectedClass: string;
+  imageOrigin: string;
+  hasBackingImage: boolean;
+  imageSize: number;
+  unreadableChannels: number[];
+}
+
+/** read_image_metadata_base64: the identity an image's trailer records. */
+export interface ImageMetadata {
+  hasMetadata: boolean;
+  rclass?: string;
+  vendor?: string;
+  model?: string;
+  /** null when the trailer records none, which CHIRP reads as any. */
+  variant?: string | null;
+}
+
+/** import_all_driver_modules: how the sweep went. */
+export interface DriverImportResult {
+  imported: number;
+  /** Module name to the reason it would not import. */
+  failed: Record<string, string>;
+  registered: number;
 }
 
 const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/";
@@ -100,7 +264,7 @@ let radioCatalogCache: CatalogRadio[] | null = null;
 // is otherwise silent, and it costs a user the whole Pyodide boot before the
 // dropdowns can appear.
 let radioCatalogSource = "";
-let allDriverModulesPromise: Promise<any> | null = null;
+let allDriverModulesPromise: Promise<DriverImportResult> | null = null;
 let handleSerialRpc: RuntimeRpcClientOptions["handleSerialRpc"] | null = null;
 let debugLog: RuntimeRpcClientOptions["logDebug"] | null = null;
 let beginProgress: RuntimeRpcClientOptions["onProgress"] | null = null;
@@ -115,7 +279,7 @@ const enqueueRuntimeCall = createCallQueue();
 
 // Dispatch one serial op message to the app's browser-serial bridge handler,
 // which createRuntimeRpcClient() supplies after the globals are installed.
-async function serialRpc(msg) {
+async function serialRpc(msg: SerialRpcMessage): Promise<unknown> {
   if (!handleSerialRpc) {
     throw new Error("Serial RPC handler is not configured");
   }
@@ -123,7 +287,7 @@ async function serialRpc(msg) {
 }
 
 // Import the selected driver from the mounted CHIRP tree before any radio-bound call.
-async function ensureSelectedRadioModules(moduleShortName) {
+async function ensureSelectedRadioModules(moduleShortName: string): Promise<void> {
   if (!moduleShortName) {
     await ensurePyodide();
     return;
@@ -158,7 +322,7 @@ async function ensureAllDriverModules() {
         );
       }
 
-      const reportProgress = (done, total, moduleShort) => {
+      const reportProgress = (done: number, total: number, moduleShort: string) => {
         progress?.update(done);
         if (debugLog && (done % DRIVER_LOG_INTERVAL === 0 || done === total)) {
           debugLog(`DRIVERS ${done}/${total} imported (latest ${moduleShort})`);
@@ -166,7 +330,7 @@ async function ensureAllDriverModules() {
       };
 
       try {
-        const result = await rpc("import_all_driver_modules", {
+        const result = await rpc<DriverImportResult>("import_all_driver_modules", {
           module_short_names: modules,
           callback: reportProgress,
         });
@@ -250,7 +414,7 @@ async function loadRadioCatalogFromSources(): Promise<CatalogRadio[]> {
   const modules = await listDriverModules(pythonSource);
 
   await ensurePyodide();
-  const allRadios = await rpc("list_registered_radios", { module_short_names: modules });
+  const allRadios = await rpc<CatalogRadio[]>("list_registered_radios", { module_short_names: modules });
 
   allRadios.sort((a, b) => {
     const av = `${a.vendor}\u0000${a.model}`;
@@ -308,15 +472,17 @@ async function requirePyodide() {
 /**
  * @returns The method's JSON-decoded result.
  */
-function rpcOn(interpreter: PyodideInterface, name: RpcMethodName, params: RpcParams = {}): Promise<any> {
+// T is what the Python method returns, as its JSON decodes; the dispatcher
+// cannot know it, so each call site names it.
+function rpcOn<T = unknown>(interpreter: PyodideInterface, name: RpcMethodName, params: RpcParams = {}): Promise<T> {
   return rpcDispatcherFor(interpreter).call(name, params);
 }
 
 // Call one Python runtime method on the current interpreter. Resolved per
 // call rather than held, because ensureSelectedRadioModules() can swap the
 // interpreter under the isolated driver set.
-function rpc(name: RpcMethodName, params: RpcParams = {}): Promise<any> {
-  return rpcOn(currentInterpreter(), name, params);
+function rpc<T = unknown>(name: RpcMethodName, params: RpcParams = {}): Promise<T> {
+  return rpcOn<T>(currentInterpreter(), name, params);
 }
 
 // The interpreter radio-bound calls go to right now. Every caller boots it
@@ -340,7 +506,7 @@ function currentInterpreter(): PyodideInterface {
 const sessionRuntimes: Map<string, PyodideInterface> = new Map();
 
 // Record which interpreter a freshly opened session lives in.
-function registerSession(sessionId, interpreter) {
+function registerSession(sessionId: string | undefined, interpreter: PyodideInterface): void {
   if (sessionId) {
     sessionRuntimes.set(String(sessionId), interpreter);
   }
@@ -349,7 +515,7 @@ function registerSession(sessionId, interpreter) {
 // The interpreter holding a session, or a clear error for one that is not
 // open. Raised here, on the JS side, so a closed session fails the same way
 // whether or not its interpreter still exists.
-function runtimeForSession(sessionId) {
+function runtimeForSession(sessionId: string | undefined): PyodideInterface {
   const owner = sessionRuntimes.get(String(sessionId || ""));
   if (!owner) {
     throw new Error(
@@ -361,20 +527,24 @@ function runtimeForSession(sessionId) {
 }
 
 // Run one radio-bound method against the interpreter that owns its session.
-function sessionRpc(sessionId, name, params = {}) {
-  return rpcOn(runtimeForSession(sessionId), name, { session_id: String(sessionId), ...params });
+function sessionRpc<T>(sessionId: string | undefined, name: RpcMethodName, params: RpcParams = {}): Promise<T> {
+  return rpcOn<T>(runtimeForSession(sessionId), name, { session_id: String(sessionId), ...params });
 }
 
 // The two methods that work without a radio (CSV export and the row
 // preflight): with a session they route to its interpreter, without one they
 // run on the current interpreter with an empty id, which the Python side
 // reads as "no radio selected".
-async function optionalSessionRpc(sessionId, name, params = {}) {
+async function optionalSessionRpc<T>(
+  sessionId: string | undefined,
+  name: RpcMethodName,
+  params: RpcParams = {},
+): Promise<T> {
   if (sessionId) {
-    return sessionRpc(sessionId, name, params);
+    return sessionRpc<T>(sessionId, name, params);
   }
   await requirePyodide();
-  return rpc(name, { session_id: "", ...params });
+  return rpc<T>(name, { session_id: "", ...params });
 }
 
 async function handleGetRuntimeInfo(): Promise<RuntimeInfo> {
@@ -395,15 +565,15 @@ async function handleListRadios(): Promise<{ radios: CatalogRadio[]; source: str
 // get_default_schema (web/python/webchirp_bridge/column_metadata.py).
 async function handleGetDefaultSchema(): Promise<RadioMetadata> {
   await requirePyodide();
-  return rpc("get_default_schema");
+  return rpc<RadioMetadata>("get_default_schema");
 }
 
 /**
  * @returns The rows and headers parse_csv found.
  */
-async function handleParseCsv(payload: { csvText?: string } = {}): Promise<any> {
+async function handleParseCsv(payload: { csvText?: string } = {}): Promise<ParsedCsv> {
   await requirePyodide();
-  return rpc("parse_csv", { csv_text: String(payload.csvText ?? "") });
+  return rpc<ParsedCsv>("parse_csv", { csv_text: String(payload.csvText ?? "") });
 }
 
 // Open a radio session for a catalog entry: import its driver (which, under
@@ -411,11 +581,11 @@ async function handleParseCsv(payload: { csvText?: string } = {}): Promise<any> 
 // register the session with the interpreter that holds it.
 async function handleOpenRadioSession(
   payload: { module?: string; className?: string } = {},
-): Promise<{ sessionId: string } & Record<string, unknown>> {
+): Promise<SessionDescription> {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
   const owner = currentInterpreter();
-  const result = await rpcOn(owner, "open_session", {
+  const result = await rpcOn<SessionDescription>(owner, "open_session", {
     module_name: payload.module || "",
     class_name: payload.className || "",
   });
@@ -435,11 +605,12 @@ async function handleCloseRadioSession(
     return { closed: false, sessionId };
   }
   sessionRuntimes.delete(sessionId);
-  return rpcOn(owner, "close_session", { session_id: sessionId });
+  return rpcOn<{ closed: boolean; sessionId: string }>(owner, "close_session", { session_id: sessionId });
 }
 
-async function handleNormalizeRows(payload: RowsPayload = {}): Promise<any> {
-  return optionalSessionRpc(payload.sessionId, "normalize_rows", {
+// The rows as CHIRP's own CSV, through the selected driver when there is one.
+async function handleNormalizeRows(payload: RowsPayload = {}): Promise<string> {
+  return optionalSessionRpc<string>(payload.sessionId, "normalize_rows", {
     rows: payload.rows || [],
   });
 }
@@ -447,8 +618,8 @@ async function handleNormalizeRows(payload: RowsPayload = {}): Promise<any> {
 /**
  * @returns The preflight's per-cell findings.
  */
-async function handleValidateRowsForUpload(payload: RowsPayload = {}): Promise<any> {
-  return optionalSessionRpc(payload.sessionId, "validate_rows_for_upload", {
+async function handleValidateRowsForUpload(payload: RowsPayload = {}): Promise<RowsValidationResult> {
+  return optionalSessionRpc<RowsValidationResult>(payload.sessionId, "validate_rows_for_upload", {
     rows: payload.rows || [],
   });
 }
@@ -456,8 +627,8 @@ async function handleValidateRowsForUpload(payload: RowsPayload = {}): Promise<a
 /**
  * @returns The base64 image and its file name.
  */
-async function handleExportImage(payload: CodeplugPayload = {}): Promise<any> {
-  return sessionRpc(payload.sessionId, "export_image_base64", {
+async function handleExportImage(payload: CodeplugPayload = {}): Promise<ExportedImage> {
+  return sessionRpc<ExportedImage>(payload.sessionId, "export_image_base64", {
     rows: payload.rows || [],
     settings_groups: payload.settings || [],
   });
@@ -466,9 +637,9 @@ async function handleExportImage(payload: CodeplugPayload = {}): Promise<any> {
 // An image load opens a session of its own in Python for the driver the
 // image names (load_image_base64 in web/python/webchirp_bridge/images.py);
 // record which interpreter it lives in before the UI adopts it.
-async function loadImageIntoSession(image_b64: string): Promise<any> {
+async function loadImageIntoSession(image_b64: string): Promise<LoadedImage> {
   const owner = currentInterpreter();
-  const result = await rpcOn(owner, "load_image_base64", { image_b64 });
+  const result = await rpcOn<LoadedImage>(owner, "load_image_base64", { image_b64 });
   registerSession(result?.sessionId, owner);
   return result;
 }
@@ -480,7 +651,7 @@ async function loadImageIntoSession(image_b64: string): Promise<any> {
  */
 async function handleLoadImage(
   payload: { imageBase64?: string; module?: string; className?: string } = {},
-): Promise<any> {
+): Promise<LoadedImage> {
   if (DRIVER_SET === QUANSHENG_UNOFFICIAL_DRIVER_SET) {
     const selected = (await loadRadioCatalog()).find((radio) =>
       radio.module === payload.module && radio.className === payload.className);
@@ -495,8 +666,8 @@ async function handleLoadImage(
   const image_b64 = payload.imageBase64 || "";
   // CHIRP image detection only searches drivers that are already imported, so
   // read the metadata trailer first and import the matching driver module.
-  const metadata = await rpc("read_image_metadata_base64", { image_b64 });
-  let resolvedDriver = null;
+  const metadata = await rpc<ImageMetadata>("read_image_metadata_base64", { image_b64 });
+  let resolvedDriver: CatalogRadio | null = null;
   if (metadata?.hasMetadata) {
     const radios = await loadRadioCatalog();
     const match = findCatalogRadioForImageMetadata(radios, metadata);
@@ -539,21 +710,22 @@ async function handleLoadImage(
   });
 }
 
-async function handleSerialConnect(payload: { baudRate?: number } = {}): Promise<any> {
+// The serial bridge's own answer, round-tripped through Python unchanged.
+async function handleSerialConnect(payload: { baudRate?: number } = {}): Promise<SerialConnectResult> {
   await requirePyodide();
-  return rpc("webserial_connect", { baudrate: payload.baudRate || 9600 });
+  return rpc<SerialConnectResult>("webserial_connect", { baudrate: payload.baudRate || 9600 });
 }
 
-async function handleSerialDisconnect(): Promise<any> {
+async function handleSerialDisconnect(): Promise<{ connected: boolean; message: string }> {
   await requirePyodide();
-  return rpc("webserial_disconnect");
+  return rpc<{ connected: boolean; message: string }>("webserial_disconnect");
 }
 
 async function handleSerialTxRx(
   payload: { txHex?: string; rxBytes?: number; timeoutMs?: number } = {},
-): Promise<any> {
+): Promise<{ tx: unknown; rx: unknown }> {
   await requirePyodide();
-  return rpc("webserial_txrx_hex", {
+  return rpc<{ tx: unknown; rx: unknown }>("webserial_txrx_hex", {
     tx_hex: payload.txHex || "",
     rx_bytes: payload.rxBytes || 32,
     timeout_ms: payload.timeoutMs || 1200,
@@ -563,19 +735,19 @@ async function handleSerialTxRx(
 /**
  * @returns The downloaded rows, settings and image.
  */
-async function handleDownloadSelectedRadio(payload: SessionPayload = {}): Promise<any> {
-  return sessionRpc(payload.sessionId, "download_selected_radio");
+async function handleDownloadSelectedRadio(payload: SessionPayload = {}): Promise<DownloadResult> {
+  return sessionRpc<DownloadResult>(payload.sessionId, "download_selected_radio");
 }
 
-async function handleUploadSelectedRadio(payload: CodeplugPayload = {}): Promise<any> {
-  return sessionRpc(payload.sessionId, "upload_selected_radio", {
+async function handleUploadSelectedRadio(payload: CodeplugPayload = {}): Promise<UploadResult> {
+  return sessionRpc<UploadResult>(payload.sessionId, "upload_selected_radio", {
     rows: payload.rows || [],
     settings_groups: payload.settings || [],
   });
 }
 
 async function handleGetRadioMetadata(payload: SessionPayload = {}): Promise<RadioMetadata> {
-  return sessionRpc(payload.sessionId, "get_radio_column_metadata");
+  return sessionRpc<RadioMetadata>(payload.sessionId, "get_radio_column_metadata");
 }
 
 // The driver's own per-channel extra settings for one memory slot, typed the
@@ -583,8 +755,8 @@ async function handleGetRadioMetadata(payload: SessionPayload = {}): Promise<Rad
 // instead of guessing from the bare values a row carries.
 async function handleGetChannelExtra(
   payload: SessionPayload & { location?: string | number } = {},
-): Promise<any> {
-  return sessionRpc(payload.sessionId, "get_channel_extra", {
+): Promise<ChannelExtraResult> {
+  return sessionRpc<ChannelExtraResult>(payload.sessionId, "get_channel_extra", {
     location: String(payload.location ?? ""),
   });
 }
@@ -592,14 +764,14 @@ async function handleGetChannelExtra(
 /**
  * @returns The settings groups get_radio_settings serialized.
  */
-async function handleGetRadioSettings(payload: SessionPayload = {}): Promise<any> {
-  return sessionRpc(payload.sessionId, "get_radio_settings");
+async function handleGetRadioSettings(payload: SessionPayload = {}): Promise<RadioSettingsResult> {
+  return sessionRpc<RadioSettingsResult>(payload.sessionId, "get_radio_settings");
 }
 
 async function handleValidateRadioSettings(
-  payload: SessionPayload & { settings?: object[] } = {},
-): Promise<any> {
-  return sessionRpc(payload.sessionId, "validate_radio_settings", {
+  payload: SessionPayload & { settings?: SettingNode[] } = {},
+): Promise<SettingsValidationResult> {
+  return sessionRpc<SettingsValidationResult>(payload.sessionId, "validate_radio_settings", {
     settings_groups: payload.settings || [],
   });
 }
@@ -660,8 +832,11 @@ export function createRuntimeRpcClient({
     ? createBootstrapCrashReporter(onRuntimeCrash)
     : null;
 
-  function wrapRuntimeMethod(name, handler) {
-    return async function invokeRuntimeMethod(payload = {}) {
+  function wrapRuntimeMethod(
+    name: string,
+    handler: (payload: Record<string, unknown>) => Promise<unknown>,
+  ) {
+    return async function invokeRuntimeMethod(payload: Record<string, unknown> = {}) {
       try {
         if (UNQUEUED_METHODS.has(name)) {
           return await handler(payload);
@@ -711,7 +886,8 @@ export function createRuntimeRpcClient({
 
   const runtimeApi: Record<string, Function> = {};
   for (const [name, handler] of Object.entries(RUNTIME_METHODS)) {
-    runtimeApi[name] = wrapRuntimeMethod(name, handler);
+    // Each handler takes its own payload shape; the wrapper only passes it on.
+    runtimeApi[name] = wrapRuntimeMethod(name, handler as (payload: Record<string, unknown>) => Promise<unknown>);
   }
 
   // Built key by key from RUNTIME_METHODS, each wrapper keeping its handler's

@@ -12,7 +12,7 @@ export function createSelectedDriverRuntime<T>(
   let selectedModule = "";
 
   // Reuse the interpreter for the same release, including its cached clone image.
-  async function select(moduleName) {
+  async function select(moduleName: string): Promise<T> {
     if (isolated && selectedModule && selectedModule !== moduleName) {
       const next = createRuntimeBootstrap({ loadRuntime });
       const runtime = await next.ensure();

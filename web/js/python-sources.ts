@@ -116,13 +116,13 @@ export function driverSetFromSearch(search: string | null | undefined): string {
   return normalizeDriverSet(new URLSearchParams(String(search || "")).get("drivers"));
 }
 
-function assertMethod(obj, name) {
-  if (!obj || typeof obj[name] !== "function") {
+function assertMethod(obj: object, name: string): void {
+  if (!obj || typeof (obj as Record<string, unknown>)[name] !== "function") {
     throw new Error(`Python source provider is missing method: ${name}`);
   }
 }
 
-async function fetchOk(url) {
+async function fetchOk(url: string): Promise<Response> {
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch ${url}: ${res.status}`);
@@ -130,15 +130,17 @@ async function fetchOk(url) {
   return res;
 }
 
-async function fetchText(url) {
+async function fetchText(url: string): Promise<string> {
   return (await fetchOk(url)).text();
 }
 
-async function fetchJson(url) {
+// The manifest, as JSON from our own origin; driverModulesFromManifest()
+// checks the fields it reads.
+async function fetchJson(url: string): Promise<any> {
   return (await fetchOk(url)).json();
 }
 
-async function fetchBytes(url) {
+async function fetchBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await (await fetchOk(url)).arrayBuffer());
 }
 
@@ -237,7 +239,7 @@ export function createBrowserPythonSource({
     throw new Error("createBrowserPythonSource requires chirpBundleBaseUrl");
   }
   const bundleNames = chirpBundleFileNames(chirpRevision);
-  const bundleUrl = (name) => new URL(name, chirpBundleBaseUrl).href;
+  const bundleUrl = (name: string) => new URL(name, chirpBundleBaseUrl).href;
   let manifestPromise: Promise<any> | null = null;
 
   // Fetched once per page: the manifest is read before the all-drivers sweep
@@ -278,20 +280,22 @@ export function createBrowserPythonSource({
   };
 }
 
-function ensureProvider(sourceProvider) {
+function ensureProvider(sourceProvider: PythonSourceProvider): void {
   assertMethod(sourceProvider, "fetchChirpArchive");
   assertMethod(sourceProvider, "fetchRuntimeFile");
   assertMethod(sourceProvider, "listDriverModules");
   assertMethod(sourceProvider, "getRuntimeInfo");
 }
 
-async function mkdirp(pyodide, dir) {
+async function mkdirp(pyodide: Pick<PyodideInterface, "FS">, dir: string): Promise<void> {
   const parts = String(dir || "").split("/").filter(Boolean);
   let current = "";
   for (const part of parts) {
     current += `/${part}`;
     try {
-      pyodide.FS.mkdir(current);
+      // Pyodide's FSType declares only part of Emscripten's FS; mkdir is
+      // there at runtime, as every Pyodide release since 0.17 has it.
+      (pyodide.FS as typeof pyodide.FS & { mkdir(path: string): void }).mkdir(current);
     } catch {
       // Exists.
     }

@@ -180,7 +180,7 @@ export function rpcDispatcherFor(pyodide: Pick<PyodideInterface, "globals">): Rp
       // Run one method and return its decoded result. The Python coroutine
       // comes back as an awaitable PyProxy; it is released once settled so a
       // long session does not accumulate one proxy per call.
-      async call(name, params = {}) {
+      async call(name: string, params: RpcParams = {}) {
         const { paramsJson, callback } = prepareRpcCall(name, params);
         const pending = dispatch(name, paramsJson, callback);
         try {

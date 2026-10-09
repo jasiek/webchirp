@@ -10,8 +10,11 @@
 // (chirp/chirp/directory.py) — and must report ambiguity rather than guessing.
 
 import { isPythonError } from "./runtime-errors.ts";
+import type { CatalogRadio, ImageMetadata } from "./runtime-rpc.ts";
 
-function identitiesFor(radio) {
+type RadioIdentity = { vendor: string; model: string; variant?: string };
+
+function identitiesFor(radio: CatalogRadio): RadioIdentity[] {
   if (Array.isArray(radio.aliases) && radio.aliases.length > 0) {
     return radio.aliases;
   }
@@ -20,7 +23,7 @@ function identitiesFor(radio) {
   return [{ vendor: radio.vendor, model: radio.model, variant: radio.variant || "" }];
 }
 
-function matchesIdentity(radio, vendor, model, variant) {
+function matchesIdentity(radio: CatalogRadio, vendor: string, model: string, variant: string | null): boolean {
   return identitiesFor(radio).some((identity) => {
     if (String(identity.vendor || "") !== vendor || String(identity.model || "") !== model) {
       return false;
@@ -32,7 +35,10 @@ function matchesIdentity(radio, vendor, model, variant) {
   });
 }
 
-export function findCatalogRadioForImageMetadata(radioCatalog, metadata) {
+export function findCatalogRadioForImageMetadata(
+  radioCatalog: readonly CatalogRadio[] | null | undefined,
+  metadata: ImageMetadata | null | undefined,
+): CatalogRadio | null {
   if (!metadata?.hasMetadata) {
     return null;
   }
@@ -92,7 +98,7 @@ export function findCatalogRadioForImageMetadata(radioCatalog, metadata) {
 // surfacing the same error. The class is read off the RuntimeCallError the
 // dispatcher throws (web/js/runtime-errors.ts), so the class name is the
 // contract; see the Python docstring.
-export function isImageDetectionFailure(error) {
+export function isImageDetectionFailure(error: unknown): boolean {
   return isPythonError(error, "ImageDetectionError");
 }
 
@@ -102,12 +108,18 @@ export function isImageDetectionFailure(error) {
 // records something new — and without this retry a wrong match is worse than
 // no match at all, because it skips the sweep that would have succeeded.
 // Injectable rather than inlined so it can be tested without a Pyodide runtime.
-export async function loadImageWithDriverFallback({
+export async function loadImageWithDriverFallback<T>({
   resolvedDriver,
   loadImage,
   importAllDrivers,
   log,
-}) {
+}: {
+  /** The catalog entry metadata resolved to, or null. */
+  resolvedDriver: Pick<CatalogRadio, "module" | "className"> | null;
+  loadImage: () => Promise<T>;
+  importAllDrivers: () => Promise<unknown>;
+  log?: ((message: string) => void) | null;
+}): Promise<T> {
   if (!resolvedDriver) {
     await importAllDrivers();
     return loadImage();
@@ -120,7 +132,7 @@ export async function loadImageWithDriverFallback({
     }
     log?.(
       `IMAGE detection failed with ${resolvedDriver.module}.${resolvedDriver.className} `
-      + `(${error?.message || error}); retrying against all drivers`,
+      + `(${(error as Error)?.message || error}); retrying against all drivers`,
     );
     await importAllDrivers();
     return loadImage();
