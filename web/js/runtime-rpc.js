@@ -201,6 +201,11 @@ async function ensureAllDriverModules() {
   return allDriverModulesPromise;
 }
 
+// A copy of the catalog in vendor-then-model order, as the pickers list it.
+/**
+ * @param {CatalogRadio[]} radios
+ * @returns {CatalogRadio[]}
+ */
 function sortRadioCatalog(radios) {
   return radios.slice().sort((a, b) => {
     const av = `${a.vendor} ${a.model}`;
@@ -251,6 +256,7 @@ async function loadRadioCatalogFromStatic() {
 }
 
 // Build the radio catalog by importing every driver in Pyodide (slow first run).
+/** @returns {Promise<CatalogRadio[]>} */
 async function loadRadioCatalogFromSources() {
   const modules = await listDriverModules(pythonSource);
 
@@ -265,7 +271,7 @@ async function loadRadioCatalogFromSources() {
 
   radioCatalogCache = allRadios;
   radioCatalogSource = "sources";
-  return radioCatalogCache;
+  return allRadios;
 }
 
 // Resolve the radio catalog, preferring the prebuilt static file so the
@@ -329,7 +335,19 @@ function rpcOn(interpreter, name, params = {}) {
  * @returns {Promise<any>}
  */
 function rpc(name, params = {}) {
-  return rpcOn(pyodide, name, params);
+  return rpcOn(currentInterpreter(), name, params);
+}
+
+// The interpreter radio-bound calls go to right now. Every caller boots it
+// first (ensurePyodide() or ensureSelectedRadioModules()), so reaching this
+// without one is a sequencing bug; it is named here rather than surfacing as a
+// TypeError from inside the dispatcher.
+/** @returns {PyodideInterface} */
+function currentInterpreter() {
+  if (!pyodide) {
+    throw new Error("The Python runtime has not been loaded yet");
+  }
+  return pyodide;
 }
 
 // Which interpreter owns each open radio session. A session lives inside the
@@ -422,7 +440,7 @@ async function handleParseCsv(payload = {}) {
 async function handleOpenRadioSession(payload = {}) {
   await requirePyodide();
   await ensureSelectedRadioModules(payload.module || "");
-  const owner = pyodide;
+  const owner = currentInterpreter();
   const result = await rpcOn(owner, "open_session", {
     module_name: payload.module || "",
     class_name: payload.className || "",
@@ -487,7 +505,7 @@ async function handleExportImage(payload = {}) {
  * @returns {Promise<any>}
  */
 async function loadImageIntoSession(image_b64) {
-  const owner = pyodide;
+  const owner = currentInterpreter();
   const result = await rpcOn(owner, "load_image_base64", { image_b64 });
   registerSession(result?.sessionId, owner);
   return result;

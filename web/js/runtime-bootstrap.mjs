@@ -61,6 +61,7 @@ export function createBootstrapCrashReporter(reportCrash) {
     throw new Error("createBootstrapCrashReporter requires a reportCrash() function");
   }
 
+  /** @type {unknown} */
   let lastReported = null;
 
   return function reportBootstrapCrash(error, detail) {
@@ -94,7 +95,11 @@ export function createRuntimeBootstrap({ loadRuntime } = {}) {
     throw new Error("createRuntimeBootstrap requires a loadRuntime() function");
   }
 
+  // Bound after the check above so the closures below see a function.
+  const load = loadRuntime;
+  /** @type {T|null} */
   let runtime = null;
+  /** @type {Promise<T>|null} */
   let attempt = null;
 
   // Resolve the runtime, starting the bootstrap at most once per outstanding
@@ -113,7 +118,7 @@ export function createRuntimeBootstrap({ loadRuntime } = {}) {
           // runtime that loaded but failed to seed cannot run any bridge
           // function, and leaving it visible let callers reach a half-built
           // interpreter and fail later in a way that named the wrong culprit.
-          const loaded = await loadRuntime();
+          const loaded = await load();
           runtime = loaded;
           return loaded;
         } catch (error) {

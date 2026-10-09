@@ -238,6 +238,7 @@ export function createBrowserPythonSource({
   }
   const bundleNames = chirpBundleFileNames(chirpRevision);
   const bundleUrl = (name) => new URL(name, chirpBundleBaseUrl).href;
+  /** @type {Promise<any>|null} */
   let manifestPromise = null;
 
   // Fetched once per page: the manifest is read before the all-drivers sweep
