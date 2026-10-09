@@ -147,6 +147,20 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   a new one.
 - A file in a suite directory is executed by the runner, so a helper with no
   tests in it goes in `tests/support/`, not beside its callers.
+- UI tests run on the real page: `installIndexPage()`
+  (`tests/support/index-page.mjs`) loads `web/index.html` into jsdom once per
+  test file and resets it between tests, and installs `window`, `document`,
+  `navigator` and the DOM constructors as globals; options add window,
+  navigator or global stubs, a `url` (`?radio=`), or another page under
+  `web/`. Drive it like a user with `tests/support/ui-interactions.mjs`
+  (`dispatch`/`emit`, which also await async listeners, `selectRadioBySearch`,
+  `importSampleCsv`, `clickLocationButton`, `setLayout`, `setInputFiles`...).
+  Dispatch at the element a user would touch and let it bubble; never set an
+  event's `target`. A module handed a partial `ctx.dom` gets index.html's
+  elements through `pageElement(name)`; an element the page lacks is created
+  explicitly by the test, with a comment saying why. jsdom does no layout, so
+  the channel grid renders every row under test; windowing is covered by the
+  browser tests.
 
 ### UI module conventions
 - Each module is a `create<Area>(ctx)` factory. `ctx` carries `dom`, `state`,

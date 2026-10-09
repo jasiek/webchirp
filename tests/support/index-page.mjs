@@ -180,8 +180,8 @@ function addMissingLayoutApis(window) {
 
 // A listener that throws is reported by jsdom, as a browser reports it to
 // window.onerror, rather than thrown out of dispatchEvent. Rethrow it outside
-// the dispatch so node:test fails the running test: under the fake DOM a
-// throwing listener failed the test, and nothing should start passing quietly.
+// the dispatch so node:test fails the running test: a listener that throws is
+// a failure, not something a test may pass over quietly.
 function failOnListenerErrors() {
   const virtualConsole = new VirtualConsole();
   virtualConsole.on("jsdomError", (error) => {
