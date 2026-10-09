@@ -134,7 +134,7 @@ function buildHarness({
   // whose table is missing the directory's tone.
   toneOptions = null,
 } = {}) {
-  // parsePrzemiennikiXml reaches for DOMParser, so it is installed with the
+  // parseRxfRecords reaches for DOMParser, so it is installed with the
   // rest of the fake DOM globals.
   const { document } = installFakeDom({ globals: fakeXmlGlobals() });
   // The meta tag is registered only when a base is provided; an unregistered

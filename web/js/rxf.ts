@@ -27,7 +27,7 @@ export function firstText(parent: ParentNode | null | undefined, selector: strin
 // is not a usable one. Number("") is 0 rather than NaN, so a plain
 // Number(firstText(...)) turned an absent or empty element into a finite 0 that
 // passed every Number.isFinite guard downstream: it defeated the
-// receive/transmit fallbacks in buildPrzemiennikiRows and turned a one-sided
+// receive/transmit fallbacks (now in rxfEntryToRecord) and turned a one-sided
 // entry into a bogus multi-MHz Duplex/Offset. A literal 0 in the feed is
 // rejected for the same reason -- no repeater works on 0 Hz.
 export function parseQrgMhz(text: string | null | undefined): number {

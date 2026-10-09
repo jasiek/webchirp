@@ -6,11 +6,12 @@
 // for the first spelling it offers, which is what findEnumOption in
 // web/js/ui/channel-table.ts ranks for it.
 //
-// This lives beside the builders rather than inside one of them because every
-// repeater directory wants the same answer: web/js/rsgb.ts and
-// web/js/datasources.ts both build repeater rows, and a ranked list that
-// existed in only one of them left przemienniki.net, repeaterbook.com and IRTS
-// imports on whatever the driver happened to list first.
+// This lives apart from the builders because more than one wants it: the
+// repeater row builder (web/js/repeater-rows.ts) writes the top tier for every
+// directory, and the GMRS band plan (web/js/datasources.ts) picks between
+// tiers. A ranked list that once existed only in the RSGB builder left
+// przemienniki.net, repeaterbook.com and IRTS imports on whatever the driver
+// happened to list first.
 
 import type { ChannelRow } from "./ui/channel-values.ts";
 

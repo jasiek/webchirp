@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildPrzemiennikiRows } from "../../web/js/datasources.ts";
-import { buildRsgbRows } from "../../web/js/rsgb.ts";
+import { rsgbRows, rxfRows } from "../support/repeater-rows.mjs";
 import { makeRowHooks } from "../support/row-hooks.mjs";
 
 // Every repeater directory has to answer the Power column the same way: a
 // channel that reaches for a distant machine takes the driver's highest tier,
 // never the blank row's default. That rule lived only in web/js/rsgb.ts for a
 // while, so przemienniki.net, repeaterbook.com and IRTS imports (all of them
-// built by buildPrzemiennikiRows in web/js/datasources.ts) arrived on whatever
-// the driver happened to list first. These cases pin it for both builders, so
-// a directory added later cannot quietly drop back to that.
+// built by the RXF builder then in web/js/datasources.ts) arrived on whatever
+// the driver happened to list first. These cases pin it for both directory
+// formats, now that every one goes through buildRepeaterRows
+// (web/js/repeater-rows.ts), so a directory added later cannot quietly drop
+// back to that.
 
 // Low first, as roughly half of CHIRP's drivers order them, so an unwritten
 // Power column is visible as "Low" rather than as the value we wanted anyway.
@@ -50,7 +51,7 @@ function rsgbRecord(overrides = {}) {
 }
 
 test("a przemienniki-shaped repeater row carries the driver's highest power", () => {
-  const { rows: [row] } = buildPrzemiennikiRows([repeater()], rowHooks());
+  const { rows: [row] } = rxfRows([repeater()], rowHooks());
   assert.equal(row.Power, "High");
 });
 
@@ -66,8 +67,8 @@ test("both repeater builders resolve the same driver's power to the same value",
     ["0.5W", "5W"],
     ["1W", "8W", "25W"],
   ]) {
-    const { rows: [fromPrzemienniki] } = buildPrzemiennikiRows([repeater()], rowHooks({ powerOptions }));
-    const { rows: [fromRsgb] } = buildRsgbRows([rsgbRecord()], rowHooks({ powerOptions }));
+    const { rows: [fromPrzemienniki] } = rxfRows([repeater()], rowHooks({ powerOptions }));
+    const { rows: [fromRsgb] } = rsgbRows([rsgbRecord()], rowHooks({ powerOptions }));
     assert.equal(
       fromPrzemienniki.Power,
       fromRsgb.Power,
@@ -80,7 +81,7 @@ test("both repeater builders resolve the same driver's power to the same value",
 test("a driver that advertises none of the known tiers keeps its own default", () => {
   // Handing a radio a level it never published is worse than leaving the
   // column alone: the upload preflight rejects the whole row for it.
-  const { rows: [row] } = buildPrzemiennikiRows([repeater()], rowHooks({ powerOptions: ["L1", "L2"] }));
+  const { rows: [row] } = rxfRows([repeater()], rowHooks({ powerOptions: ["L1", "L2"] }));
   assert.equal(row.Power, "", "no tier was recognised, so nothing may be written");
 });
 
@@ -92,7 +93,7 @@ test("a radio with no Power column at all still imports repeaters", () => {
     optionsByColumn: { Mode: ["FM"], Tone: ["", "Tone", "TSQL", "Cross"] },
     caseInsensitive: true,
   });
-  const { rows, skipped } = buildPrzemiennikiRows([repeater()], hooks);
+  const { rows, skipped } = rxfRows([repeater()], hooks);
   assert.equal(rows.length, 1);
   assert.deepEqual(skipped, []);
   assert.equal(rows[0].Power, undefined);
@@ -110,7 +111,7 @@ test("every przemienniki row the builder emits gets the power write, whatever th
     repeater({ qra: "SR6", qrgTx: 145.0125 }),
     repeater({ qra: "SR7", latitude: 52.2, longitude: 21.0 }),
   ];
-  const { rows } = buildPrzemiennikiRows(corpus, rowHooks());
+  const { rows } = rxfRows(corpus, rowHooks());
   assert.ok(rows.length >= 5, `expected most of the corpus to build, got ${rows.length}`);
   for (const row of rows) {
     assert.equal(row.Power, "High", `row ${row.Name} was not High`);

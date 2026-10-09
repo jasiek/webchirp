@@ -1,8 +1,9 @@
 // RSGB/ETCC UK repeater directory (https://api-beta.rsgb.online).
 //
 // Everything here is pure: locator maths, the square fan-out plan, dedup,
-// filtering and row construction. The UI module (web/js/ui/repeater-query.ts) owns
-// the modal and supplies the fetch. See FINDINGS.md **rsgb-etcc-api-shape** for
+// filtering and the mapping into RepeaterRecord (web/js/repeater-record.ts),
+// which the one row builder turns into rows. The RSGB adapter in
+// web/js/ui/repeater-sources.ts drives it for the shared query modal. See FINDINGS.md **rsgb-etcc-api-shape** for
 // the API's behaviour; the two rules that shape this file are that a lookup
 // reports "nothing" as HTTP 200 with {"data":null} rather than an error, and
 // that /locator only prefix-matches at four characters — so the fan-out is
@@ -12,9 +13,6 @@
 import { REPEATER_REQUEST_TIMEOUT_MS, withRequestTimeout } from "./request-timeout.ts";
 import { NO_TONE } from "./repeater-record.ts";
 import type { RepeaterMode, RepeaterRecord } from "./repeater-record.ts";
-import { setHighestPower } from "./row-power.ts";
-import type { RepeaterRowsResult, RowBuilderHooks, SkippedRepeater } from "./row-power.ts";
-import type { ChannelRow } from "./ui/channel-values.ts";
 
 /** A Maidenhead locator's box in degrees, its centre, and how many characters made it. */
 export interface MaidenheadBox {
@@ -469,8 +467,9 @@ export function filterRsgbRecords(records: RsgbRecord[] | null | undefined, {
       // A 4-character locator places a station within ~111 x 130 km, so its
       // distance is an estimate the row must not present as measured.
       approximate: box.precision < 6,
-      // The box centre doubles as the station's position for the map sidecar
-      // (buildRsgbRows below); it is the only position the payload offers.
+      // The box centre doubles as the station's position on the preview map
+      // (rsgbToRepeaterRecord below); it is the only position the payload
+      // offers.
       latitude: box.latitude,
       longitude: box.longitude,
     });
@@ -598,185 +597,3 @@ export function rsgbToRepeaterRecord(entry: RsgbEntry | RsgbRecord): RepeaterRec
   };
 }
 
-function formatFrequencyMhz(hertz: unknown): string {
-  const numeric = Number(hertz);
-  if (!Number.isFinite(numeric)) {
-    return "";
-  }
-  return (numeric / 1e6).toFixed(6);
-}
-
-// What each API mode flag would have to become in the grid's Mode column. Wider
-// than RSGB_MODES on purpose: those flags are not offered as filters, but the
-// records still carry them, and an unfiltered query has to reason about a
-// repeater whose only mode is one of them.
-const MODE_FLAG_CHOICES: Readonly<Record<string, string[]>> = {
-  D: ["DV", "DSTAR", "D-STAR"],
-  F: ["DN", "C4FM", "VW"],
-  M: ["DMR", "MOTOTRBO"],
-  P: ["P25", "APCO25", "APCO-25"],
-  N: ["NXDN"],
-  7: ["M17"],
-  E: ["TETRA"],
-};
-
-// Preference order when the query did not ask for a mode. Analogue first,
-// because an FM channel is what a mixed-mode repeater is usable as from a
-// memory the grid can program.
-const MODE_FLAG_FALLBACK_ORDER = ["A", "D", "F", "M", "P", "N", "7", "E"];
-
-// Resolve a record to a Mode the selected radio advertises, honouring what the
-// query asked for. Returns null when nothing usable exists, which is a skip
-// rather than a substitution: a D-STAR query that answered with an NFM row, or
-// a DMR-only repeater written as NFM, produces a channel that cannot work the
-// repeater it claims to be.
-function findRsgbMode(
-  findEnumOption: RowBuilderHooks["findEnumOption"],
-  record: RsgbRecord,
-  preferredModes: Iterable<string> = [],
-): string | null {
-  const flags = new Set(modeFlagsOf(record));
-  const bandwidthKhz = Number(record?.txbw);
-  const narrow = !Number.isFinite(bandwidthKhz) || bandwidthKhz <= 12.5;
-  const analogue = narrow
-    ? ["NFM", "FMN", "Narrow", "N-FM", "FM"]
-    : ["FM", "Wide", "WFM"];
-  const resolve = (flag: string) => (
-    flag === "A"
-      ? findEnumOption("Mode", analogue, true)
-      : findEnumOption("Mode", MODE_FLAG_CHOICES[flag] || [], true)
-  );
-
-  // Two records carry no mode codes at all; treat them as the analogue voice
-  // repeaters their type says they are rather than dropping them.
-  if (flags.size === 0) {
-    return findEnumOption("Mode", analogue, true) || null;
-  }
-
-  // A mode the query asked for wins over the analogue-first default — asking
-  // for D-STAR and being handed the same repeater's FM side is not an answer.
-  const asked = Array.from(preferredModes)
-    .map((mode) => String(mode).toUpperCase())
-    .filter((mode) => flags.has(mode));
-  const candidates = asked.length > 0
-    ? asked
-    : MODE_FLAG_FALLBACK_ORDER.filter((flag) => flags.has(flag));
-
-  for (const flag of candidates) {
-    const match = resolve(flag);
-    if (match) {
-      return match;
-    }
-  }
-  return null;
-}
-
-// Build channel rows from filtered entries. `tx`/`rx` are the *repeater's*
-// directions in Hz: the radio listens on `tx` and transmits on `rx`, so the
-// channel frequency is `tx` and the shift is `rx - tx`. tx === rx means a
-// simplex gateway or node, which is why duplex is derived from the pair rather
-// than from the record's two-letter type code.
-//
-// Returns `{ rows, skipped }`. A repeater the selected radio cannot express is
-// left out rather than written as something it is not, and `skipped` carries a
-// reason per record so the caller can say which and why:
-//   - "frequency": setRowValue validates against the radio's own column
-//     metadata and keeps the previous value when a write is out of range, so a
-//     1312 MHz ATV repeater on a 2m/70cm handheld would otherwise land in the
-//     grid with a blank Frequency and an accepted -63 MHz offset.
-//   - "mode": the radio advertises no Mode the repeater can be worked in — a
-//     D-STAR-only repeater on an FM-only set. Writing NFM there produces a
-//     channel that cannot work the repeater whose name it carries.
-//   - "tone": the radio's tone table has no such CTCSS frequency (or it offers
-//     no tone mode at all), so the access tone cannot be sent and the repeater
-//     never opens. `tone` carries the frequency the directory published.
-//
-// `modes` is the query's own mode selection, so a D-STAR search gets the DV
-// side of a mixed A/D repeater rather than its analogue one.
-export function buildRsgbRows(
-  entries: ReadonlyArray<RsgbEntry | RsgbRecord>,
-  { createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks,
-  { modes = [] }: { modes?: Iterable<string> } = {},
-): RepeaterRowsResult {
-  const rows: ChannelRow[] = [];
-  const skipped: SkippedRepeater[] = [];
-  for (const entry of entries) {
-    // An entry from filterRsgbRecords() carries its record; a bare record is
-    // its own.
-    const record = ((entry as Partial<RsgbEntry>)?.record || entry) as RsgbRecord;
-    const row = createBlankRow();
-    const name = String(record?.repeater || "").trim();
-
-    setRowValue(row, "Name", name);
-
-    const outputHz = Number(record?.tx);
-    const inputHz = Number(record?.rx);
-    if (Number.isFinite(outputHz)) {
-      setRowValue(row, "Frequency", formatFrequencyMhz(outputHz));
-    }
-    if (!(Number.parseFloat(String(row.Frequency ?? "")) > 0)) {
-      skipped.push({ repeater: name, reason: "frequency" });
-      continue;
-    }
-
-    const mode = findRsgbMode(findEnumOption, record, modes);
-    if (mode === null) {
-      skipped.push({ repeater: name, reason: "mode" });
-      continue;
-    }
-    if (Number.isFinite(outputHz) && Number.isFinite(inputHz)) {
-      const deltaHz = inputHz - outputHz;
-      if (deltaHz === 0) {
-        setRowValue(row, "Duplex", "");
-        setRowValue(row, "Offset", "0.000000");
-      } else {
-        setRowValue(row, "Duplex", deltaHz < 0 ? "-" : "+");
-        setRowValue(row, "Offset", formatFrequencyMhz(Math.abs(deltaHz)));
-      }
-    }
-
-    // ctcss is in Hz with 0 standing for "no tone", not for 0 Hz.
-    //
-    // The tone goes in before the mode that encodes it, and the mode is
-    // committed only once setRowValue says the tone itself was accepted. A
-    // driver whose tone table lacks the directory's value — a reduced table,
-    // or a mistyped record — otherwise takes the enum fallback and lands on
-    // the first tone in the list, so the row would claim Tone 67.0 Hz and key
-    // nothing (issue #104). Without its access tone the channel cannot work
-    // the repeater at all, so the record is left out with a reason rather than
-    // inserted as something it is not.
-    const ctcss = Number(record?.ctcss);
-    if (Number.isFinite(ctcss) && ctcss > 0) {
-      const toneMode = findEnumOption("Tone", ["Tone", "TSQL"], true);
-      if (!toneMode || !setRowValue(row, "rToneFreq", ctcss.toFixed(1))) {
-        skipped.push({ repeater: name, reason: "tone", tone: ctcss.toFixed(1) });
-        continue;
-      }
-      setRowValue(row, "Tone", toneMode);
-    }
-
-    setRowValue(row, "Mode", mode);
-
-    // These are repeater channels, so the radio is reaching for a distant
-    // machine: the highest tier the driver advertises is the only sensible
-    // default. The ranking lives in web/js/row-power.ts because every repeater
-    // directory needs the same answer.
-    setHighestPower(row, { setRowValue, findEnumOption });
-
-    const distance = Number(entry?.distanceKm);
-    const commentParts = [
-      String(record?.town || "").trim(),
-      String(record?.locator || "").trim(),
-      Number.isFinite(distance)
-        ? `${entry?.approximate ? "~" : ""}${distance.toFixed(1)} km`
-        : "",
-      String(record?.status || "").toUpperCase() === "OPERATIONAL"
-        ? ""
-        : String(record?.status || "").trim(),
-    ].filter((part) => part.length > 0);
-    setRowValue(row, "Comment", commentParts.join(" | "));
-
-    rows.push(row);
-  }
-  return { rows, skipped };
-}

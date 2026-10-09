@@ -1,15 +1,19 @@
-// Parity between the two per-source row builders (buildPrzemiennikiRows in
-// web/js/datasources.ts, buildRsgbRows in web/js/rsgb.ts) and the one that
-// replaces them: each source's parser into RepeaterRecord
-// (web/js/repeater-record.ts) plus buildRepeaterRows (web/js/repeater-rows.ts).
+// Parity between the two per-source row builders the repeater record retired
+// (buildPrzemiennikiRows in web/js/datasources.ts and buildRsgbRows in
+// web/js/rsgb.ts, until 2026-10-09) and the one that replaced them: each
+// source's parser into RepeaterRecord (web/js/repeater-record.ts) plus
+// buildRepeaterRows (web/js/repeater-rows.ts).
 //
-// Both paths run through the grid's real buildRows (web/js/ui/channel-table.ts)
-// against the real runtime, so every write gets the verdict the app would give
-// it, for several real drivers: the startup schema (CHIRP's generic CSV
-// driver), the grid before any schema arrives, a UV-5R (FM/NFM, Cross, 2m and
-// 70cm), an ID-51 (D-STAR, no Cross), a TH-D74 (D-STAR, wide coverage) and a
-// TK-690 (narrow FM only). The fixtures in tests/support/fixtures are written
-// to the shapes each live directory sends (see their headers).
+// tests/support/fixtures/repeater-rows-expected.json is what the retired
+// builders produced from the fixtures, captured while both paths still ran
+// side by side. This runs the one builder through the grid's real buildRows
+// (web/js/ui/channel-table.ts) against the real runtime, so every write gets
+// the verdict the app would give it, for several real drivers: the startup
+// schema (CHIRP's generic CSV driver), the grid before any schema arrives, a
+// UV-5R (FM/NFM, Cross, 2m and 70cm), an ID-51 (D-STAR, no Cross), a TH-D74
+// (D-STAR, wide coverage) and a TK-690 (narrow FM only). The fixtures in
+// tests/support/fixtures are written to the shapes each live directory sends
+// (see their headers).
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -17,10 +21,8 @@ import path from "node:path";
 import test from "node:test";
 
 import { CSV_FORMAT_HEADERS } from "../../web/js/clipboard.ts";
-import { buildPrzemiennikiRows, parsePrzemiennikiXml } from "../../web/js/datasources.ts";
 import { buildRepeaterRows } from "../../web/js/repeater-rows.ts";
 import {
-  buildRsgbRows,
   dedupeRsgbRecords,
   filterRsgbRecords,
   parseRsgbPayload,
@@ -116,11 +118,22 @@ function sameSkips(actual, expected, message) {
   assert.deepEqual(actual.map(skipKey).sort(), expected.map(skipKey).sort(), message);
 }
 
-// Build both ways and hand back the two results.
-async function bothWays(table, oldBuild, newBuild) {
-  const before = await table.buildRows(oldBuild);
-  const after = await table.buildRows(newBuild);
-  return { before, after };
+// What the retired builders produced, keyed "<radio> | <fixture or query>",
+// with each row reduced to the columns it fills.
+const EXPECTED = JSON.parse(fixture("repeater-rows-expected.json"));
+
+// A row as the snapshot stores it: blank columns left out. Every row in one
+// table has the same columns, so this loses nothing a comparison needs.
+function compact(row) {
+  return Object.fromEntries(Object.entries(row).filter(([, value]) => value !== ""));
+}
+
+// The retired builders' result for one case, failing loudly if the snapshot
+// does not have it rather than comparing against nothing.
+function expectedFor(key) {
+  const expected = EXPECTED[key];
+  assert.ok(expected, `no snapshot for ${key}`);
+  return expected;
 }
 
 // Where the one builder deliberately parts from the two it replaces, by radio
@@ -139,7 +152,8 @@ const KNOWN_DIFFERENCES = {
   // queries fm and dstar.
   "no schema yet": {
     SR9YS(before, after) {
-      assert.equal(rowOf(before, "SR9YS").Mode, "");
+      // The snapshot leaves blank columns out.
+      assert.equal(rowOf(before, "SR9YS").Mode ?? "", "");
       assert.equal(rowOf(after, "SR9YS").Mode, "DN");
     },
   },
@@ -184,17 +198,10 @@ for (const radio of RADIOS) {
   test(`RXF rows are unchanged on ${radio.label}`, async () => {
     const table = await tableFor(radio);
     for (const { source, file } of RXF_FIXTURES) {
-      const xml = fixture(file);
-      const old = parsePrzemiennikiXml(xml);
-      const parsed = parseRxfRecords(xml, { source });
-      const { before, after } = await bothWays(
-        table,
-        (hooks) => buildPrzemiennikiRows(old.repeaters, hooks, { perspective: old.perspective }),
-        (hooks) => {
-          const built = buildRepeaterRows(parsed.records, hooks);
-          return { rows: built.rows, skipped: [...parsed.unusable, ...built.skipped] };
-        },
-      );
+      const parsed = parseRxfRecords(fixture(file), { source });
+      const built = await table.buildRows((hooks) => buildRepeaterRows(parsed.records, hooks));
+      const after = { rows: built.rows.map(compact), skipped: [...parsed.unusable, ...built.skipped] };
+      const before = expectedFor(`${radio.label} | ${file}`);
       assert.ok(before.rows.length + before.skipped.length > 0, `${file} built nothing at all`);
       const { expected, actual } = settleKnownDifferences(radio, before, after);
       assert.deepEqual(actual.rows, expected.rows, `${file} rows on ${radio.label}`);
@@ -207,20 +214,18 @@ for (const radio of RADIOS) {
     const records = dedupeRsgbRecords(parseRsgbPayload(JSON.parse(fixture("rsgb-locator.json"))));
     for (const query of RSGB_QUERIES) {
       const entries = filterRsgbRecords(records, { ...RSGB_CENTRE, radiusKm: 200, ...query });
-      const label = `modes ${query.modes.join("/") || "any"} on ${radio.label}`;
-      const { before, after } = await bothWays(
-        table,
-        (hooks) => buildRsgbRows(entries, hooks, { modes: query.modes }),
-        (hooks) => buildRepeaterRows(
-          entries.map((entry) => rsgbToRepeaterRecord(entry)).filter((record) => record !== null),
-          hooks,
-          { preferredModes: rsgbPreferredModes(query.modes) },
-        ),
-      );
-      assert.ok(entries.length > 0, `nothing matched ${label}`);
+      const name = `rsgb modes ${query.modes.join("/") || "any"}`;
+      const built = await table.buildRows((hooks) => buildRepeaterRows(
+        entries.map((entry) => rsgbToRepeaterRecord(entry)).filter((record) => record !== null),
+        hooks,
+        { preferredModes: rsgbPreferredModes(query.modes) },
+      ));
+      const after = { rows: built.rows.map(compact), skipped: built.skipped };
+      const before = expectedFor(`${radio.label} | ${name}`);
+      assert.ok(entries.length > 0, `nothing matched ${name}`);
       const { expected, actual } = settleKnownDifferences(radio, before, after);
-      assert.deepEqual(actual.rows, expected.rows, `rows for ${label}`);
-      sameSkips(actual.skipped, expected.skipped, `skips for ${label}`);
+      assert.deepEqual(actual.rows, expected.rows, `rows for ${name} on ${radio.label}`);
+      sameSkips(actual.skipped, expected.skipped, `skips for ${name} on ${radio.label}`);
     }
   });
 }

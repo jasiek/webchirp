@@ -1,0 +1,866 @@
+{
+  "startup schema (no radio selected) | rxf-przemienniki.xml": {
+    "rows": [
+      {"Name":"SR9TA","Frequency":"439.025000","Duplex":"-","Offset":"7.600000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"141.3","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Krakow | https://przemienniki.net/przemienniki/70cm/SR9TA"},
+      {"Name":"SR9TB","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Wieliczka | Echolink 12345"},
+      {"Name":"SR9TC","Frequency":"145.625000","Duplex":"-","Offset":"0.600000","Tone":"Cross","rToneFreq":"88.5","cToneFreq":"110.9","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Myslenice"},
+      {"Name":"SR9TD","Frequency":"438.550000","Duplex":"-","Offset":"7.600000","Tone":"Cross","rToneFreq":"88.5","cToneFreq":"110.9","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Bochnia | split tones"},
+      {"Name":"SR9DS","Frequency":"438.600000","Duplex":"-","Offset":"7.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"Krakow"},
+      {"Name":"SR9YS","Frequency":"438.537500","Duplex":"-","Offset":"7.600000","Tone":"Tone","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DN","TStep":"5.00","Power":"50W","Comment":"Tarnow"},
+      {"Name":"SR9DM","Frequency":"438.512500","Duplex":"-","Offset":"7.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DMR","TStep":"5.00","Power":"50W","Comment":"Krakow | CC1"},
+      {"Name":"SR9P","Frequency":"438.750000","Duplex":"-","Offset":"7.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"P25","TStep":"5.00","Power":"50W","Comment":"Katowice"},
+      {"Name":"SR9TE","Frequency":"29.660000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Nowy Sacz"},
+      {"Name":"SR9TF","Frequency":"51.810000","Duplex":"-","Offset":"0.500000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Zakopane"},
+      {"Name":"SR9TG","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"94.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Oswiecim | no published position"},
+      {"Name":"SR9TH","Frequency":"145.500000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Chrzanow | one qrg"},
+      {"Name":"SR9TJ","Frequency":"70.425000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Rabka | simplex"}
+    ],
+    "skipped": [
+      {"repeater":"SR9M","reason":"mode","mode":"M17"},
+      {"repeater":"SR9TT","reason":"mode","mode":"TETRA"},
+      {"repeater":"SR9AT","reason":"mode","mode":"ATV"},
+      {"repeater":"SR9TI","reason":"frequency"},
+      {"repeater":"SR9TK","reason":"tone","tone":"159.0"},
+      {"repeater":"SR9TL","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "startup schema (no radio selected) | rxf-repeaterbook.xml": {
+    "rows": [
+      {"Name":"W1TST","Frequency":"447.275000","Duplex":"-","Offset":"5.000000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"123.0","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"New Canaan, Connecticut, Fairfield | Use: OPEN | WIRES: 18572"},
+      {"Name":"W1TST","Frequency":"447.275000","Duplex":"-","Offset":"5.000000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"123.0","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DN","TStep":"5.00","Power":"50W","Comment":"New Canaan, Connecticut, Fairfield | Use: OPEN"},
+      {"Name":"W2TST","Frequency":"146.940000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Manhattan, New York | Use: OPEN"},
+      {"Name":"W2TSU","Frequency":"443.200000","Duplex":"+","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Brooklyn, New York | DCS only"},
+      {"Name":"W2TSV","Frequency":"444.100000","Duplex":"+","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Queens, New York | Use: CLOSED"},
+      {"Name":"W2TSW","Frequency":"147.300000","Duplex":"+","Offset":"0.600000","Tone":"Cross","rToneFreq":"88.5","cToneFreq":"151.4","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Newark, New Jersey | mixed CTCSS and DCS"},
+      {"Name":"W2DS","Frequency":"445.650000","Duplex":"-","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"Hoboken, New Jersey"},
+      {"Name":"W2DM","Frequency":"442.850000","Duplex":"+","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DMR","TStep":"5.00","Power":"50W","Comment":"Jersey City, New Jersey | CC1"},
+      {"Name":"W2PT","Frequency":"145.170000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"P25","TStep":"5.00","Power":"50W","Comment":"Yonkers, New York | NAC 293"},
+      {"Name":"W2NX","Frequency":"441.300000","Duplex":"+","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NXDN","TStep":"5.00","Power":"50W","Comment":"Staten Island, New York | RAN 1"},
+      {"Name":"W2OF","Frequency":"224.500000","Duplex":"-","Offset":"1.600000","Tone":"Tone","rToneFreq":"114.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"White Plains, New York | Use: OPEN"},
+      {"Name":"W2SP","Frequency":"146.520000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Fort Lee, New Jersey | simplex node"},
+      {"Name":"W2SX","Frequency":"53.250000","Duplex":"-","Offset":"1.000000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Stamford, Connecticut"}
+    ],
+    "skipped": [
+      {"repeater":"W2MS","reason":"mode","mode":"M17"},
+      {"repeater":"W2TE","reason":"mode","mode":"TETRA"}
+    ]
+  },
+  "startup schema (no radio selected) | rxf-irts.xml": {
+    "rows": [
+      {"Name":"EI0TST","Frequency":"29.680000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Carndonagh, Co. Donegal | Channel: RH3 | EchoLink Node 29007 | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI4TST","Frequency":"70.375000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Seefin Mountain, North Cork | Simplexer | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI2TST","Frequency":"145.600000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Three Rock, Co. Dublin | Channel: RV48 / (R0) | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7TST","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"Mullaghanish, Co. Cork | Channel: RB04 | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7DST","Frequency":"439.400000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"Cork City | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7DMR","Frequency":"439.600000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DMR","TStep":"5.00","Power":"50W","Comment":"Cork City | CC1 | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7FUS","Frequency":"439.700000","Duplex":"-","Offset":"9.000000","Tone":"Tone","rToneFreq":"110.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DN","TStep":"5.00","Power":"50W","Comment":"Limerick | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"GI4NX","Frequency":"439.800000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NXDN","TStep":"5.00","Power":"50W","Comment":"Belfast | RAN 1 | https://www.irts.ie/cgi/repeater.cgi"}
+    ],
+    "skipped": [
+      {"repeater":"EI23TST","reason":"tone","tone":"110"}
+    ]
+  },
+  "startup schema (no radio selected) | rsgb modes A": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TM","Frequency":"29.620000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"OSWESTRY | IO82LU | 25.3 km"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TU","Frequency":"1297.100000","Duplex":"-","Offset":"6.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"BUXTON | IO93AG | 82.2 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"WREXHAM | IO83 | ~89.6 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "startup schema (no radio selected) | rsgb modes D": {
+    "rows": [
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"DERBY | IO92GW | 90.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "startup schema (no radio selected) | rsgb modes A/D": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TM","Frequency":"29.620000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"OSWESTRY | IO82LU | 25.3 km"},
+      {"Name":"GB3TI","Frequency":"430.950000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"HEREFORD | IO82 | ~28.5 km | REDUCED OUTPUT"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB3TU","Frequency":"1297.100000","Duplex":"-","Offset":"6.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"BUXTON | IO93AG | 82.2 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"DERBY | IO92GW | 90.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "startup schema (no radio selected) | rsgb modes any": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TM","Frequency":"29.620000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"OSWESTRY | IO82LU | 25.3 km"},
+      {"Name":"GB3TK","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"WELSHPOOL | IO82KP | 25.9 km"},
+      {"Name":"GB3TI","Frequency":"430.950000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"HEREFORD | IO82 | ~28.5 km | REDUCED OUTPUT"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB7TD","Frequency":"439.587500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DMR","TStep":"5.00","Power":"50W","Comment":"DUDLEY | IO82WM | 47.3 km"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TL","Frequency":"50.810000","Duplex":"+","Offset":"0.500000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"NEWTOWN | IO82HL | 49.1 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB3TU","Frequency":"1297.100000","Duplex":"-","Offset":"6.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"50W","Comment":"BUXTON | IO93AG | 82.2 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"50W","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Power":"50W","Comment":"DERBY | IO92GW | 90.7 km"},
+      {"Name":"GB7TW","Frequency":"439.662500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DN","TStep":"5.00","Power":"50W","Comment":"MATLOCK | IO93FD | 94.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TN","reason":"mode"},
+      {"repeater":"GB7TR","reason":"mode"},
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "no schema yet | rxf-przemienniki.xml": {
+    "rows": [
+      {"Name":"SR9TA","Frequency":"439.025000","Duplex":"-","Offset":"7.600000","Tone":"TSQL","cToneFreq":"141.3","Mode":"FM","Comment":"Krakow | https://przemienniki.net/przemienniki/70cm/SR9TA"},
+      {"Name":"SR9TB","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"88.5","Mode":"FM","Comment":"Wieliczka | Echolink 12345"},
+      {"Name":"SR9TC","Frequency":"145.625000","Duplex":"-","Offset":"0.600000","Tone":"Cross","cToneFreq":"110.9","CrossMode":"->Tone","Mode":"FM","Comment":"Myslenice"},
+      {"Name":"SR9TD","Frequency":"438.550000","Duplex":"-","Offset":"7.600000","Tone":"Cross","rToneFreq":"88.5","cToneFreq":"110.9","CrossMode":"Tone->Tone","Mode":"FM","Comment":"Bochnia | split tones"},
+      {"Name":"SR9DS","Frequency":"438.600000","Duplex":"-","Offset":"7.600000","Mode":"DV","Comment":"Krakow"},
+      {"Name":"SR9YS","Frequency":"438.537500","Duplex":"-","Offset":"7.600000","Tone":"Tone","rToneFreq":"88.5","Comment":"Tarnow"},
+      {"Name":"SR9DM","Frequency":"438.512500","Duplex":"-","Offset":"7.600000","Mode":"DMR","Comment":"Krakow | CC1"},
+      {"Name":"SR9P","Frequency":"438.750000","Duplex":"-","Offset":"7.600000","Mode":"P25","Comment":"Katowice"},
+      {"Name":"SR9M","Frequency":"438.775000","Duplex":"-","Offset":"7.600000","Comment":"Gliwice"},
+      {"Name":"SR9TT","Frequency":"440.400000","Duplex":"-","Offset":"10.000000","Comment":"Opole"},
+      {"Name":"SR9AT","Frequency":"1280.000000","Duplex":"-","Offset":"30.000000","Comment":"Krakow"},
+      {"Name":"SR9TE","Frequency":"29.660000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","Mode":"FM","Comment":"Nowy Sacz"},
+      {"Name":"SR9TF","Frequency":"51.810000","Duplex":"-","Offset":"0.500000","Mode":"FM","Comment":"Zakopane"},
+      {"Name":"SR9TG","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"94.8","Mode":"FM","Comment":"Oswiecim | no published position"},
+      {"Name":"SR9TH","Frequency":"145.500000","Offset":"0.000000","Mode":"FM","Comment":"Chrzanow | one qrg"},
+      {"Name":"SR9TJ","Frequency":"70.425000","Offset":"0.000000","Mode":"FM","Comment":"Rabka | simplex"}
+    ],
+    "skipped": [
+      {"repeater":"SR9TI","reason":"frequency"},
+      {"repeater":"SR9TK","reason":"tone","tone":"159.0"},
+      {"repeater":"SR9TL","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "no schema yet | rxf-repeaterbook.xml": {
+    "rows": [
+      {"Name":"W1TST","Frequency":"447.275000","Duplex":"-","Offset":"5.000000","Tone":"TSQL","cToneFreq":"123.0","Mode":"FM","Comment":"New Canaan, Connecticut, Fairfield | Use: OPEN | WIRES: 18572"},
+      {"Name":"W1TST","Frequency":"447.275000","Duplex":"-","Offset":"5.000000","Tone":"TSQL","cToneFreq":"123.0","Mode":"DN","Comment":"New Canaan, Connecticut, Fairfield | Use: OPEN"},
+      {"Name":"W2TST","Frequency":"146.940000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"136.5","Mode":"FM","Comment":"Manhattan, New York | Use: OPEN"},
+      {"Name":"W2TSU","Frequency":"443.200000","Duplex":"+","Offset":"5.000000","Mode":"FM","Comment":"Brooklyn, New York | DCS only"},
+      {"Name":"W2TSV","Frequency":"444.100000","Duplex":"+","Offset":"5.000000","Mode":"FM","Comment":"Queens, New York | Use: CLOSED"},
+      {"Name":"W2TSW","Frequency":"147.300000","Duplex":"+","Offset":"0.600000","Tone":"Cross","cToneFreq":"151.4","CrossMode":"->Tone","Mode":"FM","Comment":"Newark, New Jersey | mixed CTCSS and DCS"},
+      {"Name":"W2DS","Frequency":"445.650000","Duplex":"-","Offset":"5.000000","Mode":"DV","Comment":"Hoboken, New Jersey"},
+      {"Name":"W2DM","Frequency":"442.850000","Duplex":"+","Offset":"5.000000","Mode":"DMR","Comment":"Jersey City, New Jersey | CC1"},
+      {"Name":"W2PT","Frequency":"145.170000","Duplex":"-","Offset":"0.600000","Mode":"P25","Comment":"Yonkers, New York | NAC 293"},
+      {"Name":"W2NX","Frequency":"441.300000","Duplex":"+","Offset":"5.000000","Mode":"NXDN","Comment":"Staten Island, New York | RAN 1"},
+      {"Name":"W2MS","Frequency":"440.100000","Duplex":"+","Offset":"5.000000","Comment":"Paterson, New Jersey"},
+      {"Name":"W2OF","Frequency":"224.500000","Duplex":"-","Offset":"1.600000","Tone":"Tone","rToneFreq":"114.8","Mode":"FM","Comment":"White Plains, New York | Use: OPEN"},
+      {"Name":"W2SP","Frequency":"146.520000","Offset":"0.000000","Mode":"FM","Comment":"Fort Lee, New Jersey | simplex node"},
+      {"Name":"W2SX","Frequency":"53.250000","Duplex":"-","Offset":"1.000000","Tone":"Tone","rToneFreq":"67.0","Mode":"FM","Comment":"Stamford, Connecticut"},
+      {"Name":"W2TE","Frequency":"439.000000","Duplex":"-","Offset":"5.000000","Comment":"Bayonne, New Jersey"}
+    ],
+    "skipped": [
+    ]
+  },
+  "no schema yet | rxf-irts.xml": {
+    "rows": [
+      {"Name":"EI0TST","Frequency":"29.680000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"67.0","Mode":"FM","Comment":"Carndonagh, Co. Donegal | Channel: RH3 | EchoLink Node 29007 | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI4TST","Frequency":"70.375000","Offset":"0.000000","Mode":"FM","Comment":"Seefin Mountain, North Cork | Simplexer | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI2TST","Frequency":"145.600000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","Mode":"FM","Comment":"Three Rock, Co. Dublin | Channel: RV48 / (R0) | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7TST","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","Tone":"Tone","rToneFreq":"103.5","Mode":"FM","Comment":"Mullaghanish, Co. Cork | Channel: RB04 | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7DST","Frequency":"439.400000","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"Cork City | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7DMR","Frequency":"439.600000","Duplex":"-","Offset":"9.000000","Mode":"DMR","Comment":"Cork City | CC1 | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7FUS","Frequency":"439.700000","Duplex":"-","Offset":"9.000000","Tone":"Tone","rToneFreq":"110.9","Mode":"DN","Comment":"Limerick | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"GI4NX","Frequency":"439.800000","Duplex":"-","Offset":"9.000000","Mode":"NXDN","Comment":"Belfast | RAN 1 | https://www.irts.ie/cgi/repeater.cgi"}
+    ],
+    "skipped": [
+      {"repeater":"EI23TST","reason":"tone","tone":"110"}
+    ]
+  },
+  "no schema yet | rsgb modes A": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","Mode":"NFM","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","Mode":"FM","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","Mode":"FM","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TM","Frequency":"29.620000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","Mode":"NFM","Comment":"OSWESTRY | IO82LU | 25.3 km"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","Mode":"NFM","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","Mode":"NFM","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","Mode":"NFM","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","Mode":"FM","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TU","Frequency":"1297.100000","Duplex":"-","Offset":"6.000000","Mode":"FM","Comment":"BUXTON | IO93AG | 82.2 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","Mode":"NFM","Comment":"WREXHAM | IO83 | ~89.6 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "no schema yet | rsgb modes D": {
+    "rows": [
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","Mode":"DV","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"DERBY | IO92GW | 90.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "no schema yet | rsgb modes A/D": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","Mode":"NFM","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","Mode":"FM","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","Mode":"FM","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TM","Frequency":"29.620000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","Mode":"NFM","Comment":"OSWESTRY | IO82LU | 25.3 km"},
+      {"Name":"GB3TI","Frequency":"430.950000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"118.8","Mode":"NFM","Comment":"HEREFORD | IO82 | ~28.5 km | REDUCED OUTPUT"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","Mode":"NFM","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","Mode":"NFM","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","Mode":"NFM","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","Mode":"NFM","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","Mode":"FM","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","Mode":"NFM","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB3TU","Frequency":"1297.100000","Duplex":"-","Offset":"6.000000","Mode":"FM","Comment":"BUXTON | IO93AG | 82.2 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","Mode":"NFM","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"DERBY | IO92GW | 90.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "no schema yet | rsgb modes any": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","Mode":"NFM","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","Mode":"FM","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","Mode":"FM","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TM","Frequency":"29.620000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","Mode":"NFM","Comment":"OSWESTRY | IO82LU | 25.3 km"},
+      {"Name":"GB3TK","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","Mode":"NFM","Comment":"WELSHPOOL | IO82KP | 25.9 km"},
+      {"Name":"GB3TI","Frequency":"430.950000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"118.8","Mode":"NFM","Comment":"HEREFORD | IO82 | ~28.5 km | REDUCED OUTPUT"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","Mode":"NFM","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","Mode":"NFM","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","Mode":"NFM","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB7TD","Frequency":"439.587500","Duplex":"-","Offset":"9.000000","Mode":"DMR","Comment":"DUDLEY | IO82WM | 47.3 km"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","Mode":"NFM","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TL","Frequency":"50.810000","Duplex":"+","Offset":"0.500000","Tone":"Tone","rToneFreq":"103.5","Mode":"NFM","Comment":"NEWTOWN | IO82HL | 49.1 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","Mode":"FM","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB7TR","Frequency":"439.475000","Duplex":"-","Offset":"9.000000","Comment":"CHESTER | IO83NE | 53.9 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","Mode":"NFM","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB3TU","Frequency":"1297.100000","Duplex":"-","Offset":"6.000000","Mode":"FM","Comment":"BUXTON | IO93AG | 82.2 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","Mode":"NFM","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","Mode":"DV","Comment":"DERBY | IO92GW | 90.7 km"},
+      {"Name":"GB7TW","Frequency":"439.662500","Duplex":"-","Offset":"9.000000","Mode":"DN","Comment":"MATLOCK | IO93FD | 94.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TN","reason":"mode"},
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "Baofeng UV-5R | rxf-przemienniki.xml": {
+    "rows": [
+      {"Name":"SR9TA","Frequency":"439.025000","Duplex":"-","Offset":"7.600000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"141.3","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Krakow | https://przemienniki.net/przemienniki/70cm/SR9TA"},
+      {"Name":"SR9TB","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Wieliczka | Echolink 12345"},
+      {"Name":"SR9TC","Frequency":"145.625000","Duplex":"-","Offset":"0.600000","Tone":"Cross","rToneFreq":"88.5","cToneFreq":"110.9","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Myslenice"},
+      {"Name":"SR9TD","Frequency":"438.550000","Duplex":"-","Offset":"7.600000","Tone":"Cross","rToneFreq":"88.5","cToneFreq":"110.9","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Bochnia | split tones"},
+      {"Name":"SR9TG","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"94.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Oswiecim | no published position"},
+      {"Name":"SR9TH","Frequency":"145.500000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Chrzanow | one qrg"}
+    ],
+    "skipped": [
+      {"repeater":"SR9DS","reason":"mode","mode":"DSTAR"},
+      {"repeater":"SR9YS","reason":"mode","mode":"C4FM"},
+      {"repeater":"SR9DM","reason":"mode","mode":"MOTOTRBO"},
+      {"repeater":"SR9P","reason":"mode","mode":"APCO25"},
+      {"repeater":"SR9M","reason":"mode","mode":"M17"},
+      {"repeater":"SR9TT","reason":"mode","mode":"TETRA"},
+      {"repeater":"SR9AT","reason":"frequency"},
+      {"repeater":"SR9TE","reason":"frequency"},
+      {"repeater":"SR9TF","reason":"frequency"},
+      {"repeater":"SR9TI","reason":"frequency"},
+      {"repeater":"SR9TJ","reason":"frequency"},
+      {"repeater":"SR9TK","reason":"tone","tone":"159.0"},
+      {"repeater":"SR9TL","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "Baofeng UV-5R | rxf-repeaterbook.xml": {
+    "rows": [
+      {"Name":"W1TST","Frequency":"447.275000","Duplex":"-","Offset":"5.000000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"123.0","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"New Canaan, Connecticut, Fairfield | Use: OPEN | WIRES: 18572"},
+      {"Name":"W2TST","Frequency":"146.940000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Manhattan, New York | Use: OPEN"},
+      {"Name":"W2TSU","Frequency":"443.200000","Duplex":"+","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Brooklyn, New York | DCS only"},
+      {"Name":"W2TSV","Frequency":"444.100000","Duplex":"+","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Queens, New York | Use: CLOSED"},
+      {"Name":"W2TSW","Frequency":"147.300000","Duplex":"+","Offset":"0.600000","Tone":"Cross","rToneFreq":"88.5","cToneFreq":"151.4","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Newark, New Jersey | mixed CTCSS and DCS"},
+      {"Name":"W2OF","Frequency":"224.500000","Duplex":"-","Offset":"1.600000","Tone":"Tone","rToneFreq":"114.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"White Plains, New York | Use: OPEN"},
+      {"Name":"W2SP","Frequency":"146.520000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Fort Lee, New Jersey | simplex node"}
+    ],
+    "skipped": [
+      {"repeater":"W1TST","reason":"mode","mode":"FUSION"},
+      {"repeater":"W2DS","reason":"mode","mode":"DSTAR"},
+      {"repeater":"W2DM","reason":"mode","mode":"DMR"},
+      {"repeater":"W2PT","reason":"mode","mode":"P25"},
+      {"repeater":"W2NX","reason":"mode","mode":"NXDN"},
+      {"repeater":"W2MS","reason":"mode","mode":"M17"},
+      {"repeater":"W2SX","reason":"frequency"},
+      {"repeater":"W2TE","reason":"mode","mode":"TETRA"}
+    ]
+  },
+  "Baofeng UV-5R | rxf-irts.xml": {
+    "rows": [
+      {"Name":"EI2TST","Frequency":"145.600000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Three Rock, Co. Dublin | Channel: RV48 / (R0) | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7TST","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"Mullaghanish, Co. Cork | Channel: RB04 | https://www.irts.ie/cgi/repeater.cgi"}
+    ],
+    "skipped": [
+      {"repeater":"EI0TST","reason":"frequency"},
+      {"repeater":"EI4TST","reason":"frequency"},
+      {"repeater":"EI7DST","reason":"mode","mode":"DSTAR"},
+      {"repeater":"EI7DMR","reason":"mode","mode":"DMR"},
+      {"repeater":"EI7FUS","reason":"mode","mode":"FUSION"},
+      {"repeater":"GI4NX","reason":"mode","mode":"NXDN"},
+      {"repeater":"EI23TST","reason":"frequency"}
+    ]
+  },
+  "Baofeng UV-5R | rsgb modes A": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"WREXHAM | IO83 | ~89.6 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TM","reason":"frequency"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"}
+    ]
+  },
+  "Baofeng UV-5R | rsgb modes D": {
+    "rows": [
+    ],
+    "skipped": [
+      {"repeater":"GB3TG","reason":"mode"},
+      {"repeater":"GB7TE","reason":"mode"},
+      {"repeater":"GB7TZ","reason":"mode"},
+      {"repeater":"GB7TF","reason":"mode"},
+      {"repeater":"GB7TQ","reason":"mode"},
+      {"repeater":"GB7TV","reason":"mode"}
+    ]
+  },
+  "Baofeng UV-5R | rsgb modes A/D": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TI","Frequency":"430.950000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"HEREFORD | IO82 | ~28.5 km | REDUCED OUTPUT"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"WREXHAM | IO83 | ~89.6 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TM","reason":"frequency"},
+      {"repeater":"GB7TE","reason":"mode"},
+      {"repeater":"GB7TZ","reason":"mode"},
+      {"repeater":"GB7TF","reason":"mode"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"},
+      {"repeater":"GB7TV","reason":"mode"}
+    ]
+  },
+  "Baofeng UV-5R | rsgb modes any": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TK","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"WELSHPOOL | IO82KP | 25.9 km"},
+      {"Name":"GB3TI","Frequency":"430.950000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"HEREFORD | IO82 | ~28.5 km | REDUCED OUTPUT"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Power":"High","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"WREXHAM | IO83 | ~89.6 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TM","reason":"frequency"},
+      {"repeater":"GB3TN","reason":"frequency"},
+      {"repeater":"GB7TE","reason":"mode"},
+      {"repeater":"GB7TD","reason":"mode"},
+      {"repeater":"GB3TL","reason":"frequency"},
+      {"repeater":"GB7TR","reason":"mode"},
+      {"repeater":"GB7TZ","reason":"mode"},
+      {"repeater":"GB7TF","reason":"mode"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"},
+      {"repeater":"GB7TV","reason":"mode"},
+      {"repeater":"GB7TW","reason":"mode"}
+    ]
+  },
+  "Icom ID-51 | rxf-przemienniki.xml": {
+    "rows": [
+      {"Name":"SR9TA","Frequency":"439.025000","Duplex":"-","Offset":"7.600000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"141.3","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Krakow | https://przemienniki.net/przemienniki/70cm/SR9TA"},
+      {"Name":"SR9TB","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Wieliczka | Echolink 12345"},
+      {"Name":"SR9TC","Frequency":"145.625000","Duplex":"-","Offset":"0.600000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"110.9","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Myslenice"},
+      {"Name":"SR9TD","Frequency":"438.550000","Duplex":"-","Offset":"7.600000","Tone":"Tone","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Bochnia | split tones"},
+      {"Name":"SR9DS","Frequency":"438.600000","Duplex":"-","Offset":"7.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"Krakow"},
+      {"Name":"SR9TG","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"94.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Oswiecim | no published position"},
+      {"Name":"SR9TH","Frequency":"145.500000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Chrzanow | one qrg"}
+    ],
+    "skipped": [
+      {"repeater":"SR9YS","reason":"mode","mode":"C4FM"},
+      {"repeater":"SR9DM","reason":"mode","mode":"MOTOTRBO"},
+      {"repeater":"SR9P","reason":"mode","mode":"APCO25"},
+      {"repeater":"SR9M","reason":"mode","mode":"M17"},
+      {"repeater":"SR9TT","reason":"mode","mode":"TETRA"},
+      {"repeater":"SR9AT","reason":"frequency"},
+      {"repeater":"SR9TE","reason":"frequency"},
+      {"repeater":"SR9TF","reason":"frequency"},
+      {"repeater":"SR9TI","reason":"frequency"},
+      {"repeater":"SR9TJ","reason":"frequency"},
+      {"repeater":"SR9TK","reason":"tone","tone":"159.0"},
+      {"repeater":"SR9TL","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "Icom ID-51 | rxf-repeaterbook.xml": {
+    "rows": [
+      {"Name":"W1TST","Frequency":"447.275000","Duplex":"-","Offset":"5.000000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"123.0","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"New Canaan, Connecticut, Fairfield | Use: OPEN | WIRES: 18572"},
+      {"Name":"W2TST","Frequency":"146.940000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Manhattan, New York | Use: OPEN"},
+      {"Name":"W2TSU","Frequency":"443.200000","Duplex":"+","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Brooklyn, New York | DCS only"},
+      {"Name":"W2TSV","Frequency":"444.100000","Duplex":"+","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Queens, New York | Use: CLOSED"},
+      {"Name":"W2TSW","Frequency":"147.300000","Duplex":"+","Offset":"0.600000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"151.4","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Newark, New Jersey | mixed CTCSS and DCS"},
+      {"Name":"W2DS","Frequency":"445.650000","Duplex":"-","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"Hoboken, New Jersey"},
+      {"Name":"W2SP","Frequency":"146.520000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Fort Lee, New Jersey | simplex node"}
+    ],
+    "skipped": [
+      {"repeater":"W1TST","reason":"mode","mode":"FUSION"},
+      {"repeater":"W2DM","reason":"mode","mode":"DMR"},
+      {"repeater":"W2PT","reason":"mode","mode":"P25"},
+      {"repeater":"W2NX","reason":"mode","mode":"NXDN"},
+      {"repeater":"W2MS","reason":"mode","mode":"M17"},
+      {"repeater":"W2OF","reason":"frequency"},
+      {"repeater":"W2SX","reason":"frequency"},
+      {"repeater":"W2TE","reason":"mode","mode":"TETRA"}
+    ]
+  },
+  "Icom ID-51 | rxf-irts.xml": {
+    "rows": [
+      {"Name":"EI2TST","Frequency":"145.600000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Three Rock, Co. Dublin | Channel: RV48 / (R0) | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7TST","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Mullaghanish, Co. Cork | Channel: RB04 | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7DST","Frequency":"439.400000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"Cork City | https://www.irts.ie/cgi/repeater.cgi"}
+    ],
+    "skipped": [
+      {"repeater":"EI0TST","reason":"frequency"},
+      {"repeater":"EI4TST","reason":"frequency"},
+      {"repeater":"EI7DMR","reason":"mode","mode":"DMR"},
+      {"repeater":"EI7FUS","reason":"mode","mode":"FUSION"},
+      {"repeater":"GI4NX","reason":"mode","mode":"NXDN"},
+      {"repeater":"EI23TST","reason":"frequency"}
+    ]
+  },
+  "Icom ID-51 | rsgb modes A": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WREXHAM | IO83 | ~89.6 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TM","reason":"frequency"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"}
+    ]
+  },
+  "Icom ID-51 | rsgb modes D": {
+    "rows": [
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"DERBY | IO92GW | 90.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "Icom ID-51 | rsgb modes A/D": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TI","Frequency":"430.950000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"HEREFORD | IO82 | ~28.5 km | REDUCED OUTPUT"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"DERBY | IO92GW | 90.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TM","reason":"frequency"},
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"}
+    ]
+  },
+  "Icom ID-51 | rsgb modes any": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TK","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WELSHPOOL | IO82KP | 25.9 km"},
+      {"Name":"GB3TI","Frequency":"430.950000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"HEREFORD | IO82 | ~28.5 km | REDUCED OUTPUT"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"DERBY | IO92GW | 90.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TM","reason":"frequency"},
+      {"repeater":"GB3TN","reason":"frequency"},
+      {"repeater":"GB7TD","reason":"mode"},
+      {"repeater":"GB3TL","reason":"frequency"},
+      {"repeater":"GB7TR","reason":"mode"},
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"},
+      {"repeater":"GB7TW","reason":"mode"}
+    ]
+  },
+  "Kenwood TH-D74 | rxf-przemienniki.xml": {
+    "rows": [
+      {"Name":"SR9TA","Frequency":"439.025000","Duplex":"-","Offset":"7.600000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"141.3","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Krakow | https://przemienniki.net/przemienniki/70cm/SR9TA"},
+      {"Name":"SR9TB","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Wieliczka | Echolink 12345"},
+      {"Name":"SR9TC","Frequency":"145.625000","Duplex":"-","Offset":"0.600000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"110.9","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Myslenice"},
+      {"Name":"SR9TD","Frequency":"438.550000","Duplex":"-","Offset":"7.600000","Tone":"Cross","rToneFreq":"88.5","cToneFreq":"110.9","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Bochnia | split tones"},
+      {"Name":"SR9DS","Frequency":"438.600000","Duplex":"-","Offset":"7.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"Krakow"},
+      {"Name":"SR9TE","Frequency":"29.660000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Nowy Sacz"},
+      {"Name":"SR9TF","Frequency":"51.810000","Duplex":"-","Offset":"0.500000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Zakopane"},
+      {"Name":"SR9TG","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"94.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Oswiecim | no published position"},
+      {"Name":"SR9TH","Frequency":"145.500000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Chrzanow | one qrg"},
+      {"Name":"SR9TJ","Frequency":"70.425000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Rabka | simplex"}
+    ],
+    "skipped": [
+      {"repeater":"SR9YS","reason":"mode","mode":"C4FM"},
+      {"repeater":"SR9DM","reason":"mode","mode":"MOTOTRBO"},
+      {"repeater":"SR9P","reason":"mode","mode":"APCO25"},
+      {"repeater":"SR9M","reason":"mode","mode":"M17"},
+      {"repeater":"SR9TT","reason":"mode","mode":"TETRA"},
+      {"repeater":"SR9AT","reason":"frequency"},
+      {"repeater":"SR9TI","reason":"frequency"},
+      {"repeater":"SR9TK","reason":"tone","tone":"159.0"},
+      {"repeater":"SR9TL","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "Kenwood TH-D74 | rxf-repeaterbook.xml": {
+    "rows": [
+      {"Name":"W1TST","Frequency":"447.275000","Duplex":"-","Offset":"5.000000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"123.0","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"New Canaan, Connecticut, Fairfield | Use: OPEN | WIRES: 18572"},
+      {"Name":"W2TST","Frequency":"146.940000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Manhattan, New York | Use: OPEN"},
+      {"Name":"W2TSU","Frequency":"443.200000","Duplex":"+","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Brooklyn, New York | DCS only"},
+      {"Name":"W2TSV","Frequency":"444.100000","Duplex":"+","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Queens, New York | Use: CLOSED"},
+      {"Name":"W2TSW","Frequency":"147.300000","Duplex":"+","Offset":"0.600000","Tone":"TSQL","rToneFreq":"88.5","cToneFreq":"151.4","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Newark, New Jersey | mixed CTCSS and DCS"},
+      {"Name":"W2DS","Frequency":"445.650000","Duplex":"-","Offset":"5.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"Hoboken, New Jersey"},
+      {"Name":"W2OF","Frequency":"224.500000","Duplex":"-","Offset":"1.600000","Tone":"Tone","rToneFreq":"114.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"White Plains, New York | Use: OPEN"},
+      {"Name":"W2SP","Frequency":"146.520000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Fort Lee, New Jersey | simplex node"},
+      {"Name":"W2SX","Frequency":"53.250000","Duplex":"-","Offset":"1.000000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Stamford, Connecticut"}
+    ],
+    "skipped": [
+      {"repeater":"W1TST","reason":"mode","mode":"FUSION"},
+      {"repeater":"W2DM","reason":"mode","mode":"DMR"},
+      {"repeater":"W2PT","reason":"mode","mode":"P25"},
+      {"repeater":"W2NX","reason":"mode","mode":"NXDN"},
+      {"repeater":"W2MS","reason":"mode","mode":"M17"},
+      {"repeater":"W2TE","reason":"mode","mode":"TETRA"}
+    ]
+  },
+  "Kenwood TH-D74 | rxf-irts.xml": {
+    "rows": [
+      {"Name":"EI0TST","Frequency":"29.680000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Carndonagh, Co. Donegal | Channel: RH3 | EchoLink Node 29007 | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI4TST","Frequency":"70.375000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Seefin Mountain, North Cork | Simplexer | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI2TST","Frequency":"145.600000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Three Rock, Co. Dublin | Channel: RV48 / (R0) | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7TST","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"Mullaghanish, Co. Cork | Channel: RB04 | https://www.irts.ie/cgi/repeater.cgi"},
+      {"Name":"EI7DST","Frequency":"439.400000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"Cork City | https://www.irts.ie/cgi/repeater.cgi"}
+    ],
+    "skipped": [
+      {"repeater":"EI7DMR","reason":"mode","mode":"DMR"},
+      {"repeater":"EI7FUS","reason":"mode","mode":"FUSION"},
+      {"repeater":"GI4NX","reason":"mode","mode":"NXDN"},
+      {"repeater":"EI23TST","reason":"frequency"}
+    ]
+  },
+  "Kenwood TH-D74 | rsgb modes A": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TM","Frequency":"29.620000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"OSWESTRY | IO82LU | 25.3 km"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WREXHAM | IO83 | ~89.6 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"}
+    ]
+  },
+  "Kenwood TH-D74 | rsgb modes D": {
+    "rows": [
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"DERBY | IO92GW | 90.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "Kenwood TH-D74 | rsgb modes A/D": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TM","Frequency":"29.620000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"OSWESTRY | IO82LU | 25.3 km"},
+      {"Name":"GB3TI","Frequency":"430.950000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"HEREFORD | IO82 | ~28.5 km | REDUCED OUTPUT"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"DERBY | IO92GW | 90.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"}
+    ]
+  },
+  "Kenwood TH-D74 | rsgb modes any": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3UA","Frequency":"145.775000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"MUCH WENLOCK | IO82QO | 14.5 km"},
+      {"Name":"GB3TB","Frequency":"433.000000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"82.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"TELFORD | IO82SQ | 20.1 km"},
+      {"Name":"GB3TM","Frequency":"29.620000","Duplex":"-","Offset":"0.100000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"OSWESTRY | IO82LU | 25.3 km"},
+      {"Name":"GB3TK","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WELSHPOOL | IO82KP | 25.9 km"},
+      {"Name":"GB3TI","Frequency":"430.950000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"HEREFORD | IO82 | ~28.5 km | REDUCED OUTPUT"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB7TE","Frequency":"439.412500","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"STAFFORD | IO82WT | 43.9 km"},
+      {"Name":"GB3TC","Frequency":"430.875000","Duplex":"+","Offset":"7.600000","Tone":"Tone","rToneFreq":"67.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WOLVERHAMPTON | IO82WO | 44.0 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TL","Frequency":"50.810000","Duplex":"+","Offset":"0.500000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"NEWTOWN | IO82HL | 49.1 km"},
+      {"Name":"GB3TT","Frequency":"433.275000","Duplex":"+","Offset":"1.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"FM","TStep":"5.00","Comment":"STOKE | IO83VA | 50.5 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"},
+      {"Name":"GB7TF","Frequency":"439.650000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"LICHFIELD | IO92BQ | 59.3 km"},
+      {"Name":"GB7TQ","Frequency":"439.500000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Comment":"WREXHAM | IO83 | ~89.6 km"},
+      {"Name":"GB7TV","Frequency":"439.625000","Duplex":"-","Offset":"9.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"DV","TStep":"5.00","Comment":"DERBY | IO92GW | 90.7 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3TN","reason":"frequency"},
+      {"repeater":"GB7TD","reason":"mode"},
+      {"repeater":"GB7TR","reason":"mode"},
+      {"repeater":"GB7TZ","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"},
+      {"repeater":"GB7TW","reason":"mode"}
+    ]
+  },
+  "Kenwood TK-690 | rxf-przemienniki.xml": {
+    "rows": [
+      {"Name":"SR9TB","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"Wieliczka | Echolink 12345"},
+      {"Name":"SR9TC","Frequency":"145.625000","Duplex":"-","Offset":"0.600000","Tone":"Cross","rToneFreq":"88.5","cToneFreq":"110.9","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"Myslenice"},
+      {"Name":"SR9TG","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"94.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"Oswiecim | no published position"},
+      {"Name":"SR9TH","Frequency":"145.500000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"Chrzanow | one qrg"}
+    ],
+    "skipped": [
+      {"repeater":"SR9TA","reason":"frequency"},
+      {"repeater":"SR9TD","reason":"frequency"},
+      {"repeater":"SR9DS","reason":"frequency"},
+      {"repeater":"SR9YS","reason":"frequency"},
+      {"repeater":"SR9DM","reason":"frequency"},
+      {"repeater":"SR9P","reason":"frequency"},
+      {"repeater":"SR9M","reason":"frequency"},
+      {"repeater":"SR9TT","reason":"frequency"},
+      {"repeater":"SR9AT","reason":"frequency"},
+      {"repeater":"SR9TE","reason":"frequency"},
+      {"repeater":"SR9TF","reason":"frequency"},
+      {"repeater":"SR9TI","reason":"frequency"},
+      {"repeater":"SR9TJ","reason":"frequency"},
+      {"repeater":"SR9TK","reason":"frequency"},
+      {"repeater":"SR9TL","reason":"tone","tone":"159.0"}
+    ]
+  },
+  "Kenwood TK-690 | rxf-repeaterbook.xml": {
+    "rows": [
+      {"Name":"W2TST","Frequency":"146.940000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"136.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"Manhattan, New York | Use: OPEN"},
+      {"Name":"W2TSW","Frequency":"147.300000","Duplex":"+","Offset":"0.600000","Tone":"Cross","rToneFreq":"88.5","cToneFreq":"151.4","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"Newark, New Jersey | mixed CTCSS and DCS"},
+      {"Name":"W2SP","Frequency":"146.520000","Offset":"0.000000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"Fort Lee, New Jersey | simplex node"}
+    ],
+    "skipped": [
+      {"repeater":"W1TST","reason":"frequency"},
+      {"repeater":"W1TST","reason":"frequency"},
+      {"repeater":"W2TSU","reason":"frequency"},
+      {"repeater":"W2TSV","reason":"frequency"},
+      {"repeater":"W2DS","reason":"frequency"},
+      {"repeater":"W2DM","reason":"frequency"},
+      {"repeater":"W2PT","reason":"mode","mode":"P25"},
+      {"repeater":"W2NX","reason":"frequency"},
+      {"repeater":"W2MS","reason":"frequency"},
+      {"repeater":"W2OF","reason":"frequency"},
+      {"repeater":"W2SX","reason":"frequency"},
+      {"repeater":"W2TE","reason":"frequency"}
+    ]
+  },
+  "Kenwood TK-690 | rxf-irts.xml": {
+    "rows": [
+      {"Name":"EI2TST","Frequency":"145.600000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"Three Rock, Co. Dublin | Channel: RV48 / (R0) | https://www.irts.ie/cgi/repeater.cgi"}
+    ],
+    "skipped": [
+      {"repeater":"EI0TST","reason":"frequency"},
+      {"repeater":"EI4TST","reason":"frequency"},
+      {"repeater":"EI7TST","reason":"frequency"},
+      {"repeater":"EI7DST","reason":"frequency"},
+      {"repeater":"EI7DMR","reason":"frequency"},
+      {"repeater":"EI7FUS","reason":"frequency"},
+      {"repeater":"GI4NX","reason":"frequency"},
+      {"repeater":"EI23TST","reason":"frequency"}
+    ]
+  },
+  "Kenwood TK-690 | rsgb modes A": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"CREWE | IO83SC | 48.3 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3UA","reason":"mode"},
+      {"repeater":"GB3TB","reason":"frequency"},
+      {"repeater":"GB3TM","reason":"frequency"},
+      {"repeater":"GB3TC","reason":"frequency"},
+      {"repeater":"GB3TT","reason":"frequency"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"},
+      {"repeater":"GB7TQ","reason":"frequency"}
+    ]
+  },
+  "Kenwood TK-690 | rsgb modes D": {
+    "rows": [
+    ],
+    "skipped": [
+      {"repeater":"GB3TG","reason":"mode"},
+      {"repeater":"GB7TE","reason":"frequency"},
+      {"repeater":"GB7TZ","reason":"frequency"},
+      {"repeater":"GB7TF","reason":"frequency"},
+      {"repeater":"GB7TQ","reason":"frequency"},
+      {"repeater":"GB7TV","reason":"frequency"}
+    ]
+  },
+  "Kenwood TK-690 | rsgb modes A/D": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3UA","reason":"mode"},
+      {"repeater":"GB3TB","reason":"frequency"},
+      {"repeater":"GB3TM","reason":"frequency"},
+      {"repeater":"GB3TI","reason":"frequency"},
+      {"repeater":"GB7TE","reason":"frequency"},
+      {"repeater":"GB3TC","reason":"frequency"},
+      {"repeater":"GB3TT","reason":"frequency"},
+      {"repeater":"GB7TZ","reason":"frequency"},
+      {"repeater":"GB7TF","reason":"frequency"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"},
+      {"repeater":"GB7TQ","reason":"frequency"},
+      {"repeater":"GB7TV","reason":"frequency"}
+    ]
+  },
+  "Kenwood TK-690 | rsgb modes any": {
+    "rows": [
+      {"Name":"GB3TA","Frequency":"145.737500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"103.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"SHREWSBURY | IO82OR | 3.5 km"},
+      {"Name":"GB3TK","Frequency":"145.700000","Duplex":"-","Offset":"0.600000","rToneFreq":"88.5","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"WELSHPOOL | IO82KP | 25.9 km"},
+      {"Name":"GB3TG","Frequency":"145.612500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"77.0","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"LUDLOW | IO82PI | 39.5 km"},
+      {"Name":"GB3TH","Frequency":"145.650000","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"118.8","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"KIDDERMINSTER | IO82UJ | 46.7 km | NOT OPERATIONAL"},
+      {"Name":"GB3TS","Frequency":"145.762500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"141.3","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"CREWE | IO83SC | 48.3 km"},
+      {"Name":"GB3TJ","Frequency":"145.687500","Duplex":"-","Offset":"0.600000","Tone":"Tone","rToneFreq":"71.9","cToneFreq":"88.5","DtcsCode":"023","DtcsPolarity":"NN","RxDtcsCode":"023","CrossMode":"Tone->Tone","Mode":"NFM","TStep":"5.00","Power":"High","Comment":"LEOMINSTER | IO82OF22 | 54.5 km"}
+    ],
+    "skipped": [
+      {"repeater":"GB3UA","reason":"mode"},
+      {"repeater":"GB3TB","reason":"frequency"},
+      {"repeater":"GB3TM","reason":"frequency"},
+      {"repeater":"GB3TI","reason":"frequency"},
+      {"repeater":"GB3TN","reason":"frequency"},
+      {"repeater":"GB7TE","reason":"frequency"},
+      {"repeater":"GB3TC","reason":"frequency"},
+      {"repeater":"GB7TD","reason":"frequency"},
+      {"repeater":"GB3TL","reason":"frequency"},
+      {"repeater":"GB3TT","reason":"frequency"},
+      {"repeater":"GB7TR","reason":"frequency"},
+      {"repeater":"GB7TZ","reason":"frequency"},
+      {"repeater":"GB7TF","reason":"frequency"},
+      {"repeater":"GB3TX","reason":"tone","tone":"159.0"},
+      {"repeater":"GB3TU","reason":"frequency"},
+      {"repeater":"GB7TQ","reason":"frequency"},
+      {"repeater":"GB7TV","reason":"frequency"},
+      {"repeater":"GB7TW","reason":"frequency"}
+    ]
+  }
+}

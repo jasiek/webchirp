@@ -7,7 +7,8 @@
 // and how strictly options are matched.
 
 // The columns a repeater row builder writes; wide enough to exercise every
-// field buildRsgbRows() touches, and the default when a test needs no others.
+// field an RSGB record's row touches (buildRepeaterRows,
+// web/js/repeater-rows.ts), and the default when a test needs no others.
 export const REPEATER_COLUMNS = [
   "Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "Mode", "Power", "Comment",
 ];

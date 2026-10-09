@@ -1,10 +1,8 @@
 import { withRequestTimeout } from "./request-timeout.ts";
-import { highestPowerOption, setHighestPower } from "./row-power.ts";
-import type { RepeaterRowsResult, RowBuilderHooks, SkippedRepeater } from "./row-power.ts";
+import { highestPowerOption } from "./row-power.ts";
+import type { RowBuilderHooks } from "./row-power.ts";
 import type { ChannelRow } from "./ui/channel-values.ts";
 import type { City } from "./ui/query-fields.ts";
-import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.ts";
-import { applyTonePair } from "./repeater-rows.ts";
 import { errorFields } from "./error-details.ts";
 
 const PMR446_FREQUENCIES_MHZ = Array.from(
@@ -235,89 +233,6 @@ export function parseCitySuggestions(jsonText: string): City[] {
     .slice(0, CITY_SUGGEST_MAX);
 }
 
-// Read an RXF <ctcss> body as a CTCSS frequency, yielding "" for anything that
-// is not one. The element is not always a tone: RepeaterBook publishes "CSQ"
-// for carrier squelch, "Restricted" for a closed repeater, and DTCS codes such
-// as "D023" in the very same field. Those must count as "no tone" rather than
-// be written through, because setRowValue would reject them against the
-// rToneFreq enum and leave the row asserting a tone mode with no tone behind
-// it - a channel that transmits a default 88.5 the directory never mentioned.
-// (Carrying the DTCS codes properly needs the DtcsCode/RxDtcsCode/DtcsPolarity
-// columns and is deliberately out of scope here.)
-function parseCtcssFreq(text: unknown): string {
-  const value = String(text ?? "").trim();
-  if (!/^\d+(\.\d+)?$/.test(value)) {
-    return "";
-  }
-  return Number(value) > 0 ? value : "";
-}
-
-function formatFrequencyMhz(value: unknown): string {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return "";
-  }
-  return numeric.toFixed(6);
-}
-
-/** One <repeater> of an RXF response, its frequencies in MHz. */
-export interface PrzemiennikiRepeater {
-  qra: string;
-  mode: string;
-  qrgRx: number;
-  qrgTx: number;
-  qth: string;
-  remarks: string;
-  link: string;
-  ctcssRx: string;
-  ctcssTx: string;
-  /** NaN when the directory published no position. */
-  latitude: number;
-  longitude: number;
-}
-
-export function parsePrzemiennikiXml(xmlText: string): {
-  perspective: string;
-  countries: string[];
-  repeaters: PrzemiennikiRepeater[];
-} {
-  const xmlDoc = parseXmlDocument(xmlText);
-  const perspective = firstText(xmlDoc, "rxf > perspective").toLowerCase();
-  if (!perspective) {
-    throw new Error("RXF response is missing its frequency perspective.");
-  }
-  if (perspective !== "radio" && perspective !== "repeater") {
-    throw new Error(`RXF response has unsupported frequency perspective: ${perspective}`);
-  }
-
-  const countries = Array.from(
-    new Set(
-      Array.from(xmlDoc.querySelectorAll("repeaters > repeater > country"))
-        .map((node) => String(node.textContent || "").trim().toUpperCase())
-        .filter((code) => /^[A-Z]{2}$/.test(code)),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
-
-  const repeaters = Array.from(xmlDoc.querySelectorAll("repeaters > repeater"))
-    .map((repeaterEl) => {
-      return {
-        qra: firstText(repeaterEl, "qra"),
-        mode: firstText(repeaterEl, "mode"),
-        qrgRx: parseQrgMhz(firstText(repeaterEl, 'qrg[type="rx"]')),
-        qrgTx: parseQrgMhz(firstText(repeaterEl, 'qrg[type="tx"]')),
-        qth: firstText(repeaterEl, "qth"),
-        remarks: firstText(repeaterEl, "remarks"),
-        link: firstText(repeaterEl, "link"),
-        ctcssRx: firstText(repeaterEl, 'ctcss[type="rx"]'),
-        ctcssTx: firstText(repeaterEl, 'ctcss[type="tx"]'),
-        latitude: Number(firstText(repeaterEl, "location > latitude") || NaN),
-        longitude: Number(firstText(repeaterEl, "location > longitude") || NaN),
-      };
-    });
-
-  return { perspective, countries, repeaters };
-}
-
 export function parsePrzemiennikiMetaJson(jsonText: string): {
   countries: string[];
   bands: string[];
@@ -434,104 +349,6 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }: R
     }
     return row;
   });
-}
-
-// Returns `{ rows, skipped }`. A repeater the selected radio cannot express is
-// left out rather than written as something it is not, and `skipped` carries a
-// reason per record — "frequency" (outside the driver's valid_bands), "mode"
-// (the radio advertises no Mode the repeater can be worked in) or "tone" (the
-// radio's tone table has no such CTCSS access tone, so it could never open the
-// repeater) — so the caller can say which and why. Same contract as
-// buildRsgbRows in web/js/rsgb.ts.
-export function buildPrzemiennikiRows(
-  repeaters: readonly PrzemiennikiRepeater[],
-  { createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks,
-  { perspective = "repeater" }: { perspective?: string } = {},
-): RepeaterRowsResult {
-  const rows: ChannelRow[] = [];
-  const skipped: SkippedRepeater[] = [];
-  // RXF's <perspective> labels every rx/tx pair in the feed - frequencies and
-  // CTCSS alike - as either the user's radio's or the repeater's. Under
-  // "radio", rx is what the radio receives; under "repeater", rx is what the
-  // repeater receives, which is what the radio has to transmit.
-  const fromRadio = perspective === "radio";
-  for (const repeater of repeaters) {
-    const row = createBlankRow();
-    // Normalize the labelled pair into a CHIRP memory's receive/transmit pair.
-    const receiveFrequency = fromRadio
-      ? (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx)
-      : (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx);
-    const transmitFrequency = fromRadio
-      ? (Number.isFinite(repeater.qrgTx) ? repeater.qrgTx : repeater.qrgRx)
-      : (Number.isFinite(repeater.qrgRx) ? repeater.qrgRx : repeater.qrgTx);
-    // Tones carry the same perspective as the frequencies, so a repeater that
-    // publishes only an access tone (the tone the repeater receives) still has
-    // to reach the radio as a transmitted tone - map it to cToneFreq and the
-    // radio silently never sends it.
-    const transmitTone = parseCtcssFreq(fromRadio ? repeater.ctcssTx : repeater.ctcssRx);
-    const receiveTone = parseCtcssFreq(fromRadio ? repeater.ctcssRx : repeater.ctcssTx);
-
-    setRowValue(row, "Name", repeater.qra);
-    const commentParts = [repeater.qth, repeater.remarks, repeater.link].filter((part) => String(part || "").trim());
-    setRowValue(row, "Comment", commentParts.join(" | "));
-
-    if (Number.isFinite(receiveFrequency)) {
-      setRowValue(row, "Frequency", formatFrequencyMhz(receiveFrequency));
-    }
-    // setRowValue validates against the selected radio's own column metadata
-    // and keeps the previous value when a write falls outside valid_bands, so
-    // a 70cm repeater on a 2m-only radio would otherwise reach the grid with a
-    // blank Frequency and an accepted -7.6 MHz Offset (Offset is exempt from
-    // the band check). A blank Frequency is not merely a bad row: on upload
-    // _apply_rows_to_radio_instance reads it as "erase this memory".
-    if (!(Number.parseFloat(String(row.Frequency ?? "")) > 0)) {
-      skipped.push({ repeater: String(repeater.qra || "").trim(), reason: "frequency" });
-      continue;
-    }
-    if (Number.isFinite(receiveFrequency) && Number.isFinite(transmitFrequency)) {
-      const delta = transmitFrequency - receiveFrequency;
-      if (Math.abs(delta) < 0.0000005) {
-        setRowValue(row, "Duplex", "");
-        setRowValue(row, "Offset", "0.000000");
-      } else {
-        setRowValue(row, "Duplex", delta < 0 ? "-" : "+");
-        setRowValue(row, "Offset", formatFrequencyMhz(Math.abs(delta)));
-      }
-    }
-
-    if (!applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, receiveTone)) {
-      skipped.push({ repeater: String(repeater.qra || "").trim(), reason: "tone", tone: transmitTone });
-      continue;
-    }
-
-    const modeMappings: Readonly<Record<string, string[]>> = {
-      FM: ["FM", "NFM", "FMN"],
-      DSTAR: ["DV", "DSTAR", "D-STAR"],
-      ATV: ["ATV"],
-      ECHOLINK: ["ECHOLINK", "FM", "NFM", "FMN"],
-      DMR: ["DMR", "MOTOTRBO"],
-      MOTOTRBO: ["DMR", "MOTOTRBO"],
-      APCO25: ["P25", "APCO25", "APCO-25"],
-      C4FM: ["C4FM", "DN", "VW"],
-      FUSION: ["DN", "C4FM", "VW"],
-      FMLINK: ["FM", "NFM", "FMN"],
-      TETRA: ["TETRA"],
-      M17: ["M17"],
-    };
-    const mode = String(repeater.mode || "").trim().toUpperCase();
-    const mappedMode = findEnumOption("Mode", modeMappings[mode] || [mode], true);
-    if (!mappedMode) {
-      skipped.push({ repeater: String(repeater.qra || "").trim(), reason: "mode", mode });
-      continue;
-    }
-    setRowValue(row, "Mode", mappedMode);
-    // A repeater channel reaches for a distant machine, so it carries the
-    // driver's highest tier rather than whatever the blank row defaulted to -
-    // the same rule buildRsgbRows applies in web/js/rsgb.ts.
-    setHighestPower(row, { setRowValue, findEnumOption });
-    rows.push(row);
-  }
-  return { rows, skipped };
 }
 
 export {

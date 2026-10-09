@@ -7,10 +7,10 @@ import {
   RSGB_DEFAULT_BANDS,
   RSGB_DEFAULT_MODES,
   RSGB_MODES,
-  buildRsgbRows,
   isRepeaterRecord,
   parseRsgbPayload,
 } from "../../web/js/rsgb.ts";
+import { rsgbRows } from "../support/repeater-rows.mjs";
 import { makeRowHooks } from "../support/row-hooks.mjs";
 
 // Contract tests against the live RSGB/ETCC API. Deliberately NOT part of
@@ -25,7 +25,7 @@ import { makeRowHooks } from "../support/row-hooks.mjs";
 //   - the CORS header that lets a browser call this at all
 //   - a miss reported as 200 + {"data":null} instead of an HTTP error
 //   - /locator prefix-matching at 4 characters and matching exactly at 6
-//   - the field names, units and types buildRsgbRows() reads
+//   - the field names, units and types rsgbToRepeaterRecord() reads
 //   - that the curated band and mode lists still describe the live data
 //
 // Failures are meant to be read, not muted: each one names the assumption in
@@ -98,7 +98,7 @@ test("/locator matches exactly at 6 characters, and not at 2 or 5", async () => 
   }
 });
 
-test("records carry the fields, types and units buildRsgbRows reads", async () => {
+test("records carry the fields, types and units rsgbToRepeaterRecord reads", async () => {
   const records = await allRecords();
   assert.ok(records.length > 1000, `only ${records.length} records in /all`);
 
@@ -232,7 +232,7 @@ test("every repeater the live API serves builds a channel on High", async () => 
   const repeaters = records.filter(isRepeaterRecord);
   assert.ok(repeaters.length > 500, `only ${repeaters.length} repeaters to check`);
 
-  const { rows, skipped } = buildRsgbRows(repeaters, permissiveRowHooks());
+  const { rows, skipped } = rsgbRows(repeaters, permissiveRowHooks());
   assert.ok(rows.length > 500, `only ${rows.length} rows built from ${repeaters.length} repeaters`);
 
   const notHigh = rows.filter((row) => row.Power !== "High");
