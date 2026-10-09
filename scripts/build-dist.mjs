@@ -1,6 +1,41 @@
+// Build dist/, the tree GitHub Pages serves (.github/workflows/pages.yml).
+//
+// JavaScript and CSS go through esbuild. The entry points are whatever the
+// pages load -- every local <script type="module" src> and
+// <link rel="stylesheet" href> in every HTML file under web/, found by
+// parsing the tags rather than listed here -- bundled with code splitting into
+// ES modules under content-hashed names, with linked source maps. esbuild
+// resolves the imports and names each chunk after its own bytes and the names
+// of the chunks it imports, so a dependency-only change renames every
+// importer up the graph (issue #114) without this script reading any import
+// itself. Each page is then pointed at its entries' hashed outputs from
+// esbuild's metafile, by rewriting the src/href attribute of the tag that
+// named the source; nothing else in any file is rewritten.
+//
+// What esbuild does not handle:
+//   * The runtime Python files (web/python/**/*.py) are fetched by URL, not
+//     imported. Each is copied under name.<10 hex>.py, the hex being its
+//     SHA-256, and the bundle learns those URLs from a generated module:
+//     web/js/runtime-python-urls.js is replaced wholesale with a literal table
+//     of the hashed URLs (pythonUrlsPlugin below), so the source keeps
+//     deriving the unhashed URLs the dev server serves.
+//   * The CHIRP archive and manifest (web/chirp/, scripts/build-chirp-bundle.mjs)
+//     are named after the pin, so they are copied as they are, required, and
+//     listed in the asset manifest for retention.
+//   * Everything else -- the web manifest and icons, the radio catalogs,
+//     version.json, sitemap.xml, robots.txt, favicon -- is copied verbatim.
+//   * Pyodide (and its wasm and stdlib, through PYODIDE_INDEX_URL), the
+//     Sentry SDK and the web-serial polyfill stay on jsDelivr; their URLs are
+//     external, so the bundle never fetches them and the two lazy ones stay
+//     dynamic imports.
+//
+// asset-manifest.json lists every immutable name this build emits, which
+// scripts/retain-deployed-assets.mjs carries into the next deploy.
 import { createHash } from "node:crypto";
-import { access, cp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+import * as esbuild from "esbuild";
 
 import {
   CHIRP_BUNDLE_DIR,
@@ -11,23 +46,31 @@ import {
 const ROOT = process.cwd();
 const DIST_DIR = path.join(ROOT, "dist");
 const WEB_DIR = path.join(ROOT, "web");
-// .mjs is hashed and rewritten like .js: a hashed importer served next to a
-// stale, unhashed .mjs from the previous deploy links against exports that
-// module does not have yet, which fails the whole module graph.
-const HASHED_EXTS = new Set([".js", ".mjs", ".css", ".py"]);
-const REWRITE_EXTS = new Set([".html", ".js", ".mjs", ".css"]);
-// The CHIRP archive and manifest for the pinned revision
-// (scripts/build-chirp-bundle.mjs). Immutable by name like the hashed assets,
-// but named after the pin rather than their content, so they are neither
-// hashed nor rewritten here -- only required, and listed in the asset manifest
-// so scripts/retain-deployed-assets.mjs carries the previous pin forward.
+const PYTHON_DIR = path.join(WEB_DIR, "python");
+// The module whose source names every runtime Python file by its unhashed URL,
+// and which the bundle gets in a generated form naming the hashed copies.
+const PYTHON_URLS_MODULE = path.join(WEB_DIR, "js", "runtime-python-urls.js");
+// Every bundled JS output lands in this one directory, entries and chunks
+// alike, at the depth web/js/ has in the source. A module that resolves a URL
+// against import.meta.url (web/js/runtime-rpc.js reads "../radio-catalog.json"
+// that way) then resolves it the same way in whichever chunk it ends up in.
+const JS_OUT_DIR = "js";
+// The three CDN modules, all on jsDelivr: Pyodide's loader (a static import in
+// web/js/runtime-rpc.js), the Sentry SDK (web/js/sentry.js) and the
+// web-serial polyfill (web/js/webusb-serial.js), the last two lazy.
+const EXTERNAL_URLS = ["https://cdn.jsdelivr.net/*"];
+// The CHIRP archive and manifest for the pinned revision. Immutable by name like
+// the hashed assets, but named after the pin rather than their content, so they
+// are neither hashed nor rewritten here -- only required, and listed in the
+// asset manifest so scripts/retain-deployed-assets.mjs carries the previous pin
+// forward.
 const CHIRP_BUNDLE_FILES = Object.values(chirpBundleFileNames(DEFAULT_CHIRP_REVISION))
   .map((name) => `${CHIRP_BUNDLE_DIR}/${name}`);
 // Assets whose absence is invisible at runtime until a user notices something
 // missing: the manifest and its icons only matter when someone tries to install
-// the app to a home screen, which no test page load exercises.
+// the app to a home screen, which no test page load exercises. (A JS module
+// needs no entry here: esbuild fails the build on an import it cannot resolve.)
 const REQUIRED_WEB_FILES = [
-  "js/datasources.js",
   "manifest.webmanifest",
   "images/icon-192.png",
   "images/icon-512.png",
@@ -43,6 +86,10 @@ const REQUIRED_WEB_FILES = [
   // fine until the first radio is selected.
   ...CHIRP_BUNDLE_FILES,
 ];
+// Source files that reach dist/ only through esbuild or the Python hashing, so
+// the verbatim copy skips them (as it skips type declarations, which only tsc
+// reads, and the pages, which are written once rewritten).
+const BUILT_EXTS = new Set([".js", ".mjs", ".css", ".py"]);
 
 function toPosix(relPath) {
   return relPath.split(path.sep).join("/");
@@ -57,6 +104,9 @@ async function walkFiles(dir) {
   const files = [];
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
+    if (entry.name === "__pycache__") {
+      continue;
+    }
     if (entry.isDirectory()) {
       files.push(...(await walkFiles(full)));
     } else {
@@ -66,138 +116,284 @@ async function walkFiles(dir) {
   return files;
 }
 
-// Quote a literal reference so it can be embedded in the boundary-anchored
-// matcher below; asset paths contain "." and "-", which are regex syntax.
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-// A reference has to stand alone, so neither neighbour may be a character that
-// could extend a path. Plain substring matching conflates spellings that only
-// look alike: "/js/rsgb.js" occurs inside a comment mentioning "web/js/rsgb.js",
-// and "./analytics.js" occurs inside the import of "../analytics.js" — which
-// rewrote prose and invented dependency edges between unrelated modules.
-function referenceMatcher(form) {
-  return new RegExp(`(?<![\\w./-])${escapeRegExp(form)}(?![\\w./-])`, "g");
-}
-
-// Every spelling a file at `fromRel` could use to point at `targetRel` (both
-// dist-relative POSIX paths). Sources use three shapes: site-absolute
-// ("/js/ui.js"), dist-root-relative ("./js/ui.js", what the pages at the root
-// write) and relative to the referencing file ("./ui/format.js", what a module
-// writes). The shapes depend only on the path, so form `i` of an asset and form
-// `i` of its hashed name are the same reference before and after renaming.
-function referenceForms(fromRel, targetRel) {
-  const forms = [`/${targetRel}`, `./${targetRel}`];
-  let relative = path.posix.relative(path.posix.dirname(fromRel), targetRel);
-  if (!relative.startsWith(".")) {
-    relative = `./${relative}`;
-  }
-  forms.push(relative);
-  return forms;
-}
-
-// The single pass that both discovers which assets a file references and points
-// those references at their hashed names. `nameOf` returns the hashed path for
-// an asset, or a falsy value to leave the reference as it is — which is how the
-// discovery pass runs, so the graph can never disagree with what the rewrite
-// later does. Longest spelling first, so a shorter one can never claim part of
-// a longer one.
-function substituteReferences(fromRel, text, assetRels, nameOf) {
-  const candidates = [];
-  for (const assetRel of assetRels) {
-    referenceForms(fromRel, assetRel).forEach((form, formIndex) => {
-      candidates.push({ form, formIndex, assetRel });
-    });
-  }
-  candidates.sort((a, b) => b.form.length - a.form.length);
-
-  const referenced = new Set();
-  let out = text;
-  for (const { form, formIndex, assetRel } of candidates) {
-    if (!referenceMatcher(form).test(out)) {
+// Every start tag in an HTML document with its attributes and where each
+// attribute's value sits, skipping comments and the raw text of <script> and
+// <style> -- so a path mentioned in prose, a comment or a JSON-LD block is
+// never mistaken for a reference. Only as much HTML as the generated and
+// hand-written pages use: quoted and unquoted attribute values, void and
+// self-closing tags.
+function startTags(html) {
+  const tags = [];
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
+    if (lt < 0) {
+      break;
+    }
+    if (html.startsWith("<!--", lt)) {
+      const end = html.indexOf("-->", lt + 4);
+      i = end < 0 ? html.length : end + 3;
       continue;
     }
-    referenced.add(assetRel);
-    const hashedRel = nameOf(assetRel);
-    if (!hashedRel) {
+    const nameMatch = /^<([a-zA-Z][a-zA-Z0-9-]*)/.exec(html.slice(lt, lt + 64));
+    if (!nameMatch) {
+      i = lt + 1;
       continue;
     }
-    const replacement = referenceForms(fromRel, hashedRel)[formIndex];
-    out = out.replace(referenceMatcher(form), () => replacement);
+    const name = nameMatch[1].toLowerCase();
+    let j = lt + nameMatch[0].length;
+    const attrs = [];
+    while (j < html.length) {
+      while (/\s/.test(html[j])) {
+        j += 1;
+      }
+      if (html[j] === ">") {
+        j += 1;
+        break;
+      }
+      if (html.startsWith("/>", j)) {
+        j += 2;
+        break;
+      }
+      const attrName = /^[^\s"'>/=]+/.exec(html.slice(j, j + 256));
+      if (!attrName) {
+        j += 1;
+        continue;
+      }
+      j += attrName[0].length;
+      while (/\s/.test(html[j])) {
+        j += 1;
+      }
+      const attr = { name: attrName[0].toLowerCase(), value: "", valueStart: -1, valueEnd: -1 };
+      if (html[j] === "=") {
+        j += 1;
+        while (/\s/.test(html[j])) {
+          j += 1;
+        }
+        const quote = html[j];
+        if (quote === '"' || quote === "'") {
+          attr.valueStart = j + 1;
+          attr.valueEnd = html.indexOf(quote, j + 1);
+          if (attr.valueEnd < 0) {
+            throw new Error(`Unterminated attribute value at offset ${j}`);
+          }
+          j = attr.valueEnd + 1;
+        } else {
+          attr.valueStart = j;
+          attr.valueEnd = j + (/^[^\s>]*/.exec(html.slice(j))?.[0].length ?? 0);
+          j = attr.valueEnd;
+        }
+        attr.value = html.slice(attr.valueStart, attr.valueEnd);
+      }
+      attrs.push(attr);
+    }
+    tags.push({ name, attrs });
+    if (name === "script" || name === "style") {
+      const closer = new RegExp(`</${name}`, "ig");
+      closer.lastIndex = j;
+      const close = closer.exec(html);
+      i = close ? close.index : html.length;
+    } else {
+      i = j;
+    }
   }
-  return { referenced: [...referenced], text: out };
+  return tags;
 }
 
-// Where the hashed copy of `rel` lands, keeping its directory and extension.
-function hashedRelFor(rel, hash) {
-  const ext = path.extname(rel);
-  const dir = path.posix.dirname(rel);
-  const name = `${path.posix.basename(rel, ext)}.${hash}${ext}`;
-  return dir === "." ? name : `${dir}/${name}`;
+// A reference to a file this build serves, as opposed to a CDN or data URL.
+function isLocalRef(value) {
+  return Boolean(value) && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(value);
 }
 
-// Tarjan's strongly-connected-components algorithm. It emits a component only
-// after every component reachable from it, so walking the result in order names
-// dependencies before the files that import them — which is the whole point: a
-// file cannot be hashed until its dependencies' hashed names are known. Import
-// cycles come back as components with more than one member (and a file naming
-// itself as a component with a self edge); those cannot be named after their own
-// bytes and are handled separately by the caller.
-function stronglyConnectedComponents(nodes, edgesOf) {
-  const index = new Map();
-  const lowLink = new Map();
-  const onStack = new Set();
-  const stack = [];
-  const components = [];
-  let counter = 0;
-
-  // One depth-first step: assign the node its index, follow its edges, and on
-  // the way back out emit the component it roots, if it roots one.
-  function visit(node) {
-    index.set(node, counter);
-    lowLink.set(node, counter);
-    counter += 1;
-    stack.push(node);
-    onStack.add(node);
-    for (const next of edgesOf(node)) {
-      if (!index.has(next)) {
-        visit(next);
-        lowLink.set(node, Math.min(lowLink.get(node), lowLink.get(next)));
-      } else if (onStack.has(next)) {
-        lowLink.set(node, Math.min(lowLink.get(node), index.get(next)));
+// The source files a page loads that esbuild owns, each with the attribute
+// that names it: module scripts and stylesheets. A classic script, or an inline
+// module script, is refused rather than shipped unbundled -- its imports would
+// name source files dist/ does not have.
+function pageAssetRefs(html, pageRel) {
+  const refs = [];
+  for (const tag of startTags(html)) {
+    const attr = (name) => tag.attrs.find((candidate) => candidate.name === name);
+    if (tag.name === "script") {
+      const src = attr("src");
+      const type = (attr("type")?.value || "").trim().toLowerCase();
+      if (type === "module" && !src) {
+        throw new Error(`${pageRel}: inline module scripts are not bundled; load the module by src`);
+      }
+      if (!src || !isLocalRef(src.value)) {
+        continue;
+      }
+      if (type !== "module") {
+        throw new Error(`${pageRel}: ${src.value} is not a module script; only module scripts are bundled`);
+      }
+      refs.push({ kind: "js", attr: src });
+    } else if (tag.name === "link") {
+      const rel = (attr("rel")?.value || "").toLowerCase().split(/\s+/);
+      const href = attr("href");
+      if (rel.includes("stylesheet") && href && isLocalRef(href.value)) {
+        refs.push({ kind: "css", attr: href });
       }
     }
-    if (lowLink.get(node) === index.get(node)) {
-      const component = [];
-      let member;
-      do {
-        member = stack.pop();
-        onStack.delete(member);
-        component.push(member);
-      } while (member !== node);
-      components.push(component);
-    }
   }
+  return refs.map((ref) => {
+    // Resolve browser URLs before filesystem lookup: leading slashes name the
+    // web root, and query strings/fragments belong only on the emitted URL.
+    const url = new URL(ref.attr.value, new URL(pageRel, "https://build.invalid/"));
+    return {
+      ...ref,
+      source: path.join(WEB_DIR, decodeURIComponent(url.pathname)),
+      suffix: url.search + url.hash,
+    };
+  });
+}
 
-  for (const node of nodes) {
-    if (!index.has(node)) {
-      visit(node);
+// Copy every runtime Python file under its content hash and return the URL
+// table the bundle gets, keyed by path under web/python/ the way
+// RUNTIME_PYTHON_FILES (web/js/python-sources.mjs) names them.
+async function emitPythonFiles() {
+  const urls = {};
+  const emitted = [];
+  let files = [];
+  try {
+    files = (await walkFiles(PYTHON_DIR)).filter((file) => file.endsWith(".py"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
     }
   }
-  return components;
+  for (const file of files.sort()) {
+    const content = await readFile(file);
+    const rel = toPosix(path.relative(PYTHON_DIR, file));
+    const hashedRel = rel.replace(/\.py$/, `.${contentHash(content)}.py`);
+    const target = path.join(DIST_DIR, "python", hashedRel);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, content);
+    urls[rel] = `./python/${hashedRel}`;
+    emitted.push([`python/${rel}`, `python/${hashedRel}`]);
+  }
+  return { urls, emitted };
+}
+
+// Give the bundle web/js/runtime-python-urls.js as a literal table of the
+// hashed URLs, in place of the source that derives the unhashed ones. The
+// whole module is replaced, never edited, so nothing depends on how the
+// source spells it.
+function pythonUrlsPlugin(urls) {
+  const contents = [
+    "// Generated by scripts/build-dist.mjs: each runtime Python file's",
+    "// content-hashed URL in dist/.",
+    `export const RUNTIME_PYTHON_URLS = Object.freeze(${JSON.stringify(urls, null, 2)});`,
+    "",
+  ].join("\n");
+  return {
+    name: "runtime-python-urls",
+    setup(build) {
+      build.onLoad({ filter: /runtime-python-urls\.js$/ }, (args) => (
+        path.resolve(args.path) === PYTHON_URLS_MODULE
+          ? { contents, loader: "js", resolveDir: path.dirname(PYTHON_URLS_MODULE) }
+          : undefined
+      ));
+    },
+  };
+}
+
+// The options both esbuild runs share: bundled ES modules, readable output
+// (unminified, so a stack trace in Sentry or the debug panel stays legible
+// without its map) and a linked source map beside every output.
+const COMMON_BUILD_OPTIONS = Object.freeze({
+  absWorkingDir: ROOT,
+  outdir: DIST_DIR,
+  bundle: true,
+  write: true,
+  metafile: true,
+  sourcemap: "linked",
+  minify: false,
+  charset: "utf8",
+  logLevel: "warning",
+});
+
+// Run esbuild over the page entries and map each entry's source path to the
+// dist path of its output. The outputs are every file it wrote.
+async function bundle(entries, options) {
+  if (entries.length === 0) {
+    return { entryOutputs: new Map(), outputs: [], inputs: [] };
+  }
+  const result = await esbuild.build({ ...COMMON_BUILD_OPTIONS, ...options, entryPoints: entries });
+  const entryOutputs = new Map();
+  for (const [outPath, output] of Object.entries(result.metafile.outputs)) {
+    if (output.entryPoint) {
+      entryOutputs.set(path.resolve(ROOT, output.entryPoint), path.resolve(ROOT, outPath));
+    }
+  }
+  return {
+    entryOutputs,
+    outputs: Object.keys(result.metafile.outputs).map((outPath) => path.resolve(ROOT, outPath)),
+    inputs: Object.keys(result.metafile.inputs).map((inPath) => path.resolve(ROOT, inPath)),
+  };
 }
 
 async function main() {
   await rm(DIST_DIR, { recursive: true, force: true });
-  await cp(WEB_DIR, DIST_DIR, {
-    recursive: true,
-    // Type declarations (web/js/types/) are read by tsc alone; nothing a page
-    // loads names them, so they have no business being served.
-    filter: (src) => path.basename(src) !== "__pycache__"
-      && src !== path.join(WEB_DIR, "js", "types")
-      && !src.endsWith(".d.ts"),
+
+  const webFiles = await walkFiles(WEB_DIR);
+  const pages = webFiles.filter((file) => file.endsWith(".html"));
+  const pageRefs = new Map();
+  const jsEntries = new Set();
+  const cssEntries = new Set();
+  for (const page of pages) {
+    const pageRel = toPosix(path.relative(WEB_DIR, page));
+    const html = await readFile(page, "utf8");
+    const refs = pageAssetRefs(html, pageRel);
+    for (const ref of refs) {
+      try {
+        await access(ref.source);
+      } catch {
+        throw new Error(`${pageRel} loads ${ref.attr.value}, which does not exist`);
+      }
+      (ref.kind === "js" ? jsEntries : cssEntries).add(ref.source);
+    }
+    pageRefs.set(page, { html, refs });
+  }
+
+  const python = await emitPythonFiles();
+
+  const js = await bundle([...jsEntries].sort(), {
+    format: "esm",
+    splitting: true,
+    target: "es2022",
+    entryNames: `${JS_OUT_DIR}/[name].[hash]`,
+    chunkNames: `${JS_OUT_DIR}/[name].[hash]`,
+    external: EXTERNAL_URLS,
+    plugins: [pythonUrlsPlugin(python.urls)],
   });
+  // CSS keeps its place in the tree (styles.css stays at the root), so a
+  // url() it might come to hold resolves as it does in the source.
+  const css = await bundle([...cssEntries].sort(), {
+    outbase: WEB_DIR,
+    entryNames: "[dir]/[name].[hash]",
+  });
+  const entryOutputs = new Map([...js.entryOutputs, ...css.entryOutputs]);
+
+  // Everything esbuild and the Python hashing did not produce, as it is. A
+  // source module no page reaches is left out like any other source module;
+  // it is named here so that leaving it out is never silent.
+  // File by file rather than one recursive copy, so a directory that held
+  // only source modules (web/js/ui/) does not reappear in dist/ empty.
+  for (const file of webFiles) {
+    if (BUILT_EXTS.has(path.extname(file)) || file.endsWith(".d.ts") || file.endsWith(".html")) {
+      continue;
+    }
+    const target = path.join(DIST_DIR, path.relative(WEB_DIR, file));
+    await mkdir(path.dirname(target), { recursive: true });
+    await copyFile(file, target);
+  }
+  const bundled = new Set([...js.inputs, ...css.inputs]);
+  const unbundled = webFiles
+    .filter((file) => [".js", ".mjs", ".css"].includes(path.extname(file)))
+    .filter((file) => !bundled.has(file) && file !== PYTHON_URLS_MODULE)
+    .map((file) => toPosix(path.relative(ROOT, file)));
+  if (unbundled.length > 0) {
+    console.log(`Not loaded by any page, so not shipped: ${unbundled.join(", ")}`);
+  }
 
   for (const relPath of REQUIRED_WEB_FILES) {
     const expectedPath = path.join(DIST_DIR, relPath);
@@ -208,120 +404,43 @@ async function main() {
     }
   }
 
-  const distRels = (await walkFiles(DIST_DIR))
-    .map((filePath) => toPosix(path.relative(DIST_DIR, filePath)))
-    .sort();
-  const hashedRels = distRels.filter((rel) => HASHED_EXTS.has(path.extname(rel)));
-  const hashedSet = new Set(hashedRels);
-
-  // Read every file that can carry a reference once; both the graph and the
-  // rewrite work off this same text.
-  const sources = new Map();
-  for (const rel of distRels) {
-    if (REWRITE_EXTS.has(path.extname(rel))) {
-      sources.set(rel, await readFile(path.join(DIST_DIR, rel), "utf8"));
+  // Point each page at its entries' outputs. Only the src or href attribute
+  // that named the source is rewritten, at the offsets the tag parse found.
+  for (const [page, { html, refs }] of pageRefs) {
+    const pageDir = path.dirname(page.replace(WEB_DIR, DIST_DIR));
+    let out = html;
+    for (const ref of [...refs].sort((a, b) => b.attr.valueStart - a.attr.valueStart)) {
+      let target = toPosix(path.relative(pageDir, entryOutputs.get(ref.source)));
+      if (!target.startsWith(".")) {
+        target = `./${target}`;
+      }
+      out = out.slice(0, ref.attr.valueStart) + target + ref.suffix + out.slice(ref.attr.valueEnd);
     }
+    await mkdir(pageDir, { recursive: true });
+    await writeFile(page.replace(WEB_DIR, DIST_DIR), out, "utf8");
   }
 
-  const deps = new Map();
-  for (const rel of distRels) {
-    const text = sources.get(rel);
-    deps.set(
-      rel,
-      text === undefined ? [] : substituteReferences(rel, text, hashedRels, () => null).referenced,
-    );
-  }
-
-  const hashedRelByRel = new Map();
-  // The hashed name an asset has been given, or undefined while it is still
-  // unnamed — which is what leaves a not-yet-processed reference alone.
-  const nameOf = (assetRel) => hashedRelByRel.get(assetRel);
-
-  // Write an asset out under its hashed name and drop the unhashed original,
-  // so nothing in dist/ is reachable at a name that carries no digest.
-  async function emit(rel, hashedRel, content) {
-    await writeFile(path.join(DIST_DIR, hashedRel), content);
-    await rm(path.join(DIST_DIR, rel));
-  }
-
-  // Name each asset after the bytes it is actually served as, which means
-  // rewriting its dependency references first. Hashing before the rewrite (as
-  // this did until issue #114) let a dependency-only change alter an importer's
-  // bytes while leaving its URL alone, so a browser holding the cached importer
-  // kept importing a dependency name the new deploy no longer emits — a 404 on a
-  // module import, which is a blank app rather than a stale one.
-  for (const component of stronglyConnectedComponents(hashedRels, (rel) =>
-    deps.get(rel).filter((dep) => dep !== rel),
-  )) {
-    const cyclic = component.length > 1 || deps.get(component[0]).includes(component[0]);
-    if (!cyclic) {
-      const rel = component[0];
-      const text = sources.get(rel);
-      const content =
-        text === undefined
-          ? await readFile(path.join(DIST_DIR, rel))
-          : substituteReferences(rel, text, hashedRels, nameOf).text;
-      const hashedRel = hashedRelFor(rel, contentHash(content));
-      hashedRelByRel.set(rel, hashedRel);
-      await emit(rel, hashedRel, content);
-      continue;
-    }
-    // Members of an import cycle each depend on every other member's name, so
-    // none of them can be named after its own bytes. Name the whole group after
-    // one digest of everything that determines all of their bytes instead: the
-    // members' pre-rewrite contents plus the hashed names of what they reference
-    // outside the cycle. Same name still implies same bytes; it is only coarser,
-    // since a change to one member renames every member.
-    const members = [...component].sort();
-    const memberSet = new Set(members);
-    const external = members
-      .flatMap((rel) => deps.get(rel).filter((dep) => !memberSet.has(dep)))
-      .map(nameOf)
-      .sort();
-    const hash = contentHash(
-      JSON.stringify([members.map((rel) => [rel, sources.get(rel)]), external]),
-    );
-    for (const rel of members) {
-      hashedRelByRel.set(rel, hashedRelFor(rel, hash));
-    }
-    for (const rel of members) {
-      const content = substituteReferences(rel, sources.get(rel), hashedRels, nameOf).text;
-      await emit(rel, hashedRelByRel.get(rel), content);
-    }
-  }
-
-  // The pages are rewritten but never hashed, so they come last, once every
-  // asset they name has a name.
-  for (const [rel, text] of sources) {
-    if (hashedSet.has(rel)) {
-      continue;
-    }
-    const rewritten = substituteReferences(rel, text, hashedRels, nameOf).text;
-    if (rewritten !== text) {
-      await writeFile(path.join(DIST_DIR, rel), rewritten, "utf8");
-    }
-  }
-
-  const replacements = [];
-  for (const rel of hashedRels) {
-    const hashedRel = hashedRelByRel.get(rel);
-    replacements.push([`./${rel}`, `./${hashedRel}`]);
-    replacements.push([`/${rel}`, `/${hashedRel}`]);
-  }
-  // The pin-named CHIRP archive and manifest map to themselves: they are not
+  // Every immutable name this build emits, each in both spellings a page may
+  // request it by, keyed by what it was built from where that is one file. The
+  // pin-named CHIRP archive and manifest map to themselves: they are not
   // renamed, but they are immutable and a cached page from the previous deploy
   // still asks for the previous pin's pair, so retention has to see them.
-  for (const rel of CHIRP_BUNDLE_FILES) {
-    replacements.push([`./${rel}`, `./${rel}`]);
-    replacements.push([`/${rel}`, `/${rel}`]);
-  }
-  replacements.sort((a, b) => b[0].length - a[0].length);
+  const sourceOf = new Map([...entryOutputs].map(([source, output]) => [output, source]));
+  const pairs = [
+    ...[...js.outputs, ...css.outputs].map((output) => [
+      toPosix(path.relative(sourceOf.has(output) ? WEB_DIR : DIST_DIR, sourceOf.get(output) || output)),
+      toPosix(path.relative(DIST_DIR, output)),
+    ]),
+    ...python.emitted,
+    ...CHIRP_BUNDLE_FILES.map((rel) => [rel, rel]),
+  ];
+  const replacements = pairs.flatMap(([from, to]) => [[`./${from}`, `./${to}`], [`/${from}`, `/${to}`]]);
+  replacements.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 
-  // Every hashed name now covers its own emitted bytes and, transitively, those
-  // of everything it imports, so a digest over the name list is a digest of the
-  // whole build. The pin names cover the archive the same way: same pin, same
-  // bytes.
-  const buildHash = contentHash(JSON.stringify([...replacements].sort()));
+  // esbuild names each output after its bytes and its imports' names, and the
+  // Python and pin names cover their files the same way, so a digest over the
+  // name list is a digest of the whole build.
+  const buildHash = contentHash(JSON.stringify(replacements));
   const manifest = {
     buildHash,
     generatedAt: new Date().toISOString(),

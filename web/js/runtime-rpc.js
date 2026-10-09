@@ -17,6 +17,7 @@ import { createSelectedDriverRuntime } from "./selected-driver-runtime.mjs";
 import { installSerialBridgeGlobals } from "./serial-globals.mjs";
 import { rpcDispatcherFor } from "./rpc-dispatch.mjs";
 import { runtimeErrorDetail } from "./runtime-errors.mjs";
+import { RUNTIME_PYTHON_URLS } from "./runtime-python-urls.js";
 import {
   CHIRP_BUNDLE_DIR,
   createBrowserPythonSource,
@@ -74,39 +75,13 @@ const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/";
 const CHIRP_REVISION = DEFAULT_CHIRP_REVISION;
 const DRIVER_SET = driverSetFromSearch(globalThis.location?.search);
 
-// Where the browser fetches each runtime Python file from, keyed the way
-// RUNTIME_PYTHON_FILES (web/js/python-sources.mjs) names them. Each literal is
-// what scripts/build-dist.mjs rewrites to the file's hashed name, so every file
-// needs one; the provider refuses to construct if a listed file has no URL
-// here, and tests/build/build-dist.mjs checks the pairing statically.
-const RUNTIME_PYTHON_URLS = Object.freeze({
-  "runtime_bridge.py": "./python/runtime_bridge.py",
-  "webchirp_bridge/__init__.py": "./python/webchirp_bridge/__init__.py",
-  "webchirp_bridge/channel_extra.py": "./python/webchirp_bridge/channel_extra.py",
-  "webchirp_bridge/channel_rows.py": "./python/webchirp_bridge/channel_rows.py",
-  "webchirp_bridge/chirp_loader.py": "./python/webchirp_bridge/chirp_loader.py",
-  "webchirp_bridge/clone.py": "./python/webchirp_bridge/clone.py",
-  "webchirp_bridge/column_metadata.py": "./python/webchirp_bridge/column_metadata.py",
-  "webchirp_bridge/radio_files.py": "./python/webchirp_bridge/radio_files.py",
-  "webchirp_bridge/images.py": "./python/webchirp_bridge/images.py",
-  "webchirp_bridge/jsbridge.py": "./python/webchirp_bridge/jsbridge.py",
-  "webchirp_bridge/power_levels.py": "./python/webchirp_bridge/power_levels.py",
-  "webchirp_bridge/radio_memories.py": "./python/webchirp_bridge/radio_memories.py",
-  "webchirp_bridge/radio_settings.py": "./python/webchirp_bridge/radio_settings.py",
-  "webchirp_bridge/row_validation.py": "./python/webchirp_bridge/row_validation.py",
-  "webchirp_bridge/rpc.py": "./python/webchirp_bridge/rpc.py",
-  "webchirp_bridge/runtime_errors.py": "./python/webchirp_bridge/runtime_errors.py",
-  "webchirp_bridge/serial_pipe.py": "./python/webchirp_bridge/serial_pipe.py",
-  "webchirp_bridge/session.py": "./python/webchirp_bridge/session.py",
-  "extra_drivers/quansheng/f4hwn_v4_3.py": "./python/extra_drivers/quansheng/f4hwn_v4_3.py",
-  "extra_drivers/quansheng/f4hwn_v5_9_0.py": "./python/extra_drivers/quansheng/f4hwn_v5_9_0.py",
-  "extra_drivers/quansheng/f4hwn_v6.py": "./python/extra_drivers/quansheng/f4hwn_v6.py",
-});
-
 // The CHIRP archive and its manifest live beside the app under web/chirp/
 // (scripts/build-chirp-bundle.mjs), named by the pin rather than hashed, so
 // the directory is resolved from this module's own URL the way the static
-// catalog is below and needs no entry in the URL table above.
+// catalog is below and needs no entry in RUNTIME_PYTHON_URLS
+// (web/js/runtime-python-urls.js). scripts/build-dist.mjs puts every bundled
+// module in dist/js/, the depth this file has in web/js/, so the relative
+// URL resolves the same in whichever chunk this code lands in.
 const pythonSource = createBrowserPythonSource({
   chirpRevision: CHIRP_REVISION,
   driverSet: DRIVER_SET,

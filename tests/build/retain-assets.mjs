@@ -151,6 +151,39 @@ test("a live site with a manifest writes the retained list", async () => {
   }));
 });
 
+// esbuild names bundles and chunks name.<8 base32>.js (and their maps
+// name.<8 base32>.js.map), not the 10-hex shape the textual build used; the
+// first esbuild deploy still carries the previous textual build's assets, so
+// both shapes are immutable, while an unhashed source name never is.
+test("esbuild's hashed bundles, chunks, maps and styles are retained", async () => {
+  const kept = [
+    "js/app.FGPQXBTZ.js",
+    "js/app.FGPQXBTZ.js.map",
+    "js/chunk.57EB5M5N.js",
+    "styles.BHU2VMGV.css",
+    "python/webchirp_bridge/rpc.fa6d8dd1e5.py",
+    "js/ui.0123456789.js",
+  ];
+  const assets = Object.fromEntries([...kept, "js/app.js"].map((rel) => [`./${rel}`, `./${rel}`]));
+  const routes = {
+    "/": "{}",
+    "/asset-manifest.json": JSON.stringify({ assets }),
+    ...Object.fromEntries([...kept, "js/app.js"].map((rel) => [`/${rel}`, `served ${rel}`])),
+  };
+  await withSite(routes, (url) => withTempRepo("unused.test", async (dir) => {
+    const result = await run(dir, [url]);
+    assert.equal(result.status, 0, result.stderr);
+    const retained = JSON.parse(
+      await readFile(path.join(dir, "dist", "retained-assets.json"), "utf8"),
+    );
+    assert.deepEqual(Object.keys(retained).sort(), [...kept].sort());
+    assert.equal(
+      await readFile(path.join(dir, "dist", "js", "chunk.57EB5M5N.js"), "utf8"),
+      "served js/chunk.57EB5M5N.js",
+    );
+  }));
+});
+
 // The previous deploy's CHIRP archive is named by its submodule pin rather
 // than a content digest (scripts/build-chirp-bundle.mjs). A cached page from
 // that deploy boots from it, so it has to be carried forward like a hashed

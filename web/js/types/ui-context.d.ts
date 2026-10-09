@@ -4,12 +4,10 @@
 //
 //   /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 //
-// It lives in a declaration file, not in web/js/ui.js, so that the type can
-// name every module's factory without any served file referencing them back:
-// scripts/build-dist.mjs finds references textually, comments included, so a
-// typedef in ui.js imported by each module would read as an import cycle
-// through every UI module and give them all one shared hash. Nothing loads
-// this file at runtime, and *.d.ts never reaches dist/.
+// It lives in a declaration file, not in web/js/ui.js, so the type that names
+// every module's factory sits outside the module graph it describes: no UI
+// module has to type-import the composer that imports it. Nothing loads this
+// file at runtime, and *.d.ts never reaches dist/.
 
 import type { UiDom } from "../ui/dom.js";
 import type { UiState } from "../ui/state.js";

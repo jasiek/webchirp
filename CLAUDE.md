@@ -81,6 +81,16 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   runs (`rsgb-live` needs the network, `hw-radio` needs a radio on a serial
   port). `support` holds shared fixtures and the two harnesses, not tests.
 - `scripts/`: Build, coverage and CLI tooling only. No tests live here.
+- `scripts/build-dist.mjs` (`npm run build:dist`) builds the Pages tree. The
+  entry points are the module scripts and stylesheets the HTML pages load, and
+  esbuild bundles them: ESM with code splitting, unminified, linked source maps,
+  and every JS output in `dist/js/` named `name.<hash>.js`. Pages are pointed at
+  their outputs through esbuild's metafile. Runtime Python files are copied as
+  `name.<sha256:10>.py`, and the bundle gets their URLs from a generated
+  replacement for `web/js/runtime-python-urls.js`. The CHIRP archive pair and
+  every other file are copied as they are. The jsDelivr modules (Pyodide,
+  Sentry, web-serial-polyfill) stay external. `scripts/retain-deployed-assets.mjs`
+  knows both hashed name shapes.
 - `tsconfig.json` (browser code, lib.dom, no Node types) and
   `scripts/tsconfig.json` (tooling, with `@types/node`) are the two projects
   `npm run check:js` runs. `web/js/types/browser-globals.d.ts` declares the
@@ -115,9 +125,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 ## Rules for Agents
 - Keep Python and JavaScript separated. Put runtime Python code in
   `web/python/webchirp_bridge/*.py`; a new module must be listed in `RUNTIME_PYTHON_FILES`
-  (`web/js/python-sources.mjs`) so it is seeded into Pyodide, and in `RUNTIME_PYTHON_URLS`
-  (`web/js/runtime-rpc.js`) so the build can rewrite its URL. The module graph must stay
-  acyclic; call across modules by importing, never through the globals.
+  (`web/js/python-sources.mjs`) so it is seeded into Pyodide; its URL follows from that
+  list (`web/js/runtime-python-urls.js`, which the dist build replaces with the hashed
+  URLs). The module graph must stay acyclic; call across modules by importing, never
+  through the globals.
 - A new RPC method is a function registered in `RPC_METHODS`
   (`web/python/webchirp_bridge/rpc.py`) and listed with its parameter names in
   `RPC_METHODS` (`web/js/rpc-dispatch.mjs`); `tests/channels/rpc-contract.mjs` fails when
@@ -131,17 +142,11 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Newly added functions need a comment as to what they do and why.
 - New exported JavaScript functions carry JSDoc types (`@param`, `@returns`)
   that `npm run check:js` accepts. Sources stay plain `.js`/`.mjs`: no `.ts`.
-- Name other modules in comments by their canonical repo-root path
-  (`web/js/ui/format.js`), never dist-relative (`./js/ui/format.js`) and never
-  partial (`ui/format.js`). `build-dist.mjs` matches references textually, so a
-  comment spelled exactly like a real import is rewritten into the built file;
-  the canonical form is anchored away from that and is checked by
-  `tests/build/build-dist.mjs`, which also fails when a rename leaves a path
-  behind. A JSDoc `import("./x.js")` type is a module specifier, not prose, so
-  it stays relative -- and the build sees it as a reference too, so never
-  type-import from a module that imports yours (it reads as a cycle and the two
-  share a hash). Types that must name many modules, like `UiContext`, live in
-  `web/js/types/*.d.ts`, which never reach dist.
+- Nothing in the dist build reads comments: esbuild resolves the imports and
+  the page rewrite touches only the `src`/`href` of the tags that load a module
+  or stylesheet. So the old rule about spelling module paths in comments (and
+  its test) is retired; see FINDINGS `build-dist-rewrites-are-textual`. A JSDoc
+  `import("./x.js")` type is a module specifier and stays relative.
 - Python functions must have type signatures.
 - An import used only in annotations goes under `if TYPE_CHECKING:` so it adds no
   runtime dependency; every module has `from __future__ import annotations`, which is

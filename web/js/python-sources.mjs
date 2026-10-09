@@ -49,9 +49,9 @@ export const QUANSHENG_UNOFFICIAL_DRIVER_MODULES = Object.freeze(
 // is executed rather than written: it is the one file whose names land in
 // Pyodide's globals, and rpc_dispatch (web/python/webchirp_bridge/rpc.py) is
 // the only one JS reads back. Where the browser fetches each file from is the caller's
-// business (RUNTIME_PYTHON_URLS in web/js/runtime-rpc.js): scripts/build-dist.mjs
-// rewrites asset references to their hashed names in .js files only and copies
-// this .mjs file verbatim, so a URL literal written here would 404 in a deploy.
+// business (RUNTIME_PYTHON_URLS in web/js/runtime-python-urls.js, which
+// scripts/build-dist.mjs replaces in the bundle with the hashed URLs), so a
+// URL written here would name the unhashed file, which dist/ does not have.
 export const RUNTIME_BRIDGE_ENTRY = "runtime_bridge.py";
 export const RUNTIME_PYTHON_FILES = Object.freeze([
   RUNTIME_BRIDGE_ENTRY,
