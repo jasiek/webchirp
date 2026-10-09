@@ -26,22 +26,18 @@ export const MEASUREMENT_ID = "G-80DP6MQ180";
 //
 // Both domains are listed because the app is moving between them. webchirp.org
 // is what CNAME names and what Pages serves; codeplug.org is the name it was
-// served under, and stays here until the redirect site replacing it is live --
-// an installed PWA and a long-lived tab keep running the app from that origin
-// in the meantime, and that is production traffic reaching production code.
+// served under and now 301-redirects to webchirp.org, but a tab opened before
+// the move keeps running the app from that origin, and that is production
+// traffic reaching production code.
 // Splitting either into its own property would halve every per-driver rate for
 // no reason anyone reading the reports wants. Forks are unaffected either way,
 // being on github.io or a domain of their own.
 //
-// The two pairs are deliberately not symmetric, so a tidy-up that makes them
-// symmetric breaks one of them. www.codeplug.org is listed because it is a
-// real name that was never redirected to its apex, and an unredirected visitor
-// is real traffic. www.webchirp.org is not listed because it does not exist:
-// the name is NXDOMAIN rather than a redirect, so location.hostname can never
-// be it and an entry would be a branch that can never be taken.
+// Neither www name is listed: www.codeplug.org and www.webchirp.org are both
+// NXDOMAIN, so location.hostname can never be either and an entry would be a
+// branch that can never be taken.
 export const ANALYTICS_HOSTS = Object.freeze([
   "codeplug.org",
-  "www.codeplug.org",
   "webchirp.org",
 ]);
 

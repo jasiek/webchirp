@@ -66,7 +66,6 @@ export const SENTRY_SDK_URL =
 // "production" for both, and tests/channels/sentry.mjs fails if they diverge.
 export const SENTRY_HOSTS = Object.freeze([
   "codeplug.org",
-  "www.codeplug.org",
   "webchirp.org",
 ]);
 
