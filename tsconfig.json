@@ -18,9 +18,12 @@
     "Chromium (Web Serial since 89), and every Chromium that can clone also has JSPI",
     "(137+). strictNullChecks is on (2026-10-09; it found 203 errors here and 52",
     "in scripts/): a value that can be null is typed T|null and checked, and a",
-    "null-initialised variable says what it will hold. strict itself stays off",
-    "until noImplicitAny (~1700 annotations) and useUnknownInCatchVariables are",
-    "paid for. Every other strict-family flag that costs nothing is on."
+    "null-initialised variable says what it will hold. noImplicitAny is on",
+    "(2026-10-09; 1097 errors across both projects once the sources were",
+    "TypeScript): every parameter says what it takes, and an explicit any is",
+    "kept to the places data arrives untyped. strict itself stays off until",
+    "useUnknownInCatchVariables is paid for. Every other strict-family flag that",
+    "costs nothing is on."
   ],
   "compilerOptions": {
     "allowJs": true,
@@ -36,6 +39,7 @@
     "types": [],
     "strict": false,
     "strictNullChecks": true,
+    "noImplicitAny": true,
     "strictBindCallApply": true,
     "strictFunctionTypes": true,
     "noImplicitThis": true,
