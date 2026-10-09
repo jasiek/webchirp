@@ -44,13 +44,42 @@ export const BAUD_CHECKBOX_SELECTOR = ".loopback-bauds input[type=checkbox]";
 // the field blank, which reads as "nobody bothered".
 const UNKNOWN_VERSION = "unknown (version.json not served)";
 
-let dom = null;
+/**
+ * The page's elements by ELEMENT_IDS key, plus the baud checkboxes.
+ * @typedef {Object} LoopbackPageDom
+ * @property {NodeListOf<HTMLInputElement>} bauds
+ * @property {HTMLElement} unsupported
+ * @property {HTMLSelectElement} transport
+ * @property {HTMLInputElement} controlLines
+ * @property {HTMLButtonElement} choose
+ * @property {HTMLButtonElement} run
+ * @property {HTMLElement} adapter
+ * @property {HTMLElement} status
+ * @property {HTMLElement} results
+ * @property {HTMLElement} resultsBody
+ * @property {HTMLElement} reportWrap
+ * @property {HTMLElement} report
+ * @property {HTMLButtonElement} copy
+ * @property {HTMLButtonElement} issue
+ */
+/**
+ * A chosen port: native Web Serial, the CDC polyfill or a chip driver, which
+ * also reports its USB packet size.
+ * @typedef {(SerialPort|import("./serial-transport.mjs").SerialTransport) & {packetSize?: number}} ChosenPort
+ */
+
+// Assigned by init(), which verifies every element exists, before it binds the
+// handlers that are the only way into the functions reading it.
+/** @type {LoopbackPageDom} */
+let dom;
+/** @type {ChosenPort|null} */
 let chosenPort = null;
 let chosenDescription = "";
 let running = false;
 // The run currently on screen: its totals, so the issue title can say how many
 // cases failed without re-parsing the report, and the adapter it ran against,
 // because choosing a different adapter afterwards must not relabel it.
+/** @type {{summary: Awaited<ReturnType<typeof runLoopbackSuite>>, adapter: string}|null} */
 let lastRun = null;
 // Which commit of WebCHIRP is serving this page, from the build-time
 // version.json. A report that does not name the code it came from cannot be
@@ -118,14 +147,16 @@ async function requestPort(transport) {
     }
     return { port: await createWebUsbSerial().requestPort(), transport: "webusb" };
   }
+  // Read once, so the object checked is the object asked for a port.
+  const native = typeof navigator !== "undefined" ? navigator.serial : undefined;
   if (transport === "webserial") {
-    if (!hasNativeSerial()) {
+    if (!native) {
       throw new Error("This browser does not support native Web Serial.");
     }
-    return { port: await navigator.serial.requestPort(), transport: "webserial" };
+    return { port: await native.requestPort(), transport: "webserial" };
   }
-  if (hasNativeSerial()) {
-    return { port: await navigator.serial.requestPort(), transport: "webserial" };
+  if (native) {
+    return { port: await native.requestPort(), transport: "webserial" };
   }
   if (!hasWebUsb()) {
     throw new Error("This browser supports neither Web Serial nor WebUSB.");
@@ -296,11 +327,12 @@ function onReportIssue() {
 }
 
 function init() {
-  dom = { bauds: document.querySelectorAll(BAUD_CHECKBOX_SELECTOR) };
+  /** @type {Record<string, unknown>} */
+  const found = { bauds: document.querySelectorAll(BAUD_CHECKBOX_SELECTOR) };
   const missing = [];
   for (const [key, id] of Object.entries(ELEMENT_IDS)) {
-    dom[key] = document.getElementById(id);
-    if (!dom[key]) {
+    found[key] = document.getElementById(id);
+    if (!found[key]) {
       missing.push(id);
     }
   }
@@ -309,6 +341,8 @@ function init() {
   if (missing.length > 0) {
     throw new Error(`serial-test.html is missing elements: ${missing.join(", ")}`);
   }
+  // Every id resolved, and the tags are the ones serial-test.html declares.
+  dom = /** @type {LoopbackPageDom} */ (found);
 
   if (!hasNativeSerial() && !hasWebUsb()) {
     dom.unsupported.hidden = false;

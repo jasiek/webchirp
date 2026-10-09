@@ -54,6 +54,10 @@ const CLONE_FLOW_OUTCOMES = Object.freeze({
 export function createSerialActions(ctx) {
   const { dom, state, log, actions } = ctx;
 
+  /**
+   * @type {{capability?: typeof capability,
+   *   setPreferredTransport(transport: string): void}|null}
+   */
   let transportController = null;
   let capability = { supported: false, native: false, webusb: false, webbluetooth: false };
   // Whether this browser can run a clone at all (WebAssembly JSPI). Checked

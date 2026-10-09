@@ -478,11 +478,8 @@ export class Cp2102SerialPort extends WebUsbTransport {
   }
 
   async _initialize(baudRate) {
-    if (!this.device.configuration) {
-      await this.device.selectConfiguration(1);
-    }
-
-    const iface = this.device.configuration.interfaces[0];
+    const configuration = await this._activeConfiguration("CP2102");
+    const iface = configuration.interfaces[0];
     this._interfaceNumber = iface.interfaceNumber;
     try {
       await this.device.claimInterface(this._interfaceNumber);

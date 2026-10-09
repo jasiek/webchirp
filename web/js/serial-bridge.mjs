@@ -212,10 +212,8 @@ export class SerialBridge {
       this.portOptions = options;
       const identity = this._getPortIdentity(port);
       this.lastDeviceName = this._describePort(port);
-      this.reader = port.readable.getReader();
-      this.writer = port.writable.getWriter();
-      this._readLoop = this._startReadLoop();
-      this._watchForPortLoss();
+      this._takeStreams(port);
+      this._watchForPortLoss(port);
       return {
         connected: true,
         message: `Connected at ${rate} baud${TRANSPORT_SUFFIX[this.transport] || ""}`,
@@ -625,7 +623,15 @@ export class SerialBridge {
   // mid-clone change.
   async _reopenPort(nextOptions, { preserveBuffer = false } = {}) {
     const port = this.port;
+    if (!port) {
+      throw new Error("No serial port is open to reconfigure");
+    }
     if (port.capabilities.reconfigure === "update") {
+      // assertSerialTransport() refused a port without it at open; this names
+      // the same broken contract should one slip through.
+      if (!port.reconfigure) {
+        throw new Error(`The ${port.transport} port declares in-place reconfigure but has no reconfigure()`);
+      }
       await port.reconfigure(nextOptions);
       this.portOptions = nextOptions;
       if (!preserveBuffer) {
@@ -650,9 +656,7 @@ export class SerialBridge {
     await port.open(nextOptions);
     this.portOptions = nextOptions;
     this.readBuffer = pending;
-    this.reader = port.readable.getReader();
-    this.writer = port.writable.getWriter();
-    this._readLoop = this._startReadLoop();
+    this._takeStreams(port);
     if (pending.length) {
       this._debug(`Kept ${pending.length} buffered byte(s) across port reconfigure`);
     }
@@ -662,9 +666,15 @@ export class SerialBridge {
   // Only the mid-clone path needs this: at clone start prepareClone() asserts
   // them a moment later anyway.
   async _restoreSignals() {
-    if (this.lastSignals && this.port.capabilities.signals) {
+    const port = this.port;
+    // A port lost mid-change was torn down, which forgot the signals too:
+    // there is nothing left to restore them on.
+    if (!port || !this.lastSignals) {
+      return;
+    }
+    if (port.capabilities.signals) {
       try {
-        await this.port.setSignals(this.lastSignals);
+        await port.setSignals(this.lastSignals);
       } catch {
         // Same rule as setSignals(): control lines are advisory.
       }
@@ -675,9 +685,9 @@ export class SerialBridge {
   // way -- once, as {transport, port} -- so there is no per-transport event to
   // decode here; the identity check only guards against a report from a port
   // this bridge has already let go of.
-  _watchForPortLoss() {
+  /** @param {SerialTransport} port  The port connect() has just installed. */
+  _watchForPortLoss(port) {
     this._unwatchPortLoss();
-    const port = this.port;
     this._stopLossWatch = port.onDisconnect((payload) => {
       if (payload?.port === port) {
         this._handleTransportDisconnect(payload);
@@ -724,11 +734,27 @@ export class SerialBridge {
     }
   }
 
-  async _startReadLoop() {
-    // Pinned rather than re-read each pass: a reopen installs a new reader
-    // while this loop may still be unwinding, and an unpinned loop would then
-    // read from the successor's stream.
-    const reader = this.reader;
+  // Take the reader and writer of a port whose open() has just resolved and
+  // start reading. Web Serial promises both streams once the port is open; a
+  // transport that breaks that is named here instead of failing as a TypeError
+  // on null halfway through connecting.
+  /** @param {SerialTransport} port */
+  _takeStreams(port) {
+    const { readable, writable } = port;
+    if (!readable || !writable) {
+      throw new Error(`The ${port.transport} port opened without its readable and writable streams`);
+    }
+    const reader = readable.getReader();
+    this.reader = reader;
+    this.writer = writable.getWriter();
+    this._readLoop = this._startReadLoop(reader);
+  }
+
+  // The reader is pinned by the caller rather than re-read each pass: a reopen
+  // installs a new reader while this loop may still be unwinding, and an
+  // unpinned loop would then read from the successor's stream.
+  /** @param {ReadableStreamDefaultReader<Uint8Array>} reader */
+  async _startReadLoop(reader) {
     let endReason = "port closed";
     while (this.port && this.reader === reader) {
       try {
