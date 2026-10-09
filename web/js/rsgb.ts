@@ -10,6 +10,8 @@
 // standing in.
 
 import { REPEATER_REQUEST_TIMEOUT_MS, withRequestTimeout } from "./request-timeout.ts";
+import { NO_TONE } from "./repeater-record.ts";
+import type { RepeaterMode, RepeaterRecord } from "./repeater-record.ts";
 import { setHighestPower } from "./row-power.ts";
 import type { RepeaterRowsResult, RowBuilderHooks, SkippedRepeater } from "./row-power.ts";
 import type { ChannelRow } from "./ui/channel-values.ts";
@@ -474,6 +476,126 @@ export function filterRsgbRecords(records: RsgbRecord[] | null | undefined, {
     });
   }
   return entries.sort((a, b) => a.distanceKm - b.distanceKm);
+}
+
+// What each API mode flag is as a RepeaterMode, and the order a record's modes
+// are listed in when the query did not ask for one: analogue first, because an
+// FM channel is what a mixed-mode repeater is usable as from a memory the grid
+// can program. "A" is resolved per record (narrow or wide FM, from `txbw`).
+// Everything else reads as "other": "X" (regenerative node), "B" (beacon) and
+// "PX" (packet mailbox) are station classes rather than modes, and "T" is
+// undocumented -- its records look like ATV, but the API does not say so, and
+// a guess would be offered to the grid as a Mode it has to refuse.
+const RSGB_FLAG_MODES: ReadonlyArray<[string, RepeaterMode]> = [
+  ["D", "D-STAR"],
+  ["F", "Fusion"],
+  ["M", "DMR"],
+  ["P", "P25"],
+  ["N", "NXDN"],
+  ["7", "M17"],
+  ["E", "TETRA"],
+];
+
+// Analogue FM is narrow unless the record says its transmit bandwidth is wider
+// than 12.5 kHz; a record without `txbw` is taken as narrow, the UK 2m/70cm
+// channel width.
+function rsgbAnalogueMode(record: RsgbRecord): RepeaterMode {
+  const bandwidthKhz = Number(record?.txbw);
+  return Number.isFinite(bandwidthKhz) && bandwidthKhz > 12.5 ? "FM" : "NFM";
+}
+
+// A record's modes in the order the builder should try them. Two records carry
+// no mode codes at all; they are the analogue voice repeaters their type says
+// they are, rather than records dropped for a field the directory never filled.
+function rsgbModesOf(record: RsgbRecord): RepeaterMode[] {
+  const flags = new Set(modeFlagsOf(record));
+  if (flags.size === 0 || flags.has("A")) {
+    const modes: RepeaterMode[] = [rsgbAnalogueMode(record)];
+    if (flags.size === 0) {
+      return modes;
+    }
+    flags.delete("A");
+    return modes.concat(rsgbFlaggedModes(flags));
+  }
+  return rsgbFlaggedModes(flags);
+}
+
+// The non-analogue flags as modes, in RSGB_FLAG_MODES order, with anything
+// unknown read as one trailing "other".
+function rsgbFlaggedModes(flags: Set<string>): RepeaterMode[] {
+  const modes = RSGB_FLAG_MODES.filter(([flag]) => flags.has(flag)).map(([, mode]) => mode);
+  const known = new Set(RSGB_FLAG_MODES.map(([flag]) => flag));
+  if (Array.from(flags).some((flag) => !known.has(flag))) {
+    modes.push("other");
+  }
+  return modes;
+}
+
+// The query's mode selection (API flags, "A" and "D" today) as RepeaterModes,
+// for buildRepeaterRows' preferredModes, so a D-STAR search gets the DV side
+// of a mixed-mode repeater rather than its FM one. "A" stands for analogue at
+// either width.
+export function rsgbPreferredModes(flags: Iterable<string>): RepeaterMode[] {
+  const modes: RepeaterMode[] = [];
+  for (const flag of Array.from(flags).map((value) => String(value).split(":")[0].trim().toUpperCase())) {
+    if (flag === "A") {
+      modes.push("NFM", "FM");
+    } else {
+      const match = RSGB_FLAG_MODES.find(([known]) => known === flag);
+      if (match) {
+        modes.push(match[1]);
+      }
+    }
+  }
+  return modes;
+}
+
+// The RSGB parser's second half: one record (or a filterRsgbRecords entry,
+// which adds the distance and the locator-box position) as a RepeaterRecord,
+// or null when it has no usable output frequency. `tx`/`rx` are the
+// *repeater's* directions in Hz (FINDINGS.md **rsgb-record-semantics**): the
+// radio listens on `tx` and transmits on `rx`, and tx === rx is a simplex
+// gateway or node. `ctcss` is the access tone, 0 meaning none. There are no
+// coordinates; the position is the locator box's centre, approximate when the
+// box is coarser than six characters.
+export function rsgbToRepeaterRecord(entry: RsgbEntry | RsgbRecord): RepeaterRecord | null {
+  const isEntry = typeof (entry as Partial<RsgbEntry>)?.record === "object" && (entry as RsgbEntry).record !== null;
+  const record = (isEntry ? (entry as RsgbEntry).record : entry) as RsgbRecord;
+  const outputHz = Number(record?.tx);
+  if (!Number.isInteger(outputHz) || outputHz <= 0) {
+    return null;
+  }
+  const inputHz = Number(record?.rx);
+  const ctcss = Number(record?.ctcss);
+  const box = isEntry ? null : decodeMaidenheadBox(record?.locator);
+  const latitude = isEntry ? (entry as RsgbEntry).latitude : box?.latitude;
+  const longitude = isEntry ? (entry as RsgbEntry).longitude : box?.longitude;
+  const positioned = Number.isFinite(latitude) && Number.isFinite(longitude);
+  const distanceKm = isEntry ? Number((entry as RsgbEntry).distanceKm) : Number.NaN;
+  const status = String(record?.status || "").trim();
+  const id = record?.id;
+  return {
+    name: String(record?.repeater || "").trim(),
+    outputHz,
+    inputHz: Number.isInteger(inputHz) && inputHz > 0 && inputHz !== outputHz ? inputHz : null,
+    modes: rsgbModesOf(record),
+    // Several flags, so no single spelling to report.
+    modeLabel: "",
+    inputTone: Number.isFinite(ctcss) && ctcss > 0 ? { kind: "ctcss", hz: ctcss } : NO_TONE,
+    outputTone: NO_TONE,
+    locationName: String(record?.town || "").trim(),
+    latitude: positioned ? Number(latitude) : null,
+    longitude: positioned ? Number(longitude) : null,
+    positionApproximate: isEntry ? Boolean((entry as RsgbEntry).approximate) : (box ? box.precision < 6 : false),
+    positionLocator: String(record?.locator || "").trim(),
+    distanceKm: Number.isFinite(distanceKm) ? distanceKm : null,
+    // The only remark the payload carries: a status other than OPERATIONAL.
+    remarks: status.toUpperCase() === "OPERATIONAL" ? "" : status,
+    link: "",
+    source: "rsgb",
+    sourceId: id === null || id === undefined ? "" : String(id),
+    raw: record,
+  };
 }
 
 function formatFrequencyMhz(hertz: unknown): string {
