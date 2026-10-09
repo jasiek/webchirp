@@ -217,34 +217,6 @@ export function createRepeaterSources(
 ): RepeaterSource[] {
   const { log } = ctx;
 
-/** A remote directory's preview response, kept for reuse at smaller radii. */
-  interface RemotePreviewBody {
-    records: RepeaterRecord[];
-    unusable: SkippedRepeater[];
-    /** The radius the request covered. */
-    rangeKm: number;
-  }
-
-  function countryOptions(codes: Iterable<string> | null | undefined): FieldOption[] {
-    return Array.from(codes || [])
-      .map((code) => {
-        const name = countryDisplayName(code);
-        const flag = flagEmojiFromCountryCode(code);
-        return {
-          value: code,
-          label: `${flag} ${name}`.trim(),
-          title: name,
-        };
-      })
-      .sort((a, b) => a.title.localeCompare(b.title));
-  }
-
-  function bandOptions(bands: Iterable<string> | null | undefined): FieldOption[] {
-    return Array.from(bands || [])
-      .map((band) => ({ value: band, label: band, title: band }))
-      .sort((a, b) => a.value.localeCompare(b.value));
-  }
-
   // The row builder and the parsers return `skipped` entries tagged with why
   // the selected radio could not express the repeater. One phrasing for every
   // source, so the status line reads the same whichever directory was queried.
@@ -276,12 +248,6 @@ export function createRepeaterSources(
     return `${entry.mode || entry.reason} not supported by the selected radio`;
   }
 
-  // A preview repeats the query the Query API button would run, so the fetched
-  // bodies are cached per source and the common edits -- nudging the radius,
-  // dragging a little, ticking a band -- redraw from memory. Per source rather
-  // than per open, so a reopened modal reuses what the last one paid for.
-  const PREVIEW_CACHE_LIMIT = 24;
-
   // Every position a preview can draw, whether or not the query would keep it.
   // `inRange` is what the ring is for: a station just outside it is the answer
   // to "would a wider search find me anything", which the numbers in the form
@@ -295,15 +261,6 @@ export function createRepeaterSources(
       return null;
     }
     return { latitude, longitude, inRange, approximate };
-  }
-
-  // The request identity minus its range, so one fetched body can answer every
-  // radius it covers. Everything else -- country, bands, modes, the only-working
-  // flag, the position -- still separates one cached answer from another.
-  function keyWithoutRange(url: URL): string {
-    const key = new URL(url.toString());
-    key.searchParams.delete("range");
-    return key.toString();
   }
 
   // Turn a preview's records into what the map and its caption need. Which
@@ -400,6 +357,61 @@ export function createRepeaterSources(
     };
   }
 
+  return createRepeaterAdapters(ctx, { endpoints }).map(sourceFromAdapter);
+}
+
+// The registered repeater directories, in toolbar order. Separate from
+// createRepeaterSources so each adapter can be held to the RepeaterRecord
+// invariants on its own (tests/channels/repeater-adapters.mjs).
+export function createRepeaterAdapters(
+  ctx: UiContext,
+  { endpoints }: { endpoints: RepeaterEndpoints },
+): RepeaterDirectoryAdapter[] {
+  const { log } = ctx;
+
+  /** A remote directory's preview response, kept for reuse at smaller radii. */
+  interface RemotePreviewBody {
+    records: RepeaterRecord[];
+    unusable: SkippedRepeater[];
+    /** The radius the request covered. */
+    rangeKm: number;
+  }
+
+  function countryOptions(codes: Iterable<string> | null | undefined): FieldOption[] {
+    return Array.from(codes || [])
+      .map((code) => {
+        const name = countryDisplayName(code);
+        const flag = flagEmojiFromCountryCode(code);
+        return {
+          value: code,
+          label: `${flag} ${name}`.trim(),
+          title: name,
+        };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  function bandOptions(bands: Iterable<string> | null | undefined): FieldOption[] {
+    return Array.from(bands || [])
+      .map((band) => ({ value: band, label: band, title: band }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  }
+
+  // A preview repeats the query the Query API button would run, so the fetched
+  // bodies are cached per source and the common edits -- nudging the radius,
+  // dragging a little, ticking a band -- redraw from memory. Per source rather
+  // than per open, so a reopened modal reuses what the last one paid for.
+  const PREVIEW_CACHE_LIMIT = 24;
+
+  // The request identity minus its range, so one fetched body can answer every
+  // radius it covers. Everything else -- country, bands, modes, the only-working
+  // flag, the position -- still separates one cached answer from another.
+  function keyWithoutRange(url: URL): string {
+    const key = new URL(url.toString());
+    key.searchParams.delete("range");
+    return key.toString();
+  }
+
   function normalized(values: Iterable<unknown> | null | undefined): string[] {
     return Array.from(values || [])
       .map((value) => String(value || "").trim().toLowerCase())
@@ -446,6 +458,8 @@ export function createRepeaterSources(
     toolbarButton: ToolbarButtonName;
     sourceEndpoints: { apiUrl: string; metaUrl: string } | null | undefined;
   }): RepeaterDirectoryAdapter {
+    // The preview below names its cache key "key", so the id is held apart.
+    const adapterId = key;
     const apiUrl = sourceEndpoints?.apiUrl || "";
     const metaUrl = sourceEndpoints?.metaUrl || "";
 
@@ -523,7 +537,7 @@ export function createRepeaterSources(
         }
         return response.text();
       });
-      const parsed = parseRxfRecords(text, { source: key });
+      const parsed = parseRxfRecords(text, { source: adapterId });
       // The radius this body actually covers, not the one asked for: a later,
       // narrower search may reuse it, a wider one may not.
       const body = {
@@ -626,7 +640,7 @@ export function createRepeaterSources(
           }
           return response.text();
         });
-        const parsed = parseRxfRecords(text, { source: key });
+        const parsed = parseRxfRecords(text, { source: adapterId });
         const fetched = parsed.records.length + parsed.unusable.length;
         return {
           records: parsed.records,
@@ -960,5 +974,5 @@ export function createRepeaterSources(
     }),
     rsgbAdapter(),
   ];
-  return adapters.map(sourceFromAdapter);
+  return adapters;
 }
