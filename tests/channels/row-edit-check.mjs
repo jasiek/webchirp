@@ -90,6 +90,21 @@ test("the upload preflight and the edit check report the same per-row findings",
   assert.ok(fromEdit.length >= 4, "every bad row produced a finding");
 });
 
+test("a blank driver instance that cannot read a memory leaves the edit to the column rules", async () => {
+  // Without an image, baofeng_wp970i's BFA58S has no memory map, so every
+  // get_memory raises "'NoneType' object has no attribute 'memory'". That is
+  // the instance failing, not the driver judging the row, and it must not be
+  // pinned on every cell a user commits.
+  const harness = await sharedHarness();
+  await ensureModule(harness, "baofeng_wp970i");
+  const { sessionId } = await harness.rpc("open_session", { module_name: "baofeng_wp970i", class_name: "BFA58S" });
+  const result = await check(harness, sessionId, [
+    { row: BASE_ROW, edits: [{ column: "Name", value: "ALPHA" }] },
+  ]);
+  assert.deepEqual(result.rows[0].issues, []);
+  assert.deepEqual(result.rows[0].cells.map(({ value }) => value), ["ALPHA"]);
+});
+
 test("the per-edit check is built once per image and rebuilt when the image changes", async () => {
   const harness = await sharedHarness();
   const sessionId = await uv5rSession(harness);

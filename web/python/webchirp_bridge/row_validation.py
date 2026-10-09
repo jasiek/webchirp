@@ -434,7 +434,12 @@ def _edit_check_context(
     A live-mode radio is left out -- its memories are on the radio, so reading
     one would need the serial link the editor does not hold -- and so is a
     radio whose image will not build, which the upload preflight reports in
-    full; either way the edit still gets the column rules.
+    full, and a blank instance that cannot read its own first memory (some
+    drivers leave the memory map unset without an image, e.g.
+    ``baofeng_wp970i.BFA58S``), whose every finding would be that internal
+    error rather than anything about the row. Either way the edit still gets
+    the column rules, and the upload, which needs an image anyway, still runs
+    the driver.
     """
     if session is None:
         return _session_radio_context(None)
@@ -443,9 +448,16 @@ def _edit_check_context(
         if issubclass(session.image_cls, chirp_common.LiveRadio):
             return None, _level_map_for_radio(None, session), _memory_bounds_for_driver(session)
         try:
-            return _session_radio_context(session)
+            radio, level_map, bounds = _session_radio_context(session)
+            if radio is not None and not session.has_backing_image:
+                # Without an image some drivers build an instance whose memory
+                # map is unset, and every get_memory then raises an internal
+                # error that says nothing about the row. Probing one memory
+                # tells a usable blank instance from one of those.
+                radio.get_memory(bounds[0] if bounds else 0)
+            return radio, level_map, bounds
         except Exception as exc:
-            _log_debug(f"ROW CHECK no radio instance for {session.session_id}: {exc}")
+            _log_debug(f"ROW CHECK column rules only for {session.session_id}: {exc}")
             return None, _level_map_for_radio(None, session), _memory_bounds_for_driver(session)
 
     return session.image_memo("edit_check_context", build)

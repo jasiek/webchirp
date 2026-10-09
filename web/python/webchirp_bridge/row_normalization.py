@@ -221,7 +221,8 @@ def _normalize_enum(value: str, meta: ColumnMeta, previous: Any) -> CellOutcome:
     if numeric is not None and math.isfinite(numeric):
         for option in options:
             if js_parse_float(option) == numeric:
-                return CellOutcome(option, True, f"Matched the radio's {option}")
+                # Only the spelling changed, which needs no note.
+                return CellOutcome(option, True)
     fallback = previous if previous is not None else options[0]
     return _rejected(fallback, "Not one of the radio's options; kept the previous value")
 
