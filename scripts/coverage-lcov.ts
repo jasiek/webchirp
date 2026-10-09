@@ -67,7 +67,7 @@ export function parseLcov(text: string): Map<string, LcovFile> {
 // of the count, so its failure mode is understating a gap, not inventing one.
 // Python needs none of this: its lcov comes from coverage.py, whose DA records
 // are executable statements already.
-export function isJsCodeLine(sourceLine) {
+export function isJsCodeLine(sourceLine: string | null | undefined): boolean {
   const trimmed = String(sourceLine || "").trim();
   if (trimmed === "") {
     return false;

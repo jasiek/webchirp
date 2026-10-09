@@ -3,6 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestRadioHarness } from "../tests/support/radio-harness.mjs";
 
+type TestRadioHarness = Awaited<ReturnType<typeof createTestRadioHarness>>;
+
 function parseArgs(argv: string[] = process.argv.slice(2)): {
   positionals: string[];
   flags: Record<string, string>;
@@ -66,7 +68,7 @@ function usage() {
   ].join("\n");
 }
 
-function assertFormat(value) {
+function assertFormat(value: string): string {
   const format = String(value || "json").trim().toLowerCase();
   if (!["json", "csv", "img"].includes(format)) {
     throw new Error(`Unsupported format: ${value}`);
@@ -74,26 +76,27 @@ function assertFormat(value) {
   return format;
 }
 
-async function readUtf8(fullPath) {
+async function readUtf8(fullPath: string): Promise<string> {
   return fs.readFile(fullPath, "utf8");
 }
 
-async function writeUtf8(fullPath, text) {
+async function writeUtf8(fullPath: string, text: string): Promise<void> {
   await fs.writeFile(fullPath, text, "utf8");
 }
 
-async function writeBinary(fullPath, bytes) {
+async function writeBinary(fullPath: string, bytes: Uint8Array): Promise<void> {
   await fs.writeFile(fullPath, Buffer.from(bytes));
 }
 
-function normalizeJsonCodeplug(parsed) {
+// parsed is the --input file's JSON, checked here before anything reads it.
+function normalizeJsonCodeplug(parsed: any) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Expected JSON object with rows/settings or imageBase64");
   }
   return parsed;
 }
 
-async function parseCsvToRows(harness, csvText) {
+async function parseCsvToRows(harness: TestRadioHarness, csvText: string) {
   const parsed = await harness.rpc("parse_csv", { csv_text: String(csvText || "") });
   return {
     rows: parsed.rows || [],
@@ -102,7 +105,10 @@ async function parseCsvToRows(harness, csvText) {
   };
 }
 
-async function runReadCommand(harness, { moduleName, className, format, outputPath }) {
+async function runReadCommand(
+  harness: TestRadioHarness,
+  { moduleName, className, format, outputPath }: { moduleName: string; className: string; format: string; outputPath: string },
+): Promise<void> {
   const codeplug = await harness.readCodeplug(moduleName, className);
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
 
@@ -126,7 +132,10 @@ async function runReadCommand(harness, { moduleName, className, format, outputPa
   await writeBinary(outputPath, binary.image);
 }
 
-async function runWriteCommand(harness, { moduleName, className, format, inputPath }) {
+async function runWriteCommand(
+  harness: TestRadioHarness,
+  { moduleName, className, format, inputPath }: { moduleName: string; className: string; format: string; inputPath: string },
+): Promise<void> {
   if (format === "json") {
     const parsed = normalizeJsonCodeplug(JSON.parse(await readUtf8(inputPath)));
     if (parsed.imageBase64) {

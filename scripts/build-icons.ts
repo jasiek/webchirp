@@ -18,6 +18,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import type { ChildProcessByStdio } from "node:child_process";
+import type { Readable } from "node:stream";
 
 const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputDir = path.join(repoRootDir, "web", "images");
@@ -28,7 +30,15 @@ const GLYPH = "\u{1F4FB}";
 const BACKGROUND_TOP = "#0d5ea8";
 const BACKGROUND_BOTTOM = "#20598d";
 
-const ICONS = [
+/** One icon file: its pixel size, its shape and how much of it the glyph fills. */
+interface IconSpec {
+  file: string;
+  size: number;
+  shape: string;
+  glyphScale: number;
+}
+
+const ICONS: IconSpec[] = [
   // Android draws "any" icons without masking them, so these carry their own
   // rounded-square shape and leave the corners transparent.
   { file: "icon-192.png", size: 192, shape: "rounded", glyphScale: 0.62 },
@@ -43,7 +53,7 @@ const ICONS = [
 
 const RENDER_SETTLE_DELAY_MS = 250;
 
-function delay(ms) {
+function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -68,7 +78,10 @@ function findChromeBinary() {
   );
 }
 
-async function launchChrome(chromeBinary, profileDir) {
+async function launchChrome(
+  chromeBinary: string,
+  profileDir: string,
+): Promise<{ child: ChildProcessByStdio<null, null, Readable>; wsUrl: string }> {
   // Chrome's zygote sandbox refuses to start as root, which is the normal case
   // inside a container. Only drop it when we are actually root, so a developer
   // running this on a workstation keeps the sandbox.
@@ -89,7 +102,7 @@ async function launchChrome(chromeBinary, profileDir) {
     ],
     { stdio: ["ignore", "ignore", "pipe"] }
   );
-  const wsUrl = await new Promise((resolve, reject) => {
+  const wsUrl = await new Promise<string>((resolve, reject) => {
     let stderrText = "";
     const timer = setTimeout(() => {
       reject(new Error(`Timed out waiting for Chrome DevTools endpoint.\n${stderrText}`));
@@ -110,19 +123,24 @@ async function launchChrome(chromeBinary, profileDir) {
   return { child, wsUrl };
 }
 
-class CdpClient {
-  socket: any;
-  nextId: number;
-  pending: Map<any, any>;
+// What a DevTools Protocol command resolves to: the protocol's own JSON, whose
+// shape depends on the method, so each caller reads the fields it asked for.
+type CdpResult = any;
 
-  constructor(socket) {
+class CdpClient {
+  socket: WebSocket;
+  nextId: number;
+  pending: Map<number, { resolve: (result: CdpResult) => void; reject: (error: Error) => void }>;
+
+  constructor(socket: WebSocket) {
     this.socket = socket;
     this.nextId = 1;
     this.pending = new Map();
-    socket.addEventListener("message", (event) => {
+    socket.addEventListener("message", (event: MessageEvent) => {
       const message = JSON.parse(String(event.data));
-      if (message.id && this.pending.has(message.id)) {
-        const { resolve, reject } = this.pending.get(message.id);
+      const waiter = message.id ? this.pending.get(message.id) : undefined;
+      if (waiter) {
+        const { resolve, reject } = waiter;
         this.pending.delete(message.id);
         if (message.error) {
           reject(new Error(`CDP ${message.error.message || JSON.stringify(message.error)}`));
@@ -133,7 +151,7 @@ class CdpClient {
     });
   }
 
-  static connect(wsUrl) {
+  static connect(wsUrl: string): Promise<CdpClient> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(wsUrl);
       socket.addEventListener("open", () => resolve(new CdpClient(socket)));
@@ -141,7 +159,7 @@ class CdpClient {
     });
   }
 
-  send(method, params = {}, sessionId) {
+  send(method: string, params: object = {}, sessionId?: string): Promise<CdpResult> {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -160,7 +178,7 @@ class CdpClient {
 
 // A single icon as a standalone document: the page IS the icon, so the
 // screenshot needs no cropping.
-function iconDocument({ size, shape, glyphScale }) {
+function iconDocument({ size, shape, glyphScale }: IconSpec): string {
   const radius = shape === "rounded" ? `${Math.round(size * 0.22)}px` : "0";
   return `<!doctype html>
 <html>
@@ -195,7 +213,7 @@ function iconDocument({ size, shape, glyphScale }) {
 </html>`;
 }
 
-async function captureIcon(cdp, sessionId, icon) {
+async function captureIcon(cdp: CdpClient, sessionId: string, icon: IconSpec): Promise<Buffer> {
   await cdp.send(
     "Emulation.setDeviceMetricsOverride",
     { width: icon.size, height: icon.size, deviceScaleFactor: 1, mobile: false },
@@ -231,8 +249,8 @@ async function captureIcon(cdp, sessionId, icon) {
 async function main() {
   const chromeBinary = findChromeBinary();
   const profileDir = fs.mkdtempSync(path.join(process.env.TMPDIR || "/tmp", "webchirp-icons-"));
-  let chrome;
-  let cdp;
+  let chrome: Awaited<ReturnType<typeof launchChrome>> | undefined;
+  let cdp: CdpClient | undefined;
   try {
     chrome = await launchChrome(chromeBinary, profileDir);
     cdp = await CdpClient.connect(chrome.wsUrl);

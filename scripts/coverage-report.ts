@@ -36,7 +36,7 @@ const CONTEXT_LINES = 2;
 export type LineVerdict = "covered" | "uncovered" | "neutral";
 
 /** A measured file as the report shows it. */
-interface ReportFile {
+export interface ReportFile {
   path: string;
   language: "javascript" | "python";
   sourceLines: string[];
@@ -103,7 +103,7 @@ function collectFiles(): ReportFile[] {
 
 // Runs of consecutive uncovered lines, which is how a reader thinks about a
 // gap -- one untested function, not thirty untested lines.
-export function uncoveredRuns(verdicts) {
+export function uncoveredRuns(verdicts: readonly LineVerdict[]): Array<{ start: number; end: number }> {
   const runs: Array<{ start: number; end: number }> = [];
   verdicts.forEach((verdict, index) => {
     if (verdict !== "uncovered") {
@@ -132,11 +132,11 @@ const ANSI = {
 };
 
 // Colour only when stdout is a terminal, so a redirect to a file stays plain.
-function paint(code, text) {
+function paint(code: string, text: string): string {
   return process.stdout.isTTY ? `${code}${text}${ANSI.reset}` : text;
 }
 
-function showFile(file) {
+function showFile(file: ReportFile): void {
   const runs = uncoveredRuns(file.verdicts);
   // "code lines", not "lines": this view drops comments and blanks, so its
   // percentage is deliberately not the one in coverage/summary.md, which counts
@@ -164,7 +164,7 @@ function showFile(file) {
 
 // --- html -------------------------------------------------------------------
 
-export function escapeHtml(text) {
+export function escapeHtml(text: unknown): string {
   return String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -176,7 +176,7 @@ export function escapeHtml(text) {
 // data-percent and data-path are the sort keys the toolbar reads; data-language
 // both labels the row and is what makes a path sort useful, since web/js/ and
 // web/python/ group on their own once the list is in path order.
-export function renderFileSection(file) {
+export function renderFileSection(file: ReportFile): string {
   const rows = file.sourceLines.map((text, index) => {
     const verdict = file.verdicts[index];
     return `<tr class="${verdict}"><td class="n">${index + 1}</td>`
@@ -263,7 +263,7 @@ const SORT_SCRIPT = `<script>
 }());
 <\/script>`;
 
-function renderHtml(files) {
+function renderHtml(files: readonly ReportFile[]): string {
   const totalMeasured = files.reduce((sum, file) => sum + file.measured, 0);
   const totalCovered = files.reduce((sum, file) => sum + file.covered, 0);
   const overall = totalMeasured === 0 ? 100 : (totalCovered / totalMeasured) * 100;

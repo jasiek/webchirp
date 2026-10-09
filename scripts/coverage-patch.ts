@@ -46,7 +46,7 @@ const MAX_LISTED_RANGES = 100;
 // for. This is also why the base must be given as a *ref* rather than a SHA --
 // GitHub's own pull_request.base.sha is pinned at creation and goes stale
 // (pr-refs-go-stale in FINDINGS.md).
-function changedLinesByFile(base) {
+function changedLinesByFile(base: string): Map<string, Set<number>> {
   const diff = execFileSync(
     "git",
     ["diff", "--unified=0", "--diff-filter=d", `${base}...HEAD`],
@@ -57,8 +57,8 @@ function changedLinesByFile(base) {
 
 // The parsing half, kept separate from running git so it can be tested against
 // diffs that would be awkward to produce as real commits.
-export function changedLinesFromDiff(diff) {
-  const byFile = new Map();
+export function changedLinesFromDiff(diff: string): Map<string, Set<number>> {
+  const byFile = new Map<string, Set<number>>();
   let file = "";
   for (const line of diff.split("\n")) {
     const fileMatch = line.match(/^\+\+\+ b\/(.+)$/);
@@ -88,13 +88,20 @@ export function changedLinesFromDiff(diff) {
 
 // --- deciding what counts ---------------------------------------------------
 
+/** One language's changed lines, split by whether a test ran them. */
+export interface ScopeResult {
+  label: string;
+  covered: ChangedLine[];
+  uncovered: ChangedLine[];
+}
+
 /** One changed line that the coverage data measured. */
 interface ChangedLine {
   file: string;
   line: number;
 }
 
-function readSourceLines(repoRelativePath) {
+function readSourceLines(repoRelativePath: string): string[] {
   const full = path.join(repoRoot, repoRelativePath);
   return fs.existsSync(full) ? fs.readFileSync(full, "utf8").split("\n") : [];
 }
@@ -132,7 +139,7 @@ export function classifyChangedLines(
 
 // --- reporting --------------------------------------------------------------
 
-export function percent(covered, total) {
+export function percent(covered: number, total: number): number {
   return total === 0 ? 100 : Math.round((covered / total) * 10000) / 100;
 }
 
@@ -153,7 +160,7 @@ export function toRanges(
   return ranges;
 }
 
-export function renderMarkdown(results) {
+export function renderMarkdown(results: readonly ScopeResult[]): string {
   const totalCovered = results.reduce((sum, r) => sum + r.covered.length, 0);
   const totalLines = results.reduce((sum, r) => sum + r.covered.length + r.uncovered.length, 0);
   const lines = ["### Patch coverage", ""];
@@ -211,7 +218,7 @@ export function renderMarkdown(results) {
 
 // GitHub turns these into annotations on the pull request diff, which is the
 // only place a reviewer sees the finding next to the code that caused it.
-function emitAnnotations(results) {
+function emitAnnotations(results: readonly ScopeResult[]): void {
   const ranges = toRanges(results.flatMap((r) => r.uncovered));
   for (const { file, start, end } of ranges.slice(0, MAX_ANNOTATIONS)) {
     const what = start === end ? "This line is" : `These ${end - start + 1} lines are`;

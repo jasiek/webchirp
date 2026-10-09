@@ -35,6 +35,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { parseLcov } from "./coverage-lcov.ts";
+import type { LcovFile } from "./coverage-lcov.ts";
 import { toRepoPath } from "../tests/support/python-coverage.mjs";
 import { repoRoot } from "../tests/support/repo-paths.mjs";
 
@@ -47,15 +48,49 @@ const FLOORS_PATH = path.join(repoRoot, "coverage-floors.json");
 // calls a live third-party API, the other needs a radio on a serial port.
 const NON_SUITE_DIRS = new Set(["support", "manual"]);
 
+/** One Python module's statements and the ones a test executed. */
+interface PythonFileCoverage {
+  statements: number[];
+  executed: number[];
+}
+
+/** A total, how much of it was hit, and the share as a percentage. */
+interface Tally {
+  total: number;
+  hit: number;
+  percent: number;
+}
+
+/** What summary.json records, and what the floors are checked against. */
+interface CoverageSummary {
+  js: { lines: Tally; branches: Tally; functions: Tally; files: number };
+  python: { lines: Tally; files: number };
+  generatedAt: string;
+}
+
+/** coverage-floors.json: the lowest each measure may fall to. */
+interface CoverageFloors {
+  js: { lines: number; branches: number; functions: number };
+  python: { lines: number };
+}
+
+/** A per-file row of the job summary's tables. */
+interface FileRow {
+  name: string;
+  total: number;
+  hit: number;
+  percent: number;
+}
+
 // The suites npm test actually runs, resolved transitively: the root test
 // script chains into the per-suite scripts with npm run, so a suite counts as
 // gated only if it is reachable from scripts.test. "Named by some script" is
 // too weak -- .github/workflows/pages.yml runs npm test and nothing else, so a
 // suite dropped from that chain stops gating the deploy while its own
 // test: script, and the scan below, still find it.
-export function suitesRunByNpmTest(pkg) {
-  const suites = new Set();
-  const seen = new Set();
+export function suitesRunByNpmTest(pkg: { scripts: Record<string, string> }): Set<string> {
+  const suites = new Set<string>();
+  const seen = new Set<string>();
   const queue = ["test"];
   let name;
   while ((name = queue.pop()) !== undefined) {
@@ -107,7 +142,7 @@ export function testFiles() {
 
 // An lcov file carrying line hits only, which is all coverage.py's fragments
 // give us. Enough for GitHub annotations and for every lcov reader worth using.
-function writeLineOnlyLcov(targetPath, filesByPath) {
+function writeLineOnlyLcov(targetPath: string, filesByPath: Map<string, PythonFileCoverage>): void {
   const chunks = ["TN:"];
   for (const [sourcePath, data] of [...filesByPath].sort(([a], [b]) => a.localeCompare(b))) {
     chunks.push(`SF:${sourcePath}`);
@@ -122,7 +157,7 @@ function writeLineOnlyLcov(targetPath, filesByPath) {
 
 // --- running the suite ------------------------------------------------------
 
-function runSuiteWithCoverage(testFiles) {
+function runSuiteWithCoverage(testFiles: readonly string[]): void {
   const args = [
     "--test",
     "--experimental-wasm-stack-switching",
@@ -147,7 +182,7 @@ function runSuiteWithCoverage(testFiles) {
 // Union the per-process fragments. Statements are unioned so a module some
 // processes never imported keeps its full statement count, and executed lines
 // are unioned so a line reached by any test counts as reached.
-function mergePythonFragments() {
+function mergePythonFragments(): Map<string, PythonFileCoverage> {
   if (!fs.existsSync(FRAGMENT_DIR)) {
     return new Map();
   }
@@ -179,11 +214,11 @@ function mergePythonFragments() {
 
 // --- summarising ------------------------------------------------------------
 
-function percent(hit, total) {
+function percent(hit: number, total: number): number {
   return total === 0 ? 100 : Math.round((hit / total) * 10000) / 100;
 }
 
-function summarise(files, pick) {
+function summarise<T>(files: Map<string, T>, pick: (data: T) => [number, number]): Tally {
   let total = 0;
   let hit = 0;
   for (const data of files.values()) {
@@ -194,7 +229,10 @@ function summarise(files, pick) {
   return { total, hit, percent: percent(hit, total) };
 }
 
-function buildSummary(jsFiles, pythonFiles) {
+function buildSummary(
+  jsFiles: Map<string, LcovFile>,
+  pythonFiles: Map<string, PythonFileCoverage>,
+): CoverageSummary {
   return {
     js: {
       lines: summarise(jsFiles, (d) => [d.lines, d.linesHit]),
@@ -212,7 +250,7 @@ function buildSummary(jsFiles, pythonFiles) {
 
 // Per-file rows, worst first: the useful end of the table is the bottom of the
 // ranking, and a reader scanning a job summary should not have to sort it.
-function fileRows(files, pick) {
+function fileRows<T>(files: Map<string, T>, pick: (data: T) => [number, number]): FileRow[] {
   return [...files]
     .map(([name, data]) => {
       const [total, hit] = pick(data);
@@ -221,7 +259,7 @@ function fileRows(files, pick) {
     .sort((a, b) => a.percent - b.percent || b.total - a.total);
 }
 
-function markdownTable(rows, limit) {
+function markdownTable(rows: readonly FileRow[], limit: number): string {
   const shown = rows.slice(0, limit);
   const lines = ["| file | lines | covered |", "| --- | ---: | ---: |"];
   for (const row of shown) {
@@ -233,7 +271,14 @@ function markdownTable(rows, limit) {
   return lines.join("\n");
 }
 
-function renderMarkdown(summary, jsFiles, pythonFiles, floors, failures, baseline) {
+function renderMarkdown(
+  summary: CoverageSummary,
+  jsFiles: Map<string, LcovFile>,
+  pythonFiles: Map<string, PythonFileCoverage>,
+  floors: CoverageFloors,
+  failures: readonly string[],
+  baseline: Baseline | null,
+): string {
   const { js, python } = summary;
   const gate = failures.length === 0 ? "✅ all floors met" : `❌ ${failures.length} floor(s) breached`;
   return [
@@ -288,7 +333,11 @@ function renderMarkdown(summary, jsFiles, pythonFiles, floors, failures, baselin
 // An earlier run's summary.json, or null. Absence is normal and not an error:
 // the first run on a branch has nothing to compare against, and a report
 // without a delta column is still a report.
-function readBaseline(baselinePath) {
+// An earlier run's summary.json, read as whatever it holds: delta() only
+// trusts a field that turns out to be a number.
+type Baseline = { js?: Record<string, { percent?: unknown }>; python?: Record<string, { percent?: unknown }> };
+
+function readBaseline(baselinePath: string | undefined): Baseline | null {
   if (!baselinePath || !fs.existsSync(baselinePath)) {
     return null;
   }
@@ -302,7 +351,7 @@ function readBaseline(baselinePath) {
 // A signed delta against the baseline, or "" when there is nothing to compare.
 // Rendered to two decimals like the levels themselves, so a column of them
 // lines up and a change smaller than that reads as no change rather than noise.
-function delta(baseline, pick, current) {
+function delta(baseline: Baseline | null, pick: (summary: Baseline) => unknown, current: number): string {
   const previous = baseline && pick(baseline);
   if (typeof previous !== "number") {
     return "";
@@ -316,12 +365,12 @@ function delta(baseline, pick, current) {
 
 // --- floors -----------------------------------------------------------------
 
-function readFloors() {
+function readFloors(): CoverageFloors {
   return JSON.parse(fs.readFileSync(FLOORS_PATH, "utf8"));
 }
 
-function checkFloors(summary, floors) {
-  const checks = [
+function checkFloors(summary: CoverageSummary, floors: CoverageFloors): string[] {
+  const checks: Array<[string, number, number]> = [
     ["JS lines", summary.js.lines.percent, floors.js.lines],
     ["JS branches", summary.js.branches.percent, floors.js.branches],
     ["JS functions", summary.js.functions.percent, floors.js.functions],
@@ -345,8 +394,8 @@ const FLOOR_TOLERANCE_POINTS = 0.5;
 
 // Set the floors below what was measured, by the tolerance above, rounded down
 // to one decimal.
-function updateFloors(summary) {
-  const down = (value) => Math.floor((value - FLOOR_TOLERANCE_POINTS) * 10) / 10;
+function updateFloors(summary: CoverageSummary): CoverageFloors {
+  const down = (value: number) => Math.floor((value - FLOOR_TOLERANCE_POINTS) * 10) / 10;
   const next = {
     js: {
       lines: down(summary.js.lines.percent),

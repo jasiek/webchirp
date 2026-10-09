@@ -21,7 +21,7 @@ async function latestReleaseDate() {
   return match[1];
 }
 
-function git(args) {
+function git(args: string[]): string {
   return execFileSync("git", args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
     .trim();
 }

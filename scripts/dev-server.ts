@@ -11,6 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createServer } from "node:http";
+import type { ServerResponse } from "node:http";
 
 import * as esbuild from "esbuild";
 
@@ -18,7 +19,7 @@ const webRootDir = path.resolve(process.cwd(), "web");
 const port = Number.parseInt(process.env.PORT || "8000", 10);
 const host = process.env.HOST || "127.0.0.1";
 
-const MIME_BY_EXT = {
+const MIME_BY_EXT: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
   ".gif": "image/gif",
   ".html": "text/html; charset=utf-8",
@@ -36,7 +37,7 @@ const MIME_BY_EXT = {
   ".zip": "application/zip",
 };
 
-function resolveRequestPath(urlPath) {
+function resolveRequestPath(urlPath: string): string | null {
   const cleanPath = decodeURIComponent(urlPath.split("?")[0] || "/");
   const normalizedPath = cleanPath.startsWith("/web/")
     ? cleanPath.slice("/web".length)
@@ -51,7 +52,7 @@ function resolveRequestPath(urlPath) {
 
 // Transformed .ts sources by path, each with the mtime it was built from, so a
 // reload after an edit rebuilds only the file that changed.
-const transformCache = new Map();
+const transformCache = new Map<string, { mtimeMs: number; code: string }>();
 
 // A .ts source as the JavaScript a browser can run: types stripped, nothing
 // else changed (no bundling, no downlevelling past the target the browser code
@@ -59,7 +60,7 @@ const transformCache = new Map();
 // verbatimModuleSyntax matches tsconfig.json and Node's own stripping: every
 // import not marked type survives, so the browser sees exactly the imports
 // Node does.
-async function transformTypeScript(filePath, stat) {
+async function transformTypeScript(filePath: string, stat: fs.Stats): Promise<string> {
   const cached = transformCache.get(filePath);
   if (cached && cached.mtimeMs === stat.mtimeMs) {
     return cached.code;
@@ -77,7 +78,7 @@ async function transformTypeScript(filePath, stat) {
   return result.code;
 }
 
-function applyIsolationHeaders(res) {
+function applyIsolationHeaders(res: ServerResponse): void {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");

@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { zipSync } from "fflate";
+import type { Zippable } from "fflate";
 
 import {
   CHIRP_BUNDLE_DIR,
@@ -55,7 +56,7 @@ export const CHIRP_BUNDLE_EXCLUDED_DIRS = Object.freeze([
 
 // The package directory of a CHIRP checkout: either the directory itself or
 // its chirp/ child, whichever holds __init__.py and drivers/.
-export async function resolveChirpPackageDir(inputDir) {
+export async function resolveChirpPackageDir(inputDir: string): Promise<string> {
   const candidate = path.resolve(inputDir);
   for (const dir of [candidate, path.join(candidate, "chirp")]) {
     try {
@@ -78,7 +79,7 @@ export async function collectChirpBundleFiles(
 ): Promise<Array<{ archivePath: string; bytes: Uint8Array }>> {
   const excluded = new Set(CHIRP_BUNDLE_EXCLUDED_DIRS);
   const files: Array<{ archivePath: string; bytes: Uint8Array }> = [];
-  async function walk(dir, rel) {
+  async function walk(dir: string, rel: string): Promise<void> {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
@@ -100,10 +101,10 @@ export async function collectChirpBundleFiles(
 
 // The driver module names an archive file list carries: every
 // chirp/drivers/<name>.py that is not a dunder, sorted.
-export function driverModulesFromFiles(files) {
+export function driverModulesFromFiles(files: ReadonlyArray<{ archivePath: string }>): string[] {
   return files
     .map((file) => file.archivePath.match(/^chirp\/drivers\/([A-Za-z0-9_]+)\.py$/)?.[1])
-    .filter((name) => name && !name.startsWith("__"))
+    .filter((name): name is string => Boolean(name) && !name?.startsWith("__"))
     .sort();
 }
 
@@ -116,8 +117,8 @@ const ZIP_FIXED_MTIME = new Date(1980, 0, 1, 0, 0, 0);
 // Pack entries into a zip with deflate compression through fflate, in the
 // order given. Level 9 because the archive is built once per pin and fetched
 // by every visitor; the fixed mtime is what keeps the output reproducible.
-export function createZipArchive(entries) {
-  const files = {};
+export function createZipArchive(entries: ReadonlyArray<{ archivePath: string; bytes: Uint8Array }>): Uint8Array {
+  const files: Zippable = {};
   for (const { archivePath, bytes } of entries) {
     files[archivePath] = [new Uint8Array(bytes), { level: 9, mtime: ZIP_FIXED_MTIME }];
   }
@@ -128,7 +129,9 @@ export function createZipArchive(entries) {
 // manifest is what the runtime reads instead of listing drivers itself: the
 // pin it was built from, the driver modules inside, and the sizes that let a
 // deploy be sanity-checked without opening the zip.
-export async function buildChirpBundle({ chirpPackageDir, chirpRevision }) {
+export async function buildChirpBundle(
+  { chirpPackageDir, chirpRevision }: { chirpPackageDir: string; chirpRevision: string },
+) {
   const files = await collectChirpBundleFiles(chirpPackageDir);
   const archive = createZipArchive(files);
   const manifest = {
@@ -144,7 +147,9 @@ export async function buildChirpBundle({ chirpPackageDir, chirpRevision }) {
 
 // Write the archive and manifest under outputDir with their pin-derived
 // names, returning where they landed.
-export async function writeChirpBundle({ chirpPackageDir, chirpRevision, outputDir }) {
+export async function writeChirpBundle(
+  { chirpPackageDir, chirpRevision, outputDir }: { chirpPackageDir: string; chirpRevision: string; outputDir: string },
+) {
   const { archive, manifest } = await buildChirpBundle({ chirpPackageDir, chirpRevision });
   const names = chirpBundleFileNames(chirpRevision);
   await mkdir(outputDir, { recursive: true });
@@ -158,7 +163,7 @@ export async function writeChirpBundle({ chirpPackageDir, chirpRevision, outputD
 // The submodule's checked-out revision, so a drifted checkout cannot be
 // published under the pinned name; "local" when the directory is not a git
 // checkout at all (a WEBCHIRP_CHIRP_DIR export, say).
-async function resolveChirpRevision(chirpPackageDir) {
+async function resolveChirpRevision(chirpPackageDir: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync("git", ["-C", chirpPackageDir, "rev-parse", "HEAD"]);
     return stdout.trim();

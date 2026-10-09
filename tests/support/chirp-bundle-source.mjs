@@ -26,6 +26,7 @@ import {
 // deflating six megabytes of drivers is the slow part of a boot.
 const bundlesByDir = new Map();
 
+/** @param {string} chirpPackageDir */
 function bundleFor(chirpPackageDir) {
   if (!bundlesByDir.has(chirpPackageDir)) {
     bundlesByDir.set(
@@ -61,6 +62,7 @@ export async function createLocalPythonSource({ repoRoot, chirpDir = "", driverS
     async fetchChirpManifest() {
       return (await bundleFor(chirpPackageDir)).manifest;
     },
+    /** @param {string} relPath */
     async fetchRuntimeFile(relPath) {
       return fs.readFile(path.join(runtimePythonDir, ...relPath.split("/")), "utf8");
     },

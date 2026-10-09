@@ -56,7 +56,7 @@ const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const HASHED_NAME_RE =
   /\.[A-Z2-7]{8}\.(?:js|css)(?:\.map)?$|\.([0-9a-f]{10})\.[a-z]+$|^chirp-[0-9a-f]{40}\.(zip|json)$/;
 
-function normalizeAssetPath(ref) {
+function normalizeAssetPath(ref: string): string {
   // Manifest values appear as both "./js/app.<hash>.js" and "/js/app.<hash>.js".
   return ref.replace(/^\.?\//, "");
 }
@@ -108,7 +108,7 @@ async function fetchJson(url: string): Promise<Record<string, any> | null> {
 
 // Does the host serve anything at all? Separates "first deploy" from "wrong
 // hostname", which produce the same missing manifest.
-async function siteIsReachable(baseUrl) {
+async function siteIsReachable(baseUrl: string): Promise<boolean> {
   try {
     const res = await fetch(`${baseUrl}/`, { redirect: "follow" });
     return res.ok;
@@ -171,7 +171,8 @@ async function main() {
 
   const now = Date.now();
   const candidates = new Map<string, string>(); // asset path -> firstSeen ISO timestamp
-  for (const ref of Object.values(manifest.assets)) {
+  // Checked above to be an object; its values are the hashed names.
+  for (const ref of Object.values(manifest.assets as Record<string, string>)) {
     candidates.set(normalizeAssetPath(ref), new Date(now).toISOString());
   }
   for (const [assetPath, firstSeen] of Object.entries(previousRetained)) {
@@ -181,7 +182,7 @@ async function main() {
     }
   }
 
-  const retained = {};
+  const retained: Record<string, string> = {};
   const pending = candidates.entries();
   // Bound network load while copying independent files; any failed worker
   // prevents this artifact from being deployed by the Pages workflow.

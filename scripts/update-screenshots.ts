@@ -30,6 +30,8 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
+import type { ChildProcessByStdio } from "node:child_process";
+import type { Readable } from "node:stream";
 
 const repoRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -85,11 +87,11 @@ const SCREENSHOT_LOCATOR = "IO82MM";
 // readout and the channel schema meaningful in the published images.
 const SCREENSHOT_RADIO_QUERY = "Baofeng UV-5R";
 
-function delay(ms) {
+function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function findFreePort() {
+function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const probe = net.createServer();
     probe.once("error", reject);
@@ -121,7 +123,7 @@ function findChromeBinary() {
   );
 }
 
-async function startDevServer(port) {
+async function startDevServer(port: number): Promise<ChildProcessByStdio<null, Readable, Readable>> {
   const child = spawn(process.execPath, [path.join(repoRootDir, "scripts", "dev-server.ts")], {
     cwd: repoRootDir,
     env: { ...process.env, HOST: "127.0.0.1", PORT: String(port) },
@@ -148,7 +150,10 @@ async function startDevServer(port) {
   }
 }
 
-async function launchChrome(chromeBinary, profileDir) {
+async function launchChrome(
+  chromeBinary: string,
+  profileDir: string,
+): Promise<{ child: ChildProcessByStdio<null, null, Readable>; wsUrl: string }> {
   const child = spawn(
     chromeBinary,
     [
@@ -164,7 +169,7 @@ async function launchChrome(chromeBinary, profileDir) {
     ],
     { stdio: ["ignore", "ignore", "pipe"] }
   );
-  const wsUrl = await new Promise((resolve, reject) => {
+  const wsUrl = await new Promise<string>((resolve, reject) => {
     let stderrText = "";
     const timer = setTimeout(() => {
       reject(new Error(`Timed out waiting for Chrome DevTools endpoint.\n${stderrText}`));
@@ -185,19 +190,24 @@ async function launchChrome(chromeBinary, profileDir) {
   return { child, wsUrl };
 }
 
-class CdpClient {
-  socket: any;
-  nextId: number;
-  pending: Map<any, any>;
+// What a DevTools Protocol command resolves to: the protocol's own JSON, whose
+// shape depends on the method, so each caller reads the fields it asked for.
+type CdpResult = any;
 
-  constructor(socket) {
+class CdpClient {
+  socket: WebSocket;
+  nextId: number;
+  pending: Map<number, { resolve: (result: CdpResult) => void; reject: (error: Error) => void }>;
+
+  constructor(socket: WebSocket) {
     this.socket = socket;
     this.nextId = 1;
     this.pending = new Map();
-    socket.addEventListener("message", (event) => {
+    socket.addEventListener("message", (event: MessageEvent) => {
       const message = JSON.parse(String(event.data));
-      if (message.id && this.pending.has(message.id)) {
-        const { resolve, reject } = this.pending.get(message.id);
+      const waiter = message.id ? this.pending.get(message.id) : undefined;
+      if (waiter) {
+        const { resolve, reject } = waiter;
         this.pending.delete(message.id);
         if (message.error) {
           reject(new Error(`CDP ${message.error.message || JSON.stringify(message.error)}`));
@@ -208,7 +218,7 @@ class CdpClient {
     });
   }
 
-  static connect(wsUrl) {
+  static connect(wsUrl: string): Promise<CdpClient> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(wsUrl);
       socket.addEventListener("open", () => resolve(new CdpClient(socket)));
@@ -216,7 +226,7 @@ class CdpClient {
     });
   }
 
-  send(method, params = {}, sessionId) {
+  send(method: string, params: object = {}, sessionId?: string): Promise<CdpResult> {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -233,7 +243,7 @@ class CdpClient {
   }
 }
 
-async function evaluate(cdp, sessionId, expression) {
+async function evaluate(cdp: CdpClient, sessionId: string, expression: string): Promise<CdpResult> {
   const result = await cdp.send(
     "Runtime.evaluate",
     { expression, returnByValue: true },
@@ -248,7 +258,7 @@ async function evaluate(cdp, sessionId, expression) {
   return result.result?.value;
 }
 
-async function waitForAppReady(cdp, sessionId) {
+async function waitForAppReady(cdp: CdpClient, sessionId: string): Promise<void> {
   const deadline = Date.now() + APP_READY_TIMEOUT_MS;
   for (;;) {
     const ready = await evaluate(
@@ -277,7 +287,7 @@ async function waitForAppReady(cdp, sessionId) {
 // Drive the radio search box the way a user does — type, then take the first
 // suggestion — so the shot exercises the real selection path rather than
 // reaching into module state.
-async function selectScreenshotRadio(cdp, sessionId) {
+async function selectScreenshotRadio(cdp: CdpClient, sessionId: string): Promise<string> {
   const selected = await evaluate(
     cdp,
     sessionId,
@@ -306,7 +316,7 @@ async function selectScreenshotRadio(cdp, sessionId) {
 // manual captures: the default radio's schema populated from the RSGB query at
 // IO82MM. Drive the public controls rather than reaching into module state, so
 // the screenshot run also exercises the user-visible query path.
-async function loadScreenshotChannels(cdp, sessionId) {
+async function loadScreenshotChannels(cdp: CdpClient, sessionId: string): Promise<number> {
   const started = await evaluate(
     cdp,
     sessionId,
@@ -355,7 +365,7 @@ async function loadScreenshotChannels(cdp, sessionId) {
   }
 }
 
-async function captureShots(cdp, sessionId) {
+async function captureShots(cdp: CdpClient, sessionId: string): Promise<void> {
   for (const shot of SHOTS) {
     await cdp.send(
       "Emulation.setDeviceMetricsOverride",
@@ -405,9 +415,9 @@ async function main() {
   const chromeBinary = findChromeBinary();
   const port = await findFreePort();
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "webchirp-screenshot-"));
-  let serverProcess;
-  let chromeProcess;
-  let cdp;
+  let serverProcess: Awaited<ReturnType<typeof startDevServer>> | undefined;
+  let chromeProcess: Awaited<ReturnType<typeof launchChrome>>["child"] | undefined;
+  let cdp: CdpClient | undefined;
   try {
     console.log(`Starting dev server on port ${port}...`);
     serverProcess = await startDevServer(port);
@@ -446,12 +456,13 @@ async function main() {
     if (cdp) {
       cdp.close();
     }
-    if (chromeProcess) {
+    const chrome = chromeProcess;
+    if (chrome) {
       const chromeExited = new Promise((resolve) => {
-        chromeProcess.once("exit", resolve);
+        chrome.once("exit", resolve);
         setTimeout(resolve, 5000);
       });
-      chromeProcess.kill();
+      chrome.kill();
       await chromeExited;
     }
     if (serverProcess) {

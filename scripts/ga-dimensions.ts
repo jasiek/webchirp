@@ -35,8 +35,8 @@ const SCOPE = "https://www.googleapis.com/auth/analytics.edit";
 
 // Documented GA4 limits for a standard property. Archived dimensions release
 // their slot, which is why archiving exists and deletion does not.
-const SCOPE_LIMITS = { EVENT: 50, USER: 25, ITEM: 10 };
-const NAME_LIMITS = { EVENT: 40, USER: 24, ITEM: 40 };
+const SCOPE_LIMITS: Readonly<Record<string, number>> = { EVENT: 50, USER: 25, ITEM: 10 };
+const NAME_LIMITS: Readonly<Record<string, number>> = { EVENT: 40, USER: 24, ITEM: 40 };
 const RESERVED_PREFIXES = ["ga_", "google_", "firebase_"];
 
 // ---------------------------------------------------------------------------
@@ -190,13 +190,13 @@ export function parseArgs(argv: readonly string[]) {
 // Auth and API
 // ---------------------------------------------------------------------------
 
-function base64url(value) {
+function base64url(value: string | Buffer): string {
   return Buffer.from(value).toString("base64url");
 }
 
 // Self-signed JWT bearer flow (RFC 7523), which is all a service account needs
 // to mint an access token — no client library required.
-async function tokenFromServiceAccount(keyPath) {
+async function tokenFromServiceAccount(keyPath: string): Promise<string> {
   const key = JSON.parse(await readFile(keyPath, "utf8"));
   if (!key.client_email || !key.private_key) {
     throw new Error(`${keyPath} is not a service-account key (no client_email/private_key)`);
@@ -280,9 +280,9 @@ async function api(
 
 // Items are the Admin API's JSON resources, whatever the listing holds; the
 // callers read the few fields they need.
-async function listAll(token, path, key, query = {}): Promise<any[]> {
+async function listAll(token: string, path: string, key: string, query: Record<string, string> = {}): Promise<any[]> {
   const items: any[] = [];
-  let pageToken;
+  let pageToken: string | undefined;
   do {
     const page = await api(token, path, { query: { pageSize: "200", ...query, ...(pageToken ? { pageToken } : {}) } });
     items.push(...(page[key] || []));
@@ -293,7 +293,7 @@ async function listAll(token, path, key, query = {}): Promise<any[]> {
 
 // Find the property whose web data stream carries our measurement id, so the
 // script needs no configuration beyond credentials.
-async function resolveProperty(token) {
+async function resolveProperty(token: string): Promise<string> {
   const summaries = await listAll(token, "accountSummaries", "accountSummaries");
   const properties = summaries.flatMap((summary) => summary.propertySummaries || []);
   if (properties.length === 0) {
@@ -330,7 +330,7 @@ web/js/analytics.ts. Prints the diff and changes nothing unless --apply.
   --json            Emit the plan as JSON instead of prose
 `;
 
-function describe(plan) {
+function describe(plan: ReturnType<typeof planSync>): string {
   const lines: string[] = [];
   for (const dimension of plan.create) {
     lines.push(`  create   ${dimension.parameterName} (${dimension.scope}) — "${dimension.displayName}"`);

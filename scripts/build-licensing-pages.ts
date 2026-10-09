@@ -7,27 +7,96 @@ const ROOT = process.cwd();
 const WEB = path.join(ROOT, "web");
 const OUTPUT = path.join(WEB, "licensing");
 
+// The shapes of the curated inputs (licensing-*.json at the repo root).
+// validate() checks every field these pages rely on before any is rendered.
+
+/** A named source, with its English and local names where they differ. */
+interface SourceLink {
+  name: string;
+  url: string;
+  enName?: string;
+  localName?: string;
+}
+
+/** One country in licensing-countries.json. */
+interface CountryRecord {
+  slug: string;
+  /** ISO 3166 alpha-2. */
+  code: string;
+  /** The English name. */
+  name: string;
+  locale: string;
+  localName?: string;
+  authority: SourceLink;
+  society: SourceLink;
+  sources?: SourceLink[];
+}
+
+/** One sourced statement in a guide, in the local language and in English. */
+interface Claim {
+  local: string;
+  en: string;
+  url: string;
+  additionalUrls?: string[];
+  linkLabelLocal?: string;
+  linkLabelEn?: string;
+  /** When a forum report was posted. */
+  date?: string;
+}
+
+/** A country's researched guide in licensing-guide-details.json. */
+interface Guide {
+  steps?: Claim[];
+  requirements?: Claim[];
+  cost?: Claim;
+  costStatus?: string;
+  time?: { official?: Claim; forum?: Claim };
+  procedureStatus?: string;
+  procedureGap?: string;
+}
+
+/** The page copy for one language, by message key. */
+type Copy = Record<string, string>;
+
+/** CEPT membership and T/R 61-01 status, in licensing-cept.json. */
+interface Cept {
+  members: string[];
+  nonMemberImplementers: string[];
+  territoriesUsingUs: string[];
+  suspended: string[];
+  membershipSource: string;
+  recommendationSource: string;
+  implementationSource: string;
+  suspensionSource: string;
+  reviewedAt: string;
+}
+
 // Escape curated text at the HTML boundary so names and translations stay text.
-function escapeHtml(value) {
+function escapeHtml(value: unknown): string {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // Turn an ISO country code into regional-indicator characters for the flag.
-function flagEmoji(code) {
+function flagEmoji(code: string): string {
   return [...code.toUpperCase()].map((letter) =>
     String.fromCodePoint(0x1f1e6 + letter.charCodeAt(0) - 65)).join("");
 }
 
 // CLDR country names give each page a native-language place name by default.
-function countryName(record) {
+function countryName(record: CountryRecord): string {
   return record.localName || new Intl.DisplayNames([record.locale], { type: "region" }).of(record.code)
     || record.name;
 }
 
 // Keep translations and source URLs out of markup until they have been validated.
-function validate(records, locales, guides, cept) {
-  const seen = new Set();
+function validate(
+  records: readonly CountryRecord[],
+  locales: Record<string, Copy>,
+  guides: Record<string, Guide>,
+  cept: Cept,
+): void {
+  const seen = new Set<string>();
   for (const record of records) {
     if (!/^[a-z]+(?:-[a-z]+)*$/.test(record.slug) || seen.has(record.slug)) {
       throw new Error(`Invalid or duplicate licensing slug: ${record.slug}`);
@@ -47,7 +116,7 @@ function validate(records, locales, guides, cept) {
     const guide = guides[record.slug];
     if (!guide) throw new Error(`No researched guide: ${record.name}`);
     const claims = [...(guide.steps || []), ...(guide.requirements || []),
-      guide.cost, guide.time?.official, guide.time?.forum].filter(Boolean);
+      guide.cost, guide.time?.official, guide.time?.forum].filter((claim): claim is Claim => Boolean(claim));
     if (claims.some((claim) => !claim.local || !claim.en || !/^https?:\/\//.test(claim.url)
       || (claim.additionalUrls || []).some((url) => !/^https?:\/\//.test(url)))) {
       throw new Error(`Incomplete researched claim: ${record.name}`);
@@ -66,14 +135,14 @@ function validate(records, locales, guides, cept) {
 }
 
 // Collect every cited URL once so claim markers can point to a stable list.
-function sourceLinks(record, guide, cept) {
-  const links = [record.authority, record.society,
+function sourceLinks(record: CountryRecord, guide: Guide | undefined, cept: Cept): SourceLink[] {
+  const links: SourceLink[] = [record.authority, record.society,
     { name: "IARU", url: "https://www.iaru.org/reference/member-societies/" },
     { name: "CEPT", url: cept.membershipSource },
     { name: "CEPT T/R 61-01", url: cept.recommendationSource },
     { name: "CEPT T/R 61-01", url: cept.implementationSource }];
   for (const claim of [...(guide?.steps || []), ...(guide?.requirements || []),
-    guide?.cost, guide?.time?.official, guide?.time?.forum].filter(Boolean)) {
+    guide?.cost, guide?.time?.official, guide?.time?.forum].filter((claim): claim is Claim => Boolean(claim))) {
     links.push({ name: new URL(claim.url).host,
       localName: claim.linkLabelLocal, enName: claim.linkLabelEn, url: claim.url });
     for (const url of claim.additionalUrls || []) {
@@ -87,7 +156,7 @@ function sourceLinks(record, guide, cept) {
 }
 
 // Distinguish CEPT membership from non-member adoption of its visitor recommendation.
-function ceptStatus(record, cept, copy) {
+function ceptStatus(record: CountryRecord, cept: Cept, copy: Copy): string {
   if (cept.members.includes(record.slug)) return copy.ceptMember;
   if (cept.nonMemberImplementers.includes(record.slug)) return copy.ceptImplementer;
   if (cept.territoriesUsingUs.includes(record.slug)) return copy.ceptUsTerritory;
@@ -96,7 +165,14 @@ function ceptStatus(record, cept, copy) {
 }
 
 // Render one complete language view, with citation targets private to that view.
-function renderLanguagePanel(record, guide, copy, language, cept, sources) {
+function renderLanguagePanel(
+  record: CountryRecord,
+  guide: Guide,
+  copy: Copy,
+  language: string,
+  cept: Cept,
+  sources: readonly SourceLink[],
+): string {
   const english = language === "en";
   const key = english ? "en" : "local";
   const title = `${copy.how}: ${english ? record.name : countryName(record)}`;
@@ -106,16 +182,16 @@ function renderLanguagePanel(record, guide, copy, language, cept, sources) {
   };
   const citationPrefix = english ? "source-en" : "source-native";
   // Number citations from the same URL list used by this view's source section.
-  function citation(url) {
+  function citation(url: string): string {
     const number = sources.findIndex((source) => source.url === url) + 1;
     return number ? ` <a class="licensing-cite" href="#${citationPrefix}-${number}">[${number}]</a>` : "";
   }
   // A claim may need separate citations for its fee or application components.
-  function citations(claim) {
+  function citations(claim: Claim | undefined): string {
     return claim ? [claim.url, ...(claim.additionalUrls || [])].map(citation).join("") : "";
   }
   // Keep each fact beside the specific source that supports it.
-  function citedFact(fact) {
+  function citedFact(fact: "cost" | "time"): string {
     const claim = fact === "time" ? guide.time?.official || guide.time?.forum : guide[fact];
     return `${escapeHtml(translated[fact])}${citations(claim)}`;
   }
@@ -155,7 +231,14 @@ function renderLanguagePanel(record, guide, copy, language, cept, sources) {
 }
 
 // Render both language views while keeping the native one as the static default.
-function renderCountry(record, guide, local, english, cept, baseUrl) {
+function renderCountry(
+  record: CountryRecord,
+  guide: Guide,
+  local: Copy,
+  english: Copy,
+  cept: Cept,
+  baseUrl: string,
+): string {
   const title = `${local.how}: ${countryName(record)}`;
   const description = `${title}. ${guide?.steps?.[0]?.local || local.unverifiedSteps}`;
   const nativeLanguage = new Intl.DisplayNames([record.locale], { type: "language" }).of(record.locale);
@@ -218,7 +301,7 @@ function renderCountry(record, guide, local, english, cept, baseUrl) {
 }
 
 // Sort the English directory by its visible English country labels.
-function renderIndex(records, baseUrl) {
+function renderIndex(records: readonly CountryRecord[], baseUrl: string): string {
   const links = records.toSorted((left, right) => left.name.localeCompare(right.name, "en"))
     .map((record) => {
       const nativeName = countryName(record);
@@ -241,9 +324,9 @@ function renderIndex(records, baseUrl) {
 }
 
 // Keep the research audit outside web/ so it is never linked or included in the sitemap.
-function renderResearchSummary(records, guides, cept) {
+function renderResearchSummary(records: readonly CountryRecord[], guides: Record<string, Guide>, cept: Cept): string {
   const sorted = records.toSorted((left, right) => left.name.localeCompare(right.name, "en"));
-  const status = (value) => value ? "Found" : "Missing";
+  const status = (value: unknown) => value ? "Found" : "Missing";
   const rows = sorted.map((record) => {
     const guide = guides[record.slug];
     const stepCount = guide?.steps?.length || 0;
@@ -258,7 +341,7 @@ function renderResearchSummary(records, guides, cept) {
         cept.suspended.includes(record.slug) ? "Suspended" : "Outside / not listed";
     return `| ${record.name} | ${procedure} | ${cost} | ${status(guide?.time?.official)} | ${status(guide?.time?.forum)} | ${requirementCount} ${requirementCount === 1 ? "item" : "items"} | ${ceptValue} |`;
   });
-  const found = (test) => sorted.filter((record) => test(guides[record.slug])).length;
+  const found = (test: (guide: Guide | undefined) => unknown) => sorted.filter((record) => test(guides[record.slug])).length;
   return `# Amateur radio licensing research coverage
 
 Reviewed: ${cept.reviewedAt}. This audit is deliberately outside the published website. "Found" means a sourced claim is present in the country guide; it does not promise that the quoted fee or estimate will stay current. "Partial" means a documented step or fee component exists but the full route or fixed total is unverified. "Missing" means the requested evidence could not be verified, not that the fee or wait is zero. The forum column accepts only first-hand reports dated 2025 onward.
@@ -287,13 +370,15 @@ ${sorted.filter((record) => guides[record.slug]?.procedureStatus === "partial")
 
 // Rebuild the guides and refresh their sitemap entries in the page build.
 async function main() {
-  const records = JSON.parse(await readFile(path.join(ROOT, "licensing-countries.json"), "utf8"));
-  const locales = JSON.parse(await readFile(path.join(ROOT, "licensing-locales.json"), "utf8"));
-  const guideCopy: Record<string, Record<string, unknown>> = JSON.parse(
+  const records: CountryRecord[] = JSON.parse(await readFile(path.join(ROOT, "licensing-countries.json"), "utf8"));
+  const locales: Record<string, Copy> = JSON.parse(await readFile(path.join(ROOT, "licensing-locales.json"), "utf8"));
+  const guideCopy: Record<string, Copy> = JSON.parse(
     await readFile(path.join(ROOT, "licensing-guide-copy.json"), "utf8"),
   );
-  const guides = JSON.parse(await readFile(path.join(ROOT, "licensing-guide-details.json"), "utf8"));
-  const cept = JSON.parse(await readFile(path.join(ROOT, "licensing-cept.json"), "utf8"));
+  const guides: Record<string, Guide> = JSON.parse(
+    await readFile(path.join(ROOT, "licensing-guide-details.json"), "utf8"),
+  );
+  const cept: Cept = JSON.parse(await readFile(path.join(ROOT, "licensing-cept.json"), "utf8"));
   for (const [language, copy] of Object.entries(guideCopy)) {
     locales[language] = { ...locales[language], ...copy };
   }

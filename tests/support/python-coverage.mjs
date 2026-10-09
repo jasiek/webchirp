@@ -36,6 +36,7 @@ export function pythonCoverageDir() {
 // Turn a Pyodide filesystem path into the repo path the same file has on disk,
 // so a merged report and an lcov file both point at something a reader (or
 // GitHub's diff view) can open.
+/** @param {string} runtimePath */
 export function toRepoPath(runtimePath) {
   const text = String(runtimePath || "");
   return text.startsWith(RUNTIME_PREFIX) ? REPO_PREFIX + text.slice(RUNTIME_PREFIX.length) : text;
@@ -45,6 +46,7 @@ export function toRepoPath(runtimePath) {
 // tracing has to be running while webchirp_bridge is imported or the
 // module-level statements never register as executed. Returns whether it did
 // anything, so the caller can stay quiet when coverage is off.
+/** @param {import("pyodide").PyodideInterface} pyodide */
 export async function startPythonCoverage(pyodide) {
   const outputDir = pythonCoverageDir();
   if (!outputDir) {
@@ -77,6 +79,10 @@ export async function startPythonCoverage(pyodide) {
 // file. Named by pid plus a counter because a single process can boot more
 // than one isolated harness.
 let fragmentSeq = 0;
+/**
+ * @param {import("pyodide").PyodideInterface} pyodide
+ * @param {string} outputDir
+ */
 export function writePythonCoverageFragment(pyodide, outputDir) {
   const json = pyodide.runPython("_webchirp_coverage_fragment()");
   const parsed = JSON.parse(json);

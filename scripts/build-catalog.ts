@@ -35,7 +35,7 @@ function sortRadioCatalog(radios: CatalogRadio[]): CatalogRadio[] {
   });
 }
 
-async function resolveChirpRevision(chirpPackageDir) {
+async function resolveChirpRevision(chirpPackageDir: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync("git", ["-C", chirpPackageDir, "rev-parse", "HEAD"]);
     return stdout.trim();
@@ -99,8 +99,9 @@ async function buildIsolatedDriverCatalog(moduleName: string): Promise<DriverCat
     const child = fork(fileURLToPath(import.meta.url), ["--driver-module", moduleName], {
       stdio: ["ignore", "inherit", "inherit", "ipc"],
     });
-    let result;
-    child.on("message", (message) => { result = message; });
+    // The worker sends exactly one message: its catalog (main() below).
+    let result: DriverCatalog | undefined;
+    child.on("message", (message) => { result = message as DriverCatalog; });
     child.on("error", reject);
     child.on("exit", (code) => {
       if (code !== 0 || !result) {

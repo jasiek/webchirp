@@ -22,10 +22,12 @@ const BRIDGE_NAMESPACE_PYTHON_PATH = path.join(
   "bridge_namespace.py",
 );
 
+/** @param {string|null|undefined} base64Text */
 function decodeBase64ToBytes(base64Text) {
   return Uint8Array.from(Buffer.from(String(base64Text || ""), "base64"));
 }
 
+/** @param {ArrayLike<number>|null|undefined} bytesLike */
 function encodeBytesToBase64(bytesLike) {
   return Buffer.from(Array.from(bytesLike || []).map((value) => Number(value) & 0xff)).toString(
     "base64",
@@ -55,12 +57,15 @@ class StubSerialBridge {
   constructor() {
     // Recorded so tests can assert what the Python bridge asked for — the
     // driver's baud rate in particular, which nothing else observes.
+    /** @type {Array<{wantsDtr: boolean, wantsRts: boolean, settleMs: number, baudRate: number}>} */
     this.prepareCloneCalls = [];
     // Every setSignals() call, in order, so tests can assert that a driver's
     // control-line changes actually reached the transport (issue #77).
+    /** @type {Array<{dataTerminalReady: boolean|null, requestToSend: boolean|null}>} */
     this.signalCalls = [];
     // Every reconfigure() the pipe actually pushed, in order. The stub opens at
     // no particular rate, so it reports every call as a change.
+    /** @type {Array<Record<string, unknown>>} */
     this.reconfigureCalls = [];
   }
 
@@ -96,6 +101,12 @@ class StubSerialBridge {
     return { reset: true };
   }
 
+  /**
+   * @param {boolean} wantsDtr
+   * @param {boolean} wantsRts
+   * @param {number} settleMs
+   * @param {number} baudRate
+   */
   async prepareClone(wantsDtr, wantsRts, settleMs, baudRate) {
     this.prepareCloneCalls.push({
       wantsDtr: Boolean(wantsDtr),
@@ -106,11 +117,16 @@ class StubSerialBridge {
     return { prepared: true, settleMs: 0, baudRate: Number(baudRate || 0) };
   }
 
+  /**
+   * @param {boolean|null} dataTerminalReady
+   * @param {boolean|null} requestToSend
+   */
   async setSignals(dataTerminalReady, requestToSend) {
     this.signalCalls.push({ dataTerminalReady, requestToSend });
     return { applied: true };
   }
 
+  /** @param {Record<string, unknown>} [options] */
   async reconfigure(options = {}) {
     this.reconfigureCalls.push({ ...options });
     return { reconfigured: true, options, changed: Object.keys(options) };
@@ -121,9 +137,16 @@ class StubSerialBridge {
 // uses (web/js/serial-globals.ts) and answered by this harness's bridge. Log
 // lines go to stdout, where the CLI's user and a failing test's output show
 // them; clone progress has no UI here.
+/**
+ * @param {object} serialBridge  A SerialBridge, or a stand-in answering the
+ *   same serial ops (the stub above, a test's simulated radio).
+ * @param {object} [target]
+ */
 function installSerialGlobals(serialBridge, target = globalThis) {
   installSerialBridgeGlobals(target, createSerialRpcHandler({
-    serialBridge,
+    serialBridge: /** @type {import("../../web/js/serial-bridge.ts").SerialBridge} */ (
+      /** @type {unknown} */ (serialBridge)
+    ),
     logSerial: (message) => console.log(`[SERIAL] ${String(message || "")}`),
     onProgress: () => {},
   }));
@@ -204,6 +227,10 @@ export class TestRadioHarness {
   // against RPC_METHODS (web/js/rpc-dispatch.ts). The harness's own
   // codeplug methods below go this way, so a test that uses them exercises
   // the production contract rather than a snippet of its own.
+  /**
+   * @param {string} name
+   * @param {import("../../web/js/rpc-dispatch.ts").RpcParams} [params]
+   */
   async rpc(name, params = {}) {
     return rpcDispatcherFor(await this.interpreter()).call(name, params);
   }
@@ -225,6 +252,10 @@ export class TestRadioHarness {
   // harness.pyodide for it. vars are bound as Python globals first. The
   // snippet sees every bridge name flattened into the globals by
   // tests/support/bridge_namespace.py; production code does not.
+  /**
+   * @param {string} python
+   * @param {Record<string, unknown>} [vars]
+   */
   async runPython(python, vars = {}) {
     const pyodide = await this.interpreter();
     for (const [key, value] of Object.entries(vars)) {
@@ -233,6 +264,10 @@ export class TestRadioHarness {
     return pyodide.runPythonAsync(python);
   }
 
+  /**
+   * @param {string} python
+   * @param {Record<string, unknown>} [vars]
+   */
   async runPythonJson(python, vars = {}) {
     return JSON.parse(await this.runPython(python, vars));
   }
@@ -240,6 +275,10 @@ export class TestRadioHarness {
   // The open session for a driver, opened on first use and reused after --
   // the browser does the same for the selected radio. Returns the session id
   // every radio-bound RPC method takes.
+  /**
+   * @param {string} moduleName
+   * @param {string} className
+   */
   async session(moduleName, className) {
     const key = `${moduleName}:${className}`;
     if (!this.sessionIds.has(key)) {
@@ -257,6 +296,11 @@ export class TestRadioHarness {
   // the one they used before. An image load opens a session of its own for
   // the driver the image names, and the write that follows has to see that
   // image rather than whatever the driver's earlier session held.
+  /**
+   * @param {string} moduleName
+   * @param {string} className
+   * @param {string} sessionId
+   */
   async adoptSession(moduleName, className, sessionId) {
     const key = `${moduleName}:${className}`;
     const previous = this.sessionIds.get(key);
@@ -267,6 +311,10 @@ export class TestRadioHarness {
   }
 
   // Close a driver's session, so a later call opens a fresh one with no image.
+  /**
+   * @param {string} moduleName
+   * @param {string} className
+   */
   async closeSession(moduleName, className) {
     const key = `${moduleName}:${className}`;
     const sessionId = this.sessionIds.get(key);
@@ -280,6 +328,10 @@ export class TestRadioHarness {
   // way the CLI needs them before it opens the port. No RPC method exposes
   // this -- the browser reads the same fields from the catalog -- so it stays
   // a snippet, importing from the owning module explicitly.
+  /**
+   * @param {string} moduleName
+   * @param {string} className
+   */
   async getRadioInfo(moduleName, className) {
     await this.rpc("ensure_radio_module", { module_short_name: moduleName });
     return this.runPythonJson(
@@ -323,12 +375,23 @@ json.dumps({
     }
   }
 
+  /**
+   * @param {string} moduleName
+   * @param {string} className
+   */
   async readCodeplug(moduleName, className) {
     return this.rpc("download_selected_radio", {
       session_id: await this.session(moduleName, className),
     });
   }
 
+  /**
+   * @param {string} moduleName
+   * @param {string} className
+   * @param {object[]|{rows?: object[], settings?: object[]}|null} rows
+   *   The rows, or a whole codeplug carrying rows and settings.
+   * @param {object[]} [settingsGroups]
+   */
   async writeCodeplug(moduleName, className, rows, settingsGroups = []) {
     const codeplug =
       rows && typeof rows === "object" && !Array.isArray(rows) ? rows : null;
@@ -341,6 +404,10 @@ json.dumps({
     });
   }
 
+  /**
+   * @param {string} moduleName
+   * @param {string} className
+   */
   async readCodeplugBinary(moduleName, className) {
     const result = await this.rpc("get_cached_image_base64", {
       session_id: await this.session(moduleName, className),
@@ -351,6 +418,13 @@ json.dumps({
     };
   }
 
+  /**
+   * @param {string} moduleName
+   * @param {string} className
+   * @param {object[]|{rows?: object[], settings?: object[]}|null} rows
+   *   The rows, or a whole codeplug carrying rows and settings.
+   * @param {object[]} [settingsGroups]
+   */
   async exportCodeplugBinary(moduleName, className, rows, settingsGroups = []) {
     const codeplug =
       rows && typeof rows === "object" && !Array.isArray(rows) ? rows : null;
@@ -370,6 +444,7 @@ json.dumps({
   // Load an image the way the browser does: the runtime opens a session for
   // the driver the image names, and that session becomes the one the other
   // codeplug methods use for that driver.
+  /** @param {ArrayLike<number>} imageBytes */
   async loadCodeplugBinary(imageBytes) {
     const result = await this.rpc("load_image_base64", {
       image_b64: encodeBytesToBase64(imageBytes),
@@ -381,6 +456,11 @@ json.dumps({
     };
   }
 
+  /**
+   * @param {string} moduleName
+   * @param {string} className
+   * @param {ArrayLike<number>} imageBytes
+   */
   async writeCodeplugBinary(moduleName, className, imageBytes) {
     const loaded = await this.loadCodeplugBinary(imageBytes);
     if (String(loaded.module || "") !== String(moduleName || "")) {

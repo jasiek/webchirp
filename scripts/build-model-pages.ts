@@ -98,6 +98,12 @@ interface RadioSpecEntry {
   [flag: string]: unknown;
 }
 
+/** One question and answer for the page's FAQ section and its JSON-LD. */
+interface FaqEntry {
+  question: string;
+  answer: string;
+}
+
 interface RadioSpecsFile {
   models: Record<string, RadioSpecEntry>;
 }
@@ -113,7 +119,7 @@ interface PageRadio extends CatalogEntry {
 // "none" -- but only because these four are handled in the browser.
 const CABLE_CHIPSETS = "CH340, CP2102, PL2303 or FTDI";
 
-function escapeHtml(value) {
+function escapeHtml(value: unknown): string {
   return String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -137,7 +143,10 @@ function escapeHtml(value) {
 // gives a reader nothing to act on, so an unknown radio gets no firmware
 // section at all -- the same rule the spec bullets follow, where a capability a
 // driver cannot report contributes no bullet rather than a blank one.
-const FIRMWARE_SENTENCES = {
+/** A firmware answer as a sentence, by the scope of the entry it came from. */
+type FirmwareSentence = (vendor: string, model: string) => string;
+
+const FIRMWARE_SENTENCES: Readonly<Record<string, Readonly<Record<"model" | "vendor", FirmwareSentence>>>> = {
   official: {
     model: (vendor, model) =>
       `${vendor} publishes a firmware update for the ${model} that you can install yourself.`,
@@ -182,7 +191,7 @@ const FIRMWARE_SENTENCES = {
 // manuals, and the handful of stablemates that do have firmware -- but calling
 // that link "Firmware downloads" next to a sentence saying there is no firmware
 // is the page arguing with itself, and the reader believes the link.
-const FIRMWARE_LINK_LABELS = {
+const FIRMWARE_LINK_LABELS: Readonly<Record<string, (vendor: string, host: string) => string>> = {
   official: (vendor, host) => `Firmware downloads at ${host}`,
   service: (vendor, host) => `${vendor} support at ${host}`,
   community: (vendor, host) => `The firmware project at ${host}`,
@@ -216,7 +225,7 @@ function firmwareFor(radio: CatalogEntry, firmware: FirmwareFile): ResolvedFirmw
 // after it where there is one. Built once and used twice -- the visible
 // paragraph and the FAQ JSON-LD answer are the same string, because structured
 // data that does not match what the page shows is structured data Google drops.
-function firmwareSentence(entry, vendor, model) {
+function firmwareSentence(entry: ResolvedFirmware, vendor: string, model: string): string {
   const lead = FIRMWARE_SENTENCES[entry.status][entry.scope](vendor, model);
   return entry.note ? `${lead} ${entry.note}` : lead;
 }
@@ -225,9 +234,10 @@ function firmwareSentence(entry, vendor, model) {
 // here" and a reader can see it is the manufacturer's site before following it.
 // A url that will not parse yields no label, and the caller then renders the
 // sentence with no link rather than a link that goes nowhere.
-function firmwareLinkHost(url) {
+function firmwareLinkHost(url: string | undefined): string | null {
   try {
-    return new URL(url).host.replace(/^www\./, "");
+    // An absent url fails to parse like a malformed one.
+    return new URL(String(url)).host.replace(/^www\./, "");
   } catch {
     return null;
   }
@@ -238,7 +248,7 @@ function firmwareLinkHost(url) {
 // of about its codeplug, and it is what a reader arrives with when the answer
 // they found elsewhere was a forum thread. Absent, not empty, when nothing is
 // recorded for this radio (firmwareFor).
-function firmwareSection(radio, entry) {
+function firmwareSection(radio: CatalogEntry, entry: ResolvedFirmware | null): string {
   if (!entry) {
     return "";
   }
@@ -264,7 +274,7 @@ function firmwareSection(radio, entry) {
 // What each recorded value is called on the page. A value outside these tables
 // fails the build (validateSpecs) instead of rendering as a raw token, because
 // the file is typed by hand and a typo in it would otherwise reach every page.
-const FORM_FACTOR_LABELS = {
+const FORM_FACTOR_LABELS: Readonly<Record<string, string>> = {
   handheld: "Handheld",
   mobile: "Mobile",
   // Battery-carrying HF/multimode sets such as the FT-817: neither a handheld
@@ -274,7 +284,7 @@ const FORM_FACTOR_LABELS = {
   receiver: "Receiver (no transmit)",
 };
 
-const CHARGING_LABELS = {
+const CHARGING_LABELS: Readonly<Record<string, string>> = {
   "usb-c": "USB-C",
   usb: "USB (micro or mini)",
   cradle: "Desktop charging cradle",
@@ -327,14 +337,14 @@ function validateSpecs(specs: RadioSpecsFile): void {
   };
   // A range is one [low, high] MHz pair, ascending. Anything else would print
   // as a range that reads backwards or as "NaN MHz".
-  const isRange = (range) =>
+  const isRange = (range: unknown) =>
     Array.isArray(range)
     && range.length === 2
     && range.every((mhz) => typeof mhz === "number" && mhz > 0)
     && range[0] < range[1];
   // A band has a known name and at least one of its two ranges; a band with
   // neither says nothing a reader could use.
-  const isBand = (band) =>
+  const isBand = (band: SpecBand | null) =>
     band !== null
     && typeof band === "object"
     && BAND_NAMES.has(band.band)
@@ -398,13 +408,13 @@ function specsFor(radio: CatalogEntry, specs: RadioSpecsFile): RadioSpecEntry | 
 // One researched range as a table cell. Already in MHz, unlike the driver's Hz
 // bands that formatBands converts; a missing range is a band the radio only
 // listens on (or only the other direction is known), shown as a dash.
-function formatMHzRange(range) {
+function formatMHzRange(range: [number, number] | null): string {
   return range ? `${range[0]}–${range[1]} MHz` : "—";
 }
 
 // A yes/no row's cell. "optional" gets its own wording because "Yes" would
 // promise a feature the radio only has once an add-on unit is bought.
-function formatFlag(value) {
+function formatFlag(value: unknown): string {
   if (value === "optional") {
     return "Optional add-on";
   }
@@ -521,7 +531,7 @@ ${table}
 }
 
 // Any label as one filename-safe token.
-function slugify(value) {
+function slugify(value: string): string {
   return String(value)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -531,7 +541,7 @@ function slugify(value) {
 // Vendor and model as one filename-safe token, which is the page's identity
 // and the URL it already holds. Several drivers can land on one slug; mergeBySlug
 // folds those into a single page rather than letting one overwrite another.
-function slugFor(radio) {
+function slugFor(radio: Pick<CatalogEntry, "vendor" | "model">): string {
   return slugify(`${radio.vendor}-${radio.model}`);
 }
 
@@ -539,22 +549,22 @@ function slugFor(radio) {
 // pages so that introducing them moved no model page: GitHub Pages serves
 // static files with no redirect rules available, so a URL that changes is a
 // URL whose accumulated ranking starts again from zero.
-function vendorSlugFor(vendor) {
+function vendorSlugFor(vendor: string): string {
   return slugify(vendor);
 }
 
 // Hz to a MHz figure a person would say out loud: 400000000 -> "400",
 // 174997500 -> "174.9975". Trailing zeros go, because "136.0 MHz" reads like a
 // precision the band edge does not have.
-function toMHz(hz) {
+function toMHz(hz: number): string {
   return String(Number((hz / 1e6).toFixed(4)));
 }
 
-function formatBands(bands) {
+function formatBands(bands: ReadonlyArray<[number, number]>): string[] {
   return bands.map(([low, high]) => `${toMHz(low)}–${toMHz(high)} MHz`);
 }
 
-function formatPowerLevels(powerLevels) {
+function formatPowerLevels(powerLevels: Record<string, number>): string[] {
   return Object.entries(powerLevels).map(([label, watts]) => `${label} ${watts}`);
 }
 
@@ -592,7 +602,7 @@ function specBullets(radio: CatalogEntry, features: RadioFeatures): string[] {
 // Other names the same driver answers to. CHIRP records them because a rebrand
 // ships the same codeplug under another badge, which means one page can truthfully
 // tell a Retevis RT-5R owner that their radio is covered here.
-function aliasLabels(radio) {
+function aliasLabels(radio: CatalogEntry): string[] {
   const own = `${radio.vendor} ${radio.model}`;
   const labels: string[] = [];
   for (const alias of radio.aliases || []) {
@@ -695,7 +705,7 @@ function variantsOf(ranked: CatalogEntry[], features: Record<string, RadioFeatur
   });
 }
 
-function faqEntries(radio, features, firmware) {
+function faqEntries(radio: CatalogEntry, features: RadioFeatures, firmware: ResolvedFirmware | null): FaqEntry[] {
   const name = `${radio.vendor} ${radio.model}`;
   const [low, high] = features.memoryBounds;
   const entries = [
@@ -731,7 +741,7 @@ function faqEntries(radio, features, firmware) {
 // Google reads this, not the prose, when it decides whether a page answers a
 // question directly. The answers are the same text the page shows, because a
 // mismatch between the two is what gets structured data ignored.
-function faqJsonLd(entries) {
+function faqJsonLd(entries: readonly FaqEntry[]): string {
   return JSON.stringify({
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -753,7 +763,18 @@ function renderModelPage({
   baseUrl,
   vendorHref,
   vendorLabel,
-}) {
+}: {
+  radio: PageRadio;
+  features: RadioFeatures;
+  firmware: ResolvedFirmware | null;
+  specs: RadioSpecEntry | null;
+  /** The vendor's pages in order, for the previous/next links. */
+  siblings: readonly PageRadio[];
+  index: number;
+  baseUrl: string;
+  vendorHref: string;
+  vendorLabel: string;
+}): string {
   const name = `${radio.vendor} ${radio.model}`;
   const slug = slugFor(radio);
   const title = `${name} programming software`;
@@ -893,7 +914,9 @@ ${faq
 
 // One vendor's range. This is the page that answers "does WebCHIRP do Yaesu",
 // a search no model page can win because none of them is about the vendor.
-function renderVendorPage({ vendor, radios, baseUrl }) {
+function renderVendorPage(
+  { vendor, radios, baseUrl }: { vendor: string; radios: readonly PageRadio[]; baseUrl: string },
+): string {
   const slug = vendorSlugFor(vendor);
   const title = `${vendor} programming software`;
   const description =
@@ -955,7 +978,12 @@ ${items}
 // The directory of vendors, and the one page the app links to. It lists makers
 // rather than models: 535 model links on one page is a keyword list, while 62
 // vendor links is a route to any of them in two clicks.
-function renderIndexPage({ directory, radios, baseUrl }) {
+function renderIndexPage({ directory, radios, baseUrl }: {
+  /** One entry per vendor: its name, model count and page. */
+  directory: ReadonlyArray<{ vendor: string; count: number; href: string }>;
+  radios: readonly PageRadio[];
+  baseUrl: string;
+}): string {
   const title = "Radio programming software by manufacturer";
   const description =
     `WebCHIRP programs ${radios.length} radios from ${directory.length} manufacturers in your `
@@ -1016,7 +1044,9 @@ ${items}
 // files because this script is the only thing that knows which model pages
 // exist; a hand-maintained sitemap would be wrong the first time the vendor
 // list widens.
-function renderSitemap({ radios, vendorSlugs, baseUrl }) {
+function renderSitemap(
+  { radios, vendorSlugs, baseUrl }: { radios: readonly PageRadio[]; vendorSlugs: readonly string[]; baseUrl: string },
+): string {
   const urls = [
     `${baseUrl}/`,
     `${baseUrl}/about.html`,
@@ -1032,7 +1062,7 @@ ${entries}
 `;
 }
 
-function renderRobots(baseUrl) {
+function renderRobots(baseUrl: string): string {
   return `User-agent: *
 Allow: /
 
