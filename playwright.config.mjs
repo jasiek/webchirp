@@ -26,7 +26,8 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
   reporter: process.env.CI ? [["list"], ["github"]] : "list",
-  // Pyodide and the CHIRP archive download on the first radio selection.
+  // Pyodide and the CHIRP archive download during startup, before the first
+  // radio can be selected.
   timeout: 120_000,
   expect: { timeout: 30_000 },
   use: {

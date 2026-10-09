@@ -49,14 +49,16 @@ export const SENTRY_DSN =
 
 // jsDelivr's flattened ESM build of @sentry/browser, pinned to an exact
 // version. This is how every other third-party browser dependency arrives here
-// (Pyodide, the Web Serial polyfill): there is no bundler in this project, so
-// an npm package cannot be imported by the browser directly.
+// (Pyodide, the Web Serial polyfill): the dist build bundles only this repo's
+// sources and keeps jsDelivr imports external, and the dev server does not
+// serve node_modules, so an npm package cannot be imported by the browser
+// directly.
 export const SENTRY_SDK_VERSION = "10.73.0";
 export const SENTRY_SDK_URL =
   `https://cdn.jsdelivr.net/npm/@sentry/browser@${SENTRY_SDK_VERSION}/+esm`;
 
 // Only the production deployment reports, for the reason spelled out at length
-// in analytics.js: anyone can serve this app, and every copy carries the DSN
+// in analytics.ts: anyone can serve this app, and every copy carries the DSN
 // above, so without this gate a developer reloading localhost and a fork's
 // Pages site land in the same project as real users. An error that only ever
 // happens on someone's half-finished branch is worse than no error at all --

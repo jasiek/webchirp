@@ -14,7 +14,7 @@ export list would have to be kept in step with every helper they touch.
 Values are shared rather than copied, so a ``RadioSession`` a snippet
 resolves through the global is the object the modules use -- but *rebinding*
 a global does not reach them; a test that swaps a callable patches the owning
-module's attribute instead (tests/channels/chirp-import-errors.mjs).
+module's attribute instead (tests/channels/radio-session.mjs).
 
 Deliberately not under web/python/: nothing here ships to the browser.
 """
