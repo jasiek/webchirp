@@ -28,6 +28,7 @@ let target = typeof window === "undefined" ? null : window;
 // Null whenever no install can be offered right now: before the browser offers
 // one, after the prompt has been used (an event may be raised only once), and
 // after the app has been installed.
+/** @type {BeforeInstallPromptEvent|null} */
 let deferredPrompt = null;
 
 const availabilityListeners = new Set();
@@ -40,6 +41,7 @@ const availabilityListeners = new Set();
 const INSTALL_CHANNEL_NAME = "webchirp-install";
 const INSTALLED_MESSAGE = "installed";
 
+/** @type {BroadcastChannel|null} */
 let installChannel = null;
 
 // Drop the parked prompt and tell whoever is listening. The one path both the
@@ -66,13 +68,16 @@ function openInstallChannel(win) {
   if (typeof Channel !== "function") {
     return;
   }
+  /** @type {BroadcastChannel} */
+  let channel;
   try {
-    installChannel = new Channel(INSTALL_CHANNEL_NAME);
+    channel = new Channel(INSTALL_CHANNEL_NAME);
   } catch {
     installChannel = null;
     return;
   }
-  installChannel.onmessage = (event) => {
+  installChannel = channel;
+  channel.onmessage = (event) => {
     if (event?.data === INSTALLED_MESSAGE) {
       forgetInstallPrompt();
     }

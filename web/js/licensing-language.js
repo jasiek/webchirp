@@ -15,7 +15,12 @@ function showLanguage(language) {
   }
   document.documentElement.lang = selected.lang;
   document.documentElement.dir = selected.dir;
-  document.title = selected.dataset.pageTitle;
+  // scripts/build-licensing-pages.mjs gives every panel one; a panel without
+  // it keeps the current title rather than retitling the tab "undefined".
+  const title = selected.dataset.pageTitle;
+  if (title) {
+    document.title = title;
+  }
 }
 
 for (const button of buttons) {

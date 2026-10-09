@@ -7,9 +7,11 @@
     "and check:js runs both projects.",
     "Target ES2022: the app needs Web Serial, WebUSB or Web Bluetooth, so it runs on",
     "Chromium (Web Serial since 89), and every Chromium that can clone also has JSPI",
-    "(137+). strict is off because its two expensive halves are not paid for yet:",
-    "noImplicitAny would ask for ~1700 annotations and strictNullChecks ~250 fixes.",
-    "Every other strict-family flag that costs nothing is on."
+    "(137+). strictNullChecks is on (2026-10-09; it found 203 errors here and 52",
+    "in scripts/): a value that can be null is typed T|null and checked, and a",
+    "null-initialised variable says what it will hold. strict itself stays off",
+    "until noImplicitAny (~1700 annotations) and useUnknownInCatchVariables are",
+    "paid for. Every other strict-family flag that costs nothing is on."
   ],
   "compilerOptions": {
     "allowJs": true,
@@ -21,6 +23,7 @@
     "lib": ["es2023", "dom", "dom.iterable"],
     "types": [],
     "strict": false,
+    "strictNullChecks": true,
     "strictBindCallApply": true,
     "strictFunctionTypes": true,
     "noImplicitThis": true,

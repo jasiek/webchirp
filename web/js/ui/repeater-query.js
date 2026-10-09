@@ -98,7 +98,9 @@ export function createRepeaterQuery(ctx) {
   // rebuild the modal the second click had already opened.
   let openGeneration = 0;
   let fieldInstances = [];
+  /** @type {ReturnType<typeof createPositionField>|null} */
   let positionField = null;
+  /** @type {ReturnType<typeof createCityField>|null} */
   let cityField = null;
   const positionState = { latitudeText: "", longitudeText: "" };
   // What the Place name box last settled on. Kept for the same reason
@@ -289,10 +291,13 @@ export function createRepeaterQuery(ctx) {
   // open, so the listener is attached here rather than in bindEvents.
   function bindRangeToPreview() {
     const range = fieldInstances.find((instance) => instance.key === RANGE_FIELD_KEY);
-    if (!positionField || !range?.input) {
+    const field = positionField;
+    if (!field || !range?.input) {
       return;
     }
-    const applyRange = () => positionField.setRangeKm(range.value());
+    // The range input is rebuilt with the position field on every open, so
+    // the field this listener feeds is the one built beside it.
+    const applyRange = () => field.setRangeKm(range.value());
     range.input.addEventListener("input", applyRange);
     applyRange();
   }
@@ -311,6 +316,10 @@ export function createRepeaterQuery(ctx) {
   async function runPreview(source, values) {
     const generation = previewGeneration;
     positionField?.setMarkers(null, "loading");
+    /**
+     * @type {{points: Array<Object>, truncated?: boolean, unmapped?: number,
+     *   unsupported?: number}|null}
+     */
     let result = null;
     try {
       result = await source.previewQuery(values);
@@ -437,6 +446,7 @@ export function createRepeaterQuery(ctx) {
       return;
     }
     const generation = ++openGeneration;
+    /** @type {Record<string, Array<Object>>|null} */
     let loadedOptions = null;
     if (source.loadOptions) {
       log.setStatus(`Loading ${source.label} query options...`);
@@ -494,6 +504,11 @@ export function createRepeaterQuery(ctx) {
     const longitude = Number(position?.coords?.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       throw new Error("Geolocation did not return valid coordinates.");
+    }
+    // Every source's form has a position field (its button is what started
+    // this), but the form may have been rebuilt while the browser was asked.
+    if (!positionField) {
+      throw new Error("The query form has no position field to set.");
     }
     positionField.setPosition(latitude, longitude);
     const locator = encodeMaidenhead(latitude, longitude, 6);

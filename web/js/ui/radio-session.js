@@ -55,7 +55,7 @@ export function createRadioSession(ctx) {
   // runtime at all (a transient driver import or isolated-runtime boot
   // failure is otherwise stuck until another radio is picked).
   /**
-   * @param {CatalogRadio|null} radio
+   * @param {CatalogRadio} radio
    * @param {string} [adoptedSessionId]  A session the runtime already opened.
    * @returns {RadioSessionHandle}
    */
@@ -71,10 +71,11 @@ export function createRadioSession(ctx) {
       return current;
     }
     release(current);
+    const adoptedId = adoptedSessionId ? String(adoptedSessionId) : "";
     /** @type {RadioSessionHandle} */
     const handle = {
       radio,
-      id: adoptedSessionId ? String(adoptedSessionId) : "",
+      id: adoptedId,
       // Set once the session's metadata and settings have both been applied
       // to the editor; reselecting a loaded radio then needs no new calls
       // and keeps the user's unsaved edits.
@@ -86,11 +87,11 @@ export function createRadioSession(ctx) {
       // Set when the runtime refused to open the session; open() then treats
       // the handle as spent rather than reusing it for the same radio.
       failed: false,
-      ready: null,
+      // An adopted session is open already; any other is replaced below by
+      // the open call's promise before the handle is published.
+      ready: Promise.resolve(adoptedId),
     };
-    if (adoptedSessionId) {
-      handle.ready = Promise.resolve(handle.id);
-    } else {
+    if (!adoptedSessionId) {
       handle.ready = Promise.resolve()
         .then(() => requireRuntimeApi(state).openRadioSession({
           module: radio.module,

@@ -139,6 +139,9 @@ export function createWebUsbSerial({ loadCdcSerialPort, usb } = {}) {
 
   return {
     async requestPort() {
+      if (!navigator.usb) {
+        throw new Error("WebUSB is not available in this browser.");
+      }
       const device = await navigator.usb.requestDevice({ filters: USB_DEVICE_FILTERS });
       if (isFtdiDevice(device)) {
         return new FtdiSerialPort(device, { usb });

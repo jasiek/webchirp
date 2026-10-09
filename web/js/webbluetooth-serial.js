@@ -140,7 +140,12 @@ export class WebBluetoothSerialPort {
     this.driverName = null;
     this.device.addEventListener("gattserverdisconnected", this._onDisconnect);
     try {
-      const server = await this.device.gatt.connect();
+      // Null when the site may not reach the device's GATT server.
+      const gatt = this.device.gatt;
+      if (!gatt) {
+        throw new Error("The Bluetooth device does not expose a GATT server.");
+      }
+      const server = await gatt.connect();
       for (const driver of this._drivers) {
         this._driver = await driver.probe(server, this._driverOptions);
         if (this._driver) break;
@@ -163,7 +168,7 @@ export class WebBluetoothSerialPort {
       // ATT confirmations, which are not part of the UART byte stream.
       await this._rx.startNotifications();
       await this.reconfigure(options);
-      if (!this.device.gatt.connected) {
+      if (!gatt.connected) {
         throw new Error("Bluetooth adapter disconnected while opening the serial port.");
       }
       this._lossNotifier.arm();
@@ -177,11 +182,11 @@ export class WebBluetoothSerialPort {
   async reconfigure(options) {
     this._driver?.validateOptions(options);
     await this._enqueue(async () => {
-      if (!this.device.gatt.connected || !this._driver) {
+      if (!this.device.gatt?.connected || !this._driver) {
         throw new Error("Bluetooth serial port is not connected.");
       }
       await this._driver.configure(options, this._options);
-      if (!this.device.gatt.connected) {
+      if (!this.device.gatt?.connected) {
         throw new Error("Bluetooth adapter disconnected while setting the baud rate.");
       }
       this._options = { ...options };
@@ -192,7 +197,7 @@ export class WebBluetoothSerialPort {
   async _write(bytes) {
     const data = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength).slice();
     await this._enqueue(async () => {
-      if (!this.device.gatt.connected || !this._driver) {
+      if (!this.device.gatt?.connected || !this._driver) {
         throw new Error("Bluetooth serial port is not connected.");
       }
       await this._driver.write(data);
@@ -236,6 +241,9 @@ export function createWebBluetoothSerial({ drivers = BLUETOOTH_SERIAL_DRIVERS } 
   return {
     // Keep the picker call within the user gesture, before any async discovery.
     async requestPort() {
+      if (!navigator.bluetooth) {
+        throw new Error("Web Bluetooth is not available in this browser.");
+      }
       const device = await navigator.bluetooth.requestDevice({
         filters: drivers.flatMap((driver) => driver.filters),
         optionalServices: [...new Set(drivers.flatMap((driver) => driver.optionalServices))],

@@ -93,7 +93,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   knows both hashed name shapes.
 - `tsconfig.json` (browser code, lib.dom, no Node types) and
   `scripts/tsconfig.json` (tooling, with `@types/node`) are the two projects
-  `npm run check:js` runs. `web/js/types/browser-globals.d.ts` declares the
+  `npm run check:js` runs, both with `strictNullChecks` on (`strict` and
+  `noImplicitAny` are still off): a null-initialised variable carries its
+  `T|null` type, and a value that can be null is checked before use rather
+  than cast. `web/js/types/browser-globals.d.ts` declares the
   browser APIs lib.dom lacks (Web Serial, WebUSB, Web Bluetooth, JSPI, gtag);
   `web/js/types/ui-context.d.ts` names every member of the UI `ctx`.
 
@@ -213,6 +216,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 ## Validation
 Before committing, run syntax checks, typechecking and all tests.
 `npm test` covers syntax, Python types (`check:types`, pyright), JavaScript
-types (`check:js`, tsc over the JSDoc) and the four automatic suites.
+types (`check:js`, tsc over the JSDoc with `strictNullChecks`) and the four
+automatic suites.
 
 

@@ -205,8 +205,18 @@ export class TestRadioHarness {
   // codeplug methods below go this way, so a test that uses them exercises
   // the production contract rather than a snippet of its own.
   async rpc(name, params = {}) {
+    return rpcDispatcherFor(await this.interpreter()).call(name, params);
+  }
+
+  // The seeded interpreter, booting it first. init() either sets it or
+  // throws, so the check only names a harness whose boot went wrong instead
+  // of handing a null to the dispatcher.
+  async interpreter() {
     await this.init();
-    return rpcDispatcherFor(this.pyodide).call(name, params);
+    if (!this.pyodide) {
+      throw new Error("The test radio harness has no Pyodide runtime after init()");
+    }
+    return this.pyodide;
   }
 
   // Run Python in the seeded runtime and hand back whatever the last
@@ -216,11 +226,11 @@ export class TestRadioHarness {
   // snippet sees every bridge name flattened into the globals by
   // tests/support/bridge_namespace.py; production code does not.
   async runPython(python, vars = {}) {
-    await this.init();
+    const pyodide = await this.interpreter();
     for (const [key, value] of Object.entries(vars)) {
-      this.pyodide.globals.set(key, value);
+      pyodide.globals.set(key, value);
     }
-    return this.pyodide.runPythonAsync(python);
+    return pyodide.runPythonAsync(python);
   }
 
   async runPythonJson(python, vars = {}) {

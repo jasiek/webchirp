@@ -3,7 +3,8 @@
     "The Node half of npm run check:js: build, coverage and CLI tooling, with",
     "Node's types. Browser modules these import (web/js/python-sources.mjs, the",
     "shared serial bridge) are checked again here, so they must type-check under",
-    "both projects."
+    "both projects. The strictness flags, strictNullChecks included, come from",
+    "the root config through extends."
   ],
   "extends": "../tsconfig.json",
   "compilerOptions": {

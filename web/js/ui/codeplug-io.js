@@ -30,6 +30,9 @@ export const DROPPABLE_FILE_DESCRIPTION = "a CHIRP CSV (.csv) or binary codeplug
 // text/csv to application/vnd.ms-excel depending on what is installed.
 export function classifyLoadableFile(fileName) {
   const extension = String(fileName || "").toLowerCase().match(/\.[^.\\/]+$/)?.[0];
+  if (!extension) {
+    return null;
+  }
   return LOADABLE_FILE_KINDS.get(extension) || null;
 }
 
@@ -283,7 +286,9 @@ export function createCodeplugIo(ctx) {
       className: state.selectedRadio?.className,
     });
     const selected = ctx.catalog.selectRadioByDetectedImage(loaded);
-    if (!selected) {
+    // The radio that selection made current, which names the image below.
+    const radio = state.selectedRadio;
+    if (!selected || !radio) {
       throw new Error(
         `Loaded image radio ${loaded.module}.${loaded.className} is not available in current radio catalog`,
       );
@@ -337,7 +342,7 @@ export function createCodeplugIo(ctx) {
     // before the load.
     trackCodeplugImport("img", source, "replace");
     log.setStatus(
-      `Loaded binary codeplug for ${loaded.vendor || state.selectedRadio.vendor} ${loaded.model || state.selectedRadio.model}.`
+      `Loaded binary codeplug for ${loaded.vendor || radio.vendor} ${loaded.model || radio.model}.`
         + undecodedChannelsNote(loaded.unreadableChannels),
     );
   }

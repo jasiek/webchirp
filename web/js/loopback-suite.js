@@ -85,11 +85,18 @@ function describeMismatch(want, got) {
 // A read/write session over an already-open port. Owns the reader lock and a
 // receive buffer so callers can ask for exact byte counts with a timeout.
 export function createPortSession(port) {
+  /** @type {ReadableStreamDefaultReader<Uint8Array>|null} */
   let reader = null;
+  /** @type {WritableStreamDefaultWriter<Uint8Array>|null} */
   let writer = null;
   let buffer = new Uint8Array(0);
+  /** @type {Error|null} */
   let streamError = null;
   let stopped = false;
+  /**
+   * @type {Array<{count: number, resolve: (bytes: Uint8Array) => void,
+   *   reject: (error: Error) => void, timer: number}>}
+   */
   const waiters = [];
 
   function takeFromBuffer(count) {
@@ -116,10 +123,11 @@ export function createPortSession(port) {
     }
   }
 
-  async function pump() {
+  /** @param {ReadableStreamDefaultReader<Uint8Array>} activeReader */
+  async function pump(activeReader) {
     try {
       for (;;) {
-        const { value, done } = await reader.read();
+        const { value, done } = await activeReader.read();
         if (done) {
           break;
         }
@@ -141,10 +149,11 @@ export function createPortSession(port) {
       if (!port.readable || !port.writable) {
         throw new Error("Port exposes no readable/writable streams — is it open?");
       }
-      reader = port.readable.getReader();
+      const activeReader = port.readable.getReader();
+      reader = activeReader;
       writer = port.writable.getWriter();
       // Not awaited: the pump runs for the life of the session.
-      pump();
+      pump(activeReader);
     },
 
     available() {
@@ -152,6 +161,9 @@ export function createPortSession(port) {
     },
 
     async write(bytes) {
+      if (!writer) {
+        throw new Error("The port session has not been started");
+      }
       await writer.write(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
     },
 
@@ -163,7 +175,7 @@ export function createPortSession(port) {
         return Promise.resolve(takeFromBuffer(count));
       }
       return new Promise((resolve, reject) => {
-        const waiter = { count, resolve, reject, timer: null };
+        const waiter = { count, resolve, reject, timer: 0 };
         waiter.timer = setTimeout(() => {
           const index = waiters.indexOf(waiter);
           if (index !== -1) {
@@ -469,7 +481,8 @@ async function runWithOpenPort(port, baudRate, entries, ctx, results) {
   // Cases read the baud in force off the context to size their timeouts.
   const caseCtx = { ...ctx, baudRate };
   const withBaud = entries.map((entry) => ({ ...entry, baudRate }));
-  let session = null;
+  /** @type {ReturnType<typeof createPortSession>} */
+  let session;
   let opened = false;
   try {
     await port.open({ baudRate });

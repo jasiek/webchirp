@@ -442,21 +442,23 @@ async function resolveRelease(win) {
 
 // Hand one capture to the SDK with its tags attached. Strings are wrapped in an
 // Error so they group by message like everything else -- Sentry files a bare
-// string as a "Non-Error exception" with no useful title.
+// string as a "Non-Error exception" with no useful title. The caller passes the
+// loaded SDK it has just checked for, so this never runs against a null one.
 /**
+ * @param {SentrySdk} client
  * @param {unknown} error
  * @param {CaptureContext} [context]
  */
-function sendCapture(error, { action, tags } = {}) {
+function sendCapture(client, error, { action, tags } = {}) {
   const payload = typeof error === "string" ? new Error(error) : error;
-  sdk.withScope((scope) => {
+  client.withScope((scope) => {
     if (action) {
       scope.setTag("action", String(action));
     }
     for (const [key, value] of Object.entries(stringTags(tags))) {
       scope.setTag(key, value);
     }
-    sdk.captureException(payload);
+    client.captureException(payload);
   });
 }
 
@@ -479,7 +481,7 @@ export function captureError(error, context = {}) {
       }
       return false;
     }
-    sendCapture(error, context);
+    sendCapture(sdk, error, context);
     return true;
   } catch {
     return false;
@@ -497,19 +499,21 @@ const METRIC_EMITTERS = Object.freeze({
 
 // Hand one metric to the SDK with its attributes filtered. Context from the UI
 // is merged underneath the caller's, so an attribute set explicitly at the call
-// site still wins -- the same precedence beforeSend gives tags.
+// site still wins -- the same precedence beforeSend gives tags. Like
+// sendCapture(), it is handed the SDK its caller checked for.
 /**
+ * @param {SentrySdk} client
  * @param {string} name
  * @param {Partial<MetricRecord>} [metric]
  */
-function sendMetric(name, { type, value, unit, attributes } = {}) {
-  const emit = METRIC_EMITTERS[type];
+function sendMetric(client, name, { type, value, unit, attributes } = {}) {
+  const emit = type ? METRIC_EMITTERS[type] : undefined;
   // A kind nobody wired up, or a CDN build without the metrics namespace. Both
   // are silent: a missing metric must not become a thrown error.
-  if (!emit || !sdk.metrics) {
+  if (!emit || !client.metrics) {
     return;
   }
-  emit(sdk.metrics, String(name), Number(value), {
+  emit(client.metrics, String(name), Number(value), {
     unit,
     attributes: scrubMetricAttributes({ ...safeContext(), ...attributes }),
   });
@@ -545,7 +549,7 @@ export function captureMetric(name, metric = {}) {
       }
       return false;
     }
-    sendMetric(name, metric);
+    sendMetric(sdk, name, metric);
     return true;
   } catch {
     return false;
@@ -570,22 +574,24 @@ function bufferEarlyErrors(win) {
   };
 }
 
-function drainPendingCaptures() {
+/** @param {SentrySdk} client */
+function drainPendingCaptures(client) {
   const queued = pendingCaptures.splice(0, pendingCaptures.length);
   for (const [error, context] of queued) {
     try {
-      sendCapture(error, context);
+      sendCapture(client, error, context);
     } catch {
       // One malformed capture must not strand the rest of the queue.
     }
   }
 }
 
-function drainPendingMetrics() {
+/** @param {SentrySdk} client */
+function drainPendingMetrics(client) {
   const queued = pendingMetrics.splice(0, pendingMetrics.length);
   for (const [name, metric] of queued) {
     try {
-      sendMetric(name, metric);
+      sendMetric(client, name, metric);
     } catch {
       // One malformed metric must not strand the rest of the queue.
     }
@@ -660,11 +666,14 @@ export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) }
     return null;
   }
   const stopBuffering = bufferEarlyErrors(win);
+  /** @type {SentrySdk} */
+  let loaded;
   try {
     // Both are network round trips and neither needs the other, so they overlap
     // rather than adding up.
     const [module, release] = await Promise.all([loadSdk(), resolveRelease(win)]);
     module.init(initOptions(release));
+    loaded = module;
     sdk = module;
   } catch {
     // The CDN is blocked, offline, or serving something unusable. The app is
@@ -675,9 +684,9 @@ export async function initSentry(win, { loadSdk = () => import(SENTRY_SDK_URL) }
   } finally {
     stopBuffering();
   }
-  drainPendingCaptures();
-  drainPendingMetrics();
-  return sdk;
+  drainPendingCaptures(loaded);
+  drainPendingMetrics(loaded);
+  return loaded;
 }
 
 // Test seam: lets a test start from a known state rather than inheriting the

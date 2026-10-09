@@ -77,6 +77,25 @@ export class WebUsbTransport {
     };
   }
 
+  // The device's active configuration, selecting the first one when none is
+  // active yet. Shared by the four chip drivers, which all open this way.
+  // WebUSB sets it once selectConfiguration() resolves; a device that still
+  // has none is named here instead of failing on a null property.
+  /**
+   * @param {string} chip  The prefix the driver's own errors carry ("CH340").
+   * @returns {Promise<USBConfiguration>}
+   */
+  async _activeConfiguration(chip) {
+    if (!this.device.configuration) {
+      await this.device.selectConfiguration(1);
+    }
+    const configuration = this.device.configuration;
+    if (!configuration) {
+      throw new Error(`${chip}: the USB device has no active configuration`);
+    }
+    return configuration;
+  }
+
   // Contract: register a loss callback, get its unsubscribe back.
   /** @type {SerialTransport["onDisconnect"]} */
   onDisconnect(callback) {

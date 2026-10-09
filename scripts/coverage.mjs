@@ -57,8 +57,8 @@ export function suitesRunByNpmTest(pkg) {
   const suites = new Set();
   const seen = new Set();
   const queue = ["test"];
-  while (queue.length > 0) {
-    const name = queue.pop();
+  let name;
+  while ((name = queue.pop()) !== undefined) {
     if (seen.has(name) || !pkg.scripts[name]) {
       continue;
     }

@@ -7,6 +7,7 @@ import { requireRuntimeApi } from "./state.js";
 /** @typedef {import("../types/ui-context.js").UiContext} UiContext */
 /** @typedef {import("./channel-values.js").ColumnMeta} ColumnMeta */
 /** @typedef {import("./channel-values.js").ChannelRow} ChannelRow */
+/** @typedef {import("../runtime-rpc.js").RuntimeApi} RuntimeApi */
 
 // The bulk channel editor: one modal that writes the same value to every
 // selected channel (issue #146).
@@ -43,8 +44,10 @@ export function createChannelBulkEdit(ctx) {
   let columnFields = [];
   let extraFields = [];
   // What the fields were built from, checked again on apply. See schemaSnapshot.
+  /** @type {ReturnType<typeof schemaSnapshot>|null} */
   let editedSchema = null;
   // The toolbar button the open came from, refocused when the modal closes.
+  /** @type {HTMLElement|null} */
   let triggerElement = null;
   // Bumped on every open so the response to a superseded open cannot render
   // over the one the user is looking at.
@@ -345,6 +348,7 @@ export function createChannelBulkEdit(ctx) {
     }
     const location = String(rows[0]?.Location ?? "").trim();
     setExtraMessage("Reading the driver's per-channel settings...");
+    /** @type {Awaited<ReturnType<RuntimeApi["getChannelExtra"]>>|null} */
     let payload = null;
     try {
       payload = await requireRuntimeApi(state).getChannelExtra({
@@ -386,6 +390,7 @@ export function createChannelBulkEdit(ctx) {
   // they need nothing but the schema the grid already has — while the extras
   // are fetched, so a slow first call (this can be the one that boots Pyodide)
   // leaves a usable dialog rather than an empty one.
+  /** @param {HTMLElement|null} [trigger] */
   function open(trigger = null) {
     const rows = ctx.table.selectedChannelRows();
     if (rows.length === 0) {

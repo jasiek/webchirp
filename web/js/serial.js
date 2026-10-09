@@ -24,6 +24,13 @@ function hasNativeSerial() {
   return typeof navigator !== "undefined" && "serial" in navigator;
 }
 
+// The browser's own Web Serial object, or undefined where there is none. Read
+// once by the provider choice below, so the object it checks is the one it uses.
+/** @returns {Serial|undefined} */
+function nativeSerial() {
+  return typeof navigator !== "undefined" ? navigator.serial : undefined;
+}
+
 function hasWebUsb() {
   return typeof navigator !== "undefined" && "usb" in navigator;
 }
@@ -104,18 +111,20 @@ export class BrowserSerialBridge extends SerialBridge {
       return this.serial;
     }
     if (this.preferredTransport === "webserial") {
-      if (!hasNativeSerial()) {
+      const native = nativeSerial();
+      if (!native) {
         throw createSerialUnsupportedError("Native Web Serial is not supported in this browser.");
       }
-      this.serial = navigator.serial;
+      this.serial = native;
       this.transport = "webserial";
-      return this.serial;
+      return native;
     }
     // Auto: prefer native Web Serial, fall back to the WebUSB chip-aware provider.
-    if (hasNativeSerial()) {
-      this.serial = navigator.serial;
+    const native = nativeSerial();
+    if (native) {
+      this.serial = native;
       this.transport = "webserial";
-      return this.serial;
+      return native;
     }
     if (hasWebUsb()) {
       this.serial = this._createWebUsbSerial();

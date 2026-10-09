@@ -63,8 +63,27 @@ function normalizeAssetPath(ref) {
 
 // Retry complete reads (including interrupted bodies) before failing the build;
 // publishing a partial retention set would permanently lose older generations.
+// Only a caller that allows a missing file can get null back.
+/**
+ * @overload
+ * @param {string} url
+ * @param {{allowMissing: true}} options
+ * @returns {Promise<Buffer|null>}
+ */
+/**
+ * @overload
+ * @param {string} url
+ * @param {{allowMissing?: false}} [options]
+ * @returns {Promise<Buffer>}
+ */
+/**
+ * @param {string} url
+ * @param {{allowMissing?: boolean}} [options]
+ * @returns {Promise<Buffer|null>}
+ */
 async function fetchBytes(url, { allowMissing = false } = {}) {
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  // The third failed attempt throws, so the loop never runs off its end.
+  for (let attempt = 1; ; attempt += 1) {
     try {
       const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
       if (allowMissing && res.status === 404) {

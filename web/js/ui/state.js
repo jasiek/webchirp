@@ -20,7 +20,7 @@
  * @property {boolean} loading  A metadata/settings load is in flight.
  * @property {boolean} closed  The session was released; nothing may use it.
  * @property {boolean} failed  The runtime refused to open it.
- * @property {Promise<string>|null} ready  Resolves to id once open.
+ * @property {Promise<string>} ready  Resolves to id once open.
  */
 
 /**
