@@ -7,16 +7,17 @@ import test from "node:test";
 // value back over the caret text. The draft has to survive the re-render and be
 // committed only when the cell is really left.
 //
-// The fake DOM lives in tests/support/fake-dom.mjs; it has no layout, so
-// renderRowWindow renders every row and scrolling exercises the re-render
-// rather than the windowing arithmetic.
+// The page is index.html in jsdom (tests/support/index-page.mjs), which has
+// no layout, so renderRowWindow renders every row and scrolling exercises the
+// re-render rather than the windowing arithmetic; tests/e2e covers that.
+import { installIndexPage } from "../support/index-page.mjs";
 import {
   channelRows,
+  domEvent,
   flushMicrotasks,
   importSampleCsv,
-  installFakeDom,
   selectRadioBySearch,
-} from "../support/fake-dom.mjs";
+} from "../support/ui-interactions.mjs";
 import { fakeRowCheck, withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 const SAMPLE_ROWS = [
@@ -46,7 +47,7 @@ function frequencyVerdict(column, value, previous) {
 // Bring the grid up on a radio whose Frequency column really has bands, so the
 // band check the bug depended on is live.
 async function gridWithTwoChannels() {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   ui.setRuntimeApi(withRadioSessions({
@@ -74,14 +75,14 @@ function frequencyEditor(document, rowIdx) {
 }
 
 function scrollGrid(document) {
-  document.querySelector("#mem-table-scroll").dispatchEvent({ type: "scroll" });
+  document.querySelector("#mem-table-scroll").dispatchEvent(domEvent({ type: "scroll" }));
 }
 
 test("a half-typed frequency survives a scroll re-render", async () => {
   const { document } = await gridWithTwoChannels();
   const editor = frequencyEditor(document, 1);
   editor.value = "146.";
-  document.activeElement = editor;
+  editor.focus();
 
   scrollGrid(document);
   await flushMicrotasks();
@@ -97,7 +98,7 @@ test("an out-of-band partial value is not reverted mid-typing", async () => {
   // "14" parses fine but is outside the driver's 2 m band, which is what used
   // to make the scroll commit snap the cell back to 146.520000.
   editor.value = "14";
-  document.activeElement = editor;
+  editor.focus();
 
   scrollGrid(document);
   await flushMicrotasks();
@@ -109,10 +110,9 @@ test("leaving the cell still commits, and still rejects an invalid value", async
   const { document } = await gridWithTwoChannels();
   const editor = frequencyEditor(document, 0);
   editor.value = "146.";
-  document.activeElement = editor;
+  editor.focus();
 
-  document.querySelector("#mem-table tbody").dispatchEvent({ type: "focusout", target: editor });
-  document.activeElement = null;
+  editor.blur();
   await flushMicrotasks();
 
   assert.equal(frequencyEditor(document, 0).value, "146.520000");
@@ -122,10 +122,9 @@ test("an accepted edit committed on blur outlives the next re-render", async () 
   const { document } = await gridWithTwoChannels();
   const editor = frequencyEditor(document, 1);
   editor.value = "145.500000";
-  document.activeElement = editor;
+  editor.focus();
 
-  document.querySelector("#mem-table tbody").dispatchEvent({ type: "focusout", target: editor });
-  document.activeElement = null;
+  editor.blur();
   scrollGrid(document);
   await flushMicrotasks();
 

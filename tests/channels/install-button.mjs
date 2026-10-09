@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { initAnalytics } from "../../web/js/analytics.ts";
 import { bindInstallPrompt } from "../../web/js/install-prompt.ts";
 import { createInstallButton } from "../../web/js/ui/install-button.ts";
-import { FakeElement } from "../support/fake-dom.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
+import { dispatch } from "../support/ui-interactions.mjs";
 import { makeWindow } from "../support/fake-window.mjs";
 
 // The button's whole job is to be visible at the right moments: an install
@@ -16,8 +17,9 @@ import { makeWindow } from "../support/fake-window.mjs";
 // The two members web/js/ui/install-button.ts reads off ctx. A full UI harness
 // would only add the rest of the app to a module that touches one element.
 function makeContext() {
-  const installAppEl = new FakeElement("button", null, "install-app");
-  installAppEl.hidden = true;
+  const { document } = installIndexPage();
+  // index.html ships the button hidden until an install is on offer.
+  const installAppEl = document.querySelector("#install-app");
   const debug = [];
   return {
     installAppEl,
@@ -88,7 +90,7 @@ test("a tap raises the prompt, reports the click and retires the button", async 
   createInstallButton(ctx).bindEvents();
   win.dispatch("beforeinstallprompt", fakePromptEvent("accepted"));
 
-  await installAppEl.dispatch("click");
+  await dispatch(installAppEl, "click");
 
   // The click is this button's half of the funnel; the answer arrives
   // separately as pwa_install_choice from web/js/analytics.ts.
@@ -126,7 +128,7 @@ test("a browser that refuses the prompt says why in the debug panel", async () =
     },
   });
 
-  await installAppEl.dispatch("click");
+  await dispatch(installAppEl, "click");
 
   // The button vanishing with nothing installed is the whole user-visible
   // symptom, so the panel has to carry the actual exception.

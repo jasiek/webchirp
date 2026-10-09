@@ -17,12 +17,13 @@ import test from "node:test";
 
 import { isPythonError } from "../../web/js/runtime-errors.ts";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
 import {
   createDeferred,
+  emit,
   flushMicrotasks,
-  installFakeDom,
   selectRadioBySearch,
-} from "../support/fake-dom.mjs";
+} from "../support/ui-interactions.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 const DRIVER = { module: "uv5r", className: "BaofengUV5R" };
@@ -354,11 +355,11 @@ const EMPTY_SETTINGS = { supported: false, available: false, requiresImage: fals
 
 function tableHeaderTexts(document) {
   const headerRow = document.querySelector("#mem-table thead").children[0];
-  return (headerRow?.children || []).map((th) => th.textContent);
+  return Array.from(headerRow?.children || [], (th) => th.textContent);
 }
 
 test("the UI drops a response for a session it has since closed, and reuses a loaded one", async () => {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const slowMetadata = createDeferred();
@@ -423,7 +424,7 @@ test("the UI drops a response for a session it has since closed, and reuses a lo
 });
 
 test("reselecting a radio whose session failed to open opens a fresh one", async () => {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const opens = [];
@@ -478,7 +479,7 @@ test("reselecting a radio whose session failed to open opens a fresh one", async
 });
 
 test("an image load hands its session to the selection it makes", async () => {
-  const { document, window } = installFakeDom();
+  const { document, window } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const metadataSessions = [];
@@ -520,7 +521,7 @@ test("an image load hands its session to the selection it makes", async () => {
   const slowSession = metadataSessions.at(-1);
   assert.match(slowSession, /^slow:SlowRadio#/);
 
-  await window.emit("drop", {
+  await emit(window, "drop", {
     dataTransfer: {
       types: ["Files"],
       files: [{ name: "codeplug.img", arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }],

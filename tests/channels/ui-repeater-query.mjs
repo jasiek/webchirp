@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { FakeElement, installFakeDom } from "../support/fake-dom.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
-// The shared fake DOM lets createUiController/init run headless: every #id
-// resolves to an element, while the repeater-API-base meta tag is registered
-// per test so the configurable/disabled paths can be exercised.
+// index.html, booted headless. Its repeater-API-base meta tag is set per test
+// so the configurable/disabled paths can be exercised.
 function installUiDom({ repeaterApiBase } = {}) {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
 
-  // Register the meta tag only when a base is provided; omitting it leaves the
-  // tag absent (a non-id selector resolves to null), which resolves to the
-  // built-in default (feature enabled).
-  if (repeaterApiBase !== undefined) {
-    const meta = new FakeElement("meta", document);
+  // index.html ships the tag; a base given here replaces its content, and
+  // omitting one removes the tag, which resolves to the built-in default
+  // (feature enabled).
+  const meta = document.querySelector('meta[name="webchirp-repeater-api-base"]');
+  if (repeaterApiBase === undefined) {
+    meta.remove();
+  } else {
     meta.setAttribute("content", String(repeaterApiBase ?? ""));
-    document.register('meta[name="webchirp-repeater-api-base"]', meta);
   }
 
   return {

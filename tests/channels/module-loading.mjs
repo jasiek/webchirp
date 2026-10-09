@@ -22,7 +22,7 @@ import { pathToFileURL } from "node:url";
 // tests/support/cdn-imports.mjs.
 import "../support/register-cdn-imports.mjs";
 
-import { installFakeDom } from "../support/fake-dom.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
 import { webDir } from "../support/repo-paths.mjs";
 
 // Every .js/.mjs/.ts module under web/ (not a .d.ts, which only tsc reads), repo-relative and sorted so the test order (and
@@ -40,18 +40,30 @@ function shippedModulePaths(dir = webDir) {
   return found.sort();
 }
 
-// The globals a module may touch while it is being evaluated. This is not a
-// browser: it is the smallest surface that lets top-level code run to
-// completion, because what is under test is that the module loads, not that it
-// works. `vivify` hands out an element for any selector, so a module that
-// wires up its DOM at import time finds one.
-function installBrowserGlobals() {
-  const dom = installFakeDom({
-    // Hand out an element for any selector a module asks for while loading.
-    // The tag is the selector's own leading tag name where it has one, so
-    // "input#foo" is an input; an id-only selector becomes a div, which is
-    // enough for code that only stores the handle or sets textContent.
-    vivify: (selector) => selector.trim().match(/^([a-zA-Z][\w-]*)/)?.[1] || "div",
+// The page under web/ whose <script type="module"> loads each module, for the
+// modules that wire up their page's DOM as they load (web/js/serial-test-page.ts
+// queries serial-test.html's elements at import time). A module no page names
+// directly is imported by another module, under index.html.
+function pageOfEachModule() {
+  const pages = new Map();
+  for (const name of fs.readdirSync(webDir).filter((file) => file.endsWith(".html"))) {
+    const html = fs.readFileSync(path.join(webDir, name), "utf8");
+    for (const [, src] of html.matchAll(/<script type="module" src="\.\/([^"]+)"/g)) {
+      const modulePath = path.join(webDir, src);
+      if (name === "index.html" || !pages.has(modulePath)) {
+        pages.set(modulePath, name);
+      }
+    }
+  }
+  return pages;
+}
+
+// The globals a module may touch while it is being evaluated: the page the
+// module ships in, plus a few stand-ins. What is under test is that the module
+// loads, not that it works.
+function installBrowserGlobals(page) {
+  const dom = installIndexPage({
+    page,
     navigator: {
       userAgent: "FakeBrowser/1.0",
       // No serial or usb key at all. web/js/serial.ts and
@@ -59,7 +71,7 @@ function installBrowserGlobals() {
       // a key present with the value undefined reads as supported -- the
       // opposite of what is wanted here. web/app.ts branches on that at import
       // time and logs down either path; with both absent it takes the
-      // unsupported branch, which is the one worth loading under a fake DOM.
+      // unsupported branch, which is the one a page without serial takes.
     },
     globals: {
       // web/js/version-info.ts fetches ./version.json as it loads and swallows
@@ -68,7 +80,6 @@ function installBrowserGlobals() {
         throw new Error("fetch is not available in the module-loading test");
       },
       WebAssembly: globalThis.WebAssembly,
-      location: { href: "https://example.invalid/", search: "", hash: "" },
     },
   });
   return dom;
@@ -78,11 +89,18 @@ test("every shipped browser module loads", async (t) => {
   const modulePaths = shippedModulePaths();
   assert.ok(modulePaths.length > 20, "the walk should find the whole web/ tree");
 
-  const dom = installBrowserGlobals();
+  const pages = pageOfEachModule();
+  let dom = installBrowserGlobals("index.html");
   t.after(() => dom.restore());
 
   const failures = [];
-  for (const modulePath of modulePaths) {
+  // index.html's modules first, then each other page's under its own markup.
+  const pageOf = (modulePath) => pages.get(modulePath) || "index.html";
+  const ordered = [...modulePaths].sort((a, b) => (pageOf(a) === "index.html" ? 0 : 1) - (pageOf(b) === "index.html" ? 0 : 1));
+  for (const modulePath of ordered) {
+    if (pageOf(modulePath) !== "index.html") {
+      dom = installBrowserGlobals(pageOf(modulePath));
+    }
     try {
       await import(pathToFileURL(modulePath).href);
     } catch (error) {

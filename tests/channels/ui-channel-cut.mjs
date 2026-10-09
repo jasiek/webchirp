@@ -5,19 +5,20 @@ import test from "node:test";
 // deleted must be the rows that were serialized, not whatever is selected
 // when the (possibly permission-gated) write finally resolves.
 //
-// The fake DOM lives in tests/support/fake-dom.mjs: every selector
-// resolves to an element so createUiController/init can run headless, and
-// elements record listeners and support dispatchEvent for driving clicks.
+// The page is index.html in jsdom (tests/support/index-page.mjs), so
+// createUiController/init run headless against the real markup, and clicks
+// are real events that bubble to the grid's delegated listeners.
+import { installIndexPage } from "../support/index-page.mjs";
 import {
   channelRows,
   clickLocationButton,
   createDeferred,
+  domEvent,
   flushMicrotasks,
   importSampleCsv,
-  installFakeDom,
   selectRadioBySearch,
   tableNames,
-} from "../support/fake-dom.mjs";
+} from "../support/ui-interactions.mjs";
 import { fakeRowCheck, withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 const SAMPLE_ROWS = [
@@ -27,7 +28,7 @@ const SAMPLE_ROWS = [
 ];
 
 test("cut deletes the rows captured at copy time, not the selection at write completion", async () => {
-  const { document, navigator } = installFakeDom();
+  const { document, navigator } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
@@ -56,7 +57,7 @@ test("cut deletes the rows captured at copy time, not the selection at write com
   clickLocationButton(document, 0);
   const write = createDeferred();
   navigator.clipboard = { writeText: () => write.promise };
-  document.querySelector("#channel-cut").dispatchEvent({ type: "click" });
+  document.querySelector("#channel-cut").dispatchEvent(domEvent({ type: "click" }));
   await flushMicrotasks();
   assert.deepEqual(tableNames(document), ["Alpha", "Bravo", "Charlie"]);
 
@@ -78,7 +79,7 @@ test("cut deletes the rows captured at copy time, not the selection at write com
 // allowReadOnly; what the grid owes it is that mark, and one call for the
 // whole paste.
 test("paste preserves read-only column values and matches unpadded numeric enums", async () => {
-  const { document, navigator } = installFakeDom();
+  const { document, navigator } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
@@ -127,7 +128,7 @@ test("paste preserves read-only column values and matches unpadded numeric enums
     "Alpha\t146.520000\t5.00\n" +
     "Bravo\t146.940000\t12.5\n";
   navigator.clipboard = { readText: async () => tsv };
-  document.querySelector("#channel-paste").dispatchEvent({ type: "click" });
+  document.querySelector("#channel-paste").dispatchEvent(domEvent({ type: "click" }));
   await flushMicrotasks();
 
   const tstepValues = channelRows(document).map((tr) => tr.children[3]?.children[0]?.value ?? "");

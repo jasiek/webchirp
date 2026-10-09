@@ -24,12 +24,13 @@ import {
   readCatalog,
   sharedHarness,
 } from "../support/chirp.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
 import {
   channelRows,
+  emit,
   flushMicrotasks,
-  installFakeDom,
   selectRadioBySearch,
-} from "../support/fake-dom.mjs";
+} from "../support/ui-interactions.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // A dropped file, in the shape the drop handler reads it.
@@ -67,7 +68,7 @@ async function columnMetadata(harness) {
 // leave the lookup alone.
 function cellEditor(document, rowIdx, column) {
   const row = channelRows(document)[rowIdx];
-  const cell = row.children.find((td) => td.dataset.column === column);
+  const cell = Array.from(row.children).find((td) => td.dataset.column === column);
   return cell?.children[0];
 }
 
@@ -103,7 +104,7 @@ test("column metadata follows the cached image, not a blank driver instance", as
 });
 
 test("a download re-reads the schema, so the levels it just read survive", async () => {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
@@ -152,7 +153,11 @@ test("a download re-reads the schema, so the levels it just read survive", async
   await flushMicrotasks();
   assert.equal(channelRows(document).length, 0, "the grid starts empty");
 
-  document.querySelector("#radio-download").click();
+  // index.html ships the button disabled until a port connects, and a
+  // disabled button ignores a click; enabled here as a connection would.
+  const downloadEl = document.querySelector("#radio-download");
+  downloadEl.disabled = false;
+  downloadEl.click();
   // Twice: the clone settles on the first, the schema refresh it now waits for
   // on the second.
   await flushMicrotasks();
@@ -160,7 +165,7 @@ test("a download re-reads the schema, so the levels it just read survive", async
 
   const powerSelect = cellEditor(document, 1, "Power");
   assert.deepEqual(
-    powerSelect.children.map((option) => option.value),
+    Array.from(powerSelect.children).map((option) => option.value),
     ["Low", "Mid", "High"],
     "the dropdown should list the levels the downloaded image publishes",
   );
@@ -170,7 +175,7 @@ test("a download re-reads the schema, so the levels it just read survive", async
 });
 
 test("an import whose schema refresh fails leaves the previous channels alone", async () => {
-  const { document, window } = installFakeDom();
+  const { document, window } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
 
@@ -216,11 +221,11 @@ test("an import whose schema refresh fails leaves the previous channels alone", 
   }));
 
   await ui.init(true);
-  await window.emit("drop", dropEvent(fakeFile("before.csv")));
+  await emit(window, "drop", dropEvent(fakeFile("before.csv")));
   await flushMicrotasks();
   assert.deepEqual(ui.selectedRowsForOperations().map((row) => row.Name), ["BEFORE"]);
 
-  await window.emit("drop", dropEvent(fakeFile("codeplug.img")));
+  await emit(window, "drop", dropEvent(fakeFile("codeplug.img")));
   await flushMicrotasks();
 
   // The import is reported as failed and never re-renders, so the rows behind

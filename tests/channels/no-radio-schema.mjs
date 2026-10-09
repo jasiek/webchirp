@@ -22,13 +22,13 @@ import { CSV_FORMAT_HEADERS } from "../../web/js/clipboard.ts";
 import { buildPmr446Rows } from "../../web/js/datasources.ts";
 import { rsgbRows, rxfRows } from "../support/repeater-rows.mjs";
 import { ensureModule, sharedHarness } from "../support/chirp.mjs";
+import { installIndexPage, pageElement } from "../support/index-page.mjs";
 import {
-  FakeElement,
   channelRows,
+  domEvent,
   flushMicrotasks,
-  installFakeDom,
   selectRadioBySearch,
-} from "../support/fake-dom.mjs";
+} from "../support/ui-interactions.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 
 // The runtime the grid checks its writes with: the real one, through the
@@ -46,13 +46,13 @@ async function harnessRuntimeApi() {
 // the state before the startup schema has been fetched. Its row builders ask
 // runtimeApi for every verdict (buildRows in web/js/ui/channel-table.ts).
 async function tableWithMetadata(columns, rows = [], runtimeApi = null) {
-  installFakeDom();
+  installIndexPage();
   const { createChannelTable } = await import("../../web/js/ui/channel-table.ts");
   const dom = {
-    tableHead: new FakeElement("thead"),
-    tableBody: new FakeElement("tbody"),
-    tableScrollEl: new FakeElement("div"),
-    channelEmptyStateEl: new FakeElement("div"),
+    tableHead: pageElement("tableHead"),
+    tableBody: pageElement("tableBody"),
+    tableScrollEl: pageElement("tableScrollEl"),
+    channelEmptyStateEl: pageElement("channelEmptyStateEl"),
   };
   const state = {
     currentHeaders: CSV_FORMAT_HEADERS.slice(),
@@ -291,7 +291,7 @@ test("the startup schema imports every repeater a directory offers", async () =>
 });
 
 test("loadEmptySchema installs the whole schema, not just its headers", async () => {
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const schema = {
@@ -316,7 +316,7 @@ test("loadEmptySchema installs the whole schema, not just its headers", async ()
   // Inserting a channel with no radio selected is the observable proof that
   // the columns landed: the Mode cell is the driver's picker on its documented
   // default rather than a free-text box.
-  document.querySelector("#channel-insert").dispatchEvent({ type: "click" });
+  document.querySelector("#channel-insert").dispatchEvent(domEvent({ type: "click" }));
   const modeCell = channelRows(document)[0].children[3].children[0];
   assert.equal(modeCell.tagName, "SELECT");
   assert.equal(modeCell.value, "FM");
@@ -327,7 +327,7 @@ test("selecting a radio is what clears a power level it cannot hold", async () =
   // correct on its own, but nothing proved applyRadioMetadata calls it, so
   // deleting that call would leave the fix out of the running app with every
   // test still green.
-  const { document } = installFakeDom();
+  const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
   const headers = ["Location", "Name", "Frequency", "Power"];
@@ -362,7 +362,7 @@ test("selecting a radio is what clears a power level it cannot hold", async () =
   }));
   await ui.init(true);
 
-  document.querySelector("#channel-insert").dispatchEvent({ type: "click" });
+  document.querySelector("#channel-insert").dispatchEvent(domEvent({ type: "click" }));
   assert.equal(channelRows(document)[0].children[3].children[0].value, "50W");
 
   selectRadioBySearch(document, "Acme One");
@@ -370,13 +370,11 @@ test("selecting a radio is what clears a power level it cannot hold", async () =
 
   // A row that kept its stale label renders it: bindCellEditor appends an
   // option for a value outside the driver's list and selects it, so "50W"
-  // surviving here is exactly what an unwired clear would look like. (A
-  // cleared cell reads as the fake DOM's empty-select convention — its first
-  // option — rather than the browser's "", which is what the real grid shows.)
+  // surviving here is exactly what an unwired clear would look like.
   const powerCell = channelRows(document)[0].children[3].children[0];
   assert.notEqual(powerCell.value, "50W", "the label this radio cannot hold is gone");
   assert.deepEqual(
-    powerCell.children.map((option) => option.value),
+    Array.from(powerCell.children).map((option) => option.value),
     ["High", "Low"],
     "and it left no option behind for itself",
   );

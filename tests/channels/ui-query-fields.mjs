@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { OSM_ATTRIBUTION, OSM_COPYRIGHT_URL, metresPerPixel } from "../../web/js/staticmap.ts";
-import { installFakeDom } from "../support/fake-dom.mjs";
+import { installIndexPage } from "../support/index-page.mjs";
+import { dispatch, setLayout } from "../support/ui-interactions.mjs";
 
 // The field components build every element themselves via
-// document.createElement, so the shared fake DOM's element class is all they
-// need — no index.html, no dom.ts, no UI controller boot.
-installFakeDom();
+// document.createElement, so the page only has to supply a document -- no
+// dom.ts, no UI controller boot. The fields are not attached to it.
+installIndexPage();
 
 const {
   createSelectField,
@@ -68,7 +69,7 @@ test("checkbox group ticks its defaults and reports checked values verbatim", ()
   });
   const [, container] = field.nodes;
   assert.equal(container.className, "modal-modes");
-  const checkboxes = container.children.map((optionLabel) => optionLabel.children[0]);
+  const checkboxes = Array.from(container.children).map((optionLabel) => optionLabel.children[0]);
   assert.deepEqual(checkboxes.map((el) => el.checked), [true, true, false]);
   assert.deepEqual(checkboxes.map((el) => el.name), ["band", "band", "band"]);
   // Values come back in option order, untouched by any case normalization.
@@ -147,7 +148,7 @@ test("number field applies its constraints and reads blank as NaN, never 0", () 
 test("number field without min/max leaves the constraints unset", () => {
   const field = createNumberField({ key: "range", label: "Range (km)", min: 1, step: 1, value: 30 });
   const [, input] = field.nodes;
-  assert.equal(input.max, undefined);
+  assert.equal(input.hasAttribute("max"), false);
 });
 
 function buildPositionField(config = {}) {
@@ -188,7 +189,7 @@ function buildDraggableField(config = {}) {
     initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
     ...config,
   });
-  built.preview.clientWidth = 320;
+  setLayout(built.preview, { clientWidth: 320 });
   built.field.setRangeKm(30);
   built.field.refreshPreview();
   return built;
@@ -196,11 +197,11 @@ function buildDraggableField(config = {}) {
 
 function dragMap(previewCanvas, moves, { pointerId = 1 } = {}) {
   return (async () => {
-    await previewCanvas.dispatch("pointerdown", { pointerId, button: 0, clientX: 100, clientY: 100 });
+    await dispatch(previewCanvas, "pointerdown", { pointerId, button: 0, clientX: 100, clientY: 100 });
     for (const [x, y] of moves) {
-      await previewCanvas.dispatch("pointermove", { pointerId, clientX: x, clientY: y });
+      await dispatch(previewCanvas, "pointermove", { pointerId, clientX: x, clientY: y });
     }
-    await previewCanvas.dispatch("pointerup", { pointerId });
+    await dispatch(previewCanvas, "pointerup", { pointerId });
   })();
 }
 
@@ -217,7 +218,7 @@ function afterPreviewDebounce() {
 }
 
 function tilesIn(canvas) {
-  return canvas.children.filter((child) => child.className === "repeater-map-tile");
+  return Array.from(canvas.children).filter((child) => child.className === "repeater-map-tile");
 }
 
 test("position field renders the locator row with the geolocate and clear buttons", () => {
@@ -246,7 +247,7 @@ test("latitude and longitude share one labelled row and name themselves", () => 
   // One row holding both boxes and nothing else: the row is what keeps the
   // pair on a single grid line under the single label above.
   assert.equal(coordRow.className, "modal-coord-row");
-  assert.deepEqual(coordRow.children, [latitude, longitude]);
+  assert.deepEqual(Array.from(coordRow.children), [latitude, longitude]);
   // With no per-box label left, the placeholder is the only thing that says
   // which half is which, so it has to carry the word and not just an example.
   assert.match(latitude.placeholder, /^Latitude /);
@@ -264,7 +265,7 @@ test("latitude and longitude share one labelled row and name themselves", () => 
 test("the clear button wipes all three fields and notifies onChange", async () => {
   const { field, latitude, longitude, locator, geoRow, changes } = buildPositionField();
   field.setPosition(51.520833, -0.125);
-  await geoRow.children[2].dispatch("click");
+  await dispatch(geoRow.children[2], "click");
   assert.equal(latitude.value, "");
   assert.equal(longitude.value, "");
   assert.equal(locator.value, "");
@@ -276,17 +277,17 @@ test("coordinate edits fill the locator field once both halves are present", asy
   const { latitude, longitude, locator } = buildPositionField();
 
   latitude.value = "52.2297";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   // A lone latitude is not a position; Number("") would otherwise read the
   // blank longitude as 0 and encode a locator on the prime meridian.
   assert.equal(locator.value, "");
 
   longitude.value = "21.0122";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
   assert.equal(locator.value, "KO02MF");
 
   latitude.value = "";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   assert.equal(locator.value, "");
 });
 
@@ -294,13 +295,13 @@ test("locator edits move the coordinates to the square's centre", async () => {
   const { latitude, longitude, locator } = buildPositionField();
 
   locator.value = "IO91WM";
-  await locator.dispatch("input");
+  await dispatch(locator, "input");
   assert.equal(latitude.value, "51.520833");
   assert.equal(longitude.value, "-0.125000");
 
   // Lower case and 4-character precision both decode.
   locator.value = "ko02";
-  await locator.dispatch("input");
+  await dispatch(locator, "input");
   assert.equal(latitude.value, "52.500000");
   assert.equal(longitude.value, "21.000000");
 });
@@ -312,7 +313,7 @@ test("partial or invalid locator text leaves the coordinates alone", async () =>
   longitude.value = "21.0122";
   for (const text of ["", "I", "IO9", "99AB", "ZZ11"]) {
     locator.value = text;
-    await locator.dispatch("input");
+    await dispatch(locator, "input");
     assert.equal(latitude.value, "52.2297", `coords survived "${text}"`);
     assert.equal(longitude.value, "21.0122", `coords survived "${text}"`);
   }
@@ -322,7 +323,7 @@ test("out-of-range coordinates are not a position and encode no locator", async 
   const { field, latitude, longitude, locator } = buildPositionField();
   latitude.value = "95";
   longitude.value = "10";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   assert.equal(field.value(), null);
   assert.equal(locator.value, "");
 });
@@ -332,7 +333,7 @@ test("value() returns the validated coordinate pair", async () => {
   assert.equal(field.value(), null);
   latitude.value = "51.5";
   longitude.value = "-0.12";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
   assert.deepEqual(field.value(), { latitude: 51.5, longitude: -0.12 });
 });
 
@@ -358,14 +359,14 @@ test("setPosition fills all three fields and notifies onChange", () => {
 test("typing coordinates or a locator notifies onChange with the coordinate texts", async () => {
   const { latitude, longitude, locator, changes } = buildPositionField();
   latitude.value = "52.2297";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   longitude.value = "21.0122";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
   locator.value = "IO91WM";
-  await locator.dispatch("input");
+  await dispatch(locator, "input");
   // Partial locator text changes nothing, so it must notify nothing.
   locator.value = "IO9";
-  await locator.dispatch("input");
+  await dispatch(locator, "input");
   assert.deepEqual(changes, [
     ["52.2297", ""],
     ["52.2297", "21.0122"],
@@ -386,7 +387,7 @@ test("the map preview starts empty and stays empty without a full position", asy
   // A lone latitude is not a position, exactly as value() reads it, so there
   // is still nothing to draw.
   latitude.value = "52.2297";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   await afterPreviewDebounce();
   assert.equal(field.value(), null);
   assert.equal(previewCanvas.hidden, true);
@@ -412,14 +413,14 @@ test("refreshPreview draws OSM tiles and a marker for the current position", () 
     assert.equal(tile.crossOrigin, "anonymous");
   }
   // The marker sits last so it paints over the tiles it is centred on.
-  assert.equal(previewCanvas.children.at(-1).className, "repeater-map-marker");
+  assert.equal(Array.from(previewCanvas.children).at(-1).className, "repeater-map-marker");
 });
 
 test("the preview renders at the container's measured width once the modal has laid out", () => {
   const { field, preview, previewCanvas } = buildPositionField({
     initial: { latitudeText: "51.520833", longitudeText: "-0.125000" },
   });
-  preview.clientWidth = 360;
+  setLayout(preview, { clientWidth: 360 });
   field.refreshPreview();
   // Square: one measurement is both sides, so the range circle has the same
   // room in each direction.
@@ -428,7 +429,7 @@ test("the preview renders at the container's measured width once the modal has l
 
   // A narrower card redraws to the new width: the canvas's own width is the
   // previous render's, so only the container can report the change.
-  preview.clientWidth = 300;
+  setLayout(preview, { clientWidth: 300 });
   field.refreshPreview();
   assert.equal(previewCanvas.style.width, "300px");
 });
@@ -436,9 +437,9 @@ test("the preview renders at the container's measured width once the modal has l
 test("typing a position redraws the preview, but only after the debounce", async () => {
   const { latitude, longitude, previewCanvas } = buildPositionField();
   latitude.value = "52.2297";
-  await latitude.dispatch("input");
+  await dispatch(latitude, "input");
   longitude.value = "21.0122";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
   // Nothing yet: a redraw per keystroke is a tile fetch per keystroke.
   assert.equal(tilesIn(previewCanvas).length, 0);
 
@@ -449,7 +450,7 @@ test("typing a position redraws the preview, but only after the debounce", async
 test("a locator edit previews the square it decodes to", async () => {
   const { locator, previewCanvas } = buildPositionField();
   locator.value = "IO91WM";
-  await locator.dispatch("input");
+  await dispatch(locator, "input");
   await afterPreviewDebounce();
   assert.ok(tilesIn(previewCanvas).length >= 1);
 });
@@ -460,7 +461,7 @@ test("clearing the location returns the preview to its empty state", async () =>
   field.refreshPreview();
   assert.ok(tilesIn(previewCanvas).length >= 1);
 
-  await geoRow.children[2].dispatch("click");
+  await dispatch(geoRow.children[2], "click");
   await afterPreviewDebounce();
   assert.equal(previewCanvas.hidden, true);
   assert.equal(previewEmpty.hidden, false);
@@ -487,7 +488,7 @@ test("the block keeps one size whether or not a position is set", async () => {
 
   latitude.value = "52";
   longitude.value = "-2";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
   field.refreshPreview();
   assert.deepEqual(shown(), [previewCanvas, previewAttribution]);
 });
@@ -503,7 +504,7 @@ test("the preview carries the OSM attribution the tile policy requires", () => {
 });
 
 function rangeRingIn(canvas) {
-  return canvas.children.find((child) => child.className === "repeater-map-range") || null;
+  return Array.from(canvas.children).find((child) => child.className === "repeater-map-range") || null;
 }
 
 test("without a range the preview draws no circle", () => {
@@ -518,7 +519,7 @@ test("the range circle fits the square with map left visible around it", () => {
   const { field, preview, previewCanvas } = buildPositionField({
     initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
   });
-  preview.clientWidth = 320;
+  setLayout(preview, { clientWidth: 320 });
   field.setRangeKm(30);
   field.refreshPreview();
 
@@ -532,14 +533,14 @@ test("the range circle fits the square with map left visible around it", () => {
   assert.ok(diameter < 320);
 
   // The marker paints over the ring, so it has to come after it.
-  assert.equal(previewCanvas.children.at(-1).className, "repeater-map-marker");
+  assert.equal(Array.from(previewCanvas.children).at(-1).className, "repeater-map-marker");
 });
 
 test("a wider range zooms the preview out instead of overflowing the square", async () => {
   const { field, preview, previewCanvas } = buildPositionField({
     initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
   });
-  preview.clientWidth = 320;
+  setLayout(preview, { clientWidth: 320 });
   field.setRangeKm(30);
   field.refreshPreview();
   const tightZoom = Number(previewCanvas.children[0].src.split("/")[3]);
@@ -579,7 +580,7 @@ test("a blank range field previews the position with no circle at the fallback z
   const { field, preview, previewCanvas } = buildPositionField({
     initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
   });
-  preview.clientWidth = 320;
+  setLayout(preview, { clientWidth: 320 });
   // numericFieldValue reads a cleared "Range (km)" box as NaN, which is not a
   // radius to frame.
   field.setRangeKm(Number.NaN);
@@ -592,7 +593,7 @@ test("tiles are drawn at the scaled size a fractional zoom needs", () => {
   const { field, preview, previewCanvas } = buildPositionField({
     initial: { latitudeText: "52.000000", longitudeText: "-2.000000" },
   });
-  preview.clientWidth = 320;
+  setLayout(preview, { clientWidth: 320 });
   field.setRangeKm(30);
   field.refreshPreview();
 
@@ -653,9 +654,9 @@ test("the drag translates the tiles it has and redraws once, on release", async 
   const { previewCanvas } = buildDraggableField();
   const firstTile = previewCanvas.children[0];
 
-  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
   for (const x of [120, 140, 160]) {
-    await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: x, clientY: 100 });
+    await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: x, clientY: 100 });
   }
   // Still the same tiles, shifted: a redraw per pointermove would refetch the
   // whole grid dozens of times across one gesture.
@@ -663,9 +664,9 @@ test("the drag translates the tiles it has and redraws once, on release", async 
   assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => "translate(60px, 0px)"));
   // The marker and the range ring mark the position being chosen, so they stay
   // at the centre while the map slides under them.
-  assert.equal(previewCanvas.children.at(-1).style.transform, undefined);
+  assert.equal(previewCanvas.lastElementChild.style.transform, "");
 
-  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  await dispatch(previewCanvas, "pointerup", { pointerId: 1 });
   assert.notEqual(previewCanvas.children[0], firstTile, "release redraws around the new centre");
   assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => ""));
 });
@@ -675,18 +676,18 @@ test("a drag past the drawn map rebases and keeps tracking the pointer", async (
   const before = field.value();
   const firstTile = previewCanvas.children[0];
 
-  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
   // Past the overscan: the map has run out of drawn tiles, so it redraws
   // around where it now is mid-gesture rather than showing blank canvas.
-  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 260, clientY: 100 });
+  await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: 260, clientY: 100 });
   assert.notEqual(previewCanvas.children[0], firstTile, "rebased mid-drag");
   assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => ""));
   const rebased = field.value();
 
   // The same gesture carries on from the rebased origin.
-  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 300, clientY: 100 });
+  await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: 300, clientY: 100 });
   assert.ok(field.value().longitude < rebased.longitude, "kept moving west");
-  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  await dispatch(previewCanvas, "pointerup", { pointerId: 1 });
   assert.ok(field.value().longitude < before.longitude);
 });
 
@@ -701,9 +702,9 @@ test("onPan reports the drag once, without the coordinates it produced", async (
 test("a cancelled drag still settles the map on where it was left", async () => {
   const { field, previewCanvas, pans } = buildDraggableField();
   const before = field.value();
-  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
-  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 150, clientY: 100 });
-  await previewCanvas.dispatch("pointercancel", { pointerId: 1 });
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: 150, clientY: 100 });
+  await dispatch(previewCanvas, "pointercancel", { pointerId: 1 });
   assert.ok(field.value().longitude < before.longitude);
   assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => ""));
   assert.deepEqual(pans, [true]);
@@ -713,11 +714,11 @@ test("a cancelled drag still settles the map on where it was left", async () => 
 test("moves from another pointer, and drags with no position or no render, are ignored", async () => {
   const { field, previewCanvas } = buildDraggableField();
   const before = field.value();
-  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
   // A second finger landing on the map must not steer the first one's drag.
-  await previewCanvas.dispatch("pointermove", { pointerId: 2, clientX: 300, clientY: 300 });
+  await dispatch(previewCanvas, "pointermove", { pointerId: 2, clientX: 300, clientY: 300 });
   assert.deepEqual(field.value(), before);
-  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  await dispatch(previewCanvas, "pointerup", { pointerId: 1 });
 
   // Nothing drawn, nothing to drag: an empty preview has no zoom to compute in.
   const empty = buildPositionField();
@@ -729,8 +730,8 @@ test("moves from another pointer, and drags with no position or no render, are i
 test("the drag ignores secondary buttons", async () => {
   const { field, previewCanvas } = buildDraggableField();
   const before = field.value();
-  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 2, clientX: 100, clientY: 100 });
-  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 200, clientY: 100 });
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 1, button: 2, clientX: 100, clientY: 100 });
+  await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: 200, clientY: 100 });
   assert.deepEqual(field.value(), before);
 });
 
@@ -750,16 +751,16 @@ test("a redraw queued just before a drag is settled by it, not fired under it", 
   // A keystroke inside the debounce window, then a drag started before its
   // redraw has fired.
   longitude.value = "-2.5";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
   const queued = previewCanvas.children[0];
 
-  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
   // Settled at pointerdown: the tiles now show where the drag is starting
   // from, rather than the position two keystrokes ago.
   const atStart = previewCanvas.children[0];
   assert.notEqual(atStart, queued, "the pending redraw ran at pointerdown");
 
-  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 150, clientY: 100 });
+  await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: 150, clientY: 100 });
   // Past the debounce, still dragging: nothing may recentre the grid under the
   // pointer, or the next move applies the whole accumulated delta to a map
   // that has already moved.
@@ -767,7 +768,7 @@ test("a redraw queued just before a drag is settled by it, not fired under it", 
   assert.equal(previewCanvas.children[0], atStart, "no redraw fired mid-drag");
   assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => "translate(50px, 0px)"));
 
-  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  await dispatch(previewCanvas, "pointerup", { pointerId: 1 });
   assert.notEqual(previewCanvas.children[0], atStart, "release redraws once");
 });
 
@@ -775,7 +776,7 @@ test("a queued redraw is not lost to a press that turns out not to be a drag", a
   const { field, previewCanvas, longitude } = buildDraggableField();
   const stale = previewCanvas.children[0];
   longitude.value = "-2.5";
-  await longitude.dispatch("input");
+  await dispatch(longitude, "input");
 
   // Press and release without moving. endDrag has nothing to redraw for, so
   // if the pointerdown had merely cancelled the queued redraw the map would
@@ -847,7 +848,7 @@ function buildCityField({ results = [MANCHESTER, MANCHESTER_NH], fail = null } =
 
 async function typeCity(input, text) {
   input.value = text;
-  await input.dispatch("input");
+  await dispatch(input, "input");
   await afterCityLookup();
 }
 
@@ -898,8 +899,7 @@ test("Enter commits the highlighted suggestion and never submits the form", asyn
   const { field, input, list, selections } = buildCityField();
   await typeCity(input, "manch");
 
-  let defaultPrevented = false;
-  await input.dispatch("keydown", { key: "Enter", preventDefault() { defaultPrevented = true; } });
+  const { defaultPrevented } = await dispatch(input, "keydown", { key: "Enter" });
 
   assert.equal(defaultPrevented, true, "the modal's form must not submit on this Enter");
   assert.deepEqual(selections, [MANCHESTER]);
@@ -912,22 +912,22 @@ test("the arrow keys move the highlight and wrap around the list", async () => {
   const { input, list, selections } = buildCityField();
   await typeCity(input, "manch");
 
-  await input.dispatch("keydown", { key: "ArrowDown", preventDefault() {} });
+  await dispatch(input, "keydown", { key: "ArrowDown" });
   assert.equal(list.children[1].classList.contains("is-active"), true);
   // Past the end and back to the top, so a long list is never a dead end.
-  await input.dispatch("keydown", { key: "ArrowDown", preventDefault() {} });
+  await dispatch(input, "keydown", { key: "ArrowDown" });
   assert.equal(list.children[0].classList.contains("is-active"), true);
-  await input.dispatch("keydown", { key: "ArrowUp", preventDefault() {} });
+  await dispatch(input, "keydown", { key: "ArrowUp" });
   assert.equal(list.children[1].classList.contains("is-active"), true);
 
-  await input.dispatch("keydown", { key: "Enter", preventDefault() {} });
+  await dispatch(input, "keydown", { key: "Enter" });
   assert.deepEqual(selections, [MANCHESTER_NH]);
 });
 
 test("moving focus away commits the top suggestion", async () => {
   const { input, list, selections } = buildCityField();
   await typeCity(input, "manch");
-  await input.dispatch("blur");
+  await dispatch(input, "blur");
 
   assert.deepEqual(selections, [MANCHESTER]);
   assert.equal(input.value, "Manchester, England, United Kingdom");
@@ -938,10 +938,7 @@ test("pointing at a suggestion and pressing commits that one, not the top one", 
   const { input, list, selections } = buildCityField();
   await typeCity(input, "manch");
 
-  let defaultPrevented = false;
-  await list.children[1].dispatch("pointerdown", {
-    preventDefault() { defaultPrevented = true; },
-  });
+  const { defaultPrevented } = await dispatch(list.children[1], "pointerdown");
 
   // Suppressing the default is what keeps focus in the box, so the blur that
   // would otherwise fire first cannot commit the wrong entry.
@@ -953,14 +950,14 @@ test("Escape closes the list without committing and without reaching the modal",
   const { field, input, list, selections } = buildCityField();
   await typeCity(input, "manch");
 
-  let propagationStopped = false;
-  await input.dispatch("keydown", {
-    key: "Escape",
-    preventDefault() {},
-    stopPropagation() { propagationStopped = true; },
+  // The modal's own Escape handler sits on an ancestor; stand in for it.
+  let reachedAncestor = false;
+  input.parentNode.addEventListener("keydown", () => {
+    reachedAncestor = true;
   });
+  await dispatch(input, "keydown", { key: "Escape" });
 
-  assert.equal(propagationStopped, true, "Escape here must not close the whole modal");
+  assert.equal(reachedAncestor, false, "Escape here must not close the whole modal");
   assert.equal(list.hidden, true);
   assert.equal(field.value(), null);
   assert.deepEqual(selections, []);
@@ -1024,7 +1021,7 @@ test("a query already answered is replayed without waiting or asking again", asy
   // Backspacing lands on a query the field already has an answer for, so it
   // renders from memory with no request and nothing to await.
   input.value = "man";
-  await input.dispatch("input");
+  await dispatch(input, "input");
   assert.equal(list.hidden, false, "the cached list is on screen synchronously");
   assert.equal(list.children.length, 2);
   assert.equal(calls.length, 2, "a cache hit asks the endpoint nothing");
@@ -1061,7 +1058,7 @@ test("a failed lookup is not cached, so the next keystroke retries", async () =>
 // --- Repeaters plotted on the preview ----------------------------------------
 
 function pinsIn(canvas) {
-  return canvas.children.filter((child) => String(child.className).startsWith("repeater-map-pin"));
+  return Array.from(canvas.children).filter((child) => String(child.className).startsWith("repeater-map-pin"));
 }
 
 // buildDraggableField centres on 52.0, -2.0 at a 30 km radius, so these are
@@ -1135,7 +1132,7 @@ test("clearing the location takes the squares and the caption with it", async ()
   const { field, previewCanvas, previewCount, geoRow } = buildDraggableField();
   field.setMarkers([NEAR, ALSO_NEAR]);
 
-  await geoRow.children[2].dispatch("click");
+  await dispatch(geoRow.children[2], "click");
   await afterPreviewDebounce();
 
   assert.equal(pinsIn(previewCanvas).length, 0);
@@ -1179,7 +1176,7 @@ test("a list answering an older prefix is not committed by moving on", async () 
   const [input, list] = wrapper.children;
 
   input.value = "lond";
-  await input.dispatch("input");
+  await dispatch(input, "input");
   pending[0].resolve([MANCHESTER]);
   await afterCityLookup();
   assert.equal(list.hidden, false);
@@ -1187,8 +1184,8 @@ test("a list answering an older prefix is not committed by moving on", async () 
   // Typing on leaves the old list up so the box never blinks empty. Committing
   // it now would set London's coordinates for a box reading "londonderry".
   input.value = "londonderry";
-  await input.dispatch("input");
-  await input.dispatch("blur");
+  await dispatch(input, "input");
+  await dispatch(input, "blur");
 
   assert.deepEqual(selections, []);
   assert.equal(field.value(), null);
@@ -1205,8 +1202,8 @@ test("leaving the field abandons a lookup that has not answered yet", async () =
   const [input, list] = wrapper.children;
 
   input.value = "manch";
-  await input.dispatch("input");
-  await input.dispatch("blur");
+  await dispatch(input, "input");
+  await dispatch(input, "blur");
   pending[0].resolve([MANCHESTER, MANCHESTER_NH]);
   await afterCityLookup();
 
@@ -1219,18 +1216,14 @@ test("a touch press on a suggestion scrolls; the tap that follows commits", asyn
   const { input, list, selections } = buildCityField();
   await typeCity(input, "manch");
 
-  let defaultPrevented = false;
-  await list.children[1].dispatch("pointerdown", {
-    pointerType: "touch",
-    preventDefault() { defaultPrevented = true; },
-  });
+  const { defaultPrevented } = await dispatch(list.children[1], "pointerdown", { pointerType: "touch" });
   // Suppressing a touch press also cancels the browser's scrolling, and the
   // list shows about seven of twenty rows — so a finger could never reach the
   // eighth.
   assert.equal(defaultPrevented, false);
   assert.deepEqual(selections, [], "a press alone commits nothing on touch");
 
-  await list.children[1].dispatch("click");
+  await dispatch(list.children[1], "click");
   assert.deepEqual(selections, [MANCHESTER_NH]);
 });
 
@@ -1238,8 +1231,8 @@ test("the blur a touch press causes does not commit the highlighted entry", asyn
   const { input, selections, list } = buildCityField();
   await typeCity(input, "manch");
 
-  await list.dispatch("pointerdown", { pointerType: "touch", preventDefault() {} });
-  await input.dispatch("blur");
+  await dispatch(list, "pointerdown", { pointerType: "touch" });
+  await dispatch(input, "blur");
 
   // The gesture decides for itself: a tap commits what it hit, a scroll commits
   // nothing. Either way the top entry must not be committed behind it.
@@ -1250,12 +1243,7 @@ test("Enter mid-composition belongs to the IME, not the suggestion list", async 
   const { input, selections } = buildCityField();
   await typeCity(input, "manch");
 
-  let defaultPrevented = false;
-  await input.dispatch("keydown", {
-    key: "Enter",
-    isComposing: true,
-    preventDefault() { defaultPrevented = true; },
-  });
+  const { defaultPrevented } = await dispatch(input, "keydown", { key: "Enter", isComposing: true });
 
   assert.equal(defaultPrevented, false, "the IME needs this Enter to confirm its characters");
   assert.deepEqual(selections, []);
@@ -1287,8 +1275,8 @@ test("repeater squares travel with the map under a drag", async () => {
   const { field, previewCanvas } = buildDraggableField();
   field.setMarkers([NEAR, ALSO_NEAR]);
 
-  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
-  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 140, clientY: 120 });
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: 140, clientY: 120 });
 
   // They mark places on the ground. Left behind, every one slides off its town
   // for the length of the gesture and jumps back on release.
@@ -1297,7 +1285,7 @@ test("repeater squares travel with the map under a drag", async () => {
     "translate(calc(-50% + 40px), calc(-50% + 20px))",
     "translate(calc(-50% + 40px), calc(-50% + 20px))",
   ]);
-  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  await dispatch(previewCanvas, "pointerup", { pointerId: 1 });
 });
 
 test("a repeater across the antimeridian is drawn beside the map, not a world away", () => {
@@ -1355,30 +1343,30 @@ test("an answer arriving mid-drag waits for the gesture to end", async () => {
   const { field, previewCanvas } = buildDraggableField();
   const before = previewCanvas.children[0];
 
-  await previewCanvas.dispatch("pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
-  await previewCanvas.dispatch("pointermove", { pointerId: 1, clientX: 140, clientY: 100 });
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: 140, clientY: 100 });
   // The preview query fires 600 ms after the form settles, and holding the
   // pointer still is exactly how that happens. Recentring now would leave the
   // drag measuring from an origin the map no longer has.
   field.setMarkers([NEAR, ALSO_NEAR]);
   assert.equal(previewCanvas.children[0], before, "the tiles were not recentred under the pointer");
 
-  await previewCanvas.dispatch("pointerup", { pointerId: 1 });
+  await dispatch(previewCanvas, "pointerup", { pointerId: 1 });
   assert.notEqual(previewCanvas.children[0], before, "release draws them");
   assert.equal(pinsIn(previewCanvas).length, 2, "and the markers that arrived are there");
 });
 
 test("a touch scroll that commits nothing still closes the list", async () => {
   const { input, list, selections } = buildCityField();
-  await input.dispatch("focus");
+  await dispatch(input, "focus");
   await typeCity(input, "manch");
 
   // Press, blur (ignored because the gesture might be a tap), then lift with no
   // click: the gesture was a scroll. No second blur will ever come, so nothing
   // else would close the list.
-  await list.dispatch("pointerdown", { pointerType: "touch", preventDefault() {} });
-  await input.dispatch("blur");
-  await list.dispatch("pointerup", { pointerType: "touch" });
+  await dispatch(list, "pointerdown", { pointerType: "touch" });
+  await dispatch(input, "blur");
+  await dispatch(list, "pointerup", { pointerType: "touch" });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.equal(list.hidden, true);
@@ -1408,20 +1396,16 @@ test("a new lookup clears the previous one's verdict", async () => {
   // answer for what is being typed now.
   results = null;
   input.value = "manch";
-  await input.dispatch("input");
+  await dispatch(input, "input");
   assert.equal(note.hidden, true);
   assert.equal(note.textContent, "");
   pending[0]([MANCHESTER]);
 });
 
-// A real browser runs an option's own pointerdown handler first, then bubbles
-// the same event to the list. The fake DOM has no bubbling, so a test that
-// wants that sequence dispatches at both, which is what each listener would
-// have been handed.
+// A press on an option runs the option's own pointerdown handler first, then
+// bubbles the same event to the list.
 async function pressOption(list, index, init = {}) {
-  const event = { pointerType: "mouse", preventDefault() {}, ...init };
-  await list.children[index].dispatch("pointerdown", event);
-  await list.dispatch("pointerdown", { ...event, target: list.children[index] });
+  await dispatch(list.children[index], "pointerdown", { pointerType: "mouse", ...init });
 }
 
 test("a mouse press on the list never suppresses a later blur commit", async () => {
@@ -1433,8 +1417,8 @@ test("a mouse press on the list never suppresses a later blur commit", async () 
   // because an option's handler has already hidden the list by the time the
   // event bubbles here — the release and click then land on the page, and the
   // listeners that would clear it are on an element nothing is pointing at.
-  await list.dispatch("pointerdown", { pointerType: "mouse", preventDefault() {} });
-  await input.dispatch("blur");
+  await dispatch(list, "pointerdown", { pointerType: "mouse" });
+  await dispatch(input, "blur");
 
   assert.deepEqual(selections, [MANCHESTER], "the blur still commits");
   assert.equal(list.hidden, true);
@@ -1451,13 +1435,13 @@ test("picking one city by mouse does not strand the next one", async () => {
   const [input, list] = wrapper.children;
 
   // The reported sequence: click London, type Manchester, press Tab.
-  await input.dispatch("focus");
+  await dispatch(input, "focus");
   await typeCity(input, "lond");
   await pressOption(list, 0);
   assert.deepEqual(selections, [LONDON]);
 
   await typeCity(input, "manch");
-  await input.dispatch("blur");
+  await dispatch(input, "blur");
 
   assert.deepEqual(selections, [LONDON, MANCHESTER], "Tab commits the new city");
   assert.equal(field.value(), MANCHESTER);
