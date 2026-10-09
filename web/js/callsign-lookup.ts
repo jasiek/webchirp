@@ -25,7 +25,7 @@ const CALLSIGN_PATTERN = /^(?:[A-Z]{1,2}[0-9]{1,2}[A-Z]{1,4}|[0-9][A-Z]{1,2}[0-9
 // A row's channel name as a callsign, or "" when it is not one. Upper-cased
 // because the endpoint is case-sensitive: /lookup/gb3km is a 404 where
 // /lookup/GB3KM is not.
-export function callsignFromName(name) {
+export function callsignFromName(name: unknown): string {
   const text = String(name ?? "").trim().toUpperCase();
   return CALLSIGN_PATTERN.test(text) ? text : "";
 }
@@ -36,7 +36,17 @@ export function callsignFromName(name) {
 // keeps both frequencies so pickLookupEntry can tell them apart. Entries
 // without a position are dropped here rather than filtered later, because for
 // this feature an entry with no coordinates is not an answer at all.
-export function parseLookupXml(xmlText) {
+/** One positioned repeater the per-callsign endpoint knows. */
+export interface LookupEntry {
+  qra: string;
+  qth: string;
+  qrgRx: number;
+  qrgTx: number;
+  latitude: number;
+  longitude: number;
+}
+
+export function parseLookupXml(xmlText: string): LookupEntry[] {
   const xmlDoc = parseXmlDocument(xmlText);
   return Array.from(xmlDoc.querySelectorAll("repeaters > repeater"))
     .map((repeaterEl) => {
@@ -52,7 +62,7 @@ export function parseLookupXml(xmlText) {
         ...location,
       };
     })
-    .filter(Boolean);
+    .filter((entry) => entry !== null);
 }
 
 // Which of several same-callsign entries this row means, decided by frequency.
@@ -68,7 +78,7 @@ export function parseLookupXml(xmlText) {
 //
 // Falls back to the first entry when the row carries no usable frequency, so a
 // blank or mid-edit cell still gets the directory's primary answer.
-export function pickLookupEntry(entries, frequencyMhz) {
+export function pickLookupEntry(entries: readonly LookupEntry[] | null | undefined, frequencyMhz: unknown): LookupEntry | null {
   const list = Array.isArray(entries) ? entries : [];
   const target = Number(frequencyMhz);
   if (list.length === 0) {
@@ -119,9 +129,9 @@ export function createCallsignLookup(
   // evicted so a transient network failure is retried on the next hover, while
   // an empty result (the 404 case) is kept -- "this callsign has no position"
   // is an answer, not a failure.
-  const LOOKUP_CACHE = new Map();
+  const LOOKUP_CACHE = new Map<string, Promise<LookupEntry[]>>();
 
-  async function request(callsign) {
+  async function request(callsign: string): Promise<LookupEntry[]> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
     try {
@@ -143,7 +153,7 @@ export function createCallsignLookup(
     }
   }
 
-  function lookup(callsign) {
+  function lookup(callsign: string): Promise<LookupEntry[]> {
     const key = callsignFromName(callsign);
     if (!key || !lookupUrl) {
       return Promise.resolve([]);

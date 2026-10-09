@@ -14,6 +14,17 @@ import { setHighestPower } from "./row-power.ts";
 import type { RepeaterRowsResult, RowBuilderHooks, SkippedRepeater } from "./row-power.ts";
 import type { ChannelRow } from "./ui/channel-values.ts";
 
+/** A Maidenhead locator's box in degrees, its centre, and how many characters made it. */
+export interface MaidenheadBox {
+  precision: number;
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+  latitude: number;
+  longitude: number;
+}
+
 // No CORS proxy is involved: the API sends Access-Control-Allow-Origin: * on
 // every response, unlike przemienniki.net and repeaterbook.com. The request
 // must stay a *simple* one though (plain GET, no custom headers) — OPTIONS
@@ -91,15 +102,15 @@ export const RSGB_MODES = [
 // querying a subset.
 const DEFAULT_MAX_SQUARES = 24;
 
-function clamp(value, min, max) {
+function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function toRadians(degrees) {
+function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
 
-export function haversineKm(lat1, lon1, lat2, lon2) {
+export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const dLat = toRadians(lat2 - lat1);
   const dLon = toRadians(lon2 - lon1);
   const a = (Math.sin(dLat / 2) ** 2)
@@ -109,7 +120,7 @@ export function haversineKm(lat1, lon1, lat2, lon2) {
 
 // Encode a position as a Maidenhead locator. Only used for display — the query
 // itself goes through squaresForRadius(), which works in square indexes.
-export function encodeMaidenhead(latitude, longitude, precision = 6) {
+export function encodeMaidenhead(latitude: number, longitude: number, precision = 6): string {
   const lat = clamp(Number(latitude), -90, 90) + 90;
   const lon = ((Number(longitude) + 180) % 360 + 360) % 360;
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
@@ -134,7 +145,7 @@ export function encodeMaidenhead(latitude, longitude, precision = 6) {
 // precision — 4, 6 and 8 characters all occur, plus one 5-character oddity —
 // so callers need the box to know how much slack a distance carries.
 // Returns null for anything that has no valid 4-character prefix.
-export function decodeMaidenheadBox(locator) {
+export function decodeMaidenheadBox(locator: string | null | undefined): MaidenheadBox | null {
   const text = String(locator || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (text.length < 4) {
     return null;
@@ -191,7 +202,7 @@ export function decodeMaidenheadBox(locator) {
 // ranking on it puts every station inside the searched square at 0 km, and a
 // record pinned only to a 1 x 2 degree square would then outrank one measured
 // at 13 km. filterRsgbRecords() judges records by their box centre instead.
-export function distanceToBoxKm(latitude, longitude, box) {
+export function distanceToBoxKm(latitude: number, longitude: number, box: MaidenheadBox): number {
   const nearestLat = clamp(latitude, box.south, box.north);
   const nearestLon = clamp(longitude, box.west, box.east);
   return haversineKm(latitude, longitude, nearestLat, nearestLon);
@@ -248,14 +259,15 @@ export function squaresForRadius(
   };
 }
 
-export function rsgbLocatorUrl(locator, baseUrl = RSGB_API_BASE) {
+export function rsgbLocatorUrl(locator: string, baseUrl: string = RSGB_API_BASE): string {
   const base = String(baseUrl || RSGB_API_BASE).trim().replace(/\/+$/, "");
   return `${base}/locator/${encodeURIComponent(String(locator || "").toUpperCase())}`;
 }
 
 // A lookup that matched nothing is HTTP 200 with {"data":null}, so the payload
 // is what decides, not the status. A non-200 is still a real transport failure.
-export function parseRsgbPayload(payload) {
+// payload is the API's JSON, whatever shape it arrived in.
+export function parseRsgbPayload(payload: { data?: unknown } | null | undefined): RsgbRecord[] {
   const data = payload?.data;
   if (data === null || data === undefined) {
     return [];
@@ -335,8 +347,8 @@ export async function fetchRsgbRecords({
 // group that repeats a callsign, band and frequency; a callsign alone is not
 // unique, since one holder legitimately runs several ports (GB7BSK is packet on
 // 4 m, 2 m and 70 cm).
-export function dedupeRsgbRecords(records) {
-  const seen = new Map();
+export function dedupeRsgbRecords(records: readonly RsgbRecord[] | null | undefined): RsgbRecord[] {
+  const seen = new Map<string, RsgbRecord>();
   for (const record of records || []) {
     const id = Number(record?.id);
     const key = Number.isFinite(id)
@@ -351,8 +363,8 @@ export function dedupeRsgbRecords(records) {
 
 // Mode flags carry an access code for some modes ("M:1" is DMR colour code 1),
 // so comparisons are on the part before the colon.
-function modeFlagsOf(record) {
-  return (Array.isArray(record?.modeCodes) ? record.modeCodes : [])
+function modeFlagsOf(record: RsgbRecord | null | undefined): string[] {
+  return (Array.isArray(record?.modeCodes) ? record.modeCodes as unknown[] : [])
     .map((code) => String(code || "").split(":")[0].trim().toUpperCase())
     .filter((code) => code.length > 0);
 }
@@ -365,7 +377,7 @@ function modeFlagsOf(record) {
 // The `rx > 0` half is what makes this more than a `tx !== rx` test: all 36
 // beacons are transmit-only and report rx as 0, so comparing the pair alone
 // would call every one of them a duplex repeater with a ~145 MHz offset.
-export function isRepeaterRecord(record) {
+export function isRepeaterRecord(record: RsgbRecord | null | undefined): boolean {
   const tx = Number(record?.tx);
   const rx = Number(record?.rx);
   return Number.isFinite(tx) && Number.isFinite(rx) && tx > 0 && rx > 0 && tx !== rx;
@@ -429,7 +441,8 @@ export function filterRsgbRecords(records: RsgbRecord[] | null | undefined, {
     // consistent with the filter: judging by the nearest corner instead admits
     // stations whose centres sit outside the radius, so a 30 km search returns
     // rows reading 33.6 km — which looks like a bug, and effectively is one.
-    const distanceKm = haversineKm(latitude, longitude, box.latitude, box.longitude);
+    // Number(): an absent centre measures NaN, as the arithmetic always did.
+    const distanceKm = haversineKm(Number(latitude), Number(longitude), box.latitude, box.longitude);
     if (Number.isFinite(radius) && radius > 0 && distanceKm > radius) {
       continue;
     }
@@ -448,7 +461,7 @@ export function filterRsgbRecords(records: RsgbRecord[] | null | undefined, {
   return entries.sort((a, b) => a.distanceKm - b.distanceKm);
 }
 
-function formatFrequencyMhz(hertz) {
+function formatFrequencyMhz(hertz: unknown): string {
   const numeric = Number(hertz);
   if (!Number.isFinite(numeric)) {
     return "";
@@ -460,7 +473,7 @@ function formatFrequencyMhz(hertz) {
 // than RSGB_MODES on purpose: those flags are not offered as filters, but the
 // records still carry them, and an unfiltered query has to reason about a
 // repeater whose only mode is one of them.
-const MODE_FLAG_CHOICES = {
+const MODE_FLAG_CHOICES: Readonly<Record<string, string[]>> = {
   D: ["DV", "DSTAR", "D-STAR"],
   F: ["DN", "C4FM", "VW"],
   M: ["DMR", "MOTOTRBO"],
@@ -491,7 +504,7 @@ function findRsgbMode(
   const analogue = narrow
     ? ["NFM", "FMN", "Narrow", "N-FM", "FM"]
     : ["FM", "Wide", "WFM"];
-  const resolve = (flag) => (
+  const resolve = (flag: string) => (
     flag === "A"
       ? findEnumOption("Mode", analogue, true)
       : findEnumOption("Mode", MODE_FLAG_CHOICES[flag] || [], true)
@@ -544,7 +557,7 @@ function findRsgbMode(
 // `modes` is the query's own mode selection, so a D-STAR search gets the DV
 // side of a mixed A/D repeater rather than its analogue one.
 export function buildRsgbRows(
-  entries,
+  entries: ReadonlyArray<RsgbEntry | RsgbRecord>,
   { createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks,
   { modes = [] }: { modes?: Iterable<string> } = {},
 ): RepeaterRowsResult {

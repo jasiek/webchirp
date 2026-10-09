@@ -23,6 +23,8 @@ import {
 } from "./query-fields.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { QueryField } from "./query-fields.ts";
+import type { City, FieldOption } from "./query-fields.ts";
+import type { FieldConfig, PreviewSummary, QueryValues, RepeaterSource } from "./repeater-sources.ts";
 
 // The key every source gives its "repeaters within N km" filter. The position
 // field's map preview draws that radius, so the shell has to know which field
@@ -40,7 +42,7 @@ const PREVIEW_QUERY_DEBOUNCE_MS = 600;
 // blocks, so tooltips and the modal submit button explain the same state.
 const OFFLINE_BLOCKED_REASON = "Reconnect to query repeater directories.";
 
-const FIELD_FACTORIES = {
+const FIELD_FACTORIES: Readonly<Record<string, (config: never) => QueryField>> = {
   select: createSelectField,
   fixed: createFixedField,
   checkboxGroup: createCheckboxGroupField,
@@ -56,7 +58,7 @@ const FIELD_FACTORIES = {
 // failure says what actually happened everywhere it is surfaced. The wording
 // doubles as the analytics classification: a denial reports as
 // permission_denied and a stall as timeout instead of the catch-all "other".
-const GEOLOCATION_FAILURE_TEXT = Object.freeze({
+const GEOLOCATION_FAILURE_TEXT: Readonly<Record<number, string>> = Object.freeze({
   1: "Location permission was denied by the browser.",
   2: "The browser could not determine a position.",
   3: "Getting the location timed out.",
@@ -79,7 +81,7 @@ export function createRepeaterQuery(ctx: UiContext) {
   // removing the action.
   const endpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
   const sources = createRepeaterSources(ctx, { endpoints });
-  const sourceButtonTitles = new Map();
+  const sourceButtonTitles = new Map<string, string>();
   for (const source of sources) {
     sourceButtonTitles.set(source.key, dom[source.toolbarButton].title);
     if (!source.available) {
@@ -102,7 +104,7 @@ export function createRepeaterQuery(ctx: UiContext) {
   // the coordinates are: it is where the user is, which does not change with
   // the directory they ask. Held here rather than in the field because the
   // field is rebuilt on every open.
-  const cityState = { city: null };
+  const cityState: { city: City | null } = { city: null };
   // True only while onCitySelected is writing the position it just chose.
   // setPosition() reports through the position field's onChange, which is also
   // how a geolocate, a typed digit or a map drag arrives -- and those must wipe
@@ -140,12 +142,13 @@ export function createRepeaterQuery(ctx: UiContext) {
   // Apply the browser connectivity signal to every entry point. The explicit
   // guards in the click and submit handlers remain necessary because disabled
   // controls can still be invoked programmatically.
-  function setOnline(nextOnline) {
+  function setOnline(nextOnline: boolean): void {
     online = Boolean(nextOnline);
     for (const source of sources) {
       const button = dom[source.toolbarButton];
       button.disabled = !online;
-      button.title = online ? sourceButtonTitles.get(source.key) : OFFLINE_BLOCKED_REASON;
+      // Every source's own title was recorded when the modal was built.
+      button.title = online ? sourceButtonTitles.get(source.key) ?? "" : OFFLINE_BLOCKED_REASON;
     }
     applySubmitState();
     if (isModalOpen()) {
@@ -157,7 +160,7 @@ export function createRepeaterQuery(ctx: UiContext) {
   // submit (Enter in a text field submits the form too, not just the button),
   // while the disabled button and its label are how the user sees why the
   // second click did nothing.
-  function setQueryBusy(busy) {
+  function setQueryBusy(busy: boolean): void {
     queryInFlight = busy;
     applySubmitState();
   }
@@ -185,7 +188,7 @@ export function createRepeaterQuery(ctx: UiContext) {
   // form's position. setPosition() is the same entry point geolocation and the
   // map drag use, so the locator is recomputed and the preview recentres for
   // free -- the city field never touches those three inputs itself.
-  function onCitySelected(city) {
+  function onCitySelected(city: City): void {
     cityState.city = city;
     if (!positionField) {
       return;
@@ -207,7 +210,7 @@ export function createRepeaterQuery(ctx: UiContext) {
     log.logDebug(`${activeSource.actionLabel.toUpperCase()} CITY ${city.name} ${city.latitude.toFixed(6)},${city.longitude.toFixed(6)}`);
   }
 
-  function buildFields(source, loadedOptions) {
+  function buildFields(source: RepeaterSource, loadedOptions: Record<string, FieldOption[]> | null): void {
     dom.repeaterQueryGridEl.innerHTML = "";
     fieldInstances = [];
     positionField = null;
@@ -218,9 +221,9 @@ export function createRepeaterQuery(ctx: UiContext) {
     // range control and not above it.
     const tailNodes: Node[] = [];
     for (const config of source.fields) {
-      let instance;
+      let instance: QueryField;
       if (config.kind === "city") {
-        instance = createCityField({
+        const field = createCityField({
           ...config,
           // The field contacts nothing itself. No position hint is sent: the
           // ranking it buys is not worth putting the form's location in a query
@@ -234,9 +237,10 @@ export function createRepeaterQuery(ctx: UiContext) {
           // coordinates the position field restores beside it.
           initial: cityState,
         });
-        cityField = instance;
+        cityField = field;
+        instance = field;
       } else if (config.kind === "position") {
-        instance = createPositionField({
+        const field = createPositionField({
           locatorPlaceholder: config.locatorPlaceholder,
           initial: positionState,
           onChange: (latitudeText, longitudeText) => {
@@ -256,16 +260,18 @@ export function createRepeaterQuery(ctx: UiContext) {
           // drag landed — the coordinates stay in the form.
           onPan: () => trackEvent("repeater_map_panned", { repeater_source: activeSource.key }),
         });
-        positionField = instance;
+        positionField = field;
+        instance = field;
         // The button is recreated with the field on every open, so the
         // listener attaches here rather than in bindEvents.
-        instance.geolocateButton.addEventListener("click", onGeolocateClick);
+        field.geolocateButton.addEventListener("click", onGeolocateClick);
       } else {
         const factory = FIELD_FACTORIES[config.kind];
         const options = config.optionsKey
           ? loadedOptions?.[config.optionsKey] || []
           : config.options;
-        instance = factory({ ...config, options });
+        // Each factory reads the options of its own kind off the config.
+        instance = (factory as (config: FieldConfig) => QueryField)({ ...config, options });
       }
       for (const node of instance.nodes) {
         dom.repeaterQueryGridEl.appendChild(node);
@@ -292,7 +298,7 @@ export function createRepeaterQuery(ctx: UiContext) {
     }
     // The range input is rebuilt with the position field on every open, so
     // the field this listener feeds is the one built beside it.
-    const applyRange = () => field.setRangeKm(range.value());
+    const applyRange = () => field.setRangeKm(Number(range.value()));
     range.input.addEventListener("input", applyRange);
     applyRange();
   }
@@ -308,10 +314,10 @@ export function createRepeaterQuery(ctx: UiContext) {
   let previewGeneration = 0;
   let previewTimer = 0;
 
-  async function runPreview(source, values) {
+  async function runPreview(source: RepeaterSource, values: QueryValues): Promise<void> {
     const generation = previewGeneration;
     positionField?.setMarkers(null, "loading");
-    let result: { points: Array<object>; truncated?: boolean; unmapped?: number; unsupported?: number } | null = null;
+    let result: PreviewSummary | null = null;
     try {
       result = await source.previewQuery(values);
     } catch (error) {
@@ -395,15 +401,17 @@ export function createRepeaterQuery(ctx: UiContext) {
     }, PREVIEW_QUERY_DEBOUNCE_MS);
   }
 
-  function collectValues(): Record<string, any> {
-    const values: Record<string, any> = {};
+  function collectValues(): QueryValues {
+    const values: Record<string, unknown> = {};
     for (const instance of fieldInstances) {
       values[instance.key] = instance.value();
     }
-    return values;
+    // Keyed by the fields the source declared, which every source declares
+    // as QueryValues describes.
+    return values as QueryValues;
   }
 
-  function setModalOpen(open) {
+  function setModalOpen(open: boolean): void {
     dom.repeaterQueryModalEl.classList.toggle("hidden", !open);
     if (open) {
       const focusable = fieldInstances.find((instance) => instance.focusTarget);
@@ -431,13 +439,13 @@ export function createRepeaterQuery(ctx: UiContext) {
     return !dom.repeaterQueryModalEl.classList.contains("hidden");
   }
 
-  async function openModal(sourceKey) {
+  async function openModal(sourceKey: string): Promise<void> {
     const source = sources.find((entry) => entry.key === sourceKey);
     if (!online || !source || !source.available) {
       return;
     }
     const generation = ++openGeneration;
-    let loadedOptions: Record<string, Array<object>> | null = null;
+    let loadedOptions: Record<string, FieldOption[]> | null = null;
     if (source.loadOptions) {
       log.setStatus(`Loading ${source.label} query options...`);
       loadedOptions = await source.loadOptions();

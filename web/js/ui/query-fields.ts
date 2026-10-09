@@ -2,6 +2,7 @@ import { decodeMaidenheadBox, encodeMaidenhead } from "../rsgb.ts";
 import { latLonToWorldPixel, worldPixelToLatLon, zoomForRadius } from "../staticmap.ts";
 import { rememberBounded } from "./format.ts";
 import { createMapAttribution, renderStaticMap } from "./static-map-view.ts";
+import type { MapMarker } from "./static-map-view.ts";
 
 // Field components for the shared repeater-query modal. Each factory builds
 // its own DOM from a config and returns the same shape:
@@ -22,6 +23,12 @@ import { createMapAttribution, renderStaticMap } from "./static-map-view.ts";
 // between one modal open and the next, so nothing outside this file may look
 // them up.
 const FIELD_ID_PREFIX = "repeater-query-field-";
+
+/**
+ * What the position field's preview is showing: nothing yet, a search in
+ * flight, an answer, or one of the reasons there is none.
+ */
+export type PreviewState = "off" | "loading" | "ok" | "failed" | "offline" | "blocked" | "needed";
 
 /** One choice in a select or checkbox field. */
 export interface FieldOption {
@@ -46,7 +53,7 @@ export interface QueryField {
   tailNodes?: Node[];
 }
 
-function fieldId(key, suffix = "") {
+function fieldId(key: string, suffix = ""): string {
   return `${FIELD_ID_PREFIX}${key}${suffix ? `-${suffix}` : ""}`;
 }
 
@@ -57,7 +64,7 @@ function fieldId(key, suffix = "") {
 // a <label> when it has a control to point at and a <span> when it does not.
 const FIELD_LABEL_CLASS = "modal-field-label";
 
-function labelledBy(text, controlId) {
+function labelledBy(text: string, controlId: string): HTMLLabelElement {
   const label = document.createElement("label");
   label.className = FIELD_LABEL_CLASS;
   label.htmlFor = controlId;
@@ -65,7 +72,7 @@ function labelledBy(text, controlId) {
   return label;
 }
 
-function plainLabel(text) {
+function plainLabel(text: string): HTMLSpanElement {
   const span = document.createElement("span");
   span.className = FIELD_LABEL_CLASS;
   span.textContent = text;
@@ -74,7 +81,7 @@ function plainLabel(text) {
 
 // Number("") is 0, not NaN, so a blank field would otherwise read as zero —
 // for a coordinate, a position on the equator.
-function numericFieldValue(el) {
+function numericFieldValue(el: HTMLInputElement): number {
   const text = String(el.value ?? "").trim();
   if (text === "") {
     return Number.NaN;
@@ -181,7 +188,9 @@ export function createCheckboxGroupField(
 }
 
 // Single boolean flag ("Only working" / "Only operational").
-export function createCheckboxField({ key, label, checked = false }) {
+export function createCheckboxField(
+  { key, label, checked = false }: { key: string; label: string; checked?: boolean },
+): QueryField {
   const checkbox = document.createElement("input");
   checkbox.id = fieldId(key);
   checkbox.name = key;
@@ -196,7 +205,16 @@ export function createCheckboxField({ key, label, checked = false }) {
 }
 
 // Numeric input; blank reads as NaN, never 0.
-export function createNumberField({ key, label, min, max, step, value }) {
+export function createNumberField(
+  { key, label, min, max, step, value }: {
+    key: string;
+    label: string;
+    min?: number;
+    max?: number;
+    step?: number;
+    value?: number;
+  },
+): QueryField {
   const input = document.createElement("input");
   input.id = fieldId(key);
   input.name = key;
@@ -474,10 +492,18 @@ export function createPositionField(
   //   needReason: under "needed", the shell's own sentence for what the form
   //               is still missing -- the sources word it differently, so the
   //               caption is told rather than guessing.
-  let plot = { state: "off", points: [], truncated: false, unmapped: 0, unsupported: 0, drawn: null, needReason: "" };
+  let plot: {
+    state: PreviewState;
+    points: MapMarker[];
+    truncated: boolean;
+    unmapped: number;
+    unsupported: number;
+    drawn: { inRange: number; outOfRange: number } | null;
+    needReason: string;
+  } = { state: "off", points: [], truncated: false, unmapped: 0, unsupported: 0, drawn: null, needReason: "" };
 
   // States whose caption does not depend on what is drawn.
-  const FIXED_CAPTIONS = {
+  const FIXED_CAPTIONS: Partial<Record<PreviewState, string>> = {
     failed: "Could not preview this search.",
     offline: "Reconnect to preview repeaters.",
     blocked: "Select a radio to preview repeaters.",
@@ -492,11 +518,12 @@ export function createPositionField(
   // Caption the map with what is drawn on it, not with what was handed in: a
   // station the radius reaches but the viewport does not is real, and promising
   // it under a map that has no square for it is worse than not counting it.
-  function updateCount(drawn) {
+  function updateCount(drawn: { inRange: number; outOfRange: number } | null): void {
     plot.drawn = drawn;
     previewCount.classList.toggle("is-loading", plot.state === "loading");
-    if (FIXED_CAPTIONS[plot.state]) {
-      previewCount.textContent = plot.needReason || FIXED_CAPTIONS[plot.state];
+    const fixedCaption = FIXED_CAPTIONS[plot.state];
+    if (fixedCaption) {
+      previewCount.textContent = plot.needReason || fixedCaption;
       previewCount.hidden = false;
       return;
     }
@@ -578,7 +605,7 @@ export function createPositionField(
   // Write a coordinate pair into the three fields. Shared by setPosition and
   // by the drag, so a dragged position reaches the locator and the shell's
   // onChange exactly as a geolocated one does.
-  function applyPosition(lat, lon) {
+  function applyPosition(lat: number, lon: number): void {
     latitude.value = Number(lat).toFixed(6);
     longitude.value = Number(lon).toFixed(6);
     refreshLocatorFromCoords();
@@ -595,7 +622,7 @@ export function createPositionField(
   // ring do not (they mark the position being chosen, always the viewport
   // centre). A pin is centred on its coordinate by a transform of its own, so
   // the pan composes with that rather than replacing it.
-  function panTiles(dx, dy) {
+  function panTiles(dx: number, dy: number): void {
     const tileShift = dx || dy ? `translate(${dx}px, ${dy}px)` : "";
     const pinShift = dx || dy
       ? `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`
@@ -687,7 +714,7 @@ export function createPositionField(
     panTiles(dx, dy);
   });
 
-  function endDrag(event) {
+  function endDrag(event: PointerEvent): void {
     if (!drag || (event && event.pointerId !== drag.pointerId)) {
       return;
     }
@@ -779,7 +806,7 @@ export function createPositionField(
     refreshPreview,
     // The range filter is a sibling field, so the shell hands its value over
     // whenever it changes; the preview reframes around the new radius.
-    setRangeKm: (km) => {
+    setRangeKm: (km: number) => {
       const next = Number(km);
       if (next === rangeKm || (Number.isNaN(next) && Number.isNaN(rangeKm))) {
         return;
@@ -793,7 +820,16 @@ export function createPositionField(
     // — the squares already drawn stay put while the next answer is fetched,
     // because blanking the map on every edit would make it flicker through
     // every keystroke of a radius.
-    setMarkers: (points, state = "ok", { truncated = false, unmapped = 0, unsupported = 0, reason = "" } = {}) => {
+    setMarkers: (
+      points: MapMarker[] | null,
+      state: PreviewState = "ok",
+      { truncated = false, unmapped = 0, unsupported = 0, reason = "" }: {
+        truncated?: boolean;
+        unmapped?: number;
+        unsupported?: number;
+        reason?: string;
+      } = {},
+    ) => {
       plot.state = state;
       plot.needReason = state === "needed" ? String(reason || "") : "";
       if (state === "ok") {
@@ -833,13 +869,13 @@ const CITY_CACHE_LIMIT = 60;
 
 // The administrative context that distinguishes a place from its namesakes.
 // Region is often blank for small places and is skipped, not left as a comma.
-function cityContext(city) {
+function cityContext(city: City): string {
   return [city.region, city.country].filter((part) => part && part.length > 0).join(", ");
 }
 
 // Full text of a committed choice: "London" alone would not say which of the
 // four the coordinates below it came from.
-function cityLabel(city) {
+function cityLabel(city: City): string {
   const context = cityContext(city);
   return context ? `${city.name}, ${context}` : city.name;
 }
@@ -973,7 +1009,7 @@ export function createCityField({
   // Answered queries, keyed by the typed text. See CITY_CACHE_LIMIT.
   const cache = new Map();
 
-  function setNote(text) {
+  function setNote(text: string): void {
     note.textContent = text || "";
     note.hidden = !text;
   }
@@ -986,7 +1022,7 @@ export function createCityField({
   }
 
   // Move the highlight, in the list and in what a screen reader reads.
-  function setActiveIndex(index) {
+  function setActiveIndex(index: number): void {
     activeIndex = index;
     for (let i = 0; i < list.children.length; i += 1) {
       const option = list.children[i];
@@ -1000,7 +1036,7 @@ export function createCityField({
     }
   }
 
-  function renderSuggestions(entries) {
+  function renderSuggestions(entries: City[]): void {
     suggestions = entries;
     list.innerHTML = "";
     if (entries.length === 0) {
@@ -1091,13 +1127,13 @@ export function createCityField({
 
   // Show a result set, from wherever it came. One place, so a cached answer and
   // a fresh one put the list into exactly the same state.
-  function showResults(results, query) {
+  function showResults(results: City[], query: string): void {
     suggestionsQuery = query;
     renderSuggestions(results);
     setNote(results.length === 0 ? "No matching places." : "");
   }
 
-  async function runSearch(text) {
+  async function runSearch(text: string): Promise<void> {
     const generation = searchGeneration;
     let results: City[] = [];
     try {

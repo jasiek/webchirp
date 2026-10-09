@@ -2,6 +2,7 @@ import { withRequestTimeout } from "./request-timeout.ts";
 import { highestPowerOption, setHighestPower } from "./row-power.ts";
 import type { RepeaterRowsResult, RowBuilderHooks, SkippedRepeater } from "./row-power.ts";
 import type { ChannelRow } from "./ui/channel-values.ts";
+import type { City } from "./ui/query-fields.ts";
 import { firstText, parseQrgMhz, parseXmlDocument } from "./rxf.ts";
 
 const PMR446_FREQUENCIES_MHZ = Array.from(
@@ -193,7 +194,7 @@ export async function fetchCitySuggestions(
 
 // Number(null) and Number("") are 0, not NaN, so a missing coordinate would
 // otherwise pass the finiteness check and land the city on the equator.
-function coordinate(value) {
+function coordinate(value: unknown): number {
   if (value === null || value === undefined || value === "") {
     return Number.NaN;
   }
@@ -203,8 +204,9 @@ function coordinate(value) {
 // Split out from the fetch so the parsing is testable without a network stub.
 // The endpoint reports its own failures as { error: "..." } with HTTP 200, so
 // that case is checked before the result list.
-export function parseCitySuggestions(jsonText) {
-  let payload;
+export function parseCitySuggestions(jsonText: string): City[] {
+  // JSON from the gazetteer: every field is checked before it is used.
+  let payload: { error?: unknown; results?: unknown } | null;
   try {
     payload = JSON.parse(String(jsonText || ""));
   } catch (error) {
@@ -240,7 +242,7 @@ export function parseCitySuggestions(jsonText) {
 // it - a channel that transmits a default 88.5 the directory never mentioned.
 // (Carrying the DTCS codes properly needs the DtcsCode/RxDtcsCode/DtcsPolarity
 // columns and is deliberately out of scope here.)
-function parseCtcssFreq(text) {
+function parseCtcssFreq(text: unknown): string {
   const value = String(text ?? "").trim();
   if (!/^\d+(\.\d+)?$/.test(value)) {
     return "";
@@ -275,8 +277,13 @@ function parseCtcssFreq(text) {
 // leave the repeater out rather than insert a channel that can never work it.
 // A receive-only tone that cannot be written costs the squelch and nothing
 // else, so it returns true with the tone columns left alone.
-function applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, receiveTone) {
-  const toneMode = (mode) => findEnumOption("Tone", [mode], true);
+function applyTonePair(
+  row: ChannelRow,
+  { setRowValue, findEnumOption }: Pick<RowBuilderHooks, "setRowValue" | "findEnumOption">,
+  transmitTone: string,
+  receiveTone: string,
+): boolean {
+  const toneMode = (mode: string) => findEnumOption("Tone", [mode], true);
   const writeTransmitOnly = () => {
     const mode = toneMode("Tone");
     if (!mode || !setRowValue(row, "rToneFreq", transmitTone)) {
@@ -335,7 +342,7 @@ function applyTonePair(row, { setRowValue, findEnumOption }, transmitTone, recei
   return true;
 }
 
-function formatFrequencyMhz(value) {
+function formatFrequencyMhz(value: unknown): string {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
     return "";
@@ -401,8 +408,13 @@ export function parsePrzemiennikiXml(xmlText: string): {
   return { perspective, countries, repeaters };
 }
 
-export function parsePrzemiennikiMetaJson(jsonText) {
-  let payload;
+export function parsePrzemiennikiMetaJson(jsonText: string): {
+  countries: string[];
+  bands: string[];
+  modes: Array<{ value: string; label: string; title: string }>;
+} {
+  // JSON from the /meta endpoint: each list is checked before it is read.
+  let payload: { filters?: { country?: unknown; band?: unknown; mode?: unknown } } | null;
   try {
     payload = JSON.parse(String(jsonText || "{}"));
   } catch (error) {
@@ -437,7 +449,7 @@ export function parsePrzemiennikiMetaJson(jsonText) {
   };
 }
 
-export function buildPmr446Rows({ createBlankRow, setRowValue, findEnumOption }) {
+export function buildPmr446Rows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
   return PMR446_FREQUENCIES_MHZ.map((frequency, idx) => {
     const row = createBlankRow();
     setRowValue(row, "Name", `PMR ${idx + 1}`);
@@ -458,7 +470,7 @@ export function buildPmr446Rows({ createBlankRow, setRowValue, findEnumOption })
   });
 }
 
-export function buildFrsRows({ createBlankRow, setRowValue, findEnumOption }) {
+export function buildFrsRows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
   return FRS_FREQUENCIES_MHZ.map((frequency, idx) => {
     const row = createBlankRow();
     setRowValue(row, "Name", `FRS ${idx + 1}`);
@@ -479,21 +491,21 @@ export function buildFrsRows({ createBlankRow, setRowValue, findEnumOption }) {
   });
 }
 
-function findBandwidthMode(findEnumOption, bandwidthKhz) {
+function findBandwidthMode(findEnumOption: RowBuilderHooks["findEnumOption"], bandwidthKhz: number): string {
   if (bandwidthKhz <= 12.5) {
     return findEnumOption("Mode", ["NFM", "FMN", "Narrow", "N-FM", "FM"], true);
   }
   return findEnumOption("Mode", ["FM", "Wide", "WFM"], true);
 }
 
-function findPowerTier(findEnumOption, powerTier) {
+function findPowerTier(findEnumOption: RowBuilderHooks["findEnumOption"], powerTier: string): string {
   if (powerTier === "high") {
     return highestPowerOption(findEnumOption);
   }
   return findEnumOption("Power", ["Low", "0.5W", "500mW", "2W", "2.0W", "5W", "5.0W"], true);
 }
 
-export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }) {
+export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
   return GMRS_CHANNELS.map((channel) => {
     const row = createBlankRow();
     setRowValue(row, "Name", channel.name);
@@ -522,7 +534,7 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }) {
 // repeater) — so the caller can say which and why. Same contract as
 // buildRsgbRows in web/js/rsgb.ts.
 export function buildPrzemiennikiRows(
-  repeaters,
+  repeaters: readonly PrzemiennikiRepeater[],
   { createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks,
   { perspective = "repeater" }: { perspective?: string } = {},
 ): RepeaterRowsResult {
@@ -582,7 +594,7 @@ export function buildPrzemiennikiRows(
       continue;
     }
 
-    const modeMappings = {
+    const modeMappings: Readonly<Record<string, string[]>> = {
       FM: ["FM", "NFM", "FMN"],
       DSTAR: ["DV", "DSTAR", "D-STAR"],
       ATV: ["ATV"],

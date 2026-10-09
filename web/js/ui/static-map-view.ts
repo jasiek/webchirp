@@ -152,7 +152,7 @@ export function renderStaticMap(
 // attribution strip under each map carries a link to the copyright page
 // rather than plain text. Idempotent: a strip that already has the link is
 // left alone, so a surface built once and shown many times fills it once.
-export function fillMapAttribution(el) {
+export function fillMapAttribution(el: HTMLElement | null | undefined): void {
   if (!el || el.children?.length) {
     return;
   }

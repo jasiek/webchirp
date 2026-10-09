@@ -14,7 +14,7 @@ export const OSM_COPYRIGHT_URL = "https://www.openstreetmap.org/copyright";
 
 // Web Mercator: coordinate -> absolute pixel position on the world map at a
 // zoom level (the map is 2^zoom * 256 pixels square).
-export function latLonToWorldPixel(latitude, longitude, zoom) {
+export function latLonToWorldPixel(latitude: number, longitude: number, zoom: number): { x: number; y: number } {
   const worldSize = Math.pow(2, zoom) * OSM_TILE_SIZE;
   const lat = Math.max(-85.05112878, Math.min(85.05112878, Number(latitude)));
   const lon = Number(longitude);
@@ -30,7 +30,7 @@ export function latLonToWorldPixel(latitude, longitude, zoom) {
 // coordinate, so a map can be an input and not only a picture. Latitude is
 // clamped to Mercator's limit and longitude wrapped, so a drag off the edge of
 // the world still yields a coordinate the form can hold.
-export function worldPixelToLatLon(x, y, zoom) {
+export function worldPixelToLatLon(x: number, y: number, zoom: number): { latitude: number; longitude: number } {
   const worldSize = Math.pow(2, zoom) * OSM_TILE_SIZE;
   const wrappedX = ((Number(x) % worldSize) + worldSize) % worldSize;
   const longitude = (wrappedX / worldSize) * 360 - 180;
@@ -92,7 +92,7 @@ export function planStaticMap(
 // equator, which the cosine takes back out.
 export const OSM_EQUATOR_METRES_PER_PIXEL = 40075016.686 / OSM_TILE_SIZE;
 
-export function metresPerPixel(latitude, zoom) {
+export function metresPerPixel(latitude: number, zoom: number): number {
   const lat = Math.max(-85.05112878, Math.min(85.05112878, Number(latitude)));
   const worldMetresPerPixel = OSM_EQUATOR_METRES_PER_PIXEL * Math.cos((lat * Math.PI) / 180);
   return worldMetresPerPixel / Math.pow(2, zoom);
@@ -105,7 +105,12 @@ export function metresPerPixel(latitude, zoom) {
 // show up to four times the area asked for. Returns null for a radius or a
 // viewport that is not a positive number, so callers can fall back to a fixed
 // zoom rather than test the inputs themselves.
-export function zoomForRadius(latitude, radiusMetres, size, { fill = 0.9, minZoom = 1, maxZoom = 17 } = {}) {
+export function zoomForRadius(
+  latitude: number,
+  radiusMetres: number,
+  size: number,
+  { fill = 0.9, minZoom = 1, maxZoom = 17 }: { fill?: number; minZoom?: number; maxZoom?: number } = {},
+): number | null {
   const radius = Number(radiusMetres);
   const viewport = Number(size) * fill;
   if (!Number.isFinite(radius) || radius <= 0 || !Number.isFinite(viewport) || viewport <= 0) {
@@ -119,7 +124,7 @@ export function zoomForRadius(latitude, radiusMetres, size, { fill = 0.9, minZoo
   return Math.max(minZoom, Math.min(maxZoom, zoom));
 }
 
-export function osmTileUrl(tile, template = OSM_TILE_URL_TEMPLATE) {
+export function osmTileUrl(tile: Pick<PlannedTile, "x" | "y" | "z">, template: string = OSM_TILE_URL_TEMPLATE): string {
   return template
     .replace("{z}", String(tile.z))
     .replace("{x}", String(tile.x))
@@ -127,6 +132,6 @@ export function osmTileUrl(tile, template = OSM_TILE_URL_TEMPLATE) {
 }
 
 // Decimal-degree display form, e.g. "52.73774, 14.70523" (5 decimals ~ 1 m).
-export function formatCoordinates(latitude, longitude) {
+export function formatCoordinates(latitude: number, longitude: number): string {
   return `${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)}`;
 }

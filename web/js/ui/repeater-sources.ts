@@ -26,6 +26,8 @@ import type { RsgbRecord } from "../rsgb.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { FieldOption } from "./query-fields.ts";
 import type { MapMarker } from "./static-map-view.ts";
+import type { SkippedRepeater } from "../row-power.ts";
+import type { UiDom } from "./dom.ts";
 
 // Per-source configuration for the shared repeater-query modal
 // (web/js/ui/repeater-query.ts). Each source declares which fields its form contains,
@@ -51,6 +53,85 @@ import type { MapMarker } from "./static-map-view.ts";
 // caller.
 export class RepeaterInputError extends Error {}
 
+/** A position the form has validated. */
+export interface QueryPosition {
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * The query form's values by field key, as web/js/ui/repeater-query.ts reads
+ * them off the fields a source declares. Every source declares bands, modes,
+ * the only-working flag, a radius and a position; the remote directories add
+ * a country.
+ */
+export interface QueryValues {
+  country?: string;
+  bands: string[];
+  modes: string[];
+  only: boolean;
+  /** NaN when the field is blank. */
+  radius: number;
+  position: QueryPosition | null;
+  [key: string]: unknown;
+}
+
+/** What the preview map draws for a search, and the caption's counts. */
+export interface PreviewSummary {
+  points: MapMarker[];
+  truncated?: boolean;
+  /** Repeaters the query would insert that the map cannot place. */
+  unmapped?: number;
+  /** In-range repeaters the selected radio cannot express. */
+  unsupported?: number;
+}
+
+/** A filter requirement: any one of keys holding a value satisfies it. */
+export interface QueryRequirement {
+  keys: string[];
+  message: string;
+}
+
+/**
+ * One field of a source's form. city and position have fields of their own;
+ * every other kind is built by the factory web/js/ui/repeater-query.ts names
+ * for it from these same options, with options looked up by optionsKey when
+ * the source loads them.
+ */
+export type FieldConfig =
+  | { kind: "city"; key: string; label: string; placeholder: string }
+  | { kind: "position"; locatorPlaceholder: string }
+  | {
+    kind: "select" | "fixed" | "checkboxGroup" | "checkbox" | "number";
+    key: string;
+    label: string;
+    optionsKey?: string;
+    options?: FieldOption[];
+    [option: string]: unknown;
+  };
+
+/** The names of the dom members that are buttons, such as a source's toolbar button. */
+type ToolbarButtonName = { [K in keyof UiDom]: UiDom[K] extends HTMLButtonElement ? K : never }[keyof UiDom];
+
+/** A repeater directory the query modal can search. */
+export interface RepeaterSource {
+  key: string;
+  /** The toolbar button that opens this source's modal. */
+  toolbarButton: ToolbarButtonName;
+  /** False when the deployment configures no endpoint for it. */
+  available: boolean;
+  requires: QueryRequirement[];
+  title: string;
+  label: string;
+  actionLabel: string;
+  insertLabel: string;
+  fields: FieldConfig[];
+  /** The filter dictionaries, by optionsKey; null when every option is static. */
+  loadOptions: (() => Promise<Record<string, FieldOption[]>>) | null;
+  previewQuery: (values: QueryValues) => Promise<PreviewSummary | null>;
+  runQuery: (values: QueryValues) => Promise<void>;
+}
+
 // What a source says when the form has not narrowed the search enough to run
 // it. Exported because two places say each sentence: the shared modal
 // (web/js/ui/repeater-query.ts) puts it on the disabled Query API button
@@ -70,7 +151,10 @@ export const COUNTRY_OR_POSITION_REQUIRED_MESSAGE =
 // Any value counts, since every key this is used with is either a non-empty
 // string or a parsed position object; a filter whose unset state were the
 // number 0 would need its own test.
-export function unmetRequirement(source, values) {
+export function unmetRequirement(
+  source: Pick<RepeaterSource, "requires"> | null | undefined,
+  values: Partial<QueryValues> | null | undefined,
+): string {
   for (const requirement of source?.requires || []) {
     if (!requirement.keys.some((key) => Boolean(values?.[key]))) {
       return requirement.message;
@@ -79,8 +163,20 @@ export function unmetRequirement(source, values) {
   return "";
 }
 
-export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints: RepeaterEndpoints }) {
+export function createRepeaterSources(
+  ctx: UiContext,
+  { endpoints }: { endpoints: RepeaterEndpoints },
+): RepeaterSource[] {
   const { log } = ctx;
+
+/** A remote directory's preview response, kept for reuse at smaller radii. */
+  interface RemotePreviewBody {
+    perspective: string;
+    plotted: Array<{ point: MapMarker; repeater: PrzemiennikiRepeater }>;
+    unmapped: PrzemiennikiRepeater[];
+    /** The radius the request covered. */
+    rangeKm: number;
+  }
 
   function countryOptions(codes: Iterable<string> | null | undefined): FieldOption[] {
     return Array.from(codes || [])
@@ -105,7 +201,7 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
   // Both row builders return `skipped` entries tagged with why the selected
   // radio could not express the repeater. One phrasing for both, so the status
   // line reads the same whichever directory was queried.
-  function skippedDetail(skipped) {
+  function skippedDetail(skipped: readonly SkippedRepeater[]): string {
     const counts = {
       frequency: skipped.filter((entry) => entry.reason === "frequency").length,
       mode: skipped.filter((entry) => entry.reason === "mode").length,
@@ -121,7 +217,7 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
   // The debug line spells out what the status line only counts. Tone carries
   // the frequency the directory published, because "141.3 not in the radio's
   // tone table" is the whole diagnosis.
-  function skippedReason(entry) {
+  function skippedReason(entry: SkippedRepeater): string | undefined {
     if (entry.reason === "frequency") {
       return "frequency not supported by the selected radio";
     }
@@ -157,7 +253,7 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
   // The request identity minus its range, so one fetched body can answer every
   // radius it covers. Everything else -- country, bands, modes, the only-working
   // flag, the position -- still separates one cached answer from another.
-  function keyWithoutRange(url) {
+  function keyWithoutRange(url: URL): string {
     const key = new URL(url.toString());
     key.searchParams.delete("range");
     return key.toString();
@@ -167,14 +263,14 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
   // without the range, so one body serves every radius it covers: only which
   // side of the ring each station falls on is recomputed, and that is
   // arithmetic rather than a request.
-  function markInRange(points, position, radiusKm) {
+  function markInRange(points: readonly MapMarker[], position: QueryPosition, radiusKm: number): MapMarker[] {
     return points.map((point) => ({
       ...point,
       inRange: haversineKm(position.latitude, position.longitude, point.latitude, point.longitude) <= radiusKm,
     }));
   }
 
-  function normalized(values) {
+  function normalized(values: Iterable<unknown> | null | undefined): string[] {
     return Array.from(values || [])
       .map((value) => String(value || "").trim().toLowerCase())
       .filter((value) => value.length > 0);
@@ -211,19 +307,26 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
     insertLabel,
     toolbarButton,
     sourceEndpoints,
-  }) {
+  }: {
+    key: string;
+    label: string;
+    actionLabel: string;
+    insertLabel: string;
+    toolbarButton: ToolbarButtonName;
+    sourceEndpoints: { apiUrl: string; metaUrl: string } | null | undefined;
+  }): RepeaterSource {
     const apiUrl = sourceEndpoints?.apiUrl || "";
     const metaUrl = sourceEndpoints?.metaUrl || "";
 
     // The dictionary is fetched once and cached for the session; a failed
     // fetch clears the cache so the next open retries instead of staying
     // bricked behind a rejected promise.
-    let optionsPromise: Promise<Record<string, Array<object>>> | null = null;
+    let optionsPromise: Promise<Record<string, FieldOption[]>> | null = null;
 
     // The query URL for one set of form values, with the range taken as an
     // argument so the preview can ask for a wider area than the query will keep
     // (see previewRemote).
-    function buildQueryUrl(values, rangeKm) {
+    function buildQueryUrl(values: QueryValues, rangeKm: number): URL {
       const url = new URL(apiUrl);
       const country = String(values.country || "").trim().toLowerCase();
       if (country) {
@@ -257,7 +360,7 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
       return url;
     }
 
-    const previewCache = new Map();
+    const previewCache = new Map<string, RemotePreviewBody>();
 
     // Turn a fetched body into what the caption needs. The map's numbers must
     // agree with the button under it, and two things pull them apart: a
@@ -265,7 +368,7 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
     // the selected radio cannot express (plottable, not inserted). Both are
     // counted. Only in-range repeaters go through the row builder, which
     // allocates rows but inserts nothing.
-    function summarizeRemote(body, position, radiusKm) {
+    function summarizeRemote(body: RemotePreviewBody, position: QueryPosition, radiusKm: number): PreviewSummary {
       // Each plotted entry carries the repeater it came from, because the point
       // list is not index-aligned with the repeater list -- the unmapped ones
       // have no point at all.
@@ -292,7 +395,7 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
     // at the caller as a query failure would: a preview that cannot be drawn is
     // a map without squares on it, not a reason to stop the user filling in the
     // form. The shell reports the reason in the debug panel.
-    async function previewRemote(values) {
+    async function previewRemote(values: QueryValues): Promise<PreviewSummary | null> {
       const radiusKm = Number(values.radius);
       if (!values.position || !Number.isFinite(radiusKm) || radiusKm <= 0) {
         return null;
@@ -460,7 +563,7 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
   // Display names follow the other sources' dictionary casing ("2m", "fm",
   // "dstar"), so band and mode lists read the same in every modal; the values
   // behind them stay the API's own flags and band codes.
-  const RSGB_MODE_LABELS = { A: "fm", D: "dstar" };
+  const RSGB_MODE_LABELS: Readonly<Record<string, string>> = { A: "fm", D: "dstar" };
 
   // Modes the directory carries but the import does not offer, because a
   // channel row cannot express them usefully (see RSGB_MODES in web/js/rsgb.ts).
@@ -479,12 +582,12 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
   // two are disabled. Filter options are static — the API's documented flag
   // table and its observed band values, not a dictionary endpoint (the API has
   // none) — so the modal opens without a network round trip.
-  function rsgbSource() {
+  function rsgbSource(): RepeaterSource {
     const actionLabel = "RSGB ETCC";
     // Records keyed by locator square. RSGB costs one ~75 kB request per
     // square and a radius spans several, so only stepping into a new square
     // costs a request.
-    const squareCache = new Map();
+    const squareCache = new Map<string, RsgbRecord[]>();
 
     // Fetch only the squares not already held, then answer from the union.
     //
@@ -506,8 +609,9 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
       const held = new Map<string, RsgbRecord[]>();
       const missing: string[] = [];
       for (const locator of squares) {
-        if (squareCache.has(locator)) {
-          held.set(locator, squareCache.get(locator));
+        const cached = squareCache.get(locator);
+        if (cached) {
+          held.set(locator, cached);
         } else {
           missing.push(locator);
         }
@@ -549,7 +653,7 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
     // RSGB filters client-side, so the preview is the real filter run over the
     // squares in reach -- no widened request needed. Everything the fan-out
     // covers is offered to the map, with the ones the radius excludes dimmed.
-    async function previewRsgb(values) {
+    async function previewRsgb(values: QueryValues): Promise<PreviewSummary | null> {
       const position = values.position;
       const radiusKm = Number(values.radius);
       if (!position || !Number.isFinite(radiusKm) || radiusKm <= 0) {
@@ -579,7 +683,7 @@ export function createRepeaterSources(ctx: UiContext, { endpoints }: { endpoints
           // presenting it as surveyed.
           approximate: entry.approximate,
         }))
-        .filter(Boolean);
+        .filter((point) => point !== null);
       // What the radio cannot express, over the in-range entries only -- the
       // ones beyond the ring are context for widening the search, not results
       // the query would insert. Every RSGB position comes from a locator, so

@@ -1,4 +1,5 @@
 import { callsignFromName, createCallsignLookup, pickLookupEntry } from "../callsign-lookup.ts";
+import type { LookupEntry } from "../callsign-lookup.ts";
 import { buildRepeaterEndpoints, resolveRepeaterApiBase } from "../datasources.ts";
 import { formatCoordinates } from "../staticmap.ts";
 import { trackEvent } from "./analytics.ts";
@@ -21,9 +22,19 @@ import type { UiContext } from "../types/ui-context.js";
 /**
  * @param options lookup: a stand-in for the callsign endpoint (the tests have no network).
  */
+/** A position to show. */
+type MapPoint = { latitude: number; longitude: number };
+
+/** A Location cell under the pointer: its button, callsign and frequency. */
+interface CellQuery {
+  button: HTMLElement;
+  callsign: string;
+  frequency: number;
+}
+
 export function createRepeaterMap(
   ctx: UiContext,
-  { lookup = null }: { lookup?: ((callsign: string) => Promise<unknown>) | null } = {},
+  { lookup = null }: { lookup?: ((callsign: string) => Promise<LookupEntry[]>) | null } = {},
 ) {
   const { dom, state } = ctx;
 
@@ -53,7 +64,7 @@ export function createRepeaterMap(
   let dwellTimer = 0;
   let dwellSurface = "";
 
-  function beginDwell(surface) {
+  function beginDwell(surface: string): void {
     if (dwellTimer) {
       clearTimeout(dwellTimer);
     }
@@ -64,7 +75,7 @@ export function createRepeaterMap(
     }, MAP_DWELL_MS);
   }
 
-  function cancelDwell(surface) {
+  function cancelDwell(surface: string): void {
     if (dwellTimer && dwellSurface === surface) {
       clearTimeout(dwellTimer);
       dwellTimer = 0;
@@ -73,7 +84,7 @@ export function createRepeaterMap(
 
   // This surface's fixed zoom, applied to both its sizes; the shared renderer
   // (web/js/ui/static-map-view.ts) owns everything below the tile plan.
-  function renderMap(canvasEl, geo, width, height) {
+  function renderMap(canvasEl: HTMLElement, geo: MapPoint, width: number, height: number): void {
     renderStaticMap(canvasEl, geo, { zoom: MAP_ZOOM, width, height });
   }
 
@@ -103,12 +114,12 @@ export function createRepeaterMap(
   // frequency that tells same-callsign entries apart. Null for anything that
   // is not a Location cell, or whose name is not a callsign -- those rows never
   // reach the network.
-  function queryForEventTarget(target) {
-    const button = target?.closest?.(".channel-location-button");
+  function queryForEventTarget(target: EventTarget | null): CellQuery | null {
+    const button = (target as Element | null)?.closest?.<HTMLElement>(".channel-location-button");
     if (!button) {
       return null;
     }
-    const rowIdx = Number(button.closest("tr")?.dataset?.rowIdx);
+    const rowIdx = Number(button.closest<HTMLElement>("tr")?.dataset?.rowIdx);
     if (!Number.isInteger(rowIdx)) {
       return null;
     }
@@ -125,7 +136,7 @@ export function createRepeaterMap(
   // surfaced: the map is an unasked-for convenience, so a directory that is
   // down or unreachable costs the map and nothing else -- no modal, no error
   // banner, no Sentry report for a network the user never invoked.
-  function resolveAndShow(query, show) {
+  function resolveAndShow(query: CellQuery, show: (entry: LookupEntry) => void): void {
     const token = hoverToken;
     lookupCallsign(query.callsign)
       .then((entries) => {
@@ -164,7 +175,7 @@ export function createRepeaterMap(
     }, TOOLTIP_HIDE_DELAY_MS);
   }
 
-  function showTooltip(geo, anchorEl) {
+  function showTooltip(geo: MapPoint, anchorEl: HTMLElement): void {
     cancelPendingHide();
     dom.repeaterMapTooltipCoordsEl.textContent = formatCoordinates(geo.latitude, geo.longitude);
     renderMap(dom.repeaterMapTooltipCanvasEl, geo, TOOLTIP_MAP_WIDTH, TOOLTIP_MAP_HEIGHT);
@@ -208,7 +219,7 @@ export function createRepeaterMap(
   // caret back where it started instead of at the top of the document.
   let modalTrigger: HTMLElement | null = null;
 
-  function openModal(geo, triggerEl) {
+  function openModal(geo: MapPoint, triggerEl: HTMLElement | null): void {
     modalTrigger = triggerEl || null;
     dom.repeaterMapModalCoordsEl.textContent = formatCoordinates(geo.latitude, geo.longitude);
     // Show first: the canvas has no layout width while the overlay is hidden.

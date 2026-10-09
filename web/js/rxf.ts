@@ -4,7 +4,7 @@
 // (web/js/callsign-lookup.ts). These are the primitives they share, kept here
 // so the two cannot drift apart on what a <qrg> or an absent element means.
 
-export function parseXmlDocument(xmlText) {
+export function parseXmlDocument(xmlText: string): XMLDocument {
   const doc = new DOMParser().parseFromString(String(xmlText || ""), "application/xml");
   const parserErrorNode = doc.querySelector("parsererror");
   if (parserErrorNode) {
@@ -13,7 +13,7 @@ export function parseXmlDocument(xmlText) {
   return doc;
 }
 
-export function firstText(parent, selector) {
+export function firstText(parent: ParentNode | null | undefined, selector: string): string {
   return String(parent?.querySelector(selector)?.textContent || "").trim();
 }
 
@@ -24,7 +24,7 @@ export function firstText(parent, selector) {
 // receive/transmit fallbacks in buildPrzemiennikiRows and turned a one-sided
 // entry into a bogus multi-MHz Duplex/Offset. A literal 0 in the feed is
 // rejected for the same reason -- no repeater works on 0 Hz.
-export function parseQrgMhz(text) {
+export function parseQrgMhz(text: string | null | undefined): number {
   const numeric = Number(text || NaN);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : NaN;
 }
@@ -34,7 +34,7 @@ export function parseQrgMhz(text) {
 // has no position, an out-of-range one says the feed is broken, and the
 // 0.000000/0.000000 placeholder is what several sources publish for "unknown"
 // (GB3IC is one) -- a map centred on the Gulf of Guinea is worse than no map.
-export function parseRxfLocation(repeaterEl) {
+export function parseRxfLocation(repeaterEl: ParentNode): { latitude: number; longitude: number } | null {
   const latitude = Number(firstText(repeaterEl, "location > latitude") || NaN);
   const longitude = Number(firstText(repeaterEl, "location > longitude") || NaN);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
