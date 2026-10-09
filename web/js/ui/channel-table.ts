@@ -12,6 +12,7 @@ import {
 } from "../clipboard.ts";
 import { rowExtras } from "../row-extra.ts";
 import { requireRuntimeApi } from "./state.ts";
+import { errorDetails } from "./format.ts";
 import { callsignFromName } from "../callsign-lookup.ts";
 import { radioEventParams, trackEvent } from "./analytics.ts";
 import type { UiContext } from "../types/ui-context.js";
@@ -69,10 +70,15 @@ export function createChannelTable(ctx: UiContext) {
   // cell held before it, which is the fallback a rejected edit keeps and what
   // the row is sent with so a resend applies every pending edit again.
   const pendingEdits = new WeakMap<ChannelRow, Map<string, { edit: RowEdit; base: unknown }>>();
+  // How many checks are in flight per row, so a row rewritten while one is
+  // can be checked again as it now stands (rowsRewritten).
+  const checksInFlight = new WeakMap<ChannelRow, number>();
   // How many runtime calls buildRows() may make before giving up on a builder
   // whose branches keep asking new questions. Each call answers every write a
   // run made, so a builder settles in one or two; this only stops a loop.
   const MAX_BUILD_ROUNDS = 6;
+  // What a cell whose check failed says on hover.
+  const UNCHECKED_NOTE = "Could not be checked against the radio's rules; see Debug Output.";
 
   // --- Grid rendering -----------------------------------------------------
   // This grid is the heaviest DOM in the app: every enum cell carries a full
@@ -195,8 +201,24 @@ export function createChannelTable(ctx: UiContext) {
     const td = cellElement(Number(rowIdx), String(column || "")) as HTMLElement | null;
     td?.classList.remove("is-invalid");
     if (td) {
-      td.title = "";
+      showCellNote(td, "");
     }
+  }
+
+  // Show what the runtime said about a cell where the user hovers. The editor
+  // fills its cell and may carry a title of its own -- the power legend, the
+  // read-only explanation, the Extra button's label -- which the browser shows
+  // in preference to the cell's, so the note goes on the editor, ahead of that
+  // title, as well as on the cell. An empty note gives the editor back its own
+  // title, which matters because editors are recycled across channels.
+  function showCellNote(td: HTMLElement, note: string): void {
+    td.title = note;
+    const editor = td.children[0] as HTMLElement | undefined;
+    if (!editor) {
+      return;
+    }
+    const own = editor.dataset.ownTitle ?? "";
+    editor.title = note && own ? `${note}\n\n${own}` : note || own;
   }
 
   // Drop the preflight highlight from the given columns of the given rows and
@@ -337,6 +359,7 @@ export function createChannelTable(ctx: UiContext) {
       claimed.add(location);
     }
     let next = lo;
+    const relocated: ChannelRow[] = [];
     for (const row of needsSlot) {
       while (claimed.has(next)) {
         next += 1;
@@ -344,9 +367,14 @@ export function createChannelTable(ctx: UiContext) {
       // A full codeplug leaves the surplus rows without a slot. Blanking is
       // what keeps that visible: the upload preflight flags an empty Location
       // rather than the runtime rejecting an out-of-bounds one mid-transfer.
-      row.Location = next > hi ? "" : String(next);
+      const location = next > hi ? "" : String(next);
+      if (row.Location !== location) {
+        relocated.push(row);
+      }
+      row.Location = location;
       claimed.add(next);
     }
+    rowsRewritten(relocated);
   }
 
   // The grid is a view of the radio's memories, so its order is the radio's
@@ -435,6 +463,28 @@ export function createChannelTable(ctx: UiContext) {
     return { row: confirmed, edits: [...edits, ...extra] };
   }
 
+  // Record that rows were changed outside the check path: a move or a slot
+  // assignment gave them another Location, a radio change cleared a Power, an
+  // extras editor rewrote their sidecar. The driver's findings depend on all
+  // of that, so an answer in flight for one of these rows describes a row
+  // that no longer exists and its version moves on. A row with edits still
+  // pending, or with a check in flight, is checked again as it now stands --
+  // otherwise it would stay pending, or lose findings the dropped answer
+  // carried.
+  /**
+   * @param rows The rows that were rewritten.
+   */
+  function rowsRewritten(rows: Iterable<ChannelRow>): void {
+    const recheck: ChannelRow[] = [];
+    for (const row of new Set(rows)) {
+      bumpRowVersion(row);
+      if ((pendingEdits.get(row)?.size ?? 0) > 0 || (checksInFlight.get(row) ?? 0) > 0) {
+        recheck.push(row);
+      }
+    }
+    void checkRows(recheck);
+  }
+
   // One normalize_and_validate_rows call for the session a handle names, or
   // for no radio.
   async function runRowCheck(handle: RadioSessionHandle | null, requests: RowEditRequest[]) {
@@ -483,13 +533,29 @@ export function createChannelTable(ctx: UiContext) {
     }
   }
 
+  // A check for these rows has answered, or failed.
+  function settleInFlight(rows: readonly ChannelRow[]): void {
+    for (const row of rows) {
+      checksInFlight.set(row, Math.max(0, (checksInFlight.get(row) ?? 1) - 1));
+    }
+  }
+
+  // Put a failed row check in Debug Output in full -- for a runtime failure
+  // errorDetails() is the Python traceback, not the one-line message -- and
+  // say so in the status line, which stays short.
+  function reportRowCheckFailure(error: unknown): void {
+    log.logError(`ROW CHECK ERROR\n${errorDetails(error)}`);
+    log.setStatus("Channel values could not be checked (see Debug Output).");
+  }
+
   // Send rows to the runtime and apply each answer that is still current.
   // One call for the whole batch. An answer for a session that is no longer
   // state.radioSession is dropped, and the rows still waiting on it are sent
   // again for the radio now selected, so a radio change never leaves a cell
-  // pending or normalized by the wrong driver. A failed call leaves the
-  // values as typed, unmarked; the runtime client has already put the
-  // traceback in Debug Output.
+  // pending or normalized by the wrong driver. A failed call is reported with
+  // its traceback and settles the cells it was for: each keeps the value as
+  // typed, is no longer pending, and says on hover that it was not checked,
+  // so the upload preflight is what will judge it.
   async function checkRows(rows: readonly ChannelRow[]): Promise<void> {
     if (rows.length === 0) {
       return;
@@ -497,20 +563,31 @@ export function createChannelTable(ctx: UiContext) {
     const handle = state.radioSession;
     const versions = rows.map(rowVersion);
     const stillWaiting = () => rows.filter((row, index) => rowVersion(row) === versions[index]);
+    for (const row of rows) {
+      checksInFlight.set(row, (checksInFlight.get(row) ?? 0) + 1);
+    }
     let response: Awaited<ReturnType<typeof runRowCheck>> | null = null;
     try {
       response = await runRowCheck(handle, rows.map((row) => editRequestFor(row)));
     } catch (error) {
+      settleInFlight(rows);
       if (state.radioSession !== handle) {
         return checkRows(stillWaiting());
       }
-      log.logDebug(`ROW CHECK failed: ${(error as Error | null)?.message || error}`);
+      reportRowCheckFailure(error);
       for (const row of stillWaiting()) {
+        const rowIdx = state.currentRows.indexOf(row);
+        for (const column of pendingEdits.get(row)?.keys() ?? []) {
+          if (rowIdx >= 0) {
+            cellNotes.set(invalidCellKey(rowIdx, column), UNCHECKED_NOTE);
+          }
+        }
         pendingEdits.delete(row);
       }
       renderRowWindow();
       return;
     }
+    settleInFlight(rows);
     if (state.radioSession !== handle) {
       return checkRows(stillWaiting());
     }
@@ -572,7 +649,7 @@ export function createChannelTable(ctx: UiContext) {
     try {
       response = await runRowCheck(handle, requests.map(({ row, edits }) => editRequestFor(row, edits)));
     } catch (error) {
-      log.logDebug(`ROW CHECK failed: ${(error as Error | null)?.message || error}`);
+      reportRowCheckFailure(error);
       return null;
     }
     const results = rows.map((_row, index) => response?.rows?.[index] ?? { cells: [], issues: [], warnings: [] });
@@ -600,7 +677,10 @@ export function createChannelTable(ctx: UiContext) {
   // with the answers, until a run asks for nothing new. A builder is a pure
   // function of its input and these hooks, so a rerun builds afresh; most
   // imports settle after one call, and a branch a rejection opened takes one
-  // more.
+  // more. Verdicts are only good for the radio they came from: an answer that
+  // arrives after the selection moved on is dropped with every verdict
+  // gathered so far, and the builder starts over against the radio now
+  // selected -- as a pending cell edit is sent again (checkRows).
   /**
    * @param build The builder, given the grid's row hooks.
    * @returns Whatever the last run of build returned.
@@ -611,7 +691,7 @@ export function createChannelTable(ctx: UiContext) {
     const verdicts = new Map<string, { value: string; accepted: boolean }>();
     const verdictKey = (column: string, value: string, previous: unknown) =>
       JSON.stringify([column, value, previous === undefined ? null : String(previous)]);
-    const handle = state.radioSession;
+    let handle = state.radioSession;
     for (let round = 0; ; round += 1) {
       // Per row the builder created this run: the blank row it started from
       // and every write it made, in order, so the runtime replays them with
@@ -653,7 +733,24 @@ export function createChannelTable(ctx: UiContext) {
       if (round >= MAX_BUILD_ROUNDS) {
         throw new Error(`Row builder did not settle after ${MAX_BUILD_ROUNDS} runtime checks`);
       }
-      const response = await runRowCheck(handle, asked.map(({ base, edits }) => ({ row: base, edits })));
+      let response: Awaited<ReturnType<typeof runRowCheck>>;
+      try {
+        response = await runRowCheck(handle, asked.map(({ base, edits }) => ({ row: base, edits })));
+      } catch (error) {
+        // A handle closed under the call fails in idOf(); that is the same
+        // radio change as a stale answer, not a failed check.
+        if (!ctx.session.isCurrent(handle)) {
+          verdicts.clear();
+          handle = state.radioSession;
+          continue;
+        }
+        throw error;
+      }
+      if (!ctx.session.isCurrent(handle)) {
+        verdicts.clear();
+        handle = state.radioSession;
+        continue;
+      }
       asked.forEach(({ base, edits }, index) => {
         const current: ChannelRow = { ...base };
         (response?.rows?.[index]?.cells ?? []).forEach((cell, editIndex) => {
@@ -737,15 +834,16 @@ export function createChannelTable(ctx: UiContext) {
       return 0;
     }
     const spoken = new Set(options.map(String));
-    let cleared = 0;
+    const cleared: ChannelRow[] = [];
     for (const row of state.currentRows) {
       const value = String(row.Power ?? "");
       if (value !== "" && !spoken.has(value)) {
         row.Power = "";
-        cleared += 1;
+        cleared.push(row);
       }
     }
-    return cleared;
+    rowsRewritten(cleared);
+    return cleared.length;
   }
 
   // A row counts as a real channel when it has a usable frequency or a name;
@@ -875,9 +973,14 @@ export function createChannelTable(ctx: UiContext) {
     const movedRows = selectedIndexes.map((idx) => state.currentRows[idx]);
     state.currentRows = order.map((idx) => state.currentRows[idx]);
     if (state.currentHeaders.includes("Location")) {
+      const relocated: ChannelRow[] = [];
       state.currentRows.forEach((row, idx) => {
+        if (row.Location !== locationsByPosition[idx]) {
+          relocated.push(row);
+        }
         row.Location = locationsByPosition[idx];
       });
+      rowsRewritten(relocated);
     }
     // Slots were reassigned along the already-ascending positions, so the
     // list is still in memory order and this sort is a no-op — it runs so the
@@ -1290,7 +1393,10 @@ export function createChannelTable(ctx: UiContext) {
     for (const column of renderedColumns) {
       const td = document.createElement("td");
       td.dataset.column = String(column);
-      td.appendChild(createCellEditor(column));
+      const editor = createCellEditor(column);
+      // The title the editor was built with, for showCellNote to put back.
+      editor.dataset.ownTitle = editor.title;
+      td.appendChild(editor);
       tr.appendChild(td);
     }
     return tr;
@@ -1314,7 +1420,7 @@ export function createChannelTable(ctx: UiContext) {
       // Typed but not yet answered by the runtime: the value shown is what was
       // typed, and may still change (web/styles.css dims it).
       td.classList.toggle("is-pending", Boolean(pending?.has(column)));
-      td.title = cellNotes.get(key) ?? "";
+      showCellNote(td, cellNotes.get(key) ?? "");
       // Each cell holds the one editor createRowElement() put there.
       bindCellEditor(td.children[0] as CellEditor, row, column);
     });
@@ -1818,6 +1924,7 @@ export function createChannelTable(ctx: UiContext) {
     buildRows,
     submitRowEdits,
     previewRowEdits,
+    rowsRewritten,
     channelShortcutsActive,
     moveSelectedChannelRows,
     refreshVisibleRows: renderRowWindow,

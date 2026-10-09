@@ -68,7 +68,7 @@ async function tableWithMetadata(columns, rows = [], runtimeApi = null) {
     // render() reports the selection outward; the bulk editor is what listens.
     actions: { channelSelectionChanged() {} },
     // No radio selected: the runtime is asked with an empty session id.
-    session: { idOf: async (handle) => handle?.id ?? "" },
+    session: { idOf: async (handle) => handle?.id ?? "", isCurrent: (handle) => state.radioSession === handle },
   });
 }
 

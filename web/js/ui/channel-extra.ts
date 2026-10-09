@@ -265,6 +265,9 @@ export function createChannelExtra(ctx: UiContext) {
       return;
     }
     setRowExtras(row, values);
+    // The driver judges a channel with its extras, so a check in flight for
+    // this row answers for one that no longer exists.
+    ctx.table.rowsRewritten([row]);
     setModalOpen(false);
     // No re-render: the grid shows the same button whatever a row carries, and
     // the Extra column is already up (nothing else could have opened this).

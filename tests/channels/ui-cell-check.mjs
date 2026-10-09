@@ -16,6 +16,7 @@ import test from "node:test";
 // controls, so what is tested is what the grid does with them.
 import {
   channelRows,
+  clickLocationButton,
   flushMicrotasks,
   importSampleCsv,
   installFakeDom,
@@ -23,7 +24,7 @@ import {
 } from "../support/fake-dom.mjs";
 import { fakeRowCheck, withRadioSessions } from "../support/fake-runtime-api.mjs";
 
-const HEADERS = ["Location", "Name", "Frequency"];
+const HEADERS = ["Location", "Name", "Frequency", "Power"];
 const SAMPLE_ROWS = [
   { Location: "0", Name: "ALPHA", Frequency: "146.520000" },
   { Location: "1", Name: "BRAVO", Frequency: "146.940000" },
@@ -32,6 +33,9 @@ const COLUMNS = {
   Location: { kind: "int", editable: false, min: 0, max: 127 },
   Name: { kind: "text", editable: true, maxLength: 7 },
   Frequency: { kind: "freq", editable: true, bands: [[144_000_000, 148_000_000]] },
+  // A select with a title of its own (the wattage legend), which a note on the
+  // cell must not hide behind.
+  Power: { kind: "enum", editable: true, options: ["High", "Low"], default: "", optionWatts: { High: "5.0W", Low: "1.0W" } },
 };
 const RADIOS = [
   { vendor: "Acme", model: "One", module: "one", className: "OneRadio", key: "one:OneRadio", isLiveRadio: false },
@@ -219,4 +223,117 @@ test("a paste is checked in one call, however many rows and cells it writes", as
   // The runtime's answer is what the grid shows.
   const names = channelRows(document).map((tr) => tr.children[1].children[0].value);
   assert.deepEqual(names, ["ALPHA", "BRAVO", "CHARL", "DELTA", "ECHO"]);
+});
+
+test("a finding is on the editor the user hovers, ahead of the editor's own title", async () => {
+  // Review of #224: a select, or the Extra button, fills its cell and carries
+  // a title of its own, so a note on the enclosing cell was never what the
+  // browser showed.
+  const { document } = await grid({
+    findings: (row) => (row.Power === "Low"
+      ? { issues: [{ column: "Power", message: "Power Low is not allowed on this memory" }], warnings: [] }
+      : { issues: [], warnings: [] }),
+  });
+  const select = () => cell(document, 0, "Power").children[0];
+  assert.match(select().title, /Driver power levels: High = 5\.0W, Low = 1\.0W/);
+
+  select().value = "Low";
+  document.querySelector("#mem-table tbody").dispatchEvent({ type: "change", target: select() });
+  await flushMicrotasks();
+
+  assert.equal(cell(document, 0, "Power").classList.contains("is-invalid"), true);
+  assert.match(select().title, /^Power Low is not allowed on this memory/);
+  assert.match(select().title, /Driver power levels: High = 5\.0W, Low = 1\.0W/, "the legend is still there");
+
+  // A recycled editor must not carry the note to the next channel it shows,
+  // and clearing the finding gives the editor back its own title.
+  select().value = "High";
+  document.querySelector("#mem-table tbody").dispatchEvent({ type: "change", target: select() });
+  await flushMicrotasks();
+  assert.equal(select().title, "Driver power levels: High = 5.0W, Low = 1.0W");
+  assert.equal(cell(document, 1, "Power").children[0].title, "Driver power levels: High = 5.0W, Low = 1.0W");
+});
+
+test("a check that fails in the runtime puts its traceback in Debug Output and leaves the cell settled", async () => {
+  // Review of #224: the failure used to be logged as its one-line message,
+  // which for a driver's exception is the least useful part of it.
+  const { RuntimeCallError } = await import("../../web/js/runtime-errors.ts");
+  const failure = new RuntimeCallError({
+    type: "AttributeError",
+    bases: ["Exception"],
+    module: "builtins",
+    message: "'NoneType' object has no attribute 'memory'",
+    traceback: "Traceback (most recent call last):\n  File \"drivers/example.py\", line 42, in get_memory\nAttributeError: 'NoneType' object has no attribute 'memory'\n",
+    causes: [],
+    js: null,
+  }, { method: "normalize_and_validate_rows" });
+  const { document } = await grid({ verdict: () => { throw failure; } });
+
+  commit(document, 0, "Name", "ZULU");
+  await flushMicrotasks();
+
+  assert.match(document.querySelector("#debug-output").value, /drivers\/example\.py", line 42, in get_memory/);
+  const name = cell(document, 0, "Name");
+  assert.equal(name.classList.contains("is-pending"), false, "a failed check does not leave the cell pending");
+  assert.equal(name.children[0].value, "ZULU", "the typed value stays");
+  assert.match(name.title, /could not be checked/i);
+});
+
+test("an answer for a row that moved to another memory is discarded and the edit checked again", async () => {
+  // Review of #224: Move Up/Down hands the channel a different memory, and
+  // the driver's findings depend on the memory the row lands on, so an answer
+  // computed for the old one must not be applied.
+  const { document, rowCheck } = await grid({ held: true });
+
+  commit(document, 0, "Name", "LONGNAME");
+  await flushMicrotasks();
+  assert.equal(rowCheck.calls[0].rows[0].row.Location, "0");
+
+  clickLocationButton(document, 0);
+  document.querySelector("#channel-move-down").dispatchEvent({ type: "click" });
+  await flushMicrotasks();
+
+  rowCheck.release(0);
+  await flushMicrotasks();
+  const moved = () => cell(document, 1, "Name");
+  assert.equal(moved().children[0].value, "LONGNAME", "the answer for memory 0 did not land");
+  assert.equal(moved().classList.contains("is-pending"), true);
+  assert.equal(rowCheck.calls.length, 2, "the edit is checked again where the channel now is");
+  assert.equal(rowCheck.calls[1].rows[0].row.Location, "1");
+  assert.deepEqual(rowCheck.calls[1].rows[0].edits, [{ column: "Name", value: "LONGNAME" }]);
+
+  rowCheck.release();
+  await flushMicrotasks();
+  assert.equal(moved().children[0].value, "LONGN");
+  assert.equal(moved().classList.contains("is-pending"), false);
+});
+
+test("a band plan built against a radio no longer selected is built again for the new one", async () => {
+  // Review of #224: a builder awaiting the runtime's verdicts used to take the
+  // answer for the radio it started on even after the user picked another,
+  // and inserted rows normalized by the wrong driver.
+  const { document, rowCheck } = await grid({ held: true });
+
+  document.querySelector("#channel-add-pmr446").dispatchEvent({ type: "click" });
+  await flushMicrotasks();
+  assert.equal(rowCheck.calls.length, 1);
+  assert.equal(rowCheck.calls[0].module, "one");
+
+  selectRadioBySearch(document, "Acme Two");
+  await flushMicrotasks();
+  rowCheck.release(0);
+  await flushMicrotasks();
+
+  // Radio One's verdicts are dropped and the builder asks radio Two.
+  assert.equal(rowCheck.calls.length, 2);
+  assert.equal(rowCheck.calls[1].module, "two");
+  assert.equal(channelRows(document).length, 2, "nothing is inserted on a stale answer");
+
+  rowCheck.release();
+  await flushMicrotasks();
+  rowCheck.release();
+  await flushMicrotasks();
+  const names = channelRows(document).map((tr) => tr.children[1].children[0].value);
+  assert.equal(names.length, 18);
+  assert.deepEqual(names.slice(2), Array(16).fill("PMR"), "radio Two cuts names to 3 characters");
 });
