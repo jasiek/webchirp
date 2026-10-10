@@ -345,6 +345,25 @@ test("a change to a page alone is a new build for the service worker", async () 
   );
 });
 
+// The worker skips a sync whose buildHash it already holds, so a change to
+// anything the manifest tells it to cache has to change the hash -- including
+// the CDN list, which comes from web/js/cdn-urls.ts and can change without
+// any emitted file changing (the browser bundle tree-shakes the list away).
+// The test therefore recomputes the hash from the manifest's own contents.
+test("the build hash covers every list the service worker caches from", async () => {
+  await withTempDir("build-dist-", async (dir) => {
+    await writeTree(path.join(dir, "web"), { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n") });
+    await runBuild(dir);
+    const manifest = JSON.parse(await readFile(path.join(dir, "dist", "asset-manifest.json"), "utf8"));
+    assert.ok(manifest.offline.cdn.length > 0);
+    assert.equal(
+      manifest.buildHash,
+      digest(JSON.stringify([Object.entries(manifest.assets), manifest.offline])),
+      "the build hash is not a digest of the asset map and the whole offline section",
+    );
+  });
+});
+
 test("the service worker ships unhashed at the root as a classic script", async () => {
   const emitted = await build({
     ...appTree("export const leaf = 1;\n"),
