@@ -17,6 +17,7 @@
 // in package.json to pin the version of record, and shipped from the CDN URL
 // below. tests/channels/sentry.mjs fails the build if the two drift apart.
 
+import { SENTRY_SDK_URL, SENTRY_SDK_VERSION } from "./cdn-urls.ts";
 import { isPythonError, isRuntimeCallError } from "./runtime-errors.ts";
 import { isSerialUnsupported } from "./serial-errors.ts";
 import type { BrowserOptions } from "@sentry/browser";
@@ -48,14 +49,9 @@ export const SENTRY_DSN =
   "https://bb59bf03dbcc6894696fcaaf97d24e1d@o4511981618462720.ingest.de.sentry.io/4512037978308688";
 
 // jsDelivr's flattened ESM build of @sentry/browser, pinned to an exact
-// version. This is how every other third-party browser dependency arrives here
-// (Pyodide, the Web Serial polyfill): the dist build bundles only this repo's
-// sources and keeps jsDelivr imports external, and the dev server does not
-// serve node_modules, so an npm package cannot be imported by the browser
-// directly.
-export const SENTRY_SDK_VERSION = "10.73.0";
-export const SENTRY_SDK_URL =
-  `https://cdn.jsdelivr.net/npm/@sentry/browser@${SENTRY_SDK_VERSION}/+esm`;
+// version, lives in web/js/cdn-urls.ts with the other CDN URLs; re-exported
+// here because this module is what loads it.
+export { SENTRY_SDK_URL, SENTRY_SDK_VERSION };
 
 // Only the production deployment reports, for the reason spelled out at length
 // in analytics.ts: anyone can serve this app, and every copy carries the DSN
@@ -598,10 +594,35 @@ function drainPendingMetrics(client: SentrySdk) {
   }
 }
 
+// How many envelopes -- an error each, or a batch of metrics -- the offline
+// transport keeps while sends fail. The SDK's default is 30; a field day spent
+// programming radios with no signal can fail more flows than that.
+export const OFFLINE_QUEUE_SIZE = 100;
+
+// The SDK's two transport factories initOptions() composes; the real SDK and
+// a test's fake both provide them.
+type TransportFactories = Pick<SentrySdk, "makeBrowserOfflineTransport" | "makeFetchTransport">;
+// What the offline transport takes. The client spreads transportOptions into
+// the options it builds the transport with, but types the field as the plain
+// fetch transport's, so the offline ones are typed from the factory itself.
+type OfflineTransportOptions = Partial<Parameters<ReturnType<SentrySdk["makeBrowserOfflineTransport"]>>[0]>;
+
 // Options handed to Sentry.init. Split out so a test can assert on them without
 // standing up the real SDK.
-export function initOptions(release: string | undefined): BrowserOptions {
+//
+// With the SDK at hand, sends go through its offline transport: an envelope
+// that cannot be sent -- the page was served from the service worker's cache,
+// or the network dropped mid-session -- is stored in IndexedDB and sent at the
+// next startup or when the browser comes back online, with the timestamp it
+// was captured at. Everything stored has already been through beforeSend or
+// beforeSendMetric, so IndexedDB never holds anything unredacted.
+export function initOptions(release: string | undefined, sdk?: TransportFactories | null): BrowserOptions {
+  const transportOptions: OfflineTransportOptions = { maxQueueSize: OFFLINE_QUEUE_SIZE, flushAtStartup: true };
+  const offlineTransport = sdk?.makeBrowserOfflineTransport && sdk.makeFetchTransport
+    ? { transport: sdk.makeBrowserOfflineTransport(sdk.makeFetchTransport), transportOptions }
+    : {};
   return {
+    ...offlineTransport,
     dsn: SENTRY_DSN,
     release,
     environment: "production",
@@ -669,7 +690,7 @@ export async function initSentry(
     // Both are network round trips and neither needs the other, so they overlap
     // rather than adding up.
     const [module, release] = await Promise.all([loadSdk(), resolveRelease(win)]);
-    module.init(initOptions(release));
+    module.init(initOptions(release, module));
     loaded = module;
     sdk = module;
   } catch {

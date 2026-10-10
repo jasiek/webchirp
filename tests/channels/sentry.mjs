@@ -12,6 +12,7 @@ import {
   captureError,
   captureMetric,
   initOptions,
+  OFFLINE_QUEUE_SIZE,
   initSentry,
   isSentryHost,
   resetSentryForTests,
@@ -22,6 +23,7 @@ import {
   setContextProvider,
 } from "../../web/js/sentry.ts";
 import { ANALYTICS_HOSTS } from "../../web/js/analytics.ts";
+import { OFFLINE_CDN_URLS, SENTRY_SDK_MODULES } from "../../web/js/cdn-urls.ts";
 import { makeWindow } from "../support/fake-window.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
@@ -74,6 +76,30 @@ test("the SDK URL is pinned to the version declared in package.json", () => {
     "web/js/sentry.ts ships a different SDK version than package.json pins",
   );
   assert.ok(SENTRY_SDK_URL.includes(`@sentry/browser@${declared}`));
+});
+
+// The service worker caches these so the SDK loads offline; one missing and
+// the SDK's import fails there, taking the offline transport with it. Checked
+// against the installed packages, which npm resolved the way jsDelivr did;
+// tests/e2e/sentry-sdk-modules.mjs walks the real imports.
+test("every module of the SDK's build is cached for offline use", () => {
+  const installed = (name) => JSON.parse(
+    fs.readFileSync(path.join(repoRoot, "node_modules", "@sentry", name, "package.json"), "utf8"),
+  ).version;
+  const browserDeps = Object.keys(JSON.parse(
+    fs.readFileSync(path.join(repoRoot, "node_modules", "@sentry", "browser", "package.json"), "utf8"),
+  ).dependencies);
+  for (const dep of browserDeps) {
+    const name = dep.replace("@sentry/", "");
+    const prefix = `https://cdn.jsdelivr.net/npm/${dep}@${installed(name)}/`;
+    assert.ok(
+      SENTRY_SDK_MODULES.some((url) => url.startsWith(prefix)),
+      `${dep}@${installed(name)} is imported by the SDK but not in SENTRY_SDK_MODULES (web/js/cdn-urls.ts)`,
+    );
+  }
+  for (const url of SENTRY_SDK_MODULES) {
+    assert.ok(OFFLINE_CDN_URLS.includes(url), `${url} is not cached offline`);
+  }
 });
 
 test("reporting and analytics agree on which deployment is production", () => {
@@ -326,6 +352,25 @@ test("off the production host nothing is requested from the vendor", async () =>
   // No listeners are left behind either.
   assert.equal(win.listenerCount("error"), 0);
   assert.equal(win.listenerCount("unhandledrejection"), 0);
+  resetSentryForTests();
+});
+
+// An error or flow metric from a page with no network is stored and sent
+// later rather than lost: the SDK's own offline transport, around its fetch
+// transport, with a queue larger than its default.
+test("sends go through the SDK's offline transport", async () => {
+  resetSentryForTests();
+  const sdk = makeSdk();
+  const fetchTransport = () => ({});
+  sdk.makeFetchTransport = fetchTransport;
+  sdk.makeBrowserOfflineTransport = (inner) => ({ offline: true, inner });
+  await initSentry(makeWindow(), { loadSdk: async () => sdk });
+  const options = sdk.getOptions();
+  assert.deepEqual(options.transport, { offline: true, inner: fetchTransport });
+  assert.deepEqual(options.transportOptions, { maxQueueSize: OFFLINE_QUEUE_SIZE, flushAtStartup: true });
+  assert.ok(OFFLINE_QUEUE_SIZE > 30, "larger than the SDK's default of 30");
+  // Without the factories (an SDK that lacks them) the default transport stays.
+  assert.equal(initOptions("webchirp@abc123", {}).transport, undefined);
   resetSentryForTests();
 });
 
