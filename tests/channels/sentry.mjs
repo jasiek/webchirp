@@ -23,7 +23,7 @@ import {
   setContextProvider,
 } from "../../web/js/sentry.ts";
 import { ANALYTICS_HOSTS } from "../../web/js/analytics.ts";
-import { OFFLINE_CDN_URLS, SENTRY_SDK_MODULES } from "../../web/js/cdn-urls.ts";
+import { SENTRY_SDK_MODULES } from "../../web/js/cdn-urls.ts";
 import { makeWindow } from "../support/fake-window.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
@@ -81,8 +81,9 @@ test("the SDK URL is pinned to the version declared in package.json", () => {
 // The service worker caches these so the SDK loads offline; one missing and
 // the SDK's import fails there, taking the offline transport with it. Checked
 // against the installed packages, which npm resolved the way jsDelivr did;
-// tests/e2e/sentry-sdk-modules.mjs walks the real imports.
-test("every module of the SDK's build is cached for offline use", () => {
+// tests/e2e/sentry-sdk-modules.mjs walks the real imports, and
+// tests/build/build-dist.mjs checks the build lists them.
+test("SENTRY_SDK_MODULES names every module of the SDK's build", () => {
   const installed = (name) => JSON.parse(
     fs.readFileSync(path.join(repoRoot, "node_modules", "@sentry", name, "package.json"), "utf8"),
   ).version;
@@ -96,9 +97,6 @@ test("every module of the SDK's build is cached for offline use", () => {
       SENTRY_SDK_MODULES.some((url) => url.startsWith(prefix)),
       `${dep}@${installed(name)} is imported by the SDK but not in SENTRY_SDK_MODULES (web/js/cdn-urls.ts)`,
     );
-  }
-  for (const url of SENTRY_SDK_MODULES) {
-    assert.ok(OFFLINE_CDN_URLS.includes(url), `${url} is not cached offline`);
   }
 });
 

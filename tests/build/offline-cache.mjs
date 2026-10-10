@@ -21,7 +21,7 @@ function sha(body) {
 
 // One deploy: its renamable files and immutable assets as path -> body, and
 // the asset-manifest.json scripts/build-dist.ts would write for them.
-function deploy(buildHash, { files, assets }) {
+function deploy(buildHash, { files, assets, optional }) {
   return {
     buildHash,
     bodies: { ...files, ...assets },
@@ -32,6 +32,7 @@ function deploy(buildHash, { files, assets }) {
         files: Object.fromEntries(Object.entries(files).map(([rel, body]) => [rel, sha(body)])),
         assets: Object.keys(assets),
         cdn: [CDN_FILE],
+        ...(optional ? { optional } : {}),
       },
     },
   };
@@ -502,4 +503,48 @@ test("nothing fetched from the CDN is kept before a build is complete", async ()
   const kept = [];
   await offline.respond(subresource(module), { waitUntil: (p) => kept.push(p) });
   assert.deepEqual(kept, []);
+});
+
+// --- optional files ----------------------------------------------------------
+
+// The Sentry SDK's shape: a CDN module only some hosts load.
+const OPTIONAL_MODULE = "https://cdn.jsdelivr.net/npm/@sentry/browser@10.73.0/+esm";
+
+function deployWithOptional(buildHash, hosts) {
+  return deploy(buildHash, {
+    files: { "index.html": `<p>${buildHash}</p>` },
+    assets: { "js/app.OPTIONAL.js": "app" },
+    optional: [{ hosts, urls: [OPTIONAL_MODULE] }],
+  });
+}
+
+test("an optional file this host uses is cached with the build", async () => {
+  const { site, offline } = setup(deployWithOptional("eeeeeeeeee", ["webchirp.test"]));
+  site.cdn[OPTIONAL_MODULE] = "export {}";
+  await offline.sync();
+  site.offline = true;
+  assert.equal(await bodyOf(offline.respond(subresource(OPTIONAL_MODULE))), "export {}");
+});
+
+test("an optional file that cannot be fetched does not hold the build back", async () => {
+  const { site, offline, messages } = setup(deployWithOptional("eeeeeeeeee", ["webchirp.test"]));
+  // A privacy filter refusing the SDK looks like this to the worker.
+  site.failing.add(OPTIONAL_MODULE);
+  const state = await offline.sync();
+  assert.equal(state.current?.buildHash, "eeeeeeeeee", "the app is offline-ready without its telemetry");
+  assert.deepEqual(messages.map((message) => message.event), ["ready"]);
+});
+
+test("an optional group for another host is never fetched", async () => {
+  const { site, offline } = setup(deployWithOptional("eeeeeeeeee", ["webchirp.org"]));
+  site.cdn[OPTIONAL_MODULE] = "export {}";
+  await offline.sync();
+  assert.ok(!site.requests.includes(OPTIONAL_MODULE), "a fork caches nothing its host gate never loads");
+});
+
+test("a malformed optional group is refused", () => {
+  const manifest = (optional) => ({ buildHash: "aaaaaaaaaa", offline: { files: {}, assets: [], cdn: [], optional } });
+  assert.throws(() => parseOfflineBuild(manifest({}), SCOPE), /offline.optional is not a list/);
+  assert.throws(() => parseOfflineBuild(manifest([{ urls: [OPTIONAL_MODULE] }]), SCOPE), /without hosts and urls/);
+  assert.equal(parseOfflineBuild(manifest(undefined), SCOPE).entries.length, 0, "an older manifest has none");
 });

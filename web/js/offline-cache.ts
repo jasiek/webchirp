@@ -63,6 +63,8 @@ export interface OfflineEntry {
   /** The first 10 hex digits of the SHA-256 of its body, for a file whose name
    * does not change with its content; absent for an immutable name. */
   sha256?: string;
+  /** Cached if it can be, without holding the build back if it cannot. */
+  optional?: boolean;
 }
 
 /** A build as asset-manifest.json describes it for offline use. */
@@ -203,7 +205,33 @@ export function parseOfflineBuild(manifest: unknown, scope: string): OfflineBuil
     }
     entries.push({ url: new URL(ref, scope).href });
   }
+  entries.push(...optionalEntries(offline.optional, new URL(scope).hostname));
   return { buildHash: record.buildHash, entries, mutableUrls };
+}
+
+// The offline section's optional groups (scripts/build-dist.ts): files only
+// some deployments use -- the Sentry SDK, which loads on the production hosts
+// alone -- each group naming the hosts it is for. A group for this host is
+// cached best-effort; one for another host is not fetched at all. A manifest
+// without the field has no optional files.
+function optionalEntries(groups: unknown, hostname: string): OfflineEntry[] {
+  if (groups === undefined) {
+    return [];
+  }
+  if (!Array.isArray(groups)) {
+    throw new Error("asset-manifest.json's offline.optional is not a list");
+  }
+  const entries: OfflineEntry[] = [];
+  for (const group of groups as Array<{ hosts?: unknown; urls?: unknown } | null>) {
+    if (!Array.isArray(group?.hosts) || !Array.isArray(group.urls)
+      || !group.urls.every((url) => typeof url === "string" && url)) {
+      throw new Error("asset-manifest.json lists an optional group without hosts and urls");
+    }
+    if (group.hosts.includes(hostname)) {
+      entries.push(...(group.urls as string[]).map((url) => ({ url: new URL(url).href, optional: true })));
+    }
+  }
+  return entries;
 }
 
 // Run task over items with at most limit in flight; the first failure rejects.
@@ -387,6 +415,12 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
   // which is what keeps a deploy that changed one chunk from refetching
   // Pyodide. A renamable file is always fetched and must match its digest.
   async function cacheEntry(cache: Cache, entry: OfflineEntry): Promise<void> {
+    if (entry.optional) {
+      // A blocker, a proxy or a CDN hiccup refusing an optional file costs
+      // that file, never the build: the app runs without it, offline too.
+      await cacheEntry(cache, { url: entry.url }).catch(() => {});
+      return;
+    }
     if (await cache.match(entry.url, MATCH_OPTIONS)) {
       return;
     }

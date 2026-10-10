@@ -56,11 +56,11 @@ export const SENTRY_SDK_MODULES: readonly string[] = Object.freeze([
 ]);
 
 // The CDN files the service worker keeps beside each build: what a radio
-// session cannot start without, and the Sentry SDK, so that an error or a
-// flow metric from a page with no network is kept and sent later (the SDK's
-// offline transport, web/js/sentry.ts) rather than lost with the page.
+// session cannot start without, so a build is not offline-ready until all of
+// them are cached. The Sentry SDK is cached too, but as an optional group
+// scripts/build-dist.ts adds for the production hosts alone: it loads nowhere
+// else, and a blocker refusing it must not cost anyone the app offline.
 export const OFFLINE_CDN_URLS: readonly string[] = Object.freeze([
   ...PYODIDE_RUNTIME_FILES.map((name) => `${PYODIDE_INDEX_URL}${name}`),
   WEB_SERIAL_POLYFILL_URL,
-  ...SENTRY_SDK_MODULES,
 ]);

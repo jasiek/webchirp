@@ -37,8 +37,9 @@
 // scripts/retain-deployed-assets.ts carries into the next deploy, and under
 // "offline" what the service worker caches so the build loads without a
 // network (web/js/offline-cache.ts): the root pages and OFFLINE_DATA_FILES
-// with the digest of each, every immutable name but the source maps, and the
-// CDN files (OFFLINE_CDN_URLS).
+// with the digest of each, every immutable name but the source maps, the
+// CDN files (OFFLINE_CDN_URLS), and optional groups: files only some hosts
+// use, cached best-effort and only there (OFFLINE_OPTIONAL_GROUPS).
 import { createHash } from "node:crypto";
 import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -50,7 +51,8 @@ import {
   chirpBundleFileNames,
   DEFAULT_CHIRP_REVISION,
 } from "../web/js/python-sources.ts";
-import { OFFLINE_CDN_URLS } from "../web/js/cdn-urls.ts";
+import { OFFLINE_CDN_URLS, SENTRY_SDK_MODULES } from "../web/js/cdn-urls.ts";
+import { SENTRY_HOSTS } from "../web/js/sentry.ts";
 import { errorFields } from "../web/js/error-details.ts";
 
 const ROOT = process.cwd();
@@ -113,6 +115,14 @@ const OFFLINE_DATA_FILES = [
   "images/icon-512.png",
   "images/icon-maskable-512.png",
   "images/apple-touch-icon.png",
+];
+// Files the service worker caches only on the hosts named, and best-effort
+// there: a build is offline-ready without them. The Sentry SDK loads on the
+// production hosts alone (initSentry's host gate), so a fork would cache it
+// for nothing, and a privacy filter blocking it must not stop the app itself
+// from working offline.
+const OFFLINE_OPTIONAL_GROUPS = [
+  { hosts: [...SENTRY_HOSTS], urls: [...SENTRY_SDK_MODULES] },
 ];
 // Source files that reach dist/ only through esbuild or the Python hashing, so
 // the verbatim copy skips them (as it skips type declarations, which only tsc
@@ -523,6 +533,7 @@ async function main() {
       .filter((rel) => !rel.endsWith(".map"))
       .sort(),
     cdn: [...OFFLINE_CDN_URLS],
+    optional: OFFLINE_OPTIONAL_GROUPS,
   };
 
   // esbuild names each output after its bytes and its imports' names, and the

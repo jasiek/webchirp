@@ -82,7 +82,7 @@ and drift on each bump.
 ## PWA / install
 
 - **pwa-install-needs-no-service-worker** (2026-08-02): Chrome installs without a service worker (since 108 on Android, 112 on desktop). The manifest plus 192 and 512 icons is enough for a WebAPK. The worker added on 2026-10-10 (`web/sw.ts`) is for offline use, not installability. It is not a pass-through: it handles caching (see **offline-cache-footprint**).
-- **offline-cache-footprint** (2026-10-10): one cached build is about 18 MB, 13.8 MB of it Pyodide 0.27.7 from jsDelivr (`pyodide.asm.wasm` alone is 10.1 MB) and 1.1 MB the Sentry SDK. Two builds are kept, and Chrome may store a file copied between their caches twice, so one browser can hold about 36 MB.
+- **offline-cache-footprint** (2026-10-10): one cached build is about 18 MB, 13.8 MB of it Pyodide 0.27.7 from jsDelivr (`pyodide.asm.wasm` alone is 10.1 MB) plus 1.1 MB of Sentry SDK on the production hosts, the only ones that load it. Two builds are kept, and Chrome may store a file copied between their caches twice, so one browser can hold about 36 MB.
 - **installable-is-not-discoverable** (2026-09-18): headless Chrome on localhost fires `beforeinstallprompt`, which is why the Install button appears in `web/images/screenshot-narrow.png`.
 - **webapk-start-url-changes-take-days** (2026-08-05): a `start_url` change takes a day or more to reach installed apps. Chrome re-reads the manifest about once a day and then queues a WebAPK re-mint, and until then hits carry the old `dl`. Check `location.href` in the running app first, and use a fresh install to confirm the manifest.
 
