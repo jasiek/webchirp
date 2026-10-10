@@ -286,14 +286,7 @@ export class Ch340SerialPort extends WebUsbTransport implements SerialTransport 
     const configuration = await this._activeConfiguration("CH340");
     const iface = configuration.interfaces[0];
     this._interfaceNumber = iface.interfaceNumber;
-    try {
-      await this.device.claimInterface(this._interfaceNumber);
-    } catch (error) {
-      throw new Error(
-        `CH340: could not claim USB interface ${this._interfaceNumber} `
-        + `(another driver may already control it): ${errorFields(error).message || error}`,
-      );
-    }
+    await this._claimInterface("CH340", this._interfaceNumber);
 
     // The interface exposes an interrupt IN endpoint (modem status) alongside
     // the bulk data pair — select the bulk endpoints explicitly.

@@ -21,6 +21,25 @@ export const PORT_SELECTION_CANCELLED = "PortSelectionCancelledError";
 // A capability limit stays recognizable after Pyodide flattens the exception.
 export const SERIAL_UNSUPPORTED = "SerialUnsupportedError";
 
+// Another driver holds the cable's USB interface -- Android's own kernel
+// driver, most often -- so WebUSB cannot claim it. Named for the same reason
+// as SERIAL_UNSUPPORTED: the cause is on the user's machine, and reporting
+// recognizes it by name after Pyodide has flattened it into a JsException.
+export const USB_INTERFACE_BUSY = "UsbInterfaceBusyError";
+
+// Build the error a chip driver throws when claimInterface is refused.
+export function createUsbInterfaceBusyError(message: string): Error {
+  const error = new Error(message);
+  error.name = USB_INTERFACE_BUSY;
+  return error;
+}
+
+// Recognize that outcome by name, in JS or after crossing Python (jsErrorName
+// reads a RuntimeCallError's jsCause).
+export function isUsbInterfaceBusy(error: unknown): boolean {
+  return jsErrorName(error) === USB_INTERFACE_BUSY;
+}
+
 // Name transport capability refusals without coupling reporting to UI wording.
 export function createSerialUnsupportedError(message: string): Error {
   const error = new Error(message);

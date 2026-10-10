@@ -114,23 +114,12 @@ test("serial port open failures are ignored directly and through Pyodide", () =>
   }
 });
 
-test("USB interface claim failures are ignored for every chip driver and through Pyodide", () => {
-  const cause = "Failed to execute 'claimInterface' on 'USBDevice': Unable to claim interface.";
-  const messages = ["PL2303", "CH340", "CP2102", "FTDI"].map((chip) =>
-    `Error: ${chip}: could not claim USB interface 0 (another driver may already control it): ${cause}`);
-  messages.push(`NetworkError: ${cause}`, `pyodide.ffi.JsException: ${messages[0]}`);
-  for (const value of messages) {
-    assert.ok(initOptions().ignoreErrors.some((pattern) => pattern.test(value)), value);
-  }
-});
-
 test("other network, Pyodide and serial failures remain reportable", () => {
   const messages = [
     "NetworkError: Failed to fetch",
     "pyodide.ffi.JsException: TypeError: unexpected value",
     "NetworkError: Failed to execute 'open' on 'SerialPort': unexpected failure",
     "NetworkError: Failed to execute 'close' on 'SerialPort': Failed to open serial port.",
-    "NetworkError: Failed to execute 'releaseInterface' on 'USBDevice': Unable to claim interface.",
   ];
   for (const value of messages) {
     assert.equal(initOptions().ignoreErrors.some((pattern) => pattern.test(value)), false, value);

@@ -165,14 +165,7 @@ export class FtdiSerialPort extends WebUsbTransport implements SerialTransport {
     const configuration = await this._activeConfiguration("FTDI");
     const iface = configuration.interfaces[0];
     this._interfaceNumber = iface.interfaceNumber;
-    try {
-      await this.device.claimInterface(this._interfaceNumber);
-    } catch (error) {
-      throw new Error(
-        `FTDI: could not claim USB interface ${this._interfaceNumber} `
-        + `(another driver may already control it): ${errorFields(error).message || error}`,
-      );
-    }
+    await this._claimInterface("FTDI", this._interfaceNumber);
 
     // Current FTDI parts expose a bare bulk pair here, but filter on type
     // anyway so a variant that adds an interrupt endpoint (as PL2303 and CH340

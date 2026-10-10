@@ -490,15 +490,8 @@ export class Cp2102SerialPort extends WebUsbTransport implements SerialTransport
     const configuration = await this._activeConfiguration("CP2102");
     const iface = configuration.interfaces[0];
     this._interfaceNumber = iface.interfaceNumber;
-    try {
-      await this.device.claimInterface(this._interfaceNumber);
-      this._claimed = true;
-    } catch (error) {
-      throw new Error(
-        `CP2102: could not claim USB interface ${this._interfaceNumber} `
-        + `(another driver may already control it): ${errorFields(error).message || error}`,
-      );
-    }
+    await this._claimInterface("CP2102", this._interfaceNumber);
+    this._claimed = true;
 
     // Select the bulk pair explicitly rather than by direction: parts in this
     // family that expose GPIO carry other endpoint types on the same interface.

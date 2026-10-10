@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import { SerialPortMock } from "serialport";
 import { NativeSerialPort } from "../../web/js/native-serial-port.ts";
 import { SerialBridge } from "../../web/js/serial-bridge.ts";
+import { USB_INTERFACE_BUSY } from "../../web/js/serial-errors.ts";
 import { assertSerialTransport } from "../../web/js/serial-transport.ts";
 import { WebBluetoothSerialPort } from "../../web/js/webbluetooth-serial.ts";
 import { CdcSerialPort } from "../../web/js/webusb-serial.ts";
@@ -348,6 +349,24 @@ for (const { name, create } of TRANSPORTS) {
     });
   });
 }
+
+// A refused claimInterface -- another driver holds the interface -- is thrown
+// by every chip driver under one name, which is what reporting filters on
+// (isUsbInterfaceBusy, web/js/serial-errors.ts); the message keeps the chip
+// and the browser's own wording for the debug panel.
+test("every chip driver names a refused interface claim UsbInterfaceBusyError", async () => {
+  for (const chip of CHIP_NAMES) {
+    const { port, device } = createChipLoopbackPort(chip, { usb: makeEmitter(), latencyMs: 1 });
+    device.claimInterface = async () => {
+      throw new DOMException("Failed to execute 'claimInterface' on 'USBDevice': Unable to claim interface.", "NetworkError");
+    };
+    await assert.rejects(port.open(OPEN_OPTIONS), (error) => {
+      assert.equal(error.name, USB_INTERFACE_BUSY, chip);
+      assert.match(error.message, new RegExp(`could not claim USB interface .*Unable to claim interface`));
+      return true;
+    }, chip);
+  }
+});
 
 // The declared capabilities, pinned per transport: a change here is a
 // behaviour change for the radios that need framing or control lines, so it

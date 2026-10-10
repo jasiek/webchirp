@@ -22,9 +22,13 @@ import {
 import {
   PORT_SELECTION_CANCELLED,
   PORT_SELECTION_CANCELLED_MESSAGE,
+  USB_INTERFACE_BUSY,
   createPortSelectionCancelledError,
+  createUsbInterfaceBusyError,
   isPortSelectionCancelled,
+  isUsbInterfaceBusy,
 } from "../../web/js/serial-errors.ts";
+import { isIgnoredError } from "../../web/js/sentry.ts";
 import { classifyErrorKind, errorTypeName } from "../../web/js/ui/analytics.ts";
 import { createDebugLog } from "../../web/js/ui/debug-log.ts";
 import { errorSummary } from "../../web/js/ui/format.ts";
@@ -220,6 +224,21 @@ test("a dismissed port chooser is still classified port_not_selected after cross
   assert.equal(error.jsCause?.message, PORT_SELECTION_CANCELLED_MESSAGE);
   assert.equal(isPortSelectionCancelled(error), true);
   assert.equal(classifyErrorKind(error), "port_not_selected");
+});
+
+test("a busy USB interface keeps its name across Python and is never reported", async () => {
+  const harness = await sharedHarness();
+  const busy = createUsbInterfaceBusyError(
+    "PL2303: could not claim USB interface 0 (another driver may already control it): Unable to claim interface.",
+  );
+  const error = await withRejectingOpen(harness, busy, () => failure(
+    harness.rpc("webserial_connect", { baudrate: 9600 }),
+  ));
+
+  assert.equal(error.pythonType, "JsException");
+  assert.equal(error.jsCause?.name, USB_INTERFACE_BUSY);
+  assert.equal(isUsbInterfaceBusy(error), true);
+  assert.equal(isIgnoredError(error), true);
 });
 
 test("a reply that is not an envelope fails loudly instead of passing as a result", async () => {

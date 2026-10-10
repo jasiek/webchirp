@@ -5,6 +5,8 @@
 // web/js/webusb-serial.ts does too. What differs per chip -- the protocol --
 // stays in the subclass; how a WebUSB port names its device, reports its ids
 // and reports its own loss is written once here.
+import { errorFields } from "./error-details.ts";
+import { createUsbInterfaceBusyError } from "./serial-errors.ts";
 import { createDisconnectNotifier, watchUsbDisconnect } from "./serial-transport.ts";
 import type {
   DisconnectNotifier,
@@ -94,6 +96,19 @@ export class WebUsbTransport {
       throw new Error(`${chip}: the USB device has no active configuration`);
     }
     return configuration;
+  }
+
+  // Claim the chip's interface, or throw the named error reporting filters
+  // (isUsbInterfaceBusy): a refusal means another driver already holds it.
+  async _claimInterface(chip: string, interfaceNumber: number): Promise<void> {
+    try {
+      await this.device.claimInterface(interfaceNumber);
+    } catch (error) {
+      throw createUsbInterfaceBusyError(
+        `${chip}: could not claim USB interface ${interfaceNumber} `
+        + `(another driver may already control it): ${errorFields(error).message || error}`,
+      );
+    }
   }
 
   // Contract: register a loss callback, get its unsubscribe back.

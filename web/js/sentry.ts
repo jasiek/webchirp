@@ -18,7 +18,7 @@
 // below. tests/channels/sentry.mjs fails the build if the two drift apart.
 
 import { isPythonError, isRuntimeCallError } from "./runtime-errors.ts";
-import { isSerialUnsupported } from "./serial-errors.ts";
+import { isSerialUnsupported, isUsbInterfaceBusy } from "./serial-errors.ts";
 import type { BrowserOptions } from "@sentry/browser";
 
 // The SDK's namespace as the CDN's +esm build exports it, typed from the npm
@@ -79,10 +79,6 @@ const IGNORE_ERRORS = Object.freeze([
   /ResizeObserver loop/i,
   // Browser transport failures remain filtered when carried through Python.
   /Failed to execute 'open' on 'SerialPort': Failed to open serial port\./,
-  // Another driver (the OS's own, most often on Android) holds the cable's USB
-  // interface. Matched on the browser's wording, which every WebUSB chip driver
-  // and the CDC polyfill pass through, rather than on each driver's prefix.
-  /Failed to execute 'claimInterface' on 'USBDevice': Unable to claim interface\./,
   /\bSerialUnsupportedError\b/,
 ]);
 
@@ -114,7 +110,8 @@ export const IGNORED_CHIRP_ERRORS = Object.freeze([
 ]);
 
 // Whether a failure is one this app never reports: the runtime's own "you have
-// not done X yet" guard, or a CHIRP error from the list above. Both are this
+// not done X yet" guard, a USB interface another driver holds (named by the
+// chip drivers, web/js/serial-errors.ts), or a CHIRP error from the list above. Both are this
 // app, and CHIRP, working as designed. Read off the RuntimeCallError the
 // dispatcher throws (web/js/runtime-errors.ts), which beforeSend receives as
 // the hint's originalException -- for a capture from the one funnel and for an
@@ -140,7 +137,8 @@ export const IGNORED_CHIRP_ERRORS = Object.freeze([
 // clones fail on this model" stays a question a dashboard can answer even for
 // the classes filtered here. The debug panel still prints the whole traceback.
 export function isIgnoredError(error: unknown): boolean {
-  if (isSerialUnsupported(error) || isPythonError(error, "RuntimePreconditionError")) {
+  if (isSerialUnsupported(error) || isUsbInterfaceBusy(error)
+    || isPythonError(error, "RuntimePreconditionError")) {
     return true;
   }
   return isRuntimeCallError(error)
