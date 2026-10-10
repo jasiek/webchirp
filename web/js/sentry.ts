@@ -79,6 +79,10 @@ const IGNORE_ERRORS = Object.freeze([
   /ResizeObserver loop/i,
   // Browser transport failures remain filtered when carried through Python.
   /Failed to execute 'open' on 'SerialPort': Failed to open serial port\./,
+  // Another driver (the OS's own, most often on Android) holds the cable's USB
+  // interface. Matched on the browser's wording, which every WebUSB chip driver
+  // and the CDC polyfill pass through, rather than on each driver's prefix.
+  /Failed to execute 'claimInterface' on 'USBDevice': Unable to claim interface\./,
   /\bSerialUnsupportedError\b/,
 ]);
 
