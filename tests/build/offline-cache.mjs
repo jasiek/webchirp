@@ -53,8 +53,10 @@ const BUILD_C = deploy("cccccccccc", {
 // A site serving one deploy, with the CDN beside it. Like Pages after
 // scripts/retain-deployed-assets.ts, it goes on serving every earlier deploy's
 // hashed files; its renamable ones are the current deploy's. Every request is
-// recorded; it can be taken offline, made to fail one URL, made to hang, or
-// switched to another deploy -- including after the manifest has been read.
+// recorded; it can be taken offline, made to fail one URL, made to hang
+// (everything, or one URL; before the headers, or partway through the body),
+// made to send one URL's body slowly, or switched to another deploy --
+// including after the manifest has been read.
 function createSite(initial) {
   const retained = {};
   const site = {
@@ -69,6 +71,12 @@ function createSite(initial) {
     offline: false,
     hang: false,
     failing: new Set(),
+    // URLs whose request is accepted but never answered.
+    stalled: new Set(),
+    // URLs answered with headers and a first chunk, then nothing more.
+    stalledBodies: new Set(),
+    // URLs whose body arrives in small pieces, TRICKLE_MS apart.
+    trickling: new Set(),
     requests: [],
     // Called with each URL before it is answered, so a test can deploy mid-sync.
     onRequest: (/** @type {string} */ _url) => {},
@@ -79,8 +87,15 @@ function createSite(initial) {
       if (site.offline) {
         throw new TypeError("Failed to fetch");
       }
-      if (site.hang) {
+      if (site.hang || site.stalled.has(url)) {
         return new Promise(() => {});
+      }
+      if (site.stalledBodies.has(url)) {
+        return new Response(new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("the first part"));
+          },
+        }));
       }
       if (site.failing.has(url)) {
         return new Response("", { status: 503 });
@@ -94,7 +109,8 @@ function createSite(initial) {
         return Response.json(site.current.manifest);
       }
       if (rel !== null && rel in site.current.bodies) {
-        return new Response(site.current.bodies[rel]);
+        const body = site.current.bodies[rel];
+        return new Response(site.trickling.has(url) ? trickle(body) : body);
       }
       if (rel !== null && rel in retained) {
         return new Response(retained[rel]);
@@ -104,6 +120,28 @@ function createSite(initial) {
   };
   site.current = initial;
   return site;
+}
+
+// How long the fake download watchdog waits, and the gap between the pieces
+// of a trickled body: each gap is shorter than the watchdog, their sum longer.
+const STALL_MS = 40;
+const TRICKLE_MS = 15;
+
+// A body sent one character at a time, TRICKLE_MS apart.
+function trickle(text) {
+  const bytes = new TextEncoder().encode(text);
+  let sent = 0;
+  return new ReadableStream({
+    async pull(controller) {
+      await new Promise((resolve) => setTimeout(resolve, TRICKLE_MS));
+      if (sent < bytes.length) {
+        controller.enqueue(bytes.slice(sent, sent + 1));
+        sent += 1;
+      } else {
+        controller.close();
+      }
+    },
+  });
 }
 
 function setup(initial = BUILD_A, options = {}) {
@@ -116,6 +154,7 @@ function setup(initial = BUILD_A, options = {}) {
     fetch: (input) => site.fetch(input),
     notify: (message) => messages.push(message),
     timeoutMs: 20,
+    stallMs: STALL_MS,
     ...options,
   });
   return { caches, site, messages, offline };
@@ -232,6 +271,44 @@ test("a sync without a network keeps the cached build quietly", async () => {
   assert.equal(messages.length, 1, "being offline is not an error worth reporting");
 });
 
+test("a download that stops arriving is abandoned, and the next sync starts afresh", { timeout: 5000 }, async () => {
+  for (const stall of ["stalled", "stalledBodies"]) {
+    const { site, offline, messages } = setup();
+    await offline.sync();
+    site.current = BUILD_B;
+    site[stall].add(`${SCOPE}js/app.BBBBBBBB.js`);
+    const state = await offline.sync();
+    assert.equal(state.current?.buildHash, BUILD_A.buildHash, `${stall}: a stuck file must not hold the sync open`);
+    assert.equal(messages.at(-1)?.event, "error");
+    assert.equal(messages.at(-1)?.reason, "network");
+
+    site[stall].clear();
+    const resumed = await offline.sync();
+    assert.equal(resumed.current?.buildHash, BUILD_B.buildHash, `${stall}: the next sync is a new attempt`);
+  }
+});
+
+test("a manifest that never arrives keeps the cached build quietly", { timeout: 5000 }, async () => {
+  const { site, offline, messages } = setup();
+  await offline.sync();
+  site.stalled.add(`${SCOPE}asset-manifest.json`);
+  const state = await offline.sync();
+  assert.equal(state.current?.buildHash, BUILD_A.buildHash);
+  assert.equal(messages.length, 1);
+});
+
+test("a slow download that keeps arriving is not abandoned", { timeout: 5000 }, async () => {
+  const { site, offline } = setup();
+  await offline.sync();
+  site.current = BUILD_B;
+  // "app B" a character at a time: five gaps of TRICKLE_MS, longer than STALL_MS.
+  site.trickling.add(`${SCOPE}js/app.BBBBBBBB.js`);
+  const state = await offline.sync();
+  assert.equal(state.current?.buildHash, BUILD_B.buildHash);
+  site.offline = true;
+  assert.equal(await bodyOf(offline.respond(subresource(`${SCOPE}js/app.BBBBBBBB.js`))), "app B");
+});
+
 test("concurrent page loads share one download", async () => {
   const { site, offline } = setup();
   await Promise.all([offline.sync(), offline.sync(), offline.sync()]);
@@ -289,7 +366,9 @@ test("immutable files are served from the cache without asking the network", asy
   await offline.sync();
   site.requests = [];
   assert.equal(await bodyOf(offline.respond(subresource(`${SCOPE}js/app.AAAAAAAA.js`))), "app A");
-  assert.equal(await bodyOf(offline.respond(subresource(CDN_FILE))), "wasm");
+  const wasm = await offline.respond(subresource(CDN_FILE));
+  assert.equal(wasm?.headers.get("Content-Type"), "application/wasm", "instantiateStreaming needs the type kept");
+  assert.equal(await bodyOf(wasm), "wasm");
   assert.deepEqual(site.requests, []);
 });
 
