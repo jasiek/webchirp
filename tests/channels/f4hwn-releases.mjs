@@ -20,16 +20,15 @@ import {
 import { listRegisteredRadios, sharedHarness } from "../support/chirp.mjs";
 import { webDir } from "../support/repo-paths.mjs";
 
-const MODULE = "f4hwn_v6";
 const CLASS_NAME = "UVK5RadioEgzumer";
 
 // Pin the retained releases and their published bytes. The v4.3.2 asset still
 // identifies itself as driver v4.3.0; its catalog label names the release.
 test("the bundled F4HWN drivers are the exact published releases", async () => {
-  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.length, 3);
+  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.length, 4);
   assert.deepEqual(
     QUANSHENG_UNOFFICIAL_DRIVERS.flatMap((driver) => driver.releases),
-    ["v4.3.2", "v5.9.0", "v6.0.0"],
+    ["v4.3.2", "v5.9.0", "v6.0.0", "v6.1.0"],
   );
   assert.deepEqual(
     (await fs.readdir(path.join(webDir, "python/extra_drivers/quansheng")))
@@ -205,11 +204,18 @@ json.dumps({
 // Exercise the same bridge surfaces the browser reaches after a radio read:
 // codeplug parsing, row editing, settings serialization/validation and image
 // caching. An erased map avoids inventing a hardware fixture while still
-// making the driver's entire bitwise layout parse.
-test("the F4HWN v6 driver loads channels and settings through WebCHIRP", async () => {
-  const harness = await sharedHarness({ driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET, isolated: true });
-  const result = await harness.runPythonJson(
-    `
+// making the driver's entire bitwise layout parse. Both v6 releases run it:
+// v6.1.0 changed the layout (a scan-mix block, a longer write range) and adds
+// a "Mixed Scan Lists" settings group, so neither stands in for the other.
+const V6_RELEASES = [
+  { module: "f4hwn_v6", release: "v6.0.0", settingsGroups: 11 },
+  { module: "f4hwn_v6_1_0", release: "v6.1.0", settingsGroups: 12 },
+];
+for (const { module: MODULE, release, settingsGroups } of V6_RELEASES) {
+  test(`the F4HWN ${release} driver loads channels and settings through WebCHIRP`, async () => {
+    const harness = await sharedHarness({ driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET, isolated: true });
+    const result = await harness.runPythonJson(
+      `
 import copy
 import importlib
 import json
@@ -286,33 +292,34 @@ json.dumps({
     },
     "nativeMetadata": native_metadata,
 })
-    `,
-    { _module: MODULE, _class_name: CLASS_NAME },
-  );
+      `,
+      { _module: MODULE, _class_name: CLASS_NAME },
+    );
 
-  assert.deepEqual(result.loaded, {
-    number: 1,
-    empty: false,
-    freq: 145500000,
-    name: "TEST",
-    mode: "FM",
-    step: 12.5,
-    power: "HIGH = 5W",
+    assert.deepEqual(result.loaded, {
+      number: 1,
+      empty: false,
+      freq: 145500000,
+      name: "TEST",
+      mode: "FM",
+      step: 12.5,
+      power: "HIGH = 5W",
+    });
+    assert.equal(result.rows, 1);
+    assert.deepEqual(result.unreadable, []);
+    assert.equal(result.settingsAvailable, true);
+    assert.equal(result.settingsGroups, settingsGroups);
+    assert.equal(result.settingsValid, true);
+    assert.deepEqual(result.settingsIssues, []);
+    assert.equal(result.advancedAccepted, false);
+    assert.equal(result.calibrationAccepted, false);
+    assert.ok(result.imageSize > 0xB190, "saved image should include CHIRP metadata");
+    assert.deepEqual(result.reloaded, {
+      module: MODULE,
+      className: CLASS_NAME,
+      rows: 1,
+    });
+    assert.equal(result.nativeMetadata.variant, "");
+    assert.equal(result.nativeMetadata.rclass, CLASS_NAME);
   });
-  assert.equal(result.rows, 1);
-  assert.deepEqual(result.unreadable, []);
-  assert.equal(result.settingsAvailable, true);
-  assert.equal(result.settingsGroups, 11);
-  assert.equal(result.settingsValid, true);
-  assert.deepEqual(result.settingsIssues, []);
-  assert.equal(result.advancedAccepted, false);
-  assert.equal(result.calibrationAccepted, false);
-  assert.ok(result.imageSize > 0xB190, "saved image should include CHIRP metadata");
-  assert.deepEqual(result.reloaded, {
-    module: MODULE,
-    className: CLASS_NAME,
-    rows: 1,
-  });
-  assert.equal(result.nativeMetadata.variant, "");
-  assert.equal(result.nativeMetadata.rclass, CLASS_NAME);
-});
+}
