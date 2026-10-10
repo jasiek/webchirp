@@ -98,15 +98,24 @@ export class WebUsbTransport {
     return configuration;
   }
 
-  // Claim the chip's interface, or throw the named error reporting filters
-  // (isUsbInterfaceBusy): a refusal means another driver already holds it.
+  // Claim the chip's interface. WebUSB rejects with NetworkError when another
+  // driver already holds it, and only that becomes the named error reporting
+  // filters (isUsbInterfaceBusy). Anything else -- NotFoundError for an
+  // interface the device lacks, InvalidStateError for a device not open -- is
+  // this app's mistake, so it stays a plain, reported Error.
   async _claimInterface(chip: string, interfaceNumber: number): Promise<void> {
     try {
       await this.device.claimInterface(interfaceNumber);
     } catch (error) {
-      throw createUsbInterfaceBusyError(
-        `${chip}: could not claim USB interface ${interfaceNumber} `
-        + `(another driver may already control it): ${errorFields(error).message || error}`,
+      const { name, message } = errorFields(error);
+      if (name === "NetworkError") {
+        throw createUsbInterfaceBusyError(
+          `${chip}: could not claim USB interface ${interfaceNumber} `
+          + `(another driver may already control it): ${message || error}`,
+        );
+      }
+      throw new Error(
+        `${chip}: could not claim USB interface ${interfaceNumber}: ${message || error}`,
       );
     }
   }

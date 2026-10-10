@@ -368,6 +368,23 @@ test("every chip driver names a refused interface claim UsbInterfaceBusyError", 
   }
 });
 
+// Only contention is the user's machine. A claim refused for any other reason
+// -- an interface the device lacks -- is this app's mistake and stays a plain
+// Error, so reporting keeps it.
+test("every chip driver leaves other claim failures unnamed", async () => {
+  for (const chip of CHIP_NAMES) {
+    const { port, device } = createChipLoopbackPort(chip, { usb: makeEmitter(), latencyMs: 1 });
+    device.claimInterface = async () => {
+      throw new DOMException("The interface number provided is not supported by the device in its current configuration.", "NotFoundError");
+    };
+    await assert.rejects(port.open(OPEN_OPTIONS), (error) => {
+      assert.equal(error.name, "Error", chip);
+      assert.match(error.message, /could not claim USB interface 0: The interface number/);
+      return true;
+    }, chip);
+  }
+});
+
 // The declared capabilities, pinned per transport: a change here is a
 // behaviour change for the radios that need framing or control lines, so it
 // has to be made on purpose.
