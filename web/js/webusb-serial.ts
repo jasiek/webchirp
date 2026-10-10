@@ -17,11 +17,9 @@ import { CP210X_VENDOR_ID, Cp2102SerialPort, isCp2102Device } from "./cp2102-web
 import { FTDI_VENDOR_ID, FtdiSerialPort, isFtdiDevice } from "./ftdi-webusb.ts";
 import { PROLIFIC_VENDOR_ID, Pl2303SerialPort, isProlificDevice } from "./pl2303-webusb.ts";
 import { WebUsbTransport } from "./webusb-transport.ts";
+import { WEB_SERIAL_POLYFILL_URL } from "./cdn-urls.ts";
 import type { SerialOpenOptions, SerialSignals, SerialTransport, SerialTransportCapabilities } from "./serial-transport.ts";
 import type { WebUsbTransportOptions } from "./webusb-transport.ts";
-
-const WEB_SERIAL_POLYFILL_URL =
-  "https://cdn.jsdelivr.net/npm/web-serial-polyfill@1.0.15/+esm";
 
 // Single source of truth for user-facing "what can WebUSB drive" text; update
 // alongside USB_DEVICE_FILTERS / the dispatch below when adding chip drivers.
