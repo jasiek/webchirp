@@ -33,6 +33,12 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "retain-on-failure",
+    // The built site registers a service worker (web/sw.ts) that answers
+    // requests from its caches, out of page.route()'s sight, and downloads
+    // the whole build in the background. Every test but the one about
+    // offline use (tests/e2e/offline.mjs, which allows it) sees the page as
+    // a first visit does.
+    serviceWorkers: "block",
   },
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
   webServer: {

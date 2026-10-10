@@ -75,6 +75,13 @@ export function selectedDriverAnswered(): boolean {
   return /Download from radio or load a codeplug image|does not expose radio-wide settings/.test(text);
 }
 
+// Whether the service worker has cached a complete build, so the app can load
+// without a network: web/js/offline.ts says so in Debug Output.
+export function offlineBuildReady(): boolean {
+  const debugText = (document.querySelector("#debug-output") as HTMLTextAreaElement | null)?.value || "";
+  return /OFFLINE READY build [0-9a-f]{10}/.test(debugText);
+}
+
 // Opens the RSGB query, fills in a Maidenhead locator and submits the form, as
 // a user would. Returns false when the controls are not there to drive.
 export function submitRsgbQuery(locator: string): boolean {
