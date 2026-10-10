@@ -1,4 +1,4 @@
-import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs";
+import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.mjs";
 import { createCallQueue } from "./call-queue.ts";
 import {
   PORT_SELECTION_CANCELLED_MESSAGE,
@@ -287,7 +287,10 @@ export interface DriverImportResult {
   registered: number;
 }
 
-const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/";
+// Must name the same release as the import above and the exact pin of the
+// pyodide npm package, which the Node tests run and tsc takes its types from;
+// tests/build/pyodide-version.mjs holds the three together.
+const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 const CHIRP_REVISION = DEFAULT_CHIRP_REVISION;
 const DRIVER_SET = driverSetFromSearch(globalThis.location?.search);
 
