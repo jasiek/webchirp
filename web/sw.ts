@@ -70,7 +70,10 @@ worker.addEventListener("activate", (event) => {
 });
 
 worker.addEventListener("fetch", (event) => {
-  const response = offline.respond(event.request, event.resultingClientId);
+  const response = offline.respond(event.request, {
+    clientId: event.resultingClientId,
+    waitUntil: (promise) => event.waitUntil(promise),
+  });
   if (response) {
     event.respondWith(response);
   }
