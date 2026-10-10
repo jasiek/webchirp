@@ -69,11 +69,19 @@ export interface OfflineState {
   previous: { buildHash: string; mutableUrls: string[] } | null;
 }
 
+/** How a page load was answered: by the network, by the cached build because
+ * the network failed, or by the cached build because the network was slower
+ * than NETWORK_TIMEOUT_MS. */
+export type PageSource = "network" | "cache" | "cache_after_timeout";
+
+/** Why caching a build failed, as a fixed vocabulary analytics can group by. */
+export type OfflineFailureReason = "network" | "mismatch" | "http" | "quota" | "other";
+
 /** What the worker tells its pages, through OfflineEnv.notify. */
 export type OfflineMessage =
-  | { type: "webchirp-offline"; event: "status"; buildHash: string | null }
+  | { type: "webchirp-offline"; event: "status"; buildHash: string | null; servedFrom: PageSource | null }
   | { type: "webchirp-offline"; event: "ready"; buildHash: string }
-  | { type: "webchirp-offline"; event: "error"; message: string };
+  | { type: "webchirp-offline"; event: "error"; message: string; reason: OfflineFailureReason };
 
 /** What the worker hands this module. */
 export interface OfflineEnv {
@@ -94,6 +102,34 @@ export class OfflineBuildMismatch extends Error {
     super(message);
     this.name = "OfflineBuildMismatch";
   }
+}
+
+/** A file of a build the server would not serve. */
+export class OfflineHttpError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OfflineHttpError";
+  }
+}
+
+// The network not answering within the timeout, as opposed to failing.
+class NetworkTimeout extends Error {}
+
+// Map a caching failure onto OfflineFailureReason: a deploy landing
+// mid-download, a file the server refused, a full disk, the network dropping
+// (fetch rejects with a TypeError), or anything else.
+export function offlineFailureReason(error: unknown): OfflineFailureReason {
+  if (error instanceof OfflineBuildMismatch) {
+    return "mismatch";
+  }
+  if (error instanceof OfflineHttpError) {
+    return "http";
+  }
+  const { name } = errorFields(error);
+  if (name === "QuotaExceededError") {
+    return "quota";
+  }
+  return error instanceof TypeError ? "network" : "other";
 }
 
 const EMPTY_STATE: OfflineState = Object.freeze({ current: null, previous: null });
@@ -170,7 +206,7 @@ async function eachLimited<T>(items: T[], limit: number, task: (item: T) => Prom
 // cache for next time.
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`no answer within ${ms} ms`)), ms);
+    const timer = setTimeout(() => reject(new NetworkTimeout(`no answer within ${ms} ms`)), ms);
     promise.then(
       (value) => { clearTimeout(timer); resolve(value); },
       (error: unknown) => { clearTimeout(timer); reject(error); },
@@ -184,7 +220,13 @@ export interface OfflineCache {
    * The response for a request, or null when the worker should leave it to
    * the browser (non-GET, other hosts, asset-manifest.json).
    */
-  respond(request: Request): Promise<Response> | null;
+  respond(request: Request, clientId?: string): Promise<Response> | null;
+  /**
+   * How the navigation that created the page clientId was answered, once:
+   * the record is dropped as it is read. Null for a page this worker did not
+   * load (the first visit, or a worker restarted since).
+   */
+  pageSource(clientId: string): PageSource | null;
   /** Cache the deployed build if it is not the current one; never throws. */
   sync(): Promise<OfflineState>;
   /** The build served offline, if any. */
@@ -203,6 +245,30 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
   const timeoutMs = env.timeoutMs ?? NETWORK_TIMEOUT_MS;
   let statePromise: Promise<OfflineState> | null = null;
   let syncing: Promise<OfflineState> | null = null;
+  // How recent navigations were answered, by the id of the page each created.
+  const pageSources = new Map<string, PageSource>();
+  const PAGE_SOURCES_KEPT = 32;
+
+  // Remember how the navigation for clientId was answered, keeping only the
+  // most recent few: a page that never asks must not grow the map forever.
+  function recordPageSource(clientId: string | undefined, source: PageSource): void {
+    if (!clientId) {
+      return;
+    }
+    pageSources.set(clientId, source);
+    for (const oldest of pageSources.keys()) {
+      if (pageSources.size <= PAGE_SOURCES_KEPT) {
+        break;
+      }
+      pageSources.delete(oldest);
+    }
+  }
+
+  function pageSource(clientId: string): PageSource | null {
+    const source = pageSources.get(clientId) ?? null;
+    pageSources.delete(clientId);
+    return source;
+  }
 
   // The state as stored, read once and then kept; a worker restarted by the
   // browser starts with nothing in memory and reads it again.
@@ -242,7 +308,7 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
     if (!response) {
       response = await env.fetch(entry.url, { mode: "cors", cache: entry.sha256 ? "no-cache" : "default" });
       if (!response.ok) {
-        throw new Error(`${entry.url}: HTTP ${response.status}`);
+        throw new OfflineHttpError(`${entry.url}: HTTP ${response.status}`);
       }
     }
     if (entry.sha256) {
@@ -311,6 +377,7 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
             type: "webchirp-offline",
             event: "error",
             message: String(errorFields(error).message ?? error),
+            reason: offlineFailureReason(error),
           });
           return state();
         })
@@ -322,18 +389,28 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
   }
 
   // The network's answer within the timeout, or the cached copy under key;
-  // with no cached copy, the network's answer however long it takes.
-  async function networkFirst(request: Request, key: string, buildHash: string): Promise<Response> {
+  // with no cached copy, the network's answer however long it takes. Which
+  // one answered goes to record.
+  async function networkFirst(
+    request: Request,
+    key: string,
+    buildHash: string,
+    record: (source: PageSource) => void,
+  ): Promise<Response> {
     const network = env.fetch(request);
     // Losing to the timeout is not an error: the cached copy answered.
     network.catch(() => {});
     const cached = await (await env.caches.open(buildCacheName(buildHash))).match(key, MATCH_OPTIONS);
     if (!cached) {
+      record("network");
       return network;
     }
     try {
-      return await withTimeout(network, timeoutMs);
-    } catch {
+      const response = await withTimeout(network, timeoutMs);
+      record("network");
+      return response;
+    } catch (error) {
+      record(error instanceof NetworkTimeout ? "cache_after_timeout" : "cache");
       return cached;
     }
   }
@@ -346,30 +423,38 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
   // Until one build is complete nothing is served from a cache: a partly
   // cached build may hold a renamable file from a deploy that has since been
   // replaced, and there is nothing to fall back to offline anyway.
-  async function routeSameOrigin(request: Request, url: URL): Promise<Response> {
+  async function routeSameOrigin(request: Request, url: URL, clientId: string | undefined): Promise<Response> {
+    const navigate = request.mode === "navigate";
+    // Only a navigation's source is worth keeping: it is what the page asks.
+    const record = (source: PageSource) => {
+      if (navigate) {
+        recordPageSource(clientId, source);
+      }
+    };
     const { current } = await state();
-    if (!current) {
+    const key = navigate ? pageKey(url) : url.href;
+    if (current?.mutableUrls.includes(key)) {
+      return networkFirst(request, key, current.buildHash, record);
+    }
+    if (!current || navigate) {
+      record("network");
       return env.fetch(request);
     }
-    const key = request.mode === "navigate" ? pageKey(url) : url.href;
-    if (current.mutableUrls.includes(key)) {
-      return networkFirst(request, key, current.buildHash);
-    }
-    return request.mode === "navigate" ? env.fetch(request) : cacheFirst(request);
+    return cacheFirst(request);
   }
 
-  function respond(request: Request): Promise<Response> | null {
+  function respond(request: Request, clientId?: string): Promise<Response> | null {
     if (request.method !== "GET") {
       return null;
     }
     const url = new URL(request.url);
     if (url.href.startsWith(scope)) {
-      return url.href === manifestUrl ? null : routeSameOrigin(request, url);
+      return url.href === manifestUrl ? null : routeSameOrigin(request, url, clientId);
     }
     // Only pinned CDN URLs are immutable; analytics, Sentry's ingest and the
     // repeater directories are live and stay the browser's business.
     return url.origin === cdnOrigin ? cacheFirst(request) : null;
   }
 
-  return { respond, sync, state };
+  return { respond, pageSource, sync, state };
 }

@@ -19,13 +19,15 @@ interface ExtendableEventLike extends Event {
 
 interface FetchEventLike extends ExtendableEventLike {
   readonly request: Request;
+  /** The id of the page a navigation creates; empty for a subresource. */
+  readonly resultingClientId: string;
   respondWith(response: Promise<Response>): void;
 }
 
 interface MessageEventLike extends ExtendableEventLike {
   // Whatever a page posted: checked before use.
   readonly data: unknown;
-  readonly source: { postMessage(message: OfflineMessage): void } | null;
+  readonly source: { readonly id: string; postMessage(message: OfflineMessage): void } | null;
 }
 
 interface ServiceWorkerScope {
@@ -68,7 +70,7 @@ worker.addEventListener("activate", (event) => {
 });
 
 worker.addEventListener("fetch", (event) => {
-  const response = offline.respond(event.request);
+  const response = offline.respond(event.request, event.resultingClientId);
   if (response) {
     event.respondWith(response);
   }
@@ -79,7 +81,8 @@ worker.addEventListener("fetch", (event) => {
   }
 });
 
-// A page asking which build it could load offline (web/js/offline.ts).
+// A page asking which build it could load offline, and how it was itself
+// loaded (web/js/offline.ts reports both).
 worker.addEventListener("message", (event) => {
   const data = event.data as { type?: unknown } | null;
   if (data?.type !== "webchirp-offline-status" || !event.source) {
@@ -87,6 +90,11 @@ worker.addEventListener("message", (event) => {
   }
   const source = event.source;
   event.waitUntil(offline.state().then(({ current }) => {
-    source.postMessage({ type: "webchirp-offline", event: "status", buildHash: current?.buildHash || null });
+    source.postMessage({
+      type: "webchirp-offline",
+      event: "status",
+      buildHash: current?.buildHash || null,
+      servedFrom: offline.pageSource(source.id),
+    });
   }));
 });

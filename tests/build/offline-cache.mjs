@@ -157,6 +157,7 @@ test("a build cut short leaves the last complete one in place, and resumes", asy
   const state = await offline.sync();
   assert.equal(state.current?.buildHash, BUILD_A.buildHash, "a half-cached build must not replace a complete one");
   assert.equal(messages.at(-1)?.event, "error");
+  assert.equal(messages.at(-1)?.reason, "http");
 
   // Offline, the page served is still A's, whose files are all there.
   site.offline = true;
@@ -189,6 +190,7 @@ test("a deploy landing mid-download does not commit a mixed build", async () => 
   const state = await offline.sync();
   assert.equal(state.current?.buildHash, BUILD_A.buildHash);
   assert.match(String(messages.at(-1)?.message), /does not match the build that listed it/);
+  assert.equal(messages.at(-1)?.reason, "mismatch");
 });
 
 test("an unchanged file is copied from the previous build, not downloaded", async () => {
@@ -297,4 +299,63 @@ test("a malformed manifest is refused rather than half-cached", () => {
     /index.html without a digest/,
   );
   assert.throws(() => parseOfflineBuild({ buildHash: "../x", offline: {} }, SCOPE), /buildHash/);
+});
+
+// What analytics is told (web/js/offline.ts): how the page asking was loaded.
+test("each page load is remembered as network, cache or cache after the timeout", async () => {
+  const { site, offline } = setup();
+  await offline.sync();
+  await offline.respond(navigation(SCOPE), "online-tab");
+  site.offline = true;
+  await offline.respond(navigation(SCOPE), "offline-tab");
+  site.offline = false;
+  site.hang = true;
+  await offline.respond(navigation(SCOPE), "slow-tab");
+  assert.equal(offline.pageSource("online-tab"), "network");
+  assert.equal(offline.pageSource("offline-tab"), "cache");
+  assert.equal(offline.pageSource("slow-tab"), "cache_after_timeout");
+  assert.equal(offline.pageSource("online-tab"), null, "a source is handed out once");
+  assert.equal(offline.pageSource("never-loaded"), null);
+});
+
+test("a page loaded before any build was cached came from the network", async () => {
+  const { offline } = setup();
+  await offline.respond(navigation(SCOPE), "first-visit");
+  assert.equal(offline.pageSource("first-visit"), "network");
+});
+
+test("subresources leave no page source behind", async () => {
+  const { offline } = setup();
+  await offline.sync();
+  await offline.respond(subresource(`${SCOPE}radio-catalog.json`), "");
+  await offline.respond(subresource(`${SCOPE}js/app.AAAAAAAA.js`), "");
+  assert.equal(offline.pageSource(""), null);
+});
+
+test("a dropped connection and a full disk are reported as such", async () => {
+  {
+    const { site, offline, messages } = setup();
+    site.onRequest = (url) => {
+      if (url.endsWith("index.html")) {
+        site.offline = true;
+      }
+    };
+    await offline.sync();
+    assert.equal(messages.at(-1)?.reason, "network");
+  }
+  {
+    const { caches, offline, messages } = setup();
+    const open = caches.open.bind(caches);
+    caches.open = async (name) => {
+      const cache = await open(name);
+      if (name.includes("-build-")) {
+        cache.put = async () => {
+          throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+        };
+      }
+      return cache;
+    };
+    await offline.sync();
+    assert.equal(messages.at(-1)?.reason, "quota");
+  }
 });
