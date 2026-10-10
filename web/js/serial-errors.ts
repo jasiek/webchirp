@@ -21,6 +21,25 @@ export const PORT_SELECTION_CANCELLED = "PortSelectionCancelledError";
 // A capability limit stays recognizable after Pyodide flattens the exception.
 export const SERIAL_UNSUPPORTED = "SerialUnsupportedError";
 
+// Native Web Serial refused to open the port: another program holds it, or the
+// OS driver failed. The browser reports it as a NetworkError, the same name it
+// gives a port lost mid-clone, so the open failure gets a name of its own --
+// reporting drops this one (isIgnoredError, web/js/sentry.ts) and keeps that one.
+export const SERIAL_PORT_OPEN_FAILED = "SerialPortOpenFailedError";
+
+// Rename the browser's open failure, keeping its message for the debug panel.
+export function createSerialPortOpenFailedError(message: string): Error {
+  const error = new Error(message);
+  error.name = SERIAL_PORT_OPEN_FAILED;
+  return error;
+}
+
+// Recognize that outcome by name, in JS or after crossing Python (jsErrorName
+// reads a RuntimeCallError's jsCause).
+export function isSerialPortOpenFailed(error: unknown): boolean {
+  return jsErrorName(error) === SERIAL_PORT_OPEN_FAILED;
+}
+
 // Name transport capability refusals without coupling reporting to UI wording.
 export function createSerialUnsupportedError(message: string): Error {
   const error = new Error(message);

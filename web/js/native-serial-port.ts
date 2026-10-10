@@ -3,6 +3,8 @@
 // contract's members -- and monkey-patching a platform object would hide what
 // it really is -- so the bridge holds this wrapper and the wrapper holds the
 // port. Everything Web Serial already does is forwarded as it is.
+import { errorFields } from "./error-details.ts";
+import { createSerialPortOpenFailedError } from "./serial-errors.ts";
 import { createDisconnectNotifier } from "./serial-transport.ts";
 import type {
   DisconnectNotifier,
@@ -80,8 +82,19 @@ export class NativeSerialPort implements SerialTransport {
   }
 
   // Open the native port, then start reporting its loss.
+  // A NetworkError here is the port refusing to open (busy, or the OS driver
+  // failed); it is renamed so it is not mistaken for a port lost later. Any
+  // other failure (InvalidStateError for an already-open port) passes through.
   async open(options: SerialOpenOptions) {
-    await this.nativePort.open(options);
+    try {
+      await this.nativePort.open(options);
+    } catch (error) {
+      const { name, message } = errorFields(error);
+      if (name === "NetworkError") {
+        throw createSerialPortOpenFailedError(String(message || error));
+      }
+      throw error;
+    }
     this._watch();
   }
 
