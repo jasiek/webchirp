@@ -463,7 +463,13 @@ export class SerialBridge {
     wantsRts: boolean,
     settleMs: number,
     baudRate: number,
-  ): Promise<{ prepared: true; baudRate: number; baudRateChanged: boolean; settleMs: number }> {
+  ): Promise<{
+    prepared: true;
+    baudRate: number;
+    baudRateChanged: boolean;
+    settleMs: number;
+    transport: string;
+  }> {
     if (!this.port) {
       throw new Error("Port is not connected.");
     }
@@ -494,6 +500,9 @@ export class SerialBridge {
       baudRate: this.baudRate,
       baudRateChanged: rate.changed,
       settleMs: settle,
+      // CHIRP drivers ask the pipe whether it is Bluetooth (UV-5R Mini picks
+      // its upload block size from it), so Python needs the transport name.
+      transport: this.transport,
     };
   }
 
