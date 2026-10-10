@@ -9,7 +9,8 @@
 //   1. A page (a navigation) and the few files that keep their name across
 //      deploys (index.html, the radio catalogs, version.json...) come from the
 //      network when it answers within NETWORK_TIMEOUT_MS, so an online visit
-//      always sees the latest deploy; otherwise from the cached build.
+//      always sees the latest deploy; otherwise -- or when the host answers
+//      with an outage status such as 503 -- from the cached build.
 //   2. Everything else is immutable by name -- content-hashed bundles and
 //      Python, the pin-named CHIRP archive, version-pinned CDN files -- so a
 //      cached copy is served without asking the network at all.
@@ -214,6 +215,16 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+// Whether an HTTP status says the server could not answer just now (a 5xx,
+// a request timeout, rate limiting) rather than giving an answer. A page or
+// renamable file that gets one is served from the cached build as if the
+// network had failed, so an outage at the host does not stop a cached app
+// from launching. Any other status -- a 404 for a file a deploy dropped, say
+// -- is the answer, and the cached copy is not resurrected over it.
+function isServerOutage(status: number): boolean {
+  return status >= 500 || status === 408 || status === 429;
+}
+
 /** The service worker's behaviour, bound to one environment. */
 export interface OfflineCache {
   /**
@@ -388,7 +399,8 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
     return syncing;
   }
 
-  // The network's answer within the timeout, or the cached copy under key;
+  // The network's answer within the timeout, or the cached copy under key
+  // when the network fails, times out or reports an outage (isServerOutage);
   // with no cached copy, the network's answer however long it takes. Which
   // one answered goes to record.
   async function networkFirst(
@@ -407,12 +419,15 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
     }
     try {
       const response = await withTimeout(network, timeoutMs);
-      record("network");
-      return response;
+      if (!isServerOutage(response.status)) {
+        record("network");
+        return response;
+      }
+      record("cache");
     } catch (error) {
       record(error instanceof NetworkTimeout ? "cache_after_timeout" : "cache");
-      return cached;
     }
+    return cached;
   }
 
   // Any cache's copy of an immutable URL, else the network.

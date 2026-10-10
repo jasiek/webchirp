@@ -262,6 +262,28 @@ test("a network that never answers falls back to the cache after the timeout", a
   assert.equal(await bodyOf(offline.respond(navigation(SCOPE))), "<p>A</p>");
 });
 
+test("a server that cannot answer just now falls back to the cache", async () => {
+  const { site, offline } = setup();
+  await offline.sync();
+  site.failing.add(`${SCOPE}index.html`);
+  site.failing.add(`${SCOPE}radio-catalog.json`);
+  assert.equal(await bodyOf(offline.respond(navigation(`${SCOPE}index.html`), "outage-tab")), "<p>A</p>");
+  assert.equal(offline.pageSource("outage-tab"), "cache");
+  assert.equal(await bodyOf(offline.respond(subresource(`${SCOPE}radio-catalog.json`))), '{"a":1}');
+});
+
+test("a file the server says is gone is not resurrected from the cache", async () => {
+  const { site, offline } = setup();
+  await offline.sync();
+  // A deploy that dropped the catalog: the 404 is the answer, not an outage.
+  site.current = deploy("dddddddddd", {
+    files: { "index.html": "<p>D</p>" },
+    assets: { "js/app.DDDDDDDD.js": "app D" },
+  });
+  const response = await offline.respond(subresource(`${SCOPE}radio-catalog.json`));
+  assert.equal(response?.status, 404);
+});
+
 test("immutable files are served from the cache without asking the network", async () => {
   const { site, offline } = setup();
   await offline.sync();
