@@ -550,19 +550,28 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
   // cacheFirst for the CDN, keeping a pinned file the build did not list in
   // the current build's cache once fetched. Before any build is complete
   // there is nowhere to keep it; the next sync lists what matters anyway.
+  //
+  // A pinned file answered from an older build's cache is copied into the
+  // current one too. Without that it would live only in the cache it was
+  // first kept in, which the next deploy but one prunes, however often the
+  // app was used online in between.
   async function cacheFirstCdn(request: Request, url: URL, waitUntil: RespondOptions["waitUntil"]): Promise<Response> {
+    const pinned = PINNED_CDN_PATH.test(url.pathname);
+    const { current } = await state();
+    const currentCache = pinned && current ? await env.caches.open(buildCacheName(current.buildHash)) : null;
+    const keep = (cache: Cache, response: Response) => {
+      waitUntil?.(cache.put(request.url, response).catch(() => {}));
+    };
     const cached = await env.caches.match(request.url, MATCH_OPTIONS);
     if (cached) {
+      if (currentCache && !(await currentCache.match(request.url, MATCH_OPTIONS))) {
+        keep(currentCache, cached.clone());
+      }
       return cached;
     }
     const response = await env.fetch(request);
-    const { current } = await state();
-    if (response.ok && current && PINNED_CDN_PATH.test(url.pathname)) {
-      const copy = response.clone();
-      const stored = env.caches.open(buildCacheName(current.buildHash))
-        .then((cache) => cache.put(request.url, copy))
-        .catch(() => {});
-      waitUntil?.(stored);
+    if (response.ok && currentCache) {
+      keep(currentCache, response.clone());
     }
     return response;
   }

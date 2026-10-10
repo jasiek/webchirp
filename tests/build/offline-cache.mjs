@@ -548,3 +548,28 @@ test("a malformed optional group is refused", () => {
   assert.throws(() => parseOfflineBuild(manifest([{ urls: [OPTIONAL_MODULE] }]), SCOPE), /without hosts and urls/);
   assert.equal(parseOfflineBuild(manifest(undefined), SCOPE).entries.length, 0, "an older manifest has none");
 });
+
+// A module kept at runtime lives in the build cache that was current then;
+// served from there after a deploy, it must move to the new current cache or
+// the deploy after next prunes the only copy.
+test("a kept CDN module follows the current build across deploys", async () => {
+  const { site, offline } = setup();
+  await offline.sync();
+  const module = "https://cdn.jsdelivr.net/npm/@sentry/conventions@0.16.1/attributes/+esm";
+  site.cdn[module] = "export {}";
+  const kept = [];
+  const respond = (url) => offline.respond(subresource(url), { waitUntil: (p) => kept.push(p) });
+  await bodyOf(respond(module));
+  await Promise.all(kept.splice(0));
+
+  site.current = BUILD_B;
+  await offline.sync();
+  // Used online under B, answered from A's cache.
+  await bodyOf(respond(module));
+  await Promise.all(kept.splice(0));
+
+  site.current = BUILD_C;
+  await offline.sync();
+  site.offline = true;
+  assert.equal(await bodyOf(respond(module)), "export {}", "A's cache is gone; B's copy answers");
+});
