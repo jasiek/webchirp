@@ -12,7 +12,10 @@
 //      always sees the latest deploy; otherwise from the cached build.
 //   2. Everything else is immutable by name -- content-hashed bundles and
 //      Python, the pin-named CHIRP archive, version-pinned CDN files -- so a
-//      cached copy is served without asking the network at all.
+//      cached copy is served without asking the network at all. A pinned CDN
+//      file the build did not list is cached the first time it is fetched,
+//      so a module jsDelivr's generated +esm build starts importing still
+//      reaches the offline copy after one online visit.
 //   3. A build is cached whole or not at all. After a page load the worker
 //      reads asset-manifest.json, fetches every file the build lists into a
 //      cache of its own, checks each renamable file against the digest the
@@ -214,13 +217,26 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+/** What the worker knows about a request beyond the request itself. */
+export interface RespondOptions {
+  /** The id of the page a navigation creates (FetchEvent.resultingClientId). */
+  clientId?: string;
+  /** Keep the worker alive for work that outlasts the response. */
+  waitUntil?: (promise: Promise<unknown>) => void;
+}
+
+// A jsDelivr path that names an exact version, so its body never changes:
+// /npm/<package>@1.2.3/... (scoped or not) or Pyodide's /pyodide/v1.2.3/.
+// A range or a tag (@1, @latest) can move and is never cached.
+const PINNED_CDN_PATH = /^\/npm\/(?:@[^/]+\/)?[^/@]+@\d+\.\d+\.\d+(?:[-+][\w.]+)?\/|^\/pyodide\/v\d+\.\d+\.\d+\//;
+
 /** The service worker's behaviour, bound to one environment. */
 export interface OfflineCache {
   /**
    * The response for a request, or null when the worker should leave it to
    * the browser (non-GET, other hosts, asset-manifest.json).
    */
-  respond(request: Request, clientId?: string): Promise<Response> | null;
+  respond(request: Request, options?: RespondOptions): Promise<Response> | null;
   /**
    * How the navigation that created the page clientId was answered, once:
    * the record is dropped as it is read. Null for a page this worker did not
@@ -420,6 +436,26 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
     return (await env.caches.match(request.url, MATCH_OPTIONS)) || env.fetch(request);
   }
 
+  // cacheFirst for the CDN, keeping a pinned file the build did not list in
+  // the current build's cache once fetched. Before any build is complete
+  // there is nowhere to keep it; the next sync lists what matters anyway.
+  async function cacheFirstCdn(request: Request, url: URL, waitUntil: RespondOptions["waitUntil"]): Promise<Response> {
+    const cached = await env.caches.match(request.url, MATCH_OPTIONS);
+    if (cached) {
+      return cached;
+    }
+    const response = await env.fetch(request);
+    const { current } = await state();
+    if (response.ok && current && PINNED_CDN_PATH.test(url.pathname)) {
+      const copy = response.clone();
+      const stored = env.caches.open(buildCacheName(current.buildHash))
+        .then((cache) => cache.put(request.url, copy))
+        .catch(() => {});
+      waitUntil?.(stored);
+    }
+    return response;
+  }
+
   // Until one build is complete nothing is served from a cache: a partly
   // cached build may hold a renamable file from a deploy that has since been
   // replaced, and there is nothing to fall back to offline anyway.
@@ -443,7 +479,7 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
     return cacheFirst(request);
   }
 
-  function respond(request: Request, clientId?: string): Promise<Response> | null {
+  function respond(request: Request, { clientId, waitUntil }: RespondOptions = {}): Promise<Response> | null {
     if (request.method !== "GET") {
       return null;
     }
@@ -453,7 +489,7 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
     }
     // Only pinned CDN URLs are immutable; analytics, Sentry's ingest and the
     // repeater directories are live and stay the browser's business.
-    return url.origin === cdnOrigin ? cacheFirst(request) : null;
+    return url.origin === cdnOrigin ? cacheFirstCdn(request, url, waitUntil) : null;
   }
 
   return { respond, pageSource, sync, state };
