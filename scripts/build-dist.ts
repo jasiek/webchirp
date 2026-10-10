@@ -28,9 +28,17 @@
 //     Sentry SDK and the web-serial polyfill stay on jsDelivr; their URLs are
 //     external, so the bundle never fetches them and the two lazy ones stay
 //     dynamic imports.
+//   * The service worker (web/sw.ts) is bundled on its own, as a classic
+//     script, to dist/sw.js: unhashed and at the root, because a worker
+//     controls only pages at or below its URL and the browser updates it by
+//     fetching that same URL again.
 //
 // asset-manifest.json lists every immutable name this build emits, which
-// scripts/retain-deployed-assets.ts carries into the next deploy.
+// scripts/retain-deployed-assets.ts carries into the next deploy, and under
+// "offline" what the service worker caches so the build loads without a
+// network (web/js/offline-cache.ts): the root pages and OFFLINE_DATA_FILES
+// with the digest of each, every immutable name but the source maps, and the
+// CDN files (OFFLINE_CDN_URLS).
 import { createHash } from "node:crypto";
 import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -42,6 +50,7 @@ import {
   chirpBundleFileNames,
   DEFAULT_CHIRP_REVISION,
 } from "../web/js/python-sources.ts";
+import { OFFLINE_CDN_URLS } from "../web/js/cdn-urls.ts";
 import { errorFields } from "../web/js/error-details.ts";
 
 const ROOT = process.cwd();
@@ -86,6 +95,24 @@ const REQUIRED_WEB_FILES = [
   // loads and shows the catalog, so a deploy that forgot to build it looks
   // fine until the first radio is selected.
   ...CHIRP_BUNDLE_FILES,
+];
+// The service worker's source, bundled to dist/sw.js.
+const SERVICE_WORKER_SOURCE = path.join(WEB_DIR, "sw.ts");
+// The files the app reads at runtime under names that do not change with their
+// content, which the service worker caches with each build's pages: the
+// catalogs the radio pickers load, the version the footer and Sentry read, and
+// what an installed app's launcher shows. Each must exist; an offline app
+// missing one is broken in a way no online page load reveals.
+const OFFLINE_DATA_FILES = [
+  "radio-catalog.json",
+  "radio-catalog-quansheng-unofficial.json",
+  "version.json",
+  "manifest.webmanifest",
+  "favicon.ico",
+  "images/icon-192.png",
+  "images/icon-512.png",
+  "images/icon-maskable-512.png",
+  "images/apple-touch-icon.png",
 ];
 // Source files that reach dist/ only through esbuild or the Python hashing, so
 // the verbatim copy skips them (as it skips type declarations, which only tsc
@@ -354,6 +381,26 @@ async function bundle(
   };
 }
 
+// The digest of every file the service worker caches under a name that does
+// not change with its content -- the root pages and OFFLINE_DATA_FILES -- as
+// dist-relative paths, which the worker checks each fetched copy against so a
+// deploy landing mid-download cannot leave it a mixed build.
+async function offlineFileDigests(rootPages: string[]): Promise<Record<string, string>> {
+  const rels = [
+    ...rootPages.map((page) => toPosix(path.relative(WEB_DIR, page))),
+    ...OFFLINE_DATA_FILES,
+  ].sort();
+  const digests: Record<string, string> = {};
+  for (const rel of rels) {
+    try {
+      digests[rel] = contentHash(await readFile(path.join(DIST_DIR, rel)));
+    } catch {
+      throw new Error(`Missing offline asset: ${rel}`);
+    }
+  }
+  return digests;
+}
+
 async function main() {
   await rm(DIST_DIR, { recursive: true, force: true });
 
@@ -395,6 +442,14 @@ async function main() {
     entryNames: "[dir]/[name].[hash]",
   });
   const entryOutputs = new Map([...js.entryOutputs, ...css.entryOutputs]);
+  // A classic script rather than a module, which every browser with service
+  // workers can run; unhashed at the root (see the header).
+  const sw = await bundle([SERVICE_WORKER_SOURCE], {
+    format: "iife",
+    target: "es2022",
+    outbase: WEB_DIR,
+    entryNames: "[name]",
+  });
 
   // Everything esbuild and the Python hashing did not produce, as it is. A
   // source module no page reaches is left out like any other source module;
@@ -409,7 +464,7 @@ async function main() {
     await mkdir(path.dirname(target), { recursive: true });
     await copyFile(file, target);
   }
-  const bundled = new Set([...js.inputs, ...css.inputs]);
+  const bundled = new Set([...js.inputs, ...css.inputs, ...sw.inputs]);
   const unbundled = webFiles
     .filter((file) => (SOURCE_MODULE_EXTS.has(path.extname(file)) && !file.endsWith(".d.ts"))
       || path.extname(file) === ".css")
@@ -462,14 +517,28 @@ async function main() {
   const replacements = pairs.flatMap(([from, to]) => [[`./${from}`, `./${to}`], [`/${from}`, `/${to}`]]);
   replacements.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 
+  const offline = {
+    files: await offlineFileDigests(pages.filter((page) => path.dirname(page) === WEB_DIR)),
+    assets: [...new Set(replacements.map(([, to]) => to.replace(/^\.?\//, "")))]
+      .filter((rel) => !rel.endsWith(".map"))
+      .sort(),
+    cdn: [...OFFLINE_CDN_URLS],
+  };
+
   // esbuild names each output after its bytes and its imports' names, and the
   // Python and pin names cover their files the same way, so a digest over the
-  // name list is a digest of the whole build.
-  const buildHash = contentHash(JSON.stringify(replacements));
+  // name list is a digest of every hashed file. The whole offline section
+  // joins it: the offline files' digests, so a change to index.html or a
+  // catalog alone is a new build for the service worker to cache too, and the
+  // CDN list, which can change without any emitted file changing (the browser
+  // bundle tree-shakes it away). A worker that already holds a build hash
+  // never syncs it again, so anything it caches must move the hash.
+  const buildHash = contentHash(JSON.stringify([replacements, offline]));
   const manifest = {
     buildHash,
     generatedAt: new Date().toISOString(),
     assets: Object.fromEntries(replacements),
+    offline,
   };
   await writeFile(
     path.join(DIST_DIR, "asset-manifest.json"),

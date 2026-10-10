@@ -3,6 +3,8 @@ import { createSerialRpcHandler } from "./js/serial-globals.ts";
 import { createRuntimeRpcClient } from "./js/runtime-rpc.ts";
 import { createUiController } from "./js/ui.ts";
 import { installTooltips } from "./js/tooltip.ts";
+import { registerOfflineSupport } from "./js/offline.ts";
+import { deferAnalytics, replayDeferredAnalytics, trackEvent } from "./js/ui/analytics.ts";
 import { WEBUSB_SUPPORTED_ADAPTERS } from "./js/webusb-serial.ts";
 
 installTooltips();
@@ -61,3 +63,9 @@ if (serialCapability.webusb && !serialCapability.native) {
 if (serialCapability.webbluetooth) {
   ui.logSerial("Use WebBluetooth for a BT-1AD BLE programming dongle used with Ola Radio.");
 }
+// Keep this version cached so the next visit loads without a network.
+void registerOfflineSupport({
+  logDebug: ui.logDebug,
+  trackEvent: (name, params) => trackEvent(name, params),
+  replay: { defer: () => deferAnalytics(), replay: () => replayDeferredAnalytics() },
+});

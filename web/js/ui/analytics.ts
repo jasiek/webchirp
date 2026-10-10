@@ -24,7 +24,7 @@ import { isPortSelectionCancelled } from "../serial-errors.ts";
 import type { CatalogRadio, RowIssue, SettingIssue } from "../runtime-rpc.ts";
 import type { UiState } from "./state.ts";
 
-export { trackEvent } from "../analytics.ts";
+export { deferAnalytics, replayDeferredAnalytics, trackEvent } from "../analytics.ts";
 
 // The driver identity every radio-scoped event carries. radio answers "which
 // radios do people own", module/class answer "which CHIRP driver ran", and the

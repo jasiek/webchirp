@@ -227,6 +227,42 @@ export const CUSTOM_DIMENSIONS: readonly Readonly<CustomDimension>[] = Object.fr
     description: "CHIRP settings group opened in the radio settings editor.",
     scope: "EVENT",
   },
+  {
+    parameterName: "served_from",
+    displayName: "Offline served from",
+    description: "How the service worker answered counted app launches: cache (network failed) or cache_after_timeout (network too slow).",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "launch_count",
+    displayName: "Offline launch count",
+    description: "App launches answered from the offline cache since the last report.",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "delivery",
+    displayName: "Delivery",
+    description: "offline_replay for an event recorded on a page served from the offline cache and sent later; unset when sent live.",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "event_count",
+    displayName: "Replayed event count",
+    description: "Offline events an offline_replay sent from the replay queue.",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "dropped_count",
+    displayName: "Dropped event count",
+    description: "Offline events an offline_replay lost because the replay queue was full (REPLAY_LIMIT in web/js/analytics.ts).",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "launch_count_bucket",
+    displayName: "Offline launch count bucket",
+    description: "Offline launches since the last report as a range (1, 2-5, 6-20, 21+) so reports can group by it.",
+    scope: "EVENT",
+  },
 ].map((dimension) => Object.freeze(dimension)));
 
 // Display modes reported through the display-mode media feature, most app-like
@@ -272,17 +308,167 @@ export function isAnalyticsHost(win: Window | null | undefined): boolean {
 // A throwing gtag is swallowed: content blockers commonly replace it with a
 // stub that throws, and telemetry must never be able to fail the clone it is
 // reporting on.
+//
+// On a page diverted by deferAnalytics() the event is queued for replay
+// instead, and false says it was not sent.
 export function trackEvent(name: string, params: Record<string, unknown> = {}, win: Window | null = target): boolean {
   const gtag = win?.gtag;
-  if (typeof gtag !== "function") {
+  if (!win || typeof gtag !== "function") {
+    return false;
+  }
+  const fullParams = { display_mode: detectDisplayMode(win), ...params };
+  if (deferredWindows.has(win)) {
+    enqueueReplay(win, [{ name: String(name), params: fullParams }]);
     return false;
   }
   try {
-    gtag("event", String(name), { display_mode: detectDisplayMode(win), ...params });
+    gtag("event", String(name), fullParams);
   } catch {
     return false;
   }
   return true;
+}
+
+// --- Offline replay ----------------------------------------------------------
+//
+// A page the service worker answered from its cache because the network
+// failed (web/js/offline.ts) has no way to report: gtag.js never loads, and
+// the stub's dataLayer dies with the page. deferAnalytics() diverts such a
+// page's events into localStorage, and replayDeferredAnalytics() sends them,
+// marked delivery: "offline_replay", from the next page the network serves.
+// GA stamps them with the time of the replay, not the time they happened, and
+// counts them in the replaying session.
+//
+// The queue keeps the newest REPLAY_LIMIT events. A typical offline session --
+// select a radio, connect, download, edit, upload -- records 10 to 25, so the
+// limit covers a dozen or more sessions between online visits; when it does
+// not, the offline_replay summary's dropped_count says by how much.
+
+export const REPLAY_LIMIT = 300;
+const REPLAY_KEY = "webchirp-analytics-replay";
+
+/** One event waiting to be replayed: its name and the params trackEvent built. */
+interface QueuedEvent {
+  name: string;
+  params: Record<string, unknown>;
+}
+
+/** The replay queue as stored. */
+interface ReplayQueue {
+  events: QueuedEvent[];
+  /** Events discarded because the queue was full. */
+  dropped: number;
+}
+
+// The windows whose events are being queued; per window so a test's fake
+// window and the real one cannot leak into each other.
+const deferredWindows = new WeakSet<object>();
+
+// The window's localStorage, or null where it is missing, not a real Storage,
+// or throws to read (blocked site data, some private modes).
+function replayStorage(win: Window): Pick<Storage, "getItem" | "setItem" | "removeItem"> | null {
+  try {
+    const storage = win.localStorage;
+    return typeof storage?.getItem === "function" && typeof storage.setItem === "function"
+      && typeof storage.removeItem === "function" ? storage : null;
+  } catch {
+    return null;
+  }
+}
+
+// The stored queue, keeping only well-formed entries: it is JSON this module
+// wrote, but storage outlives code versions and can be edited by hand.
+function readReplayQueue(storage: Pick<Storage, "getItem">): ReplayQueue {
+  try {
+    const parsed = JSON.parse(storage.getItem(REPLAY_KEY) || "null") as Partial<ReplayQueue> | null;
+    const events = (Array.isArray(parsed?.events) ? parsed.events : []).filter(
+      (event): event is QueuedEvent => typeof event?.name === "string"
+        && Boolean(event.params) && typeof event.params === "object",
+    );
+    const dropped = Number.isInteger(parsed?.dropped) ? Number(parsed?.dropped) : 0;
+    return { events, dropped };
+  } catch {
+    return { events: [], dropped: 0 };
+  }
+}
+
+// Append to the queue, dropping the oldest past REPLAY_LIMIT and counting them.
+function enqueueReplay(win: Window, events: QueuedEvent[]): void {
+  const storage = replayStorage(win);
+  if (!storage || events.length === 0) {
+    return;
+  }
+  const queue = readReplayQueue(storage);
+  queue.events.push(...events);
+  const overflow = queue.events.length - REPLAY_LIMIT;
+  if (overflow > 0) {
+    queue.events.splice(0, overflow);
+    queue.dropped += overflow;
+  }
+  try {
+    storage.setItem(REPLAY_KEY, JSON.stringify(queue));
+  } catch {
+    // Storage full or blocked: these events are lost, as they were before.
+  }
+}
+
+// Queue this page's events for a later page instead of sending them, from now
+// on and retroactively: what was tracked before the page learned it was
+// offline sits in dataLayer as gtag("event", ...) argument lists, and is moved
+// out, so gtag.js cannot send it a second time should it load after all.
+// Returns whether the page is now deferred; analytics off the production host,
+// or no storage, leaves it as it was.
+export function deferAnalytics(win: Window | null = target): boolean {
+  if (!win || typeof win.gtag !== "function" || !replayStorage(win)) {
+    return false;
+  }
+  if (deferredWindows.has(win)) {
+    return true;
+  }
+  deferredWindows.add(win);
+  const layer = win.dataLayer || [];
+  const moved: QueuedEvent[] = [];
+  for (let i = 0; i < layer.length;) {
+    // dataLayer holds the arguments objects the gtag stub pushed.
+    const entry = layer[i] as ArrayLike<unknown> | null;
+    if (entry?.[0] === "event" && typeof entry[1] === "string") {
+      const params = entry[2] && typeof entry[2] === "object" ? entry[2] as Record<string, unknown> : {};
+      moved.push({ name: entry[1], params: { ...params } });
+      layer.splice(i, 1);
+    } else {
+      i += 1;
+    }
+  }
+  enqueueReplay(win, moved);
+  return true;
+}
+
+// Send what offline pages queued, oldest first, then one offline_replay
+// summary. The queue is cleared before anything is sent, so a second tab the
+// network served at the same moment finds it empty rather than sending it
+// again. Returns how many events were replayed.
+export function replayDeferredAnalytics(win: Window | null = target): number {
+  if (!win || typeof win.gtag !== "function" || deferredWindows.has(win)) {
+    return 0;
+  }
+  const storage = replayStorage(win);
+  if (!storage) {
+    return 0;
+  }
+  const queue = readReplayQueue(storage);
+  if (queue.events.length === 0 && queue.dropped === 0) {
+    return 0;
+  }
+  try {
+    storage.removeItem(REPLAY_KEY);
+  } catch {
+    return 0;
+  }
+  for (const event of queue.events) {
+    trackEvent(event.name, { ...event.params, delivery: "offline_replay" }, win);
+  }
+  trackEvent("offline_replay", { event_count: queue.events.length, dropped_count: queue.dropped }, win);
+  return queue.events.length;
 }
 
 // The install funnel. Without these, installs are invisible in GA: the browser

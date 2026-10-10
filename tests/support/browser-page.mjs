@@ -7,12 +7,21 @@
 // polyfill to every visitor.
 const ALLOWED_HOSTS = new Set(["127.0.0.1", "cdn.jsdelivr.net"]);
 
+// What Playwright logs in the page when serviceWorkers: "block" refuses a
+// registration.
+const PLAYWRIGHT_SW_BLOCKED = "Service Worker registration blocked by Playwright";
+
 // Collects what a clean page load must not produce: console errors and
 // warnings, uncaught exceptions, and failed requests. The returned array fills
 // as the page runs; a test asserts it is still empty at the end.
 export function watchConsole(page) {
   const problems = [];
   page.on("console", (message) => {
+    // Playwright's own note that it refused the app's service worker, which
+    // playwright.config.mjs asks it to for every test but the offline one.
+    if (message.text() === PLAYWRIGHT_SW_BLOCKED) {
+      return;
+    }
     if (message.type() === "error" || message.type() === "warning") {
       problems.push(`console.${message.type()}: ${message.text()}`);
     }

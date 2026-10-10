@@ -1,5 +1,6 @@
 // One Pyodide release everywhere. The browser loads Pyodide from jsDelivr
-// (web/js/runtime-rpc.ts), while the Node suites run the pyodide npm package
+// (the loader import in web/js/runtime-rpc.ts, everything else from
+// PYODIDE_INDEX_URL in web/js/cdn-urls.ts), while the Node suites run the pyodide npm package
 // (tests/support/radio-harness.mjs) and tsc takes the loader's types from it
 // (tsconfig.json's paths). When the npm range drifted ahead of the CDN pin,
 // every runtime test passed against 0.27.7 while users ran 0.27.2. Nothing
@@ -10,6 +11,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { repoRoot } from "../support/repo-paths.mjs";
+import { PYODIDE_INDEX_URL } from "../../web/js/cdn-urls.ts";
 
 const CDN_RE = /https:\/\/cdn\.jsdelivr\.net\/pyodide\/v([^/]+)\/full\//;
 
@@ -20,7 +22,7 @@ async function readRepoFile(...segments) {
 test("the browser, the Node tests and the types share one Pyodide release", async () => {
   const runtime = await readRepoFile("web", "js", "runtime-rpc.ts");
   const loader = runtime.match(/^import \{ loadPyodide \} from "([^"]+)";$/m)?.[1] || "";
-  const indexUrl = runtime.match(/^const PYODIDE_INDEX_URL = "([^"]+)";$/m)?.[1] || "";
+  const indexUrl = PYODIDE_INDEX_URL;
   const pathsKey = Object.keys(JSON.parse(await readRepoFile("tsconfig.json")).compilerOptions.paths)
     .find((key) => CDN_RE.test(key)) || "";
   const installed = JSON.parse(await readRepoFile("node_modules", "pyodide", "package.json")).version;

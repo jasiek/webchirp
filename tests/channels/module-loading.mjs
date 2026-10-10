@@ -22,6 +22,7 @@ import { pathToFileURL } from "node:url";
 // tests/support/cdn-imports.mjs.
 import "../support/register-cdn-imports.mjs";
 
+import { FakeCacheStorage } from "../support/fake-cache-storage.mjs";
 import { installIndexPage } from "../support/index-page.mjs";
 import { webDir } from "../support/repo-paths.mjs";
 
@@ -85,6 +86,34 @@ function installBrowserGlobals(page) {
   return dom;
 }
 
+// web/sw.ts runs in a service worker, not a page: as it loads it reads its
+// registration's scope, opens nothing yet, and binds its events on the worker
+// global. Stand-ins for exactly that, set for its import and removed after.
+const SERVICE_WORKER_MODULE = path.join(webDir, "sw.ts");
+
+function installServiceWorkerGlobals() {
+  const stubs = {
+    registration: { scope: "https://webchirp.test/" },
+    clients: { claim: async () => {}, matchAll: async () => [] },
+    skipWaiting: async () => {},
+    caches: new FakeCacheStorage(),
+    addEventListener: () => {},
+  };
+  const saved = Object.fromEntries(Object.keys(stubs).map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+  for (const [name, value] of Object.entries(stubs)) {
+    Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+  }
+  return () => {
+    for (const [name, descriptor] of Object.entries(saved)) {
+      if (descriptor) {
+        Object.defineProperty(globalThis, name, descriptor);
+      } else {
+        delete globalThis[name];
+      }
+    }
+  };
+}
+
 test("every shipped browser module loads", async (t) => {
   const modulePaths = shippedModulePaths();
   assert.ok(modulePaths.length > 20, "the walk should find the whole web/ tree");
@@ -101,10 +130,13 @@ test("every shipped browser module loads", async (t) => {
     if (pageOf(modulePath) !== "index.html") {
       dom = installBrowserGlobals(pageOf(modulePath));
     }
+    const restoreWorker = modulePath === SERVICE_WORKER_MODULE ? installServiceWorkerGlobals() : () => {};
     try {
       await import(pathToFileURL(modulePath).href);
     } catch (error) {
       failures.push(`${path.relative(process.cwd(), modulePath)}: ${error && error.message}`);
+    } finally {
+      restoreWorker();
     }
   }
 

@@ -89,6 +89,13 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `images`, plus `jsbridge` (JS-boundary helpers), `runtime_errors` and `rpc`
   (the `RPC_METHODS` table and `rpc_dispatch`). `__init__.py` only installs
   the shims CHIRP needs before import. No embedded Python in JS files.
+- Offline use: the service worker (`web/sw.ts`, logic in
+  `web/js/offline-cache.ts`, registered by `web/js/offline.ts` on the built
+  site only) caches each deploy whole from `asset-manifest.json`'s `offline`
+  section. A file the app fetches at runtime under a fixed name must be added
+  to `OFFLINE_DATA_FILES` (`scripts/build-dist.ts`), and a new CDN dependency
+  to `web/js/cdn-urls.ts`: anything missing from that section breaks only
+  offline, which no online page load reveals.
 - `chirp/`: Upstream CHIRP source as a git submodule. The runtime never reads it
   file by file: `scripts/build-chirp-bundle.ts` (`npm run build:chirp`, run by `dev`
   and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,
