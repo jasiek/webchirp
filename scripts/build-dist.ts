@@ -527,10 +527,13 @@ async function main() {
 
   // esbuild names each output after its bytes and its imports' names, and the
   // Python and pin names cover their files the same way, so a digest over the
-  // name list is a digest of every hashed file. The offline files' digests
-  // join it, so a change to index.html or a catalog alone is a new build for
-  // the service worker to cache too.
-  const buildHash = contentHash(JSON.stringify([replacements, offline.files]));
+  // name list is a digest of every hashed file. The whole offline section
+  // joins it: the offline files' digests, so a change to index.html or a
+  // catalog alone is a new build for the service worker to cache too, and the
+  // CDN list, which can change without any emitted file changing (the browser
+  // bundle tree-shakes it away). A worker that already holds a build hash
+  // never syncs it again, so anything it caches must move the hash.
+  const buildHash = contentHash(JSON.stringify([replacements, offline]));
   const manifest = {
     buildHash,
     generatedAt: new Date().toISOString(),

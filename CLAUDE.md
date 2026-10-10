@@ -89,30 +89,15 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `images`, plus `jsbridge` (JS-boundary helpers), `runtime_errors` and `rpc`
   (the `RPC_METHODS` table and `rpc_dispatch`). `__init__.py` only installs
   the shims CHIRP needs before import. No embedded Python in JS files.
-- Offline use: `web/sw.ts` is the service worker. `build-dist` bundles it to an
-  unhashed `dist/sw.js` at the root, and `web/js/offline.ts` registers it
-  (built site only, never the dev server). Its logic is in
-  `web/js/offline-cache.ts`. A page load, and any file whose name does not
-  change with its content, comes from the network first, falling back to the
-  cache after `NETWORK_TIMEOUT_MS`. Hashed files and pinned CDN files are
-  served from the cache first. After each page load the worker caches the
-  build that `asset-manifest.json`'s `offline` section describes: the root
-  pages and `OFFLINE_DATA_FILES` with their digests, every immutable name, and
-  `OFFLINE_CDN_URLS` (`web/js/cdn-urls.ts`, the one home of the jsDelivr URLs).
-  The new build replaces the current one only once every file is cached. A
-  new file the app fetches at runtime under a fixed name belongs in
-  `OFFLINE_DATA_FILES`, and a new CDN dependency in `cdn-urls.ts`. Offline
-  analytics (`offline_ready`, `offline_cache_failed`, `offline_launches`)
-  is sent from `offline.ts`. A launch the worker answered from the cache
-  cannot be sent at the time, so it is counted in localStorage and reported
-  by the next page the network serves. That page's other events are queued
-  the same way (`deferAnalytics` / `replayDeferredAnalytics` in
-  `web/js/analytics.ts`, newest `REPLAY_LIMIT` kept) and replayed with
-  `delivery: "offline_replay"`. Sentry needs no queue of its own. The worker
-  caches the SDK (`SENTRY_SDK_MODULES`), and `initOptions` sends through the
-  SDK's offline transport, which stores failed envelopes (errors and flow
-  metrics, already redacted) in IndexedDB and resends them later with their
-  original timestamps.
+- Offline use: the service worker (`web/sw.ts`, logic in
+  `web/js/offline-cache.ts`, registered by `web/js/offline.ts` on the built
+  site only) caches each deploy whole from `asset-manifest.json`'s `offline`
+  section. A file the app fetches at runtime under a fixed name must be added
+  to `OFFLINE_DATA_FILES` (`scripts/build-dist.ts`), and a new CDN dependency
+  to `web/js/cdn-urls.ts`: anything missing from that section breaks only
+  offline, which no online page load reveals. Bumping the Sentry SDK means
+  updating `SENTRY_SDK_MODULES` there too; `tests/e2e/sentry-sdk-modules.mjs`
+  checks it against what jsDelivr's build actually imports.
 - `chirp/`: Upstream CHIRP source as a git submodule. The runtime never reads it
   file by file: `scripts/build-chirp-bundle.ts` (`npm run build:chirp`, run by `dev`
   and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,
