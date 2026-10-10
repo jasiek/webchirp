@@ -81,7 +81,8 @@ and drift on each bump.
 
 ## PWA / install
 
-- **pwa-install-needs-no-service-worker** (2026-08-02): Chrome installs without a service worker (since 108 on Android, 112 on desktop). The manifest plus 192 and 512 icons is enough for a WebAPK, so do not add a pass-through worker. A worker would only buy deterministic caching, since a WebAPK uses Chrome's evictable HTTP cache. Doing that is real offline work: Pyodide and `web-serial-polyfill` come from jsDelivr, and it would have to fit the hashed-asset retention scheme.
+- **pwa-install-needs-no-service-worker** (2026-08-02): Chrome installs without a service worker (since 108 on Android, 112 on desktop). The manifest plus 192 and 512 icons is enough for a WebAPK. The worker added on 2026-10-10 (`web/sw.ts`) is for offline use, not installability. It is not a pass-through: it handles caching (see **offline-cache-footprint**).
+- **offline-cache-footprint** (2026-10-10): one cached build is about 17 MB. Pyodide 0.27.2 from jsDelivr is about 13.8 MB (`pyodide.asm.wasm` 10.1 MB, `python_stdlib.zip` 2.4 MB, `pyodide.asm.js` 1.3 MB). The same-origin files are about 3.1 MB, the CHIRP archive 2.1 MB of that. Two builds are kept, and an unchanged file is copied between their caches rather than downloaded again. Chrome may still store the copy twice, so the worst case is about 34 MB. jsDelivr answers `access-control-allow-origin: *`, so a copy the worker fetched with `mode: "cors"` can be served back to a module import. On localhost, with the HTTP cache warm, a first sync took about 1 s.
 - **installable-is-not-discoverable** (2026-09-18): headless Chrome on localhost fires `beforeinstallprompt`, which is why the Install button appears in `web/images/screenshot-narrow.png`.
 - **webapk-start-url-changes-take-days** (2026-08-05): a `start_url` change takes a day or more to reach installed apps. Chrome re-reads the manifest about once a day and then queues a WebAPK re-mint, and until then hits carry the old `dl`. Check `location.href` in the running app first, and use a fresh install to confirm the manifest.
 
@@ -105,6 +106,7 @@ and drift on each bump.
 
 ## Test suite
 
+- **playwright-service-workers** (2026-10-10): Playwright 1.63, Chromium. With `serviceWorkers: "block"`, the page logs the console warning `Service Worker registration blocked by Playwright`, which `watchConsole` would otherwise count as a problem. `context.setOffline(true)` also cuts off the worker's own fetches, not just the page's. tests/e2e/offline.mjs checks this by fetching a file the worker never cached.
 - **test-support-is-the-shared-fixture-home** (2026-09-06): when a shared fixture almost fits, add an option or a subclass rather than copying it.
 - **ui-tests-run-on-index-html-in-jsdom** (2026-10-09): why jsdom, what it costs, and traps the support code does not already explain:
   - **Choice**: on three converted files (median of five, M1 Pro) jsdom 29.1.1 and happy-dom 20.14.5 cost about the same CPU (1.07/2.08/1.21 s vs 1.08/2.15/1.31 s), but happy-dom failed two bulk-edit tests. jsdom 30.x is out: its `engines` excludes Node 25.

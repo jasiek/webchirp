@@ -89,6 +89,19 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `images`, plus `jsbridge` (JS-boundary helpers), `runtime_errors` and `rpc`
   (the `RPC_METHODS` table and `rpc_dispatch`). `__init__.py` only installs
   the shims CHIRP needs before import. No embedded Python in JS files.
+- Offline use: `web/sw.ts` is the service worker. `build-dist` bundles it to an
+  unhashed `dist/sw.js` at the root, and `web/js/offline.ts` registers it
+  (built site only, never the dev server). Its logic is in
+  `web/js/offline-cache.ts`. A page load, and any file whose name does not
+  change with its content, comes from the network first, falling back to the
+  cache after `NETWORK_TIMEOUT_MS`. Hashed files and pinned CDN files are
+  served from the cache first. After each page load the worker caches the
+  build that `asset-manifest.json`'s `offline` section describes: the root
+  pages and `OFFLINE_DATA_FILES` with their digests, every immutable name, and
+  `OFFLINE_CDN_URLS` (`web/js/cdn-urls.ts`, the one home of the jsDelivr URLs).
+  The new build replaces the current one only once every file is cached. A
+  new file the app fetches at runtime under a fixed name belongs in
+  `OFFLINE_DATA_FILES`, and a new CDN dependency in `cdn-urls.ts`.
 - `chirp/`: Upstream CHIRP source as a git submodule. The runtime never reads it
   file by file: `scripts/build-chirp-bundle.ts` (`npm run build:chirp`, run by `dev`
   and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,
