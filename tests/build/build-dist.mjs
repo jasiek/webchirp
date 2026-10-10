@@ -27,6 +27,8 @@ import {
   RUNTIME_PYTHON_FILES,
 } from "../../web/js/python-sources.ts";
 import { RUNTIME_PYTHON_URLS } from "../../web/js/runtime-python-urls.ts";
+import { SENTRY_SDK_MODULES } from "../../web/js/cdn-urls.ts";
+import { SENTRY_HOSTS } from "../../web/js/sentry.ts";
 
 const SCRIPT = path.join(repoRoot, "scripts", "build-dist.ts");
 // esbuild's names (name.<8 base32>.js, .css, and .js.map beside each) and the
@@ -328,6 +330,11 @@ test("the offline section lists what a cached build boots from, with digests", a
     const hashed = (await walk(dist)).filter((rel) => HASHED_NAME_RE.test(path.basename(rel)) && !rel.endsWith(".map"));
     assert.deepEqual([...assets].sort(), [...hashed, ...CHIRP_BUNDLE_FILES].sort(), "every immutable name but the maps");
     assert.ok(cdn.some((url) => url.endsWith("/pyodide.asm.wasm")), "Pyodide's wasm is cached with the build");
+    // The Sentry SDK is optional, and only for the hosts that load it: a
+    // blocker refusing it must not stop a build becoming offline-ready, and
+    // a fork must not download what its host gate never loads.
+    assert.ok(!SENTRY_SDK_MODULES.some((url) => cdn.includes(url)), "the SDK is not a required CDN file");
+    assert.deepEqual(manifest.offline.optional, [{ hosts: [...SENTRY_HOSTS], urls: [...SENTRY_SDK_MODULES] }]);
   });
 });
 

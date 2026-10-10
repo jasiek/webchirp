@@ -95,7 +95,9 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   section. A file the app fetches at runtime under a fixed name must be added
   to `OFFLINE_DATA_FILES` (`scripts/build-dist.ts`), and a new CDN dependency
   to `web/js/cdn-urls.ts`: anything missing from that section breaks only
-  offline, which no online page load reveals.
+  offline, which no online page load reveals. Bumping the Sentry SDK means
+  updating `SENTRY_SDK_MODULES` there too; `tests/e2e/sentry-sdk-modules.mjs`
+  checks it against what jsDelivr's build actually imports.
 - `chirp/`: Upstream CHIRP source as a git submodule. The runtime never reads it
   file by file: `scripts/build-chirp-bundle.ts` (`npm run build:chirp`, run by `dev`
   and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,

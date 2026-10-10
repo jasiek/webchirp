@@ -18,7 +18,7 @@ from chirp import chirp_common
 from js import serial_prepare_clone
 
 from webchirp_bridge.channel_rows import _csv_text_for_rows
-from webchirp_bridge.jsbridge import _await_js, _log_debug, _make_status_logger
+from webchirp_bridge.jsbridge import _await_js, _js_to_py, _log_debug, _make_status_logger
 from webchirp_bridge.radio_memories import (
     _apply_rows_to_radio_instance,
     _read_radio_payload,
@@ -55,7 +55,7 @@ def _driver_baud_rate(radio_cls: type[chirp_common.Radio]) -> Optional[int]:
     return baud if baud > 0 else None
 
 
-def _new_serial_pipe(radio_cls: type[chirp_common.Radio]) -> WebSerialPipe:
+def _new_serial_pipe(radio_cls: type[chirp_common.Radio], transport: str = "") -> WebSerialPipe:
     """Build the pipe a clone runs over, seeded from the driver's declarations.
 
     Shared by every clone entry point so the pipe a driver sees is configured
@@ -67,6 +67,7 @@ def _new_serial_pipe(radio_cls: type[chirp_common.Radio]) -> WebSerialPipe:
         baudrate=_driver_baud_rate(radio_cls),
         dtr=bool(getattr(radio_cls, "WANTS_DTR", True)),
         rts=bool(getattr(radio_cls, "WANTS_RTS", True)),
+        transport=transport,
     )
 
 
@@ -114,14 +115,16 @@ def _detect_radio_class(
     return detected
 
 
-def _create_radio_for_serial(radio_cls: type[chirp_common.Radio]) -> chirp_common.Radio:
+def _create_radio_for_serial(
+    radio_cls: type[chirp_common.Radio], transport: str = ""
+) -> chirp_common.Radio:
     """Instantiate the radio actually on the wire, on a detection-shared pipe.
 
     Detection has to run on the same pipe the clone then uses: drivers that
     hand-shake during detection leave the radio in program mode and expect the
     instance they return to carry on from there (issue #81).
     """
-    pipe = _new_serial_pipe(radio_cls)
+    pipe = _new_serial_pipe(radio_cls, transport)
     detected_cls = _detect_radio_class(radio_cls, pipe)
     _ensure_clone_mode_radio(detected_cls)
     radio = detected_cls(pipe)
@@ -129,22 +132,29 @@ def _create_radio_for_serial(radio_cls: type[chirp_common.Radio]) -> chirp_commo
     return radio
 
 
-def _prepare_clone_session(radio_cls: type[chirp_common.Radio]) -> None:
+def _prepare_clone_session(radio_cls: type[chirp_common.Radio]) -> str:
     """Reset/prepare transport lines before clone operations for stability.
 
     Also hands the bridge the driver's declared BAUD_RATE. The port's line rate
     is latched when it opens, and the user may have connected with a different
     radio selected, so the rate has to be re-applied per clone rather than
     trusted from connect time (issue #76).
+
+    Returns the open port's transport name, which the clone's pipe needs to
+    answer CHIRP's Bluetooth check (``WebSerialPipe.port``).
     """
-    _await_js(
-        serial_prepare_clone(
-            bool(getattr(radio_cls, "WANTS_DTR", True)),
-            bool(getattr(radio_cls, "WANTS_RTS", True)),
-            350,
-            _driver_baud_rate(radio_cls) or 0,
+    result = _js_to_py(
+        _await_js(
+            serial_prepare_clone(
+                bool(getattr(radio_cls, "WANTS_DTR", True)),
+                bool(getattr(radio_cls, "WANTS_RTS", True)),
+                350,
+                _driver_baud_rate(radio_cls) or 0,
+            )
         )
     )
+    transport = result.get("transport") if isinstance(result, dict) else None
+    return str(transport or "")
 
 
 def _download_selected_radio_sync(session: RadioSession) -> dict[str, Any]:
@@ -152,8 +162,8 @@ def _download_selected_radio_sync(session: RadioSession) -> dict[str, Any]:
     radio_cls = session.radio_cls
     _ensure_clone_mode_radio(radio_cls)
 
-    _prepare_clone_session(radio_cls)
-    radio = _create_radio_for_serial(radio_cls)
+    transport = _prepare_clone_session(radio_cls)
+    radio = _create_radio_for_serial(radio_cls, transport)
     radio.sync_in()
     # The image belongs to whatever detection settled on, not to the selection
     # the user made in the UI, and upload/export have to re-parse it as such;
@@ -183,14 +193,16 @@ def _upload_selected_radio_sync(
     # image with that class.
     image_cls = session.image_cls
     radio = session.radio_instance()
-    radio.set_pipe(_new_serial_pipe(image_cls))
     _apply_rows_to_radio_instance(radio, rows, session)
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
     )
     if not settings_result["valid"]:
         raise RuntimeUnsupportedError("Radio settings validation failed before upload")
-    _prepare_clone_session(image_cls)
+    # The pipe is made after preparing the session, because preparing is what
+    # reports the transport the pipe has to name; nothing above touches it.
+    transport = _prepare_clone_session(image_cls)
+    radio.set_pipe(_new_serial_pipe(image_cls, transport))
     radio.sync_out()
     session.record_radio(radio, session.image_origin)
     return {"uploaded": True, "settings": settings_result["settings"]}

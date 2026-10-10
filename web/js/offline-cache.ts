@@ -13,7 +13,10 @@
 //      with an outage status such as 503 -- from the cached build.
 //   2. Everything else is immutable by name -- content-hashed bundles and
 //      Python, the pin-named CHIRP archive, version-pinned CDN files -- so a
-//      cached copy is served without asking the network at all.
+//      cached copy is served without asking the network at all. A pinned CDN
+//      file the build did not list is cached the first time it is fetched,
+//      so a module jsDelivr's generated +esm build starts importing still
+//      reaches the offline copy after one online visit.
 //   3. A build is cached whole or not at all. After a page load the worker
 //      reads asset-manifest.json, fetches every file the build lists into a
 //      cache of its own, checks each renamable file against the digest the
@@ -60,6 +63,8 @@ export interface OfflineEntry {
   /** The first 10 hex digits of the SHA-256 of its body, for a file whose name
    * does not change with its content; absent for an immutable name. */
   sha256?: string;
+  /** Cached if it can be, without holding the build back if it cannot. */
+  optional?: boolean;
 }
 
 /** A build as asset-manifest.json describes it for offline use. */
@@ -200,7 +205,33 @@ export function parseOfflineBuild(manifest: unknown, scope: string): OfflineBuil
     }
     entries.push({ url: new URL(ref, scope).href });
   }
+  entries.push(...optionalEntries(offline.optional, new URL(scope).hostname));
   return { buildHash: record.buildHash, entries, mutableUrls };
+}
+
+// The offline section's optional groups (scripts/build-dist.ts): files only
+// some deployments use -- the Sentry SDK, which loads on the production hosts
+// alone -- each group naming the hosts it is for. A group for this host is
+// cached best-effort; one for another host is not fetched at all. A manifest
+// without the field has no optional files.
+function optionalEntries(groups: unknown, hostname: string): OfflineEntry[] {
+  if (groups === undefined) {
+    return [];
+  }
+  if (!Array.isArray(groups)) {
+    throw new Error("asset-manifest.json's offline.optional is not a list");
+  }
+  const entries: OfflineEntry[] = [];
+  for (const group of groups as Array<{ hosts?: unknown; urls?: unknown } | null>) {
+    if (!Array.isArray(group?.hosts) || !Array.isArray(group.urls)
+      || !group.urls.every((url) => typeof url === "string" && url)) {
+      throw new Error("asset-manifest.json lists an optional group without hosts and urls");
+    }
+    if (group.hosts.includes(hostname)) {
+      entries.push(...(group.urls as string[]).map((url) => ({ url: new URL(url).href, optional: true })));
+    }
+  }
+  return entries;
 }
 
 // Run task over items with at most limit in flight; the first failure rejects.
@@ -236,13 +267,26 @@ function isServerOutage(status: number): boolean {
   return status >= 500 || status === 408 || status === 429;
 }
 
+/** What the worker knows about a request beyond the request itself. */
+export interface RespondOptions {
+  /** The id of the page a navigation creates (FetchEvent.resultingClientId). */
+  clientId?: string;
+  /** Keep the worker alive for work that outlasts the response. */
+  waitUntil?: (promise: Promise<unknown>) => void;
+}
+
+// A jsDelivr path that names an exact version, so its body never changes:
+// /npm/<package>@1.2.3/... (scoped or not) or Pyodide's /pyodide/v1.2.3/.
+// A range or a tag (@1, @latest) can move and is never cached.
+const PINNED_CDN_PATH = /^\/npm\/(?:@[^/]+\/)?[^/@]+@\d+\.\d+\.\d+(?:[-+][\w.]+)?\/|^\/pyodide\/v\d+\.\d+\.\d+\//;
+
 /** The service worker's behaviour, bound to one environment. */
 export interface OfflineCache {
   /**
    * The response for a request, or null when the worker should leave it to
    * the browser (non-GET, other hosts, asset-manifest.json).
    */
-  respond(request: Request, clientId?: string): Promise<Response> | null;
+  respond(request: Request, options?: RespondOptions): Promise<Response> | null;
   /**
    * How the navigation that created the page clientId was answered, once:
    * the record is dropped as it is read. Null for a page this worker did not
@@ -371,6 +415,12 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
   // which is what keeps a deploy that changed one chunk from refetching
   // Pyodide. A renamable file is always fetched and must match its digest.
   async function cacheEntry(cache: Cache, entry: OfflineEntry): Promise<void> {
+    if (entry.optional) {
+      // A blocker, a proxy or a CDN hiccup refusing an optional file costs
+      // that file, never the build: the app runs without it, offline too.
+      await cacheEntry(cache, { url: entry.url }).catch(() => {});
+      return;
+    }
     if (await cache.match(entry.url, MATCH_OPTIONS)) {
       return;
     }
@@ -497,6 +547,35 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
     return (await env.caches.match(request.url, MATCH_OPTIONS)) || env.fetch(request);
   }
 
+  // cacheFirst for the CDN, keeping a pinned file the build did not list in
+  // the current build's cache once fetched. Before any build is complete
+  // there is nowhere to keep it; the next sync lists what matters anyway.
+  //
+  // A pinned file answered from an older build's cache is copied into the
+  // current one too. Without that it would live only in the cache it was
+  // first kept in, which the next deploy but one prunes, however often the
+  // app was used online in between.
+  async function cacheFirstCdn(request: Request, url: URL, waitUntil: RespondOptions["waitUntil"]): Promise<Response> {
+    const pinned = PINNED_CDN_PATH.test(url.pathname);
+    const { current } = await state();
+    const currentCache = pinned && current ? await env.caches.open(buildCacheName(current.buildHash)) : null;
+    const keep = (cache: Cache, response: Response) => {
+      waitUntil?.(cache.put(request.url, response).catch(() => {}));
+    };
+    const cached = await env.caches.match(request.url, MATCH_OPTIONS);
+    if (cached) {
+      if (currentCache && !(await currentCache.match(request.url, MATCH_OPTIONS))) {
+        keep(currentCache, cached.clone());
+      }
+      return cached;
+    }
+    const response = await env.fetch(request);
+    if (response.ok && currentCache) {
+      keep(currentCache, response.clone());
+    }
+    return response;
+  }
+
   // Until one build is complete nothing is served from a cache: a partly
   // cached build may hold a renamable file from a deploy that has since been
   // replaced, and there is nothing to fall back to offline anyway.
@@ -520,7 +599,7 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
     return cacheFirst(request);
   }
 
-  function respond(request: Request, clientId?: string): Promise<Response> | null {
+  function respond(request: Request, { clientId, waitUntil }: RespondOptions = {}): Promise<Response> | null {
     if (request.method !== "GET") {
       return null;
     }
@@ -530,7 +609,7 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
     }
     // Only pinned CDN URLs are immutable; analytics, Sentry's ingest and the
     // repeater directories are live and stay the browser's business.
-    return url.origin === cdnOrigin ? cacheFirst(request) : null;
+    return url.origin === cdnOrigin ? cacheFirstCdn(request, url, waitUntil) : null;
   }
 
   return { respond, pageSource, sync, state };

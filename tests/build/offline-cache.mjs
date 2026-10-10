@@ -21,7 +21,7 @@ function sha(body) {
 
 // One deploy: its renamable files and immutable assets as path -> body, and
 // the asset-manifest.json scripts/build-dist.ts would write for them.
-function deploy(buildHash, { files, assets }) {
+function deploy(buildHash, { files, assets, optional }) {
   return {
     buildHash,
     bodies: { ...files, ...assets },
@@ -32,6 +32,7 @@ function deploy(buildHash, { files, assets }) {
         files: Object.fromEntries(Object.entries(files).map(([rel, body]) => [rel, sha(body)])),
         assets: Object.keys(assets),
         cdn: [CDN_FILE],
+        ...(optional ? { optional } : {}),
       },
     },
   };
@@ -71,6 +72,8 @@ function createSite(initial) {
     offline: false,
     hang: false,
     failing: new Set(),
+    // CDN files beyond the one every build lists, by URL.
+    cdn: {},
     // URLs whose request is accepted but never answered.
     stalled: new Set(),
     // URLs answered with headers and a first chunk, then nothing more.
@@ -102,6 +105,9 @@ function createSite(initial) {
       }
       if (url === CDN_FILE) {
         return new Response("wasm", { headers: { "Content-Type": "application/wasm" } });
+      }
+      if (url in site.cdn) {
+        return new Response(site.cdn[url]);
       }
       const pathname = new URL(url).pathname;
       const rel = url.startsWith(SCOPE) ? `${pathname.slice(1)}${pathname.endsWith("/") ? "index.html" : ""}` : null;
@@ -344,7 +350,7 @@ test("a server that cannot answer just now falls back to the cache", async () =>
   await offline.sync();
   site.failing.add(`${SCOPE}index.html`);
   site.failing.add(`${SCOPE}radio-catalog.json`);
-  assert.equal(await bodyOf(offline.respond(navigation(`${SCOPE}index.html`), "outage-tab")), "<p>A</p>");
+  assert.equal(await bodyOf(offline.respond(navigation(`${SCOPE}index.html`), { clientId: "outage-tab" })), "<p>A</p>");
   assert.equal(offline.pageSource("outage-tab"), "cache");
   assert.equal(await bodyOf(offline.respond(subresource(`${SCOPE}radio-catalog.json`))), '{"a":1}');
 });
@@ -406,12 +412,12 @@ test("a malformed manifest is refused rather than half-cached", () => {
 test("each page load is remembered as network, cache or cache after the timeout", async () => {
   const { site, offline } = setup();
   await offline.sync();
-  await offline.respond(navigation(SCOPE), "online-tab");
+  await offline.respond(navigation(SCOPE), { clientId: "online-tab" });
   site.offline = true;
-  await offline.respond(navigation(SCOPE), "offline-tab");
+  await offline.respond(navigation(SCOPE), { clientId: "offline-tab" });
   site.offline = false;
   site.hang = true;
-  await offline.respond(navigation(SCOPE), "slow-tab");
+  await offline.respond(navigation(SCOPE), { clientId: "slow-tab" });
   assert.equal(offline.pageSource("online-tab"), "network");
   assert.equal(offline.pageSource("offline-tab"), "cache");
   assert.equal(offline.pageSource("slow-tab"), "cache_after_timeout");
@@ -421,15 +427,15 @@ test("each page load is remembered as network, cache or cache after the timeout"
 
 test("a page loaded before any build was cached came from the network", async () => {
   const { offline } = setup();
-  await offline.respond(navigation(SCOPE), "first-visit");
+  await offline.respond(navigation(SCOPE), { clientId: "first-visit" });
   assert.equal(offline.pageSource("first-visit"), "network");
 });
 
 test("subresources leave no page source behind", async () => {
   const { offline } = setup();
   await offline.sync();
-  await offline.respond(subresource(`${SCOPE}radio-catalog.json`), "");
-  await offline.respond(subresource(`${SCOPE}js/app.AAAAAAAA.js`), "");
+  await offline.respond(subresource(`${SCOPE}radio-catalog.json`), { clientId: "" });
+  await offline.respond(subresource(`${SCOPE}js/app.AAAAAAAA.js`), { clientId: "" });
   assert.equal(offline.pageSource(""), null);
 });
 
@@ -459,4 +465,111 @@ test("a dropped connection and a full disk are reported as such", async () => {
     await offline.sync();
     assert.equal(messages.at(-1)?.reason, "quota");
   }
+});
+
+// jsDelivr's +esm builds are generated, and can start importing a module the
+// build never listed (a new patch of a dependency resolved from a range).
+test("a pinned CDN module the build did not list is kept once fetched", async () => {
+  const { site, offline } = setup();
+  await offline.sync();
+  const module = "https://cdn.jsdelivr.net/npm/@sentry/conventions@0.16.1/attributes/+esm";
+  site.cdn[module] = "export {}";
+  const kept = [];
+  assert.equal(await bodyOf(offline.respond(subresource(module), { waitUntil: (p) => kept.push(p) })), "export {}");
+  await Promise.all(kept);
+  site.offline = true;
+  assert.equal(await bodyOf(offline.respond(subresource(module))), "export {}");
+});
+
+test("a CDN URL that names no exact version is never kept", async () => {
+  const { site, offline } = setup();
+  await offline.sync();
+  const kept = [];
+  for (const url of [
+    "https://cdn.jsdelivr.net/npm/web-serial-polyfill@1/+esm",
+    "https://cdn.jsdelivr.net/npm/@sentry/browser@latest/+esm",
+    "https://cdn.jsdelivr.net/npm/@sentry/browser/+esm",
+  ]) {
+    site.cdn[url] = "moves";
+    await offline.respond(subresource(url), { waitUntil: (p) => kept.push(p) });
+  }
+  assert.deepEqual(kept, []);
+});
+
+test("nothing fetched from the CDN is kept before a build is complete", async () => {
+  const { site, offline } = setup();
+  const module = "https://cdn.jsdelivr.net/npm/@sentry/core@10.73.0/+esm";
+  site.cdn[module] = "export {}";
+  const kept = [];
+  await offline.respond(subresource(module), { waitUntil: (p) => kept.push(p) });
+  assert.deepEqual(kept, []);
+});
+
+// --- optional files ----------------------------------------------------------
+
+// The Sentry SDK's shape: a CDN module only some hosts load.
+const OPTIONAL_MODULE = "https://cdn.jsdelivr.net/npm/@sentry/browser@10.73.0/+esm";
+
+function deployWithOptional(buildHash, hosts) {
+  return deploy(buildHash, {
+    files: { "index.html": `<p>${buildHash}</p>` },
+    assets: { "js/app.OPTIONAL.js": "app" },
+    optional: [{ hosts, urls: [OPTIONAL_MODULE] }],
+  });
+}
+
+test("an optional file this host uses is cached with the build", async () => {
+  const { site, offline } = setup(deployWithOptional("eeeeeeeeee", ["webchirp.test"]));
+  site.cdn[OPTIONAL_MODULE] = "export {}";
+  await offline.sync();
+  site.offline = true;
+  assert.equal(await bodyOf(offline.respond(subresource(OPTIONAL_MODULE))), "export {}");
+});
+
+test("an optional file that cannot be fetched does not hold the build back", async () => {
+  const { site, offline, messages } = setup(deployWithOptional("eeeeeeeeee", ["webchirp.test"]));
+  // A privacy filter refusing the SDK looks like this to the worker.
+  site.failing.add(OPTIONAL_MODULE);
+  const state = await offline.sync();
+  assert.equal(state.current?.buildHash, "eeeeeeeeee", "the app is offline-ready without its telemetry");
+  assert.deepEqual(messages.map((message) => message.event), ["ready"]);
+});
+
+test("an optional group for another host is never fetched", async () => {
+  const { site, offline } = setup(deployWithOptional("eeeeeeeeee", ["webchirp.org"]));
+  site.cdn[OPTIONAL_MODULE] = "export {}";
+  await offline.sync();
+  assert.ok(!site.requests.includes(OPTIONAL_MODULE), "a fork caches nothing its host gate never loads");
+});
+
+test("a malformed optional group is refused", () => {
+  const manifest = (optional) => ({ buildHash: "aaaaaaaaaa", offline: { files: {}, assets: [], cdn: [], optional } });
+  assert.throws(() => parseOfflineBuild(manifest({}), SCOPE), /offline.optional is not a list/);
+  assert.throws(() => parseOfflineBuild(manifest([{ urls: [OPTIONAL_MODULE] }]), SCOPE), /without hosts and urls/);
+  assert.equal(parseOfflineBuild(manifest(undefined), SCOPE).entries.length, 0, "an older manifest has none");
+});
+
+// A module kept at runtime lives in the build cache that was current then;
+// served from there after a deploy, it must move to the new current cache or
+// the deploy after next prunes the only copy.
+test("a kept CDN module follows the current build across deploys", async () => {
+  const { site, offline } = setup();
+  await offline.sync();
+  const module = "https://cdn.jsdelivr.net/npm/@sentry/conventions@0.16.1/attributes/+esm";
+  site.cdn[module] = "export {}";
+  const kept = [];
+  const respond = (url) => offline.respond(subresource(url), { waitUntil: (p) => kept.push(p) });
+  await bodyOf(respond(module));
+  await Promise.all(kept.splice(0));
+
+  site.current = BUILD_B;
+  await offline.sync();
+  // Used online under B, answered from A's cache.
+  await bodyOf(respond(module));
+  await Promise.all(kept.splice(0));
+
+  site.current = BUILD_C;
+  await offline.sync();
+  site.offline = true;
+  assert.equal(await bodyOf(respond(module)), "export {}", "A's cache is gone; B's copy answers");
 });
