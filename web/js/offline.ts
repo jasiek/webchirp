@@ -8,7 +8,9 @@
 // the cache (offline_launches). The last cannot be sent as it happens --
 // offline, gtag.js never loads and its queue dies with the page -- so each
 // launch the worker answered from the cache is counted in localStorage and
-// the count is sent from the next page the network served.
+// the count is sent from the next page the network served. The page's other
+// events -- radios downloaded and uploaded offline among them -- are diverted
+// into the replay queue in web/js/analytics.ts the same way and sent with it.
 //
 // Only the built site has a worker to register: scripts/build-dist.ts emits
 // sw.js, and the dev server serves web/ unbuilt, where this module itself is
@@ -24,11 +26,23 @@ export type TrackEvent = (name: string, params?: Record<string, unknown>) => boo
 /** The part of localStorage the offline counters use. */
 export type OfflineStore = Pick<Storage, "getItem" | "setItem">;
 
+/** The replay queue's two ends (web/js/analytics.ts). */
+export interface AnalyticsReplay {
+  /** Queue this page's events instead of sending them. */
+  defer: () => void;
+  /** Send what offline pages queued. */
+  replay: () => void;
+}
+
+const NO_REPLAY: AnalyticsReplay = Object.freeze({ defer: () => {}, replay: () => {} });
+
 /** What registerOfflineSupport() needs from the page. */
 export interface OfflineSupportOptions {
   logDebug: (message: string) => void;
   /** Where the offline events go; nothing is sent without it. */
   trackEvent?: TrackEvent;
+  /** The replay queue; without it an offline page's events are lost. */
+  replay?: AnalyticsReplay;
   /** Defaults to localStorage, where the browser allows it. */
   store?: OfflineStore | null;
   /** The module's own URL; a test passes the built shape. */
@@ -116,7 +130,11 @@ function writeStore(store: OfflineStore, key: string, value: string): void {
 
 // Turn the worker's messages into analytics events. Returns the handler for
 // one message; it never throws.
-export function createOfflineAnalytics(trackEvent: TrackEvent, store: OfflineStore | null): (data: unknown) => void {
+export function createOfflineAnalytics(
+  trackEvent: TrackEvent,
+  store: OfflineStore | null,
+  replay: AnalyticsReplay = NO_REPLAY,
+): (data: unknown) => void {
   // offline_ready once per build per browser, however many tabs hear about
   // it, and only once actually sent (trackEvent is false off-domain).
   function reportReady(buildHash: string): void {
@@ -164,10 +182,18 @@ export function createOfflineAnalytics(trackEvent: TrackEvent, store: OfflineSto
       } else if (message.event === "error") {
         trackEvent("offline_cache_failed", { error_kind: message.reason || "other" });
       } else if (message.event === "status" && message.servedFrom) {
-        // A page served from the cache is offline, where nothing reaches GA;
-        // only a network-served one can report the build it holds.
-        if (message.servedFrom === "network" && message.buildHash) {
-          reportReady(message.buildHash);
+        // A page served from the cache is offline, where nothing reaches GA:
+        // its events wait in the replay queue. Only a network-served page can
+        // report, and it sends what waited. A page the timeout served is
+        // neither: gtag.js may yet load on it, so its events go out live.
+        if (message.servedFrom === "cache") {
+          replay.defer();
+        }
+        if (message.servedFrom === "network") {
+          if (message.buildHash) {
+            reportReady(message.buildHash);
+          }
+          replay.replay();
         }
         recordLaunch(message.servedFrom);
       }
@@ -182,6 +208,7 @@ export function createOfflineAnalytics(trackEvent: TrackEvent, store: OfflineSto
 export async function registerOfflineSupport({
   logDebug,
   trackEvent = () => false,
+  replay = NO_REPLAY,
   store = defaultStore(),
   moduleUrl = import.meta.url,
   serviceWorker = globalThis.navigator?.serviceWorker,
@@ -194,7 +221,7 @@ export async function registerOfflineSupport({
     logDebug("OFFLINE unavailable: this browser has no service workers");
     return;
   }
-  const report = createOfflineAnalytics(trackEvent, store);
+  const report = createOfflineAnalytics(trackEvent, store, replay);
   serviceWorker.addEventListener("message", (event) => {
     const line = describeOfflineMessage(event.data);
     if (line) {

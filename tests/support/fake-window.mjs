@@ -21,6 +21,21 @@
 // Also exposes `injected` (every node appended to document.head), `broadcasts`
 // (every message posted to a channel) and the `dispatch`/`listenerCount`/
 // `deliverBroadcast` helpers tests drive listeners through.
+// localStorage's three methods over a Map, for one fake tab.
+function memoryStorage() {
+  const items = new Map();
+  return {
+    items,
+    getItem: (key) => (items.has(key) ? items.get(key) : null),
+    setItem: (key, value) => {
+      items.set(key, String(value));
+    },
+    removeItem: (key) => {
+      items.delete(key);
+    },
+  };
+}
+
 export function makeWindow({
   hostname = "webchirp.org",
   displayModes = [],
@@ -28,6 +43,7 @@ export function makeWindow({
   version = { webchirpSha: "abc123" },
   fetch = async () => ({ ok: version !== null, json: async () => version }),
   broadcast = true,
+  storage = true,
 } = {}) {
   const listeners = new Map();
   const injected = [];
@@ -63,6 +79,8 @@ export function makeWindow({
       }
     },
     location: { hostname },
+    // An in-memory localStorage; storage: false leaves the window without one.
+    localStorage: storage ? memoryStorage() : undefined,
     injected,
     document: {
       createElement: () => ({}),

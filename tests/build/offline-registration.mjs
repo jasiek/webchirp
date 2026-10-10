@@ -212,6 +212,16 @@ test("a store that throws loses the count, not the page", () => {
   assert.doesNotThrow(() => report(ready("aaaaaaaaaa")));
 });
 
+test("a cached page defers analytics, a network page replays, a slow one does neither", () => {
+  const calls = [];
+  const replay = { defer: () => calls.push("defer"), replay: () => calls.push("replay") };
+  const report = createOfflineAnalytics(recorder().trackEvent, memoryStore(), replay);
+  report(status("cache"));
+  report(status("cache_after_timeout"));
+  report(status("network"));
+  assert.deepEqual(calls, ["defer", "replay"]);
+});
+
 test("launch counts fall into four ranges", () => {
   assert.deepEqual([1, 2, 5, 6, 20, 21, 400].map(launchCountBucket), ["1", "2-5", "2-5", "6-20", "6-20", "21+", "21+"]);
 });

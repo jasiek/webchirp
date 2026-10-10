@@ -6,10 +6,13 @@ import path from "node:path";
 import {
   ANALYTICS_HOSTS,
   MEASUREMENT_ID,
+  REPLAY_LIMIT,
   bindInstallTracking,
+  deferAnalytics,
   detectDisplayMode,
   initAnalytics,
   isAnalyticsHost,
+  replayDeferredAnalytics,
   trackEvent,
 } from "../../web/js/analytics.ts";
 import { makeWindow } from "../support/fake-window.mjs";
@@ -242,4 +245,85 @@ test("the encoding declaration stays inside the first 1024 bytes", () => {
     const at = html.indexOf("charset");
     assert.ok(at >= 0 && at < 1024, `${page} declares its encoding at byte ${at}`);
   }
+});
+
+// --- offline replay ----------------------------------------------------------
+
+// Two pages of one browser: an offline one and a later online one, sharing
+// localStorage the way two loads of the same origin do.
+function offlineThenOnline() {
+  const offline = makeWindow({ displayModes: ["standalone"] });
+  initAnalytics(offline);
+  const online = makeWindow();
+  online.localStorage = offline.localStorage;
+  initAnalytics(online);
+  return { offline, online };
+}
+
+test("an offline page's events are queued, those tracked before it knew included", () => {
+  const { offline } = offlineThenOnline();
+  trackEvent("app_ready", {}, offline);
+  assert.equal(deferAnalytics(offline), true);
+  assert.equal(trackEvent("radio_upload_success", { radio: "Baofeng UV-5R" }, offline), false, "not sent");
+  assert.deepEqual(eventsNamed(offline, "app_ready"), [], "moved out, so gtag.js cannot send it too");
+  assert.deepEqual(eventsNamed(offline, "radio_upload_success"), []);
+  assert.ok(calls(offline).some((call) => call[0] === "config"), "only events move; the config stays");
+  const queue = JSON.parse(offline.localStorage.getItem("webchirp-analytics-replay"));
+  assert.deepEqual(queue.events.map((event) => event.name), ["app_ready", "radio_upload_success"]);
+  assert.equal(queue.events[1].params.display_mode, "standalone", "the launch context is kept as it was");
+});
+
+test("the next online page replays them in order, marked, with a summary, once", () => {
+  const { offline, online } = offlineThenOnline();
+  deferAnalytics(offline);
+  trackEvent("radio_download_success", { radio: "Baofeng UV-5R" }, offline);
+  trackEvent("radio_upload_success", { radio: "Baofeng UV-5R" }, offline);
+
+  assert.equal(replayDeferredAnalytics(online), 2);
+  const sent = calls(online).filter((call) => call[0] === "event");
+  assert.deepEqual(sent.map((call) => call[1]), ["radio_download_success", "radio_upload_success", "offline_replay"]);
+  assert.deepEqual(sent[1][2], {
+    display_mode: "standalone",
+    radio: "Baofeng UV-5R",
+    delivery: "offline_replay",
+  });
+  assert.deepEqual(sent[2][2], { display_mode: "browser", event_count: 2, dropped_count: 0 });
+  assert.equal(replayDeferredAnalytics(online), 0, "a queue is sent once");
+});
+
+test("past the limit the oldest events go, and the summary says how many", () => {
+  const { offline, online } = offlineThenOnline();
+  deferAnalytics(offline);
+  for (let i = 0; i < REPLAY_LIMIT + 10; i++) {
+    trackEvent("channel_extra_opened", { channel_count: i }, offline);
+  }
+  assert.equal(replayDeferredAnalytics(online), REPLAY_LIMIT);
+  const sent = eventsNamed(online, "channel_extra_opened");
+  assert.equal(sent[0][2].channel_count, 10, "the newest are kept");
+  assert.deepEqual(eventsNamed(online, "offline_replay")[0][2].dropped_count, 10);
+});
+
+test("an offline page does not replay, and off the production host nothing queues", () => {
+  const { offline } = offlineThenOnline();
+  deferAnalytics(offline);
+  trackEvent("radio_selected", {}, offline);
+  assert.equal(replayDeferredAnalytics(offline), 0);
+
+  const fork = makeWindow({ hostname: "someone.github.io" });
+  initAnalytics(fork);
+  assert.equal(deferAnalytics(fork), false);
+  assert.equal(fork.localStorage.getItem("webchirp-analytics-replay"), null);
+});
+
+test("without storage the page reports live, and a corrupt queue is ignored", () => {
+  const bare = makeWindow({ storage: false });
+  initAnalytics(bare);
+  assert.equal(deferAnalytics(bare), false);
+  assert.equal(trackEvent("app_ready", {}, bare), true);
+
+  const { online } = offlineThenOnline();
+  online.localStorage.setItem("webchirp-analytics-replay", "{not json");
+  assert.equal(replayDeferredAnalytics(online), 0);
+  online.localStorage.setItem("webchirp-analytics-replay", JSON.stringify({ events: [{ name: 7 }, { name: "ok", params: {} }] }));
+  assert.equal(replayDeferredAnalytics(online), 1, "only well-formed entries are replayed");
 });

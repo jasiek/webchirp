@@ -105,7 +105,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   analytics (`offline_ready`, `offline_cache_failed`, `offline_launches`)
   is sent from `offline.ts`. A launch the worker answered from the cache
   cannot be sent at the time, so it is counted in localStorage and reported
-  by the next page the network serves.
+  by the next page the network serves. That page's other events are queued
+  the same way (`deferAnalytics` / `replayDeferredAnalytics` in
+  `web/js/analytics.ts`, newest `REPLAY_LIMIT` kept) and replayed with
+  `delivery: "offline_replay"`.
 - `chirp/`: Upstream CHIRP source as a git submodule. The runtime never reads it
   file by file: `scripts/build-chirp-bundle.ts` (`npm run build:chirp`, run by `dev`
   and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,
