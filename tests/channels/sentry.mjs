@@ -14,6 +14,7 @@ import {
   initOptions,
   OFFLINE_QUEUE_SIZE,
   initSentry,
+  isIgnoredError,
   isSentryHost,
   resetSentryForTests,
   scrubEvent,
@@ -23,6 +24,8 @@ import {
   setContextProvider,
 } from "../../web/js/sentry.ts";
 import { ANALYTICS_HOSTS } from "../../web/js/analytics.ts";
+import { SERIAL_PORT_OPEN_FAILED, createSerialPortOpenFailedError } from "../../web/js/serial-errors.ts";
+import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 import { SENTRY_SDK_MODULES } from "../../web/js/cdn-urls.ts";
 import { makeWindow } from "../support/fake-window.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
@@ -125,29 +128,31 @@ test("the host gate admits only the production deployment", () => {
   assert.equal(isSentryHost(null), false);
 });
 
-test("serial port open failures are ignored directly and through Pyodide", () => {
+test("a port native Web Serial would not open is ignored by name, directly and through Pyodide", () => {
   const message = "Failed to execute 'open' on 'SerialPort': Failed to open serial port.";
-  const messages = [
-    message,
-    `NetworkError: ${message}`,
-    `pyodide.ffi.JsException: NetworkError: ${message}`,
-    `PythonError: Traceback (most recent call last):\n  File "/webchirp_runtime/webchirp_bridge/serial_pipe.py", line 1, in open\npyodide.ffi.JsException: NetworkError: ${message}\n`,
-  ];
-  for (const value of messages) {
-    assert.ok(initOptions().ignoreErrors.some((pattern) => pattern.test(value)), value);
-  }
+  const failed = createSerialPortOpenFailedError(message);
+  assert.equal(isIgnoredError(failed), true);
+  const throughPython = runtimeCallError("JsException", `${SERIAL_PORT_OPEN_FAILED}: ${message}`, {
+    js: { name: SERIAL_PORT_OPEN_FAILED, message },
+  }, "webserial_connect");
+  assert.equal(isIgnoredError(throughPython), true);
 });
 
-test("other network, Pyodide and serial failures remain reportable", () => {
-  const messages = [
-    "NetworkError: Failed to fetch",
-    "pyodide.ffi.JsException: TypeError: unexpected value",
-    "NetworkError: Failed to execute 'open' on 'SerialPort': unexpected failure",
-    "NetworkError: Failed to execute 'close' on 'SerialPort': Failed to open serial port.",
-  ];
-  for (const value of messages) {
-    assert.equal(initOptions().ignoreErrors.some((pattern) => pattern.test(value)), false, value);
-  }
+test("other network and serial failures remain reportable", () => {
+  // The same name the browser gives an open failure, on a port lost mid-clone:
+  // only the renamed open failure is dropped.
+  const lost = runtimeCallError("JsException", "NetworkError: The device has been lost.", {
+    js: { name: "NetworkError", message: "The device has been lost." },
+  }, "webserial_read");
+  assert.equal(isIgnoredError(lost), false);
+  const raw = new Error("Failed to execute 'open' on 'SerialPort': Failed to open serial port.");
+  raw.name = "NetworkError";
+  assert.equal(isIgnoredError(raw), false);
+  assert.equal(isIgnoredError(new TypeError("unexpected value")), false);
+});
+
+test("only browser noise is left to message patterns", () => {
+  assert.deepEqual(initOptions().ignoreErrors.map(String), ["/ResizeObserver loop/i"]);
 });
 
 test("scrubText removes the user data a CHIRP traceback carries", () => {

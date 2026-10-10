@@ -93,6 +93,7 @@ const JS_ERROR_KINDS = new Map([
   ["NotAllowedError", "permission_denied"],
   ["SecurityError", "permission_denied"],
   ["NetworkError", "serial_disconnect"],
+  ["SerialPortOpenFailedError", "port_open_failed"],
 ]);
 
 // Failure causes that exist only as wording: a CHIRP driver says "Radio did

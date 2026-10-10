@@ -22,9 +22,12 @@ import {
 import {
   PORT_SELECTION_CANCELLED,
   PORT_SELECTION_CANCELLED_MESSAGE,
+  SERIAL_PORT_OPEN_FAILED,
   createPortSelectionCancelledError,
+  createSerialPortOpenFailedError,
   isPortSelectionCancelled,
 } from "../../web/js/serial-errors.ts";
+import { isIgnoredError } from "../../web/js/sentry.ts";
 import { classifyErrorKind, errorTypeName } from "../../web/js/ui/analytics.ts";
 import { createDebugLog } from "../../web/js/ui/debug-log.ts";
 import { errorSummary } from "../../web/js/ui/format.ts";
@@ -220,6 +223,21 @@ test("a dismissed port chooser is still classified port_not_selected after cross
   assert.equal(error.jsCause?.message, PORT_SELECTION_CANCELLED_MESSAGE);
   assert.equal(isPortSelectionCancelled(error), true);
   assert.equal(classifyErrorKind(error), "port_not_selected");
+});
+
+test("a port that would not open keeps its name across Python and is never reported", async () => {
+  const harness = await sharedHarness();
+  const refused = createSerialPortOpenFailedError(
+    "Failed to execute 'open' on 'SerialPort': Failed to open serial port.",
+  );
+  const error = await withRejectingOpen(harness, refused, () => failure(
+    harness.rpc("webserial_connect", { baudrate: 9600 }),
+  ));
+
+  assert.equal(error.pythonType, "JsException");
+  assert.equal(error.jsCause?.name, SERIAL_PORT_OPEN_FAILED);
+  assert.equal(classifyErrorKind(error), "port_open_failed");
+  assert.equal(isIgnoredError(error), true);
 });
 
 test("a reply that is not an envelope fails loudly instead of passing as a result", async () => {
