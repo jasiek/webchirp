@@ -35,4 +35,11 @@ test("a visited build loads and boots a radio without a network", async ({ conte
   // Answered by the driver, in Pyodide, booted from the cache.
   await page.waitForFunction(selectedDriverAnswered);
   await expect(page.locator("#radio-selection-name")).toHaveText(RADIO_QUERY);
+
+  // The worker told the page it came from the cache, and the launch is
+  // counted for the next online page to report (web/js/offline.ts). Off the
+  // production host nothing is ever sent, so the count stays.
+  await page.waitForFunction(() => localStorage.getItem("webchirp-offline-launches") !== null);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("webchirp-offline-launches") || "{}")))
+    .toEqual({ cache: 1 });
 });

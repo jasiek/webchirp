@@ -101,7 +101,11 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `OFFLINE_CDN_URLS` (`web/js/cdn-urls.ts`, the one home of the jsDelivr URLs).
   The new build replaces the current one only once every file is cached. A
   new file the app fetches at runtime under a fixed name belongs in
-  `OFFLINE_DATA_FILES`, and a new CDN dependency in `cdn-urls.ts`.
+  `OFFLINE_DATA_FILES`, and a new CDN dependency in `cdn-urls.ts`. Offline
+  analytics (`offline_ready`, `offline_cache_failed`, `offline_launches`)
+  is sent from `offline.ts`. A launch the worker answered from the cache
+  cannot be sent at the time, so it is counted in localStorage and reported
+  by the next page the network serves.
 - `chirp/`: Upstream CHIRP source as a git submodule. The runtime never reads it
   file by file: `scripts/build-chirp-bundle.ts` (`npm run build:chirp`, run by `dev`
   and `build:dist`) zips the pinned `chirp/chirp` package -- minus `wxui`, `cli`,

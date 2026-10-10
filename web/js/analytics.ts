@@ -227,6 +227,24 @@ export const CUSTOM_DIMENSIONS: readonly Readonly<CustomDimension>[] = Object.fr
     description: "CHIRP settings group opened in the radio settings editor.",
     scope: "EVENT",
   },
+  {
+    parameterName: "served_from",
+    displayName: "Offline served from",
+    description: "How the service worker answered counted app launches: cache (network failed) or cache_after_timeout (network too slow).",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "launch_count",
+    displayName: "Offline launch count",
+    description: "App launches answered from the offline cache since the last report.",
+    scope: "EVENT",
+  },
+  {
+    parameterName: "launch_count_bucket",
+    displayName: "Offline launch count bucket",
+    description: "Offline launches since the last report as a range (1, 2-5, 6-20, 21+) so reports can group by it.",
+    scope: "EVENT",
+  },
 ].map((dimension) => Object.freeze(dimension)));
 
 // Display modes reported through the display-mode media feature, most app-like
