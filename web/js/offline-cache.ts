@@ -376,6 +376,8 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
     }
     let response = entry.sha256 ? undefined : await env.caches.match(entry.url, MATCH_OPTIONS);
     if (!response) {
+      // CORS rather than no-cors, so a CDN copy can answer the page's own
+      // module import; jsDelivr sends access-control-allow-origin: *.
       response = await download(entry.url, { mode: "cors", cache: entry.sha256 ? "no-cache" : "default" });
       if (!response.ok) {
         throw new OfflineHttpError(`${entry.url}: HTTP ${response.status}`);
