@@ -67,6 +67,9 @@ class StubSerialBridge {
     // no particular rate, so it reports every call as a change.
     /** @type {Array<Record<string, unknown>>} */
     this.reconfigureCalls = [];
+    // The transport name prepareClone() reports, as the real bridge does;
+    // tests set it to see what a driver makes of a Bluetooth port.
+    this.transport = "webserial";
   }
 
   async open() {
@@ -114,7 +117,7 @@ class StubSerialBridge {
       settleMs: Number(settleMs || 0),
       baudRate: Number(baudRate || 0),
     });
-    return { prepared: true, settleMs: 0, baudRate: Number(baudRate || 0) };
+    return { prepared: true, settleMs: 0, baudRate: Number(baudRate || 0), transport: this.transport };
   }
 
   /**

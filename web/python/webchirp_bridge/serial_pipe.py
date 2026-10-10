@@ -57,6 +57,15 @@ WEB_SERIAL_DATA_BITS = {7: 7, 8: 8}
 WEB_SERIAL_STOP_BITS = {1: 1, 2: 2}
 WEB_SERIAL_PARITY = {"N": "none", "E": "even", "O": "odd"}
 
+# CHIRP has no transport API, so a driver that behaves differently over
+# Bluetooth asks ``platform.get_platform().is_ble_serial(pipe)``: the UV-5R Mini
+# family (baofeng_uv17Pro) uploads in smaller blocks over BLE. Pyodide reports
+# ``os.name == "posix"``, so that is UnixPlatform's check, which reads
+# ``pipe.port`` and looks for the ``/tmp/ttyBLE`` prefix of the ble-serial
+# bridge CHIRP's users run on Linux. The names below are what ``port`` answers.
+BLE_SERIAL_PORT_NAME = "/tmp/ttyBLE-webbluetooth"
+WEB_BLUETOOTH_TRANSPORT = "webbluetooth"
+
 
 def _web_serial_framing(table: dict, value: Any) -> Any:
     """Translate one pyserial framing value, or None when there is no mapping."""
@@ -96,6 +105,7 @@ class WebSerialPipe:
         baudrate: Optional[int] = None,
         dtr: Optional[bool] = None,
         rts: Optional[bool] = None,
+        transport: str = "",
     ) -> None:
         """Expose a minimal pyserial-like pipe for CHIRP clone-mode drivers.
 
@@ -107,14 +117,32 @@ class WebSerialPipe:
         driver's wanted lines with the settle delay a radio needs. Later writes
         -- ``setDTR()``, ``setRTS()``, or assigning ``baudrate`` and the framing
         properties -- are driver-initiated and do reach the port.
+
+        ``transport`` is the open port's transport name as the JS bridge
+        reports it ("webserial", "webusb", "webbluetooth", "node"); only
+        ``port`` reads it.
         """
         self.timeout = timeout
+        self._transport = str(transport or "")
         self._baudrate = None if baudrate is None else int(baudrate)
         self._bytesize = None
         self._stopbits = None
         self._parity = None
         self._dtr = None if dtr is None else bool(dtr)
         self._rts = None if rts is None else bool(rts)
+
+    @property
+    def port(self) -> str:
+        """Name the port the way pyserial's ``Serial.port`` would, for CHIRP.
+
+        No driver opens a port by this name; CHIRP reads it only to tell a
+        Bluetooth link from a cable (see ``BLE_SERIAL_PORT_NAME``). Without it,
+        UV-5R Mini downloads and uploads died with AttributeError before the
+        first byte (Sentry WEBCHIRP-FRONTEND-1F).
+        """
+        if self._transport == WEB_BLUETOOTH_TRANSPORT:
+            return BLE_SERIAL_PORT_NAME
+        return f"webchirp:{self._transport or 'unknown'}"
 
     def write(self, data: "str | bytes | bytearray | memoryview") -> int:
         """Write bytes to the JS serial bridge and report the byte count.
