@@ -39,9 +39,16 @@ const PYTHON_NAME_RE = /\.([0-9a-f]{10})\.py$/;
 const CHIRP_BUNDLE_FILES = Object.values(chirpBundleFileNames(DEFAULT_CHIRP_REVISION))
   .map((name) => `${CHIRP_BUNDLE_DIR}/${name}`);
 
-// The files build-dist.mjs refuses to build without; their contents are never
-// read, only their presence.
+// The files build-dist.mjs refuses to build without -- the install assets, the
+// CHIRP archive, the service worker and what it caches for offline use --
+// whose contents are never read, only their presence (and the offline files'
+// digests).
 const REQUIRED_FILES = {
+  "sw.ts": "self.addEventListener(\"fetch\", () => {});\n",
+  "radio-catalog.json": "{}\n",
+  "radio-catalog-quansheng-unofficial.json": "{}\n",
+  "version.json": "{}\n",
+  "favicon.ico": "",
   "manifest.webmanifest": "{}\n",
   "images/icon-192.png": "",
   "images/icon-512.png": "",
@@ -227,10 +234,12 @@ test("a TypeScript entry is bundled with its types stripped", async () => {
   assert.deepEqual([...emitted.keys()].filter((rel) => rel.endsWith(".ts")), [], "no .ts file ships");
 });
 
+// The service worker is the one exception: the browser finds a new version
+// by fetching the URL it registered, so that URL cannot change.
 test("no source module or stylesheet ships under its own name", async () => {
   const emitted = await build(appTree("export const leaf = 1;\n"));
   const unhashed = [...emitted.keys()].filter(
-    (rel) => /\.(?:m?js|css|py)$/.test(rel) && !HASHED_NAME_RE.test(path.basename(rel)),
+    (rel) => /\.(?:m?js|css|py)$/.test(rel) && !HASHED_NAME_RE.test(path.basename(rel)) && rel !== "sw.js",
   );
   assert.deepEqual(unhashed, [], "every script, stylesheet and Python file is served under a hashed name");
   for (const rel of emitted.keys()) {
@@ -282,6 +291,76 @@ test("the CHIRP archive and every hashed output are listed for retention", async
     assert.ok(hashed.length >= 8, "expected hashed outputs to list");
     assert.deepEqual(hashed.filter((rel) => !listed.has(rel)), [], "every hashed output must be retainable");
     assert.match(manifest.buildHash, /^[0-9a-f]{10}$/);
+  });
+});
+
+// The service worker (web/sw.ts) caches what the manifest's offline section
+// lists and checks each renamable file against its digest there, so the
+// section has to name every file a cached build boots from, with the digest of
+// the bytes dist/ serves under that name.
+test("the offline section lists what a cached build boots from, with digests", async () => {
+  await withTempDir("build-dist-", async (dir) => {
+    await writeTree(path.join(dir, "web"), {
+      ...REQUIRED_FILES,
+      ...appTree("export const leaf = 1;\n"),
+      "radios/uv5r.html": "<!doctype html><p>a model page</p>\n",
+    });
+    await runBuild(dir);
+    const dist = path.join(dir, "dist");
+    const manifest = JSON.parse(await readFile(path.join(dist, "asset-manifest.json"), "utf8"));
+    const { files, assets, cdn } = manifest.offline;
+    assert.deepEqual(Object.keys(files).sort(), [
+      "about.html",
+      "favicon.ico",
+      "images/apple-touch-icon.png",
+      "images/icon-192.png",
+      "images/icon-512.png",
+      "images/icon-maskable-512.png",
+      "index.html",
+      "manifest.webmanifest",
+      "radio-catalog-quansheng-unofficial.json",
+      "radio-catalog.json",
+      "version.json",
+    ], "the root pages and the data files, but not the model pages");
+    for (const [rel, sha] of Object.entries(files)) {
+      assert.equal(sha, digest(await readFile(path.join(dist, rel))), `${rel}'s digest is not of the file served`);
+    }
+    const hashed = (await walk(dist)).filter((rel) => HASHED_NAME_RE.test(path.basename(rel)) && !rel.endsWith(".map"));
+    assert.deepEqual([...assets].sort(), [...hashed, ...CHIRP_BUNDLE_FILES].sort(), "every immutable name but the maps");
+    assert.ok(cdn.some((url) => url.endsWith("/pyodide.asm.wasm")), "Pyodide's wasm is cached with the build");
+  });
+});
+
+test("a change to a page alone is a new build for the service worker", async () => {
+  const buildHashOf = (files) => withTempDir("build-dist-", async (dir) => {
+    await writeTree(path.join(dir, "web"), { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n"), ...files });
+    await runBuild(dir);
+    return JSON.parse(await readFile(path.join(dir, "dist", "asset-manifest.json"), "utf8")).buildHash;
+  });
+  const before = await buildHashOf({});
+  assert.equal(await buildHashOf({}), before, "an unchanged tree keeps its build hash");
+  assert.notEqual(
+    await buildHashOf({ "about.html": '<!doctype html><p>new</p><script type="module" src="./js/about.js"></script>\n' }),
+    before,
+  );
+});
+
+test("the service worker ships unhashed at the root as a classic script", async () => {
+  const emitted = await build({
+    ...appTree("export const leaf = 1;\n"),
+    "sw.ts": 'import { leaf } from "./js/ui/leaf.js";\nconst n: number = leaf;\nself.addEventListener("fetch", () => n);\n',
+  });
+  const sw = text(emitted, "sw.js");
+  assert.doesNotMatch(sw, /^\s*(?:import|export)\b/m, "a classic worker cannot hold module syntax");
+  assert.match(sw, /addEventListener\("fetch"/);
+});
+
+test("a missing offline file fails the build", async () => {
+  await withTempDir("build-dist-", async (dir) => {
+    const files = { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n") };
+    delete files["radio-catalog.json"];
+    await writeTree(path.join(dir, "web"), files);
+    await assert.rejects(runBuild(dir), /Missing offline asset: radio-catalog.json/);
   });
 });
 

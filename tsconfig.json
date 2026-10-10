@@ -45,5 +45,5 @@
       "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.mjs": ["./node_modules/pyodide/pyodide.d.ts"]
     }
   },
-  "include": ["web/js", "web/app.ts"]
+  "include": ["web/js", "web/app.ts", "web/sw.ts"]
 }
