@@ -53,8 +53,9 @@ export function makeEmitter(extra = {}) {
 //   transport       — the transport name it declares ("webusb" by default)
 //   capabilities    — what it declares it can do; framing, signals and
 //                     reopen by default. Mutable, so a test can take one away.
-//   failOpenWhen    — (options, attempt) => message or null; a message makes
-//                     that open() throw after it has been recorded
+//   failOpenWhen    — (options, attempt) => message, Error or null; either of
+//                     the first two makes that open() throw after it has been
+//                     recorded (an Error is thrown as it is, name and all)
 //   failSignalsWith — message every setSignals() throws with
 //   deliverOnCancel — a chunk the adapter had already completed when a reopen
 //                     began: a real reader hands it to the pending read()
@@ -153,7 +154,7 @@ export function makeRecordingPort({
       const failure = failOpenWhen(options, port.opens.length);
       port.opens.push({ ...options });
       if (failure) {
-        throw new Error(failure);
+        throw failure instanceof Error ? failure : new Error(failure);
       }
       port.opened = true;
       port.closed = false;

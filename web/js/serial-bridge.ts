@@ -24,6 +24,7 @@ import type {
   SerialTransport,
 } from "./serial-transport.ts";
 import { errorFields } from "./error-details.ts";
+import { wrapTransportError } from "./serial-errors.ts";
 
 /** Why the bridge gave up an open port, as onPortLost hears it. */
 export interface PortLostInfo {
@@ -275,8 +276,9 @@ export class SerialBridge {
       const deviceName = this.lastDeviceName;
       await this._teardown();
       this._reportPortLost({ deviceName, reason: "baud-rate-change" });
-      throw new Error(
+      throw wrapTransportError(
         `Could not reopen the serial port at ${wanted} baud: ${errorFields(error).message || error}`,
+        error,
       );
     }
     this._debug(`Serial port reopened at ${wanted} baud (was ${previousBaudRate || "unknown"}).`);
@@ -597,8 +599,9 @@ export class SerialBridge {
       } catch {
         await this._teardown();
       }
-      throw new Error(
+      throw wrapTransportError(
         `Could not reconfigure the port (${changed.join(", ")}): ${errorFields(error).message || error}`,
+        error,
       );
     }
     await this._restoreSignals();

@@ -40,6 +40,23 @@ export function isUsbInterfaceBusy(error: unknown): boolean {
   return jsErrorName(error) === USB_INTERFACE_BUSY;
 }
 
+// The named transport failures a wrapper must not erase: reporting recognizes
+// them by name alone, so a plain Error around one would be reported after all.
+const PRESERVED_TRANSPORT_FAILURES: readonly string[] = [USB_INTERFACE_BUSY];
+
+// Wrap a transport failure in a sentence of the caller's, keeping the failure
+// as the cause and, when it is one of the names above, its name too -- the
+// serial bridge's re-rate and reconfigure paths reopen the port, which can
+// fail exactly as the first open did.
+export function wrapTransportError(message: string, cause: unknown): Error {
+  const error = new Error(message, { cause });
+  const name = jsErrorName(cause);
+  if (PRESERVED_TRANSPORT_FAILURES.includes(name)) {
+    error.name = name;
+  }
+  return error;
+}
+
 // Name transport capability refusals without coupling reporting to UI wording.
 export function createSerialUnsupportedError(message: string): Error {
   const error = new Error(message);
