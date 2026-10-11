@@ -660,6 +660,33 @@
     </div>
 
     <!--
+      Shown before a ?csv_url= link's channels reach the grid
+      (loadCsvFromLink, web/js/ui/codeplug-io.ts). The link can come from
+      anyone, so the user is shown where the list comes from and how big it is
+      and has to accept it; nothing is applied on page load alone.
+    -->
+    <div
+      id="csv-link-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="csv-link-title"
+    >
+      <div class="modal-card">
+        <h2 id="csv-link-title">Load linked channel list?</h2>
+        <p id="csv-link-message" class="import-choice-message"></p>
+        <p class="import-choice-message">
+          Only load lists from a source you trust. Before uploading to a radio,
+          check every channel is one you are licensed to transmit on.
+        </p>
+        <div class="modal-actions">
+          <button id="csv-link-cancel" type="button">Cancel</button>
+          <button id="csv-link-accept" type="button">Load channels</button>
+        </div>
+      </div>
+    </div>
+
+    <!--
       The one modal for a failure the user can clear themselves rather than a
       defect: pressing Upload before anything has been downloaded is the case
       that forced it (RuntimePreconditionError,

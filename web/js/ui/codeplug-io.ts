@@ -13,6 +13,13 @@ import {
 } from "./analytics.ts";
 import { FLOWS, OUTCOMES, recordFlow } from "./metrics.ts";
 import { requireRuntimeApi } from "./state.ts";
+import {
+  CSV_LINK_MAX_ROWS,
+  CsvLinkError,
+  fetchCsvLink,
+  readCsvLink,
+} from "../csv-link.ts";
+import { keepUrlOutOfReports } from "../sentry.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { UiState } from "./state.ts";
 import type { ParsedCsv } from "../runtime-rpc.ts";
@@ -43,12 +50,14 @@ export function classifyLoadableFile(fileName: string | null | undefined): strin
 
 // Reading and writing channel data as files: CSV parse/export through the
 // Python runtime, CHIRP binary .img import/export, drag-and-drop loading of
-// either kind, and the replace-or-merge prompt shown when an import would
-// discard channels already in the editor.
+// either kind, a channel list named by a ?csv_url= link, and the
+// replace-or-merge prompt shown when an import would discard channels already
+// in the editor.
 export function createCodeplugIo(ctx: UiContext) {
   const { dom, state, log } = ctx;
   type ImportChoice = "replace" | "merge" | "cancel";
   let importChoiceResolve: ((choice: ImportChoice) => void) | null = null;
+  let csvLinkResolve: ((accepted: boolean) => void) | null = null;
   let fileLoadInFlight = false;
   // dragenter/dragleave fire once per element the pointer crosses, so the
   // overlay is driven by the depth of nested enters rather than by any single
@@ -153,6 +162,106 @@ export function createCodeplugIo(ctx: UiContext) {
       log.setStatus(`Merged ${imported.length} imported channel(s); ${state.currentRows.length} total${issues}.`);
     } else {
       log.setStatus(`Loaded ${state.currentRows.length} channel(s)${issues}.`);
+    }
+  }
+
+  function isCsvLinkModalOpen() {
+    return !dom.csvLinkModalEl.classList.contains("hidden");
+  }
+
+  // Close the linked-list confirmation with the user's answer.
+  function resolveCsvLink(accepted: boolean) {
+    if (!csvLinkResolve) {
+      return;
+    }
+    const resolve = csvLinkResolve;
+    csvLinkResolve = null;
+    dom.csvLinkModalEl.classList.add("hidden");
+    resolve(accepted);
+  }
+
+  // Ask the user to accept a linked channel list, naming its host and size.
+  // The host is URL.host, which the URL parser has already turned into
+  // punycode, so a look-alike Unicode name shows as the xn-- form it really is.
+  function askCsvLinkConfirm(host: string, channelCount: number): Promise<boolean> {
+    dom.csvLinkMessageEl.textContent = `This link loads ${channelCount} channel(s) from ${host}.`;
+    dom.csvLinkModalEl.classList.remove("hidden");
+    dom.csvLinkAcceptEl.focus?.();
+    return new Promise((resolve) => {
+      csvLinkResolve = resolve;
+    });
+  }
+
+  // Report a linked list the app would not or could not load. These are the
+  // link's problems, not the app's, so they get the notice modal and the debug
+  // panel but are never captured as errors.
+  function reportCsvLinkRefused(error: CsvLinkError) {
+    log.logDebug(`CSV LINK REFUSED\n${error.message}${error.cause ? `\n${String(error.cause)}` : ""}`);
+    log.setStatus("Linked channel list not loaded (see Debug Output).");
+    ctx.notice.show({ title: "Linked channel list not loaded", message: error.message });
+  }
+
+  // Load the channel list a ?csv_url= link names: download it under the limits
+  // in web/js/csv-link.ts, parse it with CHIRP, then apply it only once the
+  // user has accepted it in the confirmation. Called once the boot has the
+  // schema of the radio a ?radio= link picked, so the rows land in that
+  // radio's columns. Never throws: a page whose link fails still works.
+  async function loadCsvFromLink(
+    search = window.location?.search || "",
+    hash = window.location?.hash || "",
+  ): Promise<void> {
+    try {
+      const link = readCsvLink(search, hash);
+      if (!link) {
+        return;
+      }
+      // The list's address names whoever published it, so it is cleared from
+      // error reports before the first request for it can leave a breadcrumb.
+      keepUrlOutOfReports(link.url.href);
+      const host = link.url.host;
+      log.logDebug(`CSV LINK ${link.url.href}${link.sha256 ? " (sha256 pinned)" : ""}`);
+      if (!ctx.connectivity.isOnline()) {
+        throw new CsvLinkError(`You are offline, so the channel list from ${host} cannot be downloaded.`);
+      }
+      log.setStatus(`Downloading channel list from ${host}...`);
+      // Read at call time rather than bound at construction, so the global
+      // fetch the page has is the one used.
+      const csvText = await fetchCsvLink(link, (input, init) => fetch(input, init));
+      const parsed = await parseCsvViaRuntime(csvText);
+      const count = (parsed.rows || []).length;
+      if (count > CSV_LINK_MAX_ROWS) {
+        throw new CsvLinkError(
+          `The channel list from ${host} has ${count} channels, more than the `
+          + `${CSV_LINK_MAX_ROWS} a linked list may hold. It was not loaded.`,
+        );
+      }
+      if (!(await askCsvLinkConfirm(host, count))) {
+        trackCodeplugImport("csv", "link", "cancelled");
+        log.setStatus("Linked channel list not loaded.");
+        return;
+      }
+      let mode: "replace" | "merge" = "replace";
+      if (ctx.table.hasRealChannels()) {
+        const choice = await askImportChoice(
+          `The editor holds ${state.currentRows.length} channel(s) that will be lost if replaced. `
+          + `The list from ${host} contains ${count} channel(s). `
+          + "Replace the existing channels, or merge by appending the imported channels below them?",
+        );
+        if (choice === "cancel") {
+          trackCodeplugImport("csv", "link", "cancelled");
+          log.setStatus("Linked channel list not loaded.");
+          return;
+        }
+        mode = choice;
+      }
+      applyParsedCsv(parsed, mode);
+      trackCodeplugImport("csv", "link", mode);
+    } catch (error) {
+      if (error instanceof CsvLinkError) {
+        reportCsvLinkRefused(error);
+        return;
+      }
+      log.reportActionError("Linked channel list", error);
     }
   }
 
@@ -506,6 +615,18 @@ export function createCodeplugIo(ctx: UiContext) {
       }
     });
 
+    dom.csvLinkAcceptEl.addEventListener("click", () => {
+      resolveCsvLink(true);
+    });
+    dom.csvLinkCancelEl.addEventListener("click", () => {
+      resolveCsvLink(false);
+    });
+    dom.csvLinkModalEl.addEventListener("click", (event) => {
+      if (event.target === dom.csvLinkModalEl) {
+        resolveCsvLink(false);
+      }
+    });
+
     dom.loadCodeplugEl.addEventListener("click", () => {
       dom.fileInput.click();
     });
@@ -560,8 +681,11 @@ export function createCodeplugIo(ctx: UiContext) {
   return {
     bindEvents,
     loadEmptySchema,
+    loadCsvFromLink,
     isImportChoiceModalOpen,
     resolveImportChoice,
+    isCsvLinkModalOpen,
+    resolveCsvLink,
     isExportMenuOpen,
     closeExportMenu,
   };

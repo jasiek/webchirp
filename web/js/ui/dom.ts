@@ -123,6 +123,10 @@ export const REQUIRED_ELEMENTS = {
   importChoiceReplaceEl: "#import-choice-replace",
   importChoiceMergeEl: "#import-choice-merge",
   importChoiceCancelEl: "#import-choice-cancel",
+  csvLinkModalEl: "#csv-link-modal",
+  csvLinkMessageEl: "#csv-link-message",
+  csvLinkCancelEl: "#csv-link-cancel",
+  csvLinkAcceptEl: "#csv-link-accept",
   noticeModalEl: "#notice-modal",
   noticeTitleEl: "#notice-title",
   noticeMessageEl: "#notice-message",
@@ -197,6 +201,8 @@ export type UiElementTypes = {
   importChoiceReplaceEl: HTMLButtonElement;
   importChoiceMergeEl: HTMLButtonElement;
   importChoiceCancelEl: HTMLButtonElement;
+  csvLinkCancelEl: HTMLButtonElement;
+  csvLinkAcceptEl: HTMLButtonElement;
   noticeDismissEl: HTMLButtonElement;
 };
 

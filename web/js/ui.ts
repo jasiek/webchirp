@@ -165,7 +165,7 @@ export function createUiController() {
     connectivity.bindEvents();
 
     // Escape closes the topmost open surface: a notice, which is shown over
-    // whatever else is open, then the import prompt, then the channel extras
+    // whatever else is open, then the import prompts, then the channel extras
     // editor, then the bulk editor, then the repeater modals and export menu.
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
@@ -175,6 +175,10 @@ export function createUiController() {
         }
         if (codeplugIo.isImportChoiceModalOpen()) {
           codeplugIo.resolveImportChoice("cancel");
+          return;
+        }
+        if (codeplugIo.isCsvLinkModalOpen()) {
+          codeplugIo.resolveCsvLink(false);
           return;
         }
         if (channelExtra.isModalOpen()) {
@@ -314,6 +318,10 @@ export function createUiController() {
       const catalogSource = catalogResponse.source || "unknown";
       trackEvent("app_ready", { duration_ms: readyMs, catalog_source: catalogSource });
       recordFlow(FLOWS.APP_START, OUTCOMES.OK, { catalog_source: catalogSource }, readyMs);
+      // After app_ready and not awaited: a slow download, or a confirmation
+      // the user leaves open, must not hold startup. It reports its own
+      // failures and never rejects.
+      void codeplugIo.loadCsvFromLink();
     } catch (error) {
       catalog.setRadioSelectPlaceholder("Unavailable");
       const failedMs = Date.now() - startedAt;
