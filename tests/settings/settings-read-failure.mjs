@@ -31,6 +31,12 @@ _cls.get_settings = _broken_get_settings
     assert.equal(loaded.rows.length, baseline.loaded.rows.length);
     // Empty settings is what the UI reads as "no Settings tab".
     assert.deepEqual(loaded.settings, []);
+
+    // The user keeps editing the recovered channels, so a channel-only export
+    // has to get through the same failing get_settings.
+    const exported = await harness.exportCodeplugBinary(module, className, loaded.rows, []);
+    assert.ok(exported.image.length > 0, "a binary export should still produce an image");
+    assert.deepEqual(exported.settings, []);
   } finally {
     await harness.runPython(
       `

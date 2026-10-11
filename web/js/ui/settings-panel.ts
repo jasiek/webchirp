@@ -444,10 +444,15 @@ export function createSettingsPanel(ctx: UiContext) {
       settingsState.groups = cloneGroups(groups || settingsState.groups);
     },
     // Wholesale replacement after a download or image load, where the settings
-    // come from the image rather than a driver probe.
+    // come from the image rather than a driver probe. A result with no settings
+    // while the Settings view is open would leave the channels hidden behind a
+    // disabled view, so it returns to Channels like applyLoadedState does.
     replaceState(nextState: SettingsState) {
       settingsState = nextState;
       activeTab = settingsState.groups[0]?.id || "";
+      if (!radioHasSettings() && state.currentEditorView === "settings") {
+        actions.setEditorView("channels");
+      }
     },
   };
 }

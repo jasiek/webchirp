@@ -12,6 +12,7 @@ than guessing from a blank instance.
 from __future__ import annotations
 
 import copy
+import traceback
 from typing import TYPE_CHECKING
 
 from chirp import (
@@ -410,12 +411,29 @@ def _validate_and_apply_radio_settings(
     serialized_groups: Sequence[dict[str, Any]],
     apply_changes: bool = False,
 ) -> dict[str, Any]:
-    """Validate serialized settings against a fresh CHIRP settings tree."""
+    """Validate serialized settings against a fresh CHIRP settings tree.
+
+    A driver whose ``get_settings()`` raises has no settings to show or write.
+    When the caller submitted none either -- every download, image load,
+    channel-only upload and export -- that is reported as "no settings" (empty,
+    valid) with the traceback in the debug panel, so the channels still make
+    it through. Submitted settings cannot be applied without a tree, so that
+    case still raises rather than silently dropping the user's edits.
+    """
     rf = radio.get_features()
     if not bool(getattr(rf, "has_settings", False)):
         return {"valid": True, "issues": [], "settings": []}
 
-    settings_tree = radio.get_settings()
+    try:
+        settings_tree = radio.get_settings()
+    except Exception:
+        if serialized_groups:
+            raise
+        _log_debug(
+            "Radio-wide settings could not be read and are unavailable:\n"
+            + traceback.format_exc()
+        )
+        return {"valid": True, "issues": [], "settings": []}
     issues = []
     _apply_serialized_settings(settings_tree, serialized_groups, issues, [])
     if issues:
