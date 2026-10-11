@@ -167,15 +167,26 @@ def _read_radio_payload(
     session, extract the rows, record the slots that would not decode so a
     later upload leaves them alone, and serialize the radio-wide settings
     read-only.
+
+    A driver whose ``get_settings()`` raises must not cost the user the
+    channels that decoded fine: the failure goes to the debug panel and the
+    settings come back empty, which the UI reads as "no Settings tab".
     """
     session.record_radio(radio, origin)
     rows, unreadable = _radio_rows_from_instance(radio)
     session.record_unreadable_channels(unreadable)
-    settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
+    try:
+        settings = _validate_and_apply_radio_settings(radio, [], apply_changes=False)["settings"]
+    except Exception:
+        _log_debug(
+            "Radio-wide settings could not be read and are unavailable:\n"
+            + traceback.format_exc()
+        )
+        settings = []
     return {
         "rows": rows,
         "headers": CSV_HEADERS,
-        "settings": settings_result["settings"],
+        "settings": settings,
         "unreadableChannels": unreadable,
     }
 
