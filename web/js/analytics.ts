@@ -522,6 +522,41 @@ function loadGtagScript(win: Window): void {
   (doc.head || doc.documentElement)?.appendChild(script);
 }
 
+// A URL with its query string and fragment cut off, or undefined when there is
+// nothing parseable to cut. gtag reports the full page URL (and the referrer,
+// which is the full URL for a same-origin navigation) on every hit unless told
+// otherwise, and the query is where links put things GA must never see: a
+// linked CSV's address, a repeater search's coordinates.
+export function urlWithoutQuery(href: string | null | undefined): string | undefined {
+  if (!href) {
+    return undefined;
+  }
+  try {
+    const url = new URL(href);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return undefined;
+  }
+}
+
+// The page parameters for config: page_location and page_referrer with their
+// queries stripped. Config parameters persist for every later hit of the
+// measurement ID, so setting them here covers events, not just the page_view.
+// A missing referrer is left out rather than sent as "", which GA would record
+// as a value of its own.
+function scrubbedPageParams(win: Window): Record<string, string> {
+  const params: Record<string, string> = {};
+  const location = urlWithoutQuery(win.location?.href);
+  if (location) {
+    params.page_location = location;
+  }
+  const referrer = urlWithoutQuery(win.document?.referrer);
+  if (referrer) {
+    params.page_referrer = referrer;
+  }
+  return params;
+}
+
 // Define gtag, load the vendor tag, then config with the launch context
 // attached. gtag.js reads whatever is already in dataLayer when it arrives, so
 // the ordering between the injection and the commands below does not matter.
@@ -547,7 +582,10 @@ export function initAnalytics(win: Window | null | undefined) {
   }
   loadGtagScript(win);
   win.gtag("js", new Date());
-  win.gtag("config", MEASUREMENT_ID, { display_mode: detectDisplayMode(win) });
+  win.gtag("config", MEASUREMENT_ID, {
+    ...scrubbedPageParams(win),
+    display_mode: detectDisplayMode(win),
+  });
   bindInstallTracking(win);
   return win.gtag;
 }
