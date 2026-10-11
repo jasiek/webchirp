@@ -438,10 +438,16 @@ export function createSettingsPanel(ctx: UiContext) {
     applyValidationIssues,
     invalidCount: () => invalidKeys.size,
     getGroups: () => settingsState.groups,
-    // Replace the settings tree, falling back to the current groups when the
-    // runtime returns nothing (upload/export echo the settings back).
+    // Replace the settings tree with the one the runtime echoed back (upload,
+    // export and preflight all do). An empty or missing reply means the runtime
+    // could not read the settings (validate_radio_settings answers `[]` with
+    // available: false), not that the radio has none, so the tree the panel
+    // already holds stays.
     setGroups(groups: SettingNode[] | null | undefined) {
-      settingsState.groups = cloneGroups(groups || settingsState.groups);
+      if (!Array.isArray(groups) || groups.length === 0) {
+        return;
+      }
+      settingsState.groups = cloneGroups(groups);
     },
     // Wholesale replacement after a download or image load, where the settings
     // come from the image rather than a driver probe. A result with no settings

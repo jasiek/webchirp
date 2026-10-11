@@ -282,8 +282,14 @@ def _apply_serialized_settings(
     payload_children: Optional[Sequence[Any]],
     issues: list[dict[str, Any]],
     prefix: list[str],
+    rejected: Optional[dict[tuple[tuple[str, ...], int], Any]] = None,
 ) -> None:
-    """Apply serialized UI settings onto a fresh CHIRP settings tree."""
+    """Apply serialized UI settings onto a fresh CHIRP settings tree.
+
+    ``rejected``, when given, collects the value the driver refused for each
+    failed ``set_value`` (keyed by setting path and value index), so the reply
+    can hand the user's input back instead of the value it was typed over.
+    """
     children = payload_children or []
     actual_children = _settings_container_children(actual_container)
     for position, payload in enumerate(children):
@@ -301,7 +307,9 @@ def _apply_serialized_settings(
 
         path = prefix + [child_id]
         if payload.get("kind") == "group":
-            _apply_serialized_settings(actual_child, payload.get("children") or [], issues, path)
+            _apply_serialized_settings(
+                actual_child, payload.get("children") or [], issues, path, rejected
+            )
             continue
 
         if not isinstance(actual_child, chirp_settings.RadioSetting):
@@ -344,6 +352,30 @@ def _apply_serialized_settings(
                 target.set_value(next_value)
             except Exception as exc:
                 issues.append(_setting_issue(path, value_index, exc))
+                if rejected is not None:
+                    rejected[(tuple(_setting_path(path)), int(value_index))] = next_value
+
+
+def _restore_rejected_values(
+    nodes: Sequence[dict[str, Any]],
+    rejected: dict[tuple[tuple[str, ...], int], Any],
+) -> None:
+    """Put the user's refused input back into a serialized settings tree.
+
+    A value ``set_value`` rejected was never stored, so the freshly serialized
+    tree still holds what the radio had. Replying with that would make the
+    panel snap the field back to the old value while flagging it invalid; the
+    user's own text, next to the message saying why it failed, is what they
+    can correct.
+    """
+    for node in nodes:
+        if node.get("kind") == "group":
+            _restore_rejected_values(node.get("children") or [], rejected)
+            continue
+        for value in node.get("values") or []:
+            key = (tuple(node.get("path") or []), int(value.get("index", 0)))
+            if key in rejected:
+                value["current"] = rejected[key]
 
 
 def _settings_child_is_writable(setting: chirp_settings.RadioSettingGroup) -> bool:
@@ -435,9 +467,12 @@ def _validate_and_apply_radio_settings(
         )
         return {"valid": True, "issues": [], "settings": []}
     issues = []
-    _apply_serialized_settings(settings_tree, serialized_groups, issues, [])
+    rejected: dict[tuple[tuple[str, ...], int], Any] = {}
+    _apply_serialized_settings(settings_tree, serialized_groups, issues, [], rejected)
     if issues:
-        return {"valid": False, "issues": issues, "settings": _serialize_radio_settings(settings_tree)}
+        serialized = _serialize_radio_settings(settings_tree)
+        _restore_rejected_values(serialized, rejected)
+        return {"valid": False, "issues": issues, "settings": serialized}
     if apply_changes:
         # Prune a copy, not the tree itself: the serialized reply below still
         # has to show the user every setting the radio reported, including the

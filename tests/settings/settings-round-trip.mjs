@@ -379,3 +379,41 @@ json.dumps({"valid": _res["valid"], "written": _MixedRadio.written})
   assert.equal(written.valid, true);
   assert.deepEqual(written.written, { pair: ["Edited", "Locked"] });
 });
+
+// A value the driver refuses is reported as an issue, and the reply's tree
+// carries what the user typed rather than the value it was typed over, so the
+// panel shows the field the message is about (issue 97).
+test("a refused edit comes back in the reply as the user's own value", async () => {
+  const { harness } = await context();
+  const result = await harness.runPythonJson(
+    `
+def _tree():
+    return chirp_settings.RadioSettings(chirp_settings.RadioSettingGroup(
+        "basic", "Basic",
+        chirp_settings.RadioSetting(
+            "volume", "Volume", chirp_settings.RadioSettingValueInteger(0, 10, 5)),
+        chirp_settings.RadioSetting(
+            "name", "Name", chirp_settings.RadioSettingValueString(0, 8, "Open")),
+    ))
+
+class _Radio:
+    def get_features(self):
+        _rf = chirp_common.RadioFeatures()
+        _rf.has_settings = True
+        return _rf
+    def get_settings(self):
+        return _tree()
+
+_payload = _serialize_radio_settings(_tree())
+_payload[0]["children"][0]["values"][0]["current"] = 99
+_payload[0]["children"][1]["values"][0]["current"] = "Edited"
+_res = _validate_and_apply_radio_settings(_Radio(), _payload, apply_changes=False)
+_by_id = {c["id"]: c["values"][0]["current"] for c in _res["settings"][0]["children"]}
+json.dumps({"valid": _res["valid"], "issues": _res["issues"], "values": _by_id})
+    `,
+  );
+  assert.equal(result.valid, false);
+  assert.deepEqual(result.issues.map((issue) => issue.path), [["basic", "volume"]]);
+  assert.equal(result.values.volume, 99, "the refused 99 is shown, not the radio's 5");
+  assert.equal(String(result.values.name).trimEnd(), "Edited", "an accepted edit is applied as before");
+});
