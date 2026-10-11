@@ -214,6 +214,23 @@ const SCRUB_RULES: ReadonlyArray<[RegExp, string | ((match: string, ...groups: s
 // Apply every redaction rule to one string. Exported so the rules can be tested
 // directly -- they are the part of this module that has to be right, and a
 // rule that silently stops matching is invisible in the Sentry UI.
+// Whole URLs this page has been told never to report. The query rule above
+// cannot cover a URL whose identifying part is its path -- a linked channel
+// list on a gist or a club's site names its owner there -- so a feature that
+// fetches one registers it here and every string sent is cleared of it.
+const PRIVATE_URLS = new Set<string>();
+
+// Keep a URL out of every Sentry event, breadcrumb and metric from now on.
+// The fragment-less form is registered as well, because that is the form a
+// fetch breadcrumb records.
+export function keepUrlOutOfReports(href: string): void {
+  if (!href) {
+    return;
+  }
+  PRIVATE_URLS.add(href);
+  PRIVATE_URLS.add(href.replace(/#.*$/, ""));
+}
+
 export function scrubText(value: string): string;
 export function scrubText<T>(value: T): T;
 export function scrubText(value: unknown): unknown {
@@ -221,6 +238,13 @@ export function scrubText(value: unknown): unknown {
     return value;
   }
   let out = value;
+  // Before the rules, which would otherwise cut a private URL down to a prefix
+  // that no longer matches it.
+  for (const href of PRIVATE_URLS) {
+    if (href) {
+      out = out.split(href).join("[private-url]");
+    }
+  }
   for (const [pattern, replacement] of SCRUB_RULES) {
     // replace() is declared once for a string and once for a replacer
     // function, and picks neither for their union, so each is named.
