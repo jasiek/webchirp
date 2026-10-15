@@ -305,11 +305,14 @@ def _apply_serialized_settings(
     issues: list[dict[str, Any]],
     prefix: list[str],
     rejected: RejectedValues,
+    changed: list[list[str]],
 ) -> None:
     """Apply serialized UI settings onto a fresh CHIRP settings tree.
 
     A value CHIRP refuses is reported in issues and its submission recorded in
-    rejected, so the reply can echo what the user typed (issue 97).
+    rejected, so the reply can echo what the user typed (issue 97). The path
+    of every setting that took a new value is appended to changed, so the
+    caller can tell an edit from a payload that only echoes the radio.
     """
     children = payload_children or []
     actual_children = _settings_container_children(actual_container)
@@ -329,7 +332,7 @@ def _apply_serialized_settings(
         path = prefix + [child_id]
         if payload.get("kind") == "group":
             _apply_serialized_settings(
-                actual_child, payload.get("children") or [], issues, path, rejected
+                actual_child, payload.get("children") or [], issues, path, rejected, changed
             )
             continue
 
@@ -374,6 +377,9 @@ def _apply_serialized_settings(
             except Exception as exc:
                 issues.append(_setting_issue(path, value_index, exc))
                 rejected[id(target)] = next_value
+                continue
+            if path not in changed:
+                changed.append(path)
 
 
 def _settings_child_is_writable(setting: chirp_settings.RadioSettingGroup) -> bool:
@@ -449,6 +455,16 @@ def _validate_and_apply_radio_settings(
     valid) with the traceback in the debug panel, so the channels still make
     it through. Submitted settings cannot be applied without a tree, so that
     case still raises rather than silently dropping the user's edits.
+
+    The driver's ``set_settings()`` runs only when a submitted value differs
+    from the one the tree read. Export and upload submit the panel's whole
+    tree, so without that gate every write replayed every setting through the
+    driver, and a driver can refuse a value it rendered itself: kguv9dplus
+    shows a VFO frequency of 0 as "", and its apply callback parses "" back as
+    0 Hz, outside the band, and raises (WEBCHIRP-FRONTEND-2D). Desktop CHIRP
+    calls ``set_settings()`` only from the editor's change handler
+    (``_changed``, ``chirp/chirp/wxui/settingsedit.py:202-209``); a write with no edit
+    leaves the image's settings bytes exactly as they were read.
     """
     rf = radio.get_features()
     if not bool(getattr(rf, "has_settings", False)):
@@ -466,14 +482,17 @@ def _validate_and_apply_radio_settings(
         return {"valid": True, "issues": [], "settings": []}
     issues = []
     rejected: RejectedValues = {}
-    _apply_serialized_settings(settings_tree, serialized_groups, issues, [], rejected)
+    changed: list[list[str]] = []
+    _apply_serialized_settings(settings_tree, serialized_groups, issues, [], rejected, changed)
     if issues:
         return {
             "valid": False,
             "issues": issues,
             "settings": _serialize_radio_settings(settings_tree, rejected),
         }
-    if apply_changes:
+    if apply_changes and not changed:
+        _log_debug("No radio setting was changed; the image's settings are written as read.")
+    elif apply_changes:
         # Prune a copy, not the tree itself: the serialized reply below still
         # has to show the user every setting the radio reported, including the
         # ones CHIRP declined to load.
