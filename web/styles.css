@@ -2934,3 +2934,92 @@ button:disabled {
   pointer-events: none;
   white-space: pre-line;
 }
+
+/* Analytics consent banner (web/js/consent-banner.ts). Built by the analytics
+   module on the production host only, on every page that loads it. Floating
+   and small so the app stays usable behind it; it never blocks the page,
+   because nothing about the app depends on the answer. Above the modals and
+   the unsupported-browser overlay (70), so it can be answered from behind
+   them; below the drag feedback (80) and tooltips (100). */
+.consent-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  z-index: 75;
+  box-sizing: border-box;
+  width: min(36rem, calc(100vw - 2rem));
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 10px 24px var(--shadow-color);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.consent-banner-text {
+  flex: 1 1 18rem;
+  margin: 0;
+}
+
+.consent-banner-text a {
+  color: var(--accent);
+}
+
+.consent-banner-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+/* Accept and Decline share one class and one size: neither may stand out. */
+.consent-banner-button {
+  min-width: 6rem;
+}
+
+/* "Cookie settings": a quiet text control in each page's footer. Never given
+   a display value, so the hidden attribute it ships with keeps working. */
+.footer-link-button {
+  border: none;
+  background: none;
+  padding: 0.25rem 0.1rem;
+  color: var(--accent);
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.about-footer {
+  margin-top: 0.9rem;
+  text-align: center;
+}
+
+/* Phones, and the Android app, which shows exactly these pages: a full-width
+   strip along the bottom edge with thumb-sized buttons sharing the row. */
+@media (max-width: 560px) {
+  .consent-banner {
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    transform: none;
+    border-width: 1px 0 0;
+    border-radius: 0;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .consent-banner-actions {
+    width: 100%;
+  }
+
+  .consent-banner-button {
+    flex: 1 1 0;
+    min-height: 2.75rem;
+  }
+}

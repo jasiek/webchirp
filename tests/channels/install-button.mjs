@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { initAnalytics } from "../../web/js/analytics.ts";
+import { CONSENT_KEY, initAnalytics } from "../../web/js/analytics.ts";
 import { ANDROID_APP_LAUNCH_PARAMS } from "../../web/js/android-app.ts";
 import { bindInstallPrompt } from "../../web/js/install-prompt.ts";
 import { createInstallButton } from "../../web/js/ui/install-button.ts";
@@ -97,6 +97,9 @@ test("an install offered before the UI booted is still shown", () => {
 
 test("a tap raises the prompt, reports the click and retires the button", async () => {
   const win = makeWindow();
+  // A visitor who accepted analytics, or the click is held for an answer
+  // rather than reported (tests/channels/analytics-consent.mjs).
+  win.localStorage.setItem(CONSENT_KEY, "granted");
   initAnalytics(win);
   bindInstallPrompt(win);
   const { installAppEl, debug, ctx } = makeContext();

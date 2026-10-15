@@ -64,6 +64,16 @@
         </p>
         <p class="about-signoff">73 de HF2J / M0NIT</p>
       </section>
+      <!--
+        Reopens the analytics consent banner. Shipped hidden: the analytics
+        module reveals it on the production host, the only place there is a
+        choice to change.
+      -->
+      <footer class="about-footer">
+        <button type="button" class="footer-link-button" data-analytics-consent-settings hidden>
+          Cookie settings
+        </button>
+      </footer>
     </main>
   </body>
 </html>
