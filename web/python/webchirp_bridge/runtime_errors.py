@@ -47,3 +47,16 @@ class RuntimePreconditionError(RuntimeUnsupportedError):
     real failures. The debug panel still prints it in full.
     ``tests/channels/precondition-errors.mjs`` pins the two together.
     """
+
+
+class SettingsRefusedError(RuntimePreconditionError):
+    """The radio refused a setting value the user edited.
+
+    Raised by export and upload when CHIRP or the driver rejects an edited
+    setting -- a frequency outside its band, an option the list does not
+    hold. The message names the setting and carries the driver's own reason,
+    and the fix is the user's: correct the value in Settings and try again.
+    It derives from ``RuntimePreconditionError`` so the browser shows it as a
+    notice and Sentry drops it. A refusal the runtime cannot pin on an edit
+    is never raised as this class, so it stays reported.
+    """
