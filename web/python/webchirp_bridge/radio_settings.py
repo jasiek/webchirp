@@ -695,7 +695,8 @@ def _raise_for_refused_settings(result: dict[str, Any], action: str) -> None:
             " %d other setting(s) were refused too; see Debug Output." % others
             if others > 0
             else "",
-        )
+        ),
+        issues,
     )
 
 

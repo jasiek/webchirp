@@ -78,6 +78,8 @@ test("a precondition failure arrives as a RuntimeCallError with its type and bas
   assert.match(error.message, /never-opened.*is not open/s);
   assert.doesNotMatch(error.message, /Traceback|RuntimePreconditionError/);
   assert.match(error.pythonTraceback, /webchirp_bridge\.runtime_errors\.RuntimePreconditionError:/);
+  // Only an error with something to hand the browser sends details.
+  assert.equal(error.pythonDetails, null);
   assert.equal(error.jsCause, null);
 
   // Matched by its own class and by every base, never by a sibling.

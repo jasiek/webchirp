@@ -29,6 +29,7 @@ export const PYTHON_BASES = Object.freeze({
   RuntimeUnsupportedError: ["RadioError", ...EXCEPTION_BASES],
   ImageDetectionError: ["RuntimeUnsupportedError", "RadioError", ...EXCEPTION_BASES],
   RuntimePreconditionError: ["RuntimeUnsupportedError", "RadioError", ...EXCEPTION_BASES],
+  SettingsRefusedError: ["RuntimePreconditionError", "RuntimeUnsupportedError", "RadioError", ...EXCEPTION_BASES],
   JsException: ["JsProxy", ...EXCEPTION_BASES],
   Exception: ["BaseException"],
   ValueError: EXCEPTION_BASES,
@@ -43,7 +44,7 @@ const BUILTIN_TYPES = new Set(["Exception", "ValueError", "TypeError", "Attribut
 // The module each class is defined in, which is what the traceback's last
 // line and the envelope's module field name.
 function defaultModule(type) {
-  if (/^Runtime|^ImageDetectionError$/.test(type)) {
+  if (/^Runtime|^ImageDetectionError$|^SettingsRefusedError$/.test(type)) {
     return "webchirp_bridge.runtime_errors";
   }
   if (type === "JsException") {
@@ -71,7 +72,11 @@ export function pythonTraceback(type, message, module = defaultModule(type), fil
 }
 
 // The error envelope rpc_error_envelope would build for one exception.
-export function errorEnvelope(type, message, { module, bases, traceback, causes = [], origin = null, js = null } = {}) {
+export function errorEnvelope(
+  type,
+  message,
+  { module, bases, traceback, causes = [], origin = null, js = null, details = null } = {},
+) {
   const resolvedModule = module ?? defaultModule(type);
   return {
     type,
@@ -82,6 +87,7 @@ export function errorEnvelope(type, message, { module, bases, traceback, causes 
     causes,
     origin,
     js,
+    details,
   };
 }
 
