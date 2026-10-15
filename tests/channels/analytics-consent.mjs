@@ -55,8 +55,12 @@ function choiceButton(document, choice) {
   return banner(document)?.querySelector(`button[data-consent="${choice}"]`);
 }
 
+// The page's scripts served by Google's tag host, matched on the parsed
+// hostname rather than a substring of the URL.
 function gtagScripts(document) {
-  return [...document.querySelectorAll("script")].filter((script) => script.src.includes("googletagmanager.com"));
+  return [...document.querySelectorAll("script[src]")].filter(
+    (script) => new URL(script.src, document.baseURI).hostname === new URL(GTAG_SRC).hostname,
+  );
 }
 
 // dataLayer holds arguments objects, not arrays.
