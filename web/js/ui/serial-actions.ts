@@ -728,6 +728,7 @@ export function createSerialActions(ctx: UiContext) {
         ...codeplugParams(state),
         ...cloneFailureParams(error, stage),
       });
+      ctx.settings.markRefused(error);
       log.reportActionError("Upload", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {

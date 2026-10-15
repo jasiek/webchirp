@@ -58,6 +58,7 @@ from webchirp_bridge.serial_pipe import (
     webserial_disconnect,
     webserial_txrx_hex,
 )
+from webchirp_bridge.runtime_errors import RuntimeUnsupportedError
 from webchirp_bridge.session import close_session, open_session
 
 if TYPE_CHECKING:
@@ -140,6 +141,19 @@ def _exception_chain(exc: BaseException) -> list[BaseException]:
         chain.append(current)
         current = current.__cause__ or current.__context__
     return chain
+
+
+def _error_details(exc: BaseException) -> dict[str, Any] | None:
+    """The data a runtime error carries for the browser beyond its message.
+
+    Only the runtime's own errors carry any (``RuntimeUnsupportedError.details``,
+    which ``SettingsRefusedError`` fills with the refused settings). A CHIRP or
+    Python exception that happens to have a ``details`` attribute of its own is
+    not read, because nothing promises it is JSON.
+    """
+    if isinstance(exc, RuntimeUnsupportedError):
+        return exc.details
+    return None
 
 
 def _js_cause(exc: BaseException) -> dict[str, str] | None:
@@ -238,8 +252,9 @@ def rpc_error_envelope(exc: Exception) -> dict[str, Any]:
     can be shown -- and ``traceback`` is the full formatted text the debug panel
     prints. ``causes`` names the exceptions it was chained from, nearest first
     (``_python_causes``), ``origin`` the module and function that raised it
-    (``_raise_origin``), and ``js`` is the JS error under a ``JsException``
-    (``_js_cause``), or ``None``.
+    (``_raise_origin``), ``js`` is the JS error under a ``JsException``
+    (``_js_cause``), or ``None``, and ``details`` is the data a runtime error
+    carries for the browser to act on (``_error_details``), or ``None``.
     """
     cls = type(exc)
     return {
@@ -251,6 +266,7 @@ def rpc_error_envelope(exc: Exception) -> dict[str, Any]:
         "causes": _python_causes(exc),
         "origin": _raise_origin(exc),
         "js": _js_cause(exc),
+        "details": _error_details(exc),
     }
 
 

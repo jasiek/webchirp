@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isPythonError } from "../../web/js/runtime-errors.ts";
+import { isPythonError, refusedSettingIssues } from "../../web/js/runtime-errors.ts";
 import { initOptions } from "../../web/js/sentry.ts";
 import { loadImageFor, readCatalog, sharedHarness } from "../support/chirp.mjs";
 
@@ -167,6 +167,14 @@ test("an edit the radio refuses stops the export and names the setting", async (
         assert.match(error.message, names, why);
         assert.match(error.message, /Correct it in Settings, then export again\./, why);
         assert.ok(isIgnoredBySentry(error), `${why}: Sentry should drop it`);
+        // The refused setting travels with the error, by the same path the
+        // panel keys its fields on, so the panel can mark it.
+        const issues = refusedSettingIssues(error);
+        assert.deepEqual(
+          issues.map((issue) => issue.path.join(".")),
+          [findSetting(loaded.settings, id).path.join(".")],
+          why,
+        );
         return true;
       },
     );

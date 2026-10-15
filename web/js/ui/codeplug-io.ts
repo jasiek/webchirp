@@ -581,6 +581,7 @@ export function createCodeplugIo(ctx: UiContext) {
       try {
         await exportBinaryCodeplug();
       } catch (error) {
+        ctx.settings.markRefused(error);
         log.reportActionError("Binary export", error);
       }
     });

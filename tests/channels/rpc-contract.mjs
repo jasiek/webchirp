@@ -226,7 +226,7 @@ test("a raised RuntimePreconditionError answers with an error envelope, not a re
   assert.equal(reply.ok, false);
   assert.deepEqual(
     Object.keys(reply.error).sort(),
-    ["bases", "causes", "js", "message", "module", "origin", "traceback", "type"],
+    ["bases", "causes", "details", "js", "message", "module", "origin", "traceback", "type"],
   );
   // Where it was raised, as data: the guard in the session registry that
   // refused the unknown id.
@@ -246,4 +246,6 @@ test("a raised RuntimePreconditionError answers with an error envelope, not a re
   assert.match(reply.error.traceback, /^Traceback \(most recent call last\):/);
   assert.match(reply.error.traceback, /webchirp_bridge\.runtime_errors\.RuntimePreconditionError: /);
   assert.equal(reply.error.js, null);
+  // Only an error with data for the browser (SettingsRefusedError) sends any.
+  assert.equal(reply.error.details, null);
 });
