@@ -14,6 +14,7 @@ import {
   isAnalyticsHost,
   replayDeferredAnalytics,
   trackEvent,
+  urlWithoutQuery,
 } from "../../web/js/analytics.ts";
 import { makeWindow } from "../support/fake-window.mjs";
 import { htmlPages, repoRoot, webDir } from "../support/repo-paths.mjs";
@@ -70,6 +71,41 @@ test("init attaches the launch context to config, never to a bare set", () => {
   // real collect payload, verified on-device. Nothing here can observe that,
   // so the shape is pinned instead.
   assert.ok(!commands.includes("set"), 'display_mode must not be sent via gtag("set")');
+});
+
+test("config reports the page and referrer without their query strings", () => {
+  // A link's query is where user data lands (a linked CSV's address, a
+  // repeater search's coordinates), and gtag reports the full URL on every hit
+  // unless config overrides it.
+  const win = makeWindow({
+    hostname: "codeplug.org",
+    href: "https://codeplug.org/?radio=uvk5&csv_url=https%3A%2F%2Fexample.com%2Fclub.csv#sha256=ab",
+    referrer: "https://codeplug.org/models/quansheng-uv-k5.html?q=secret",
+  });
+  initAnalytics(win);
+
+  const [, , params] = calls(win).find((call) => call[0] === "config");
+  assert.equal(params.page_location, "https://codeplug.org/");
+  assert.equal(params.page_referrer, "https://codeplug.org/models/quansheng-uv-k5.html");
+  assert.ok(params.display_mode, "the launch context still rides along");
+});
+
+test("config leaves out a referrer the page does not have", () => {
+  const win = makeWindow({ hostname: "codeplug.org" });
+  initAnalytics(win);
+
+  const [, , params] = calls(win).find((call) => call[0] === "config");
+  assert.equal(params.page_location, "https://codeplug.org/");
+  // "" would be recorded by GA as a referrer value of its own.
+  assert.ok(!("page_referrer" in params));
+});
+
+test("urlWithoutQuery keeps origin and path only", () => {
+  assert.equal(urlWithoutQuery("https://codeplug.org/a/b.html?x=1#y"), "https://codeplug.org/a/b.html");
+  assert.equal(urlWithoutQuery("https://codeplug.org"), "https://codeplug.org/");
+  assert.equal(urlWithoutQuery(""), undefined);
+  assert.equal(urlWithoutQuery(undefined), undefined);
+  assert.equal(urlWithoutQuery("not a url"), undefined);
 });
 
 test("only the production deployment reports", () => {

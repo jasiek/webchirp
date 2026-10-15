@@ -10,6 +10,8 @@
 
 // Build a fake window.
 //   hostname     - what location.hostname reports; defaults to production.
+//   href         - what location.href reports; defaults to the host's root.
+//   referrer     - what document.referrer reports; defaults to "" (none).
 //   displayModes - the display-mode media queries that should match.
 //   standalone   - navigator.standalone, or undefined to leave it unset (iOS
 //                  home-screen launches are the only place it exists).
@@ -38,6 +40,8 @@ function memoryStorage() {
 
 export function makeWindow({
   hostname = "webchirp.org",
+  href = `https://${hostname}/`,
+  referrer = "",
   displayModes = [],
   standalone = undefined,
   version = { webchirpSha: "abc123" },
@@ -78,11 +82,12 @@ export function makeWindow({
         }
       }
     },
-    location: { hostname },
+    location: { hostname, href },
     // An in-memory localStorage; storage: false leaves the window without one.
     localStorage: storage ? memoryStorage() : undefined,
     injected,
     document: {
+      referrer,
       createElement: () => ({}),
       head: {
         appendChild(node) {
