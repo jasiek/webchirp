@@ -220,6 +220,23 @@ body {
   font-weight: 600;
 }
 
+/* The privacy policy (privacy.html) on the about-page shell: it is the one
+   page of that shape long enough to need section headings. */
+.privacy-page h2 {
+  font-size: 1.05rem;
+  margin: 1.4rem 0 0.4rem;
+}
+
+.privacy-effective {
+  margin-top: 0;
+  color: var(--muted);
+  font-size: 0.87rem;
+}
+
+.privacy-page summary {
+  cursor: pointer;
+}
+
 /* Static per-model pages (web/radios/, built by scripts/build-model-pages.ts),
    which reuse the about-page shell above. Only the parts the about page has no
    equivalent for live here: the call to action into the app, the model list and
@@ -2008,6 +2025,21 @@ button:disabled {
   line-height: 1;
 }
 
+/* The line under the locator row saying where a position goes
+   (web/js/ui/query-fields.ts). It spans the row's three tracks so it wraps
+   under the locator and both buttons rather than squeezing into the first. */
+.modal-geo-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.modal-geo-note a {
+  color: inherit;
+}
+
 /* The Place name autocomplete (web/js/ui/query-fields.ts): a text box with
    a suggestion list that overlays the fields under it. Positioned rather than
    in flow, so a list that appears on a keystroke does not shove Latitude,
@@ -3020,15 +3052,19 @@ button:disabled {
   min-width: 6rem;
 }
 
-/* "Cookie settings": a quiet text control in each page's footer. Never given
-   a display value, so the hidden attribute it ships with keeps working. */
-.footer-link-button {
+/* "Cookie settings" and the "Privacy Policy" link: quiet text controls in
+   each page's footer, styled alike so the link and the button read as one
+   row. Never given a display value, so the hidden attribute the button ships
+   with keeps working. */
+.footer-link-button,
+.footer-link {
   border: none;
   background: none;
   padding: 0.25rem 0.1rem;
   color: var(--accent);
   font-size: 0.85rem;
   text-decoration: underline;
+  white-space: nowrap;
   cursor: pointer;
 }
 

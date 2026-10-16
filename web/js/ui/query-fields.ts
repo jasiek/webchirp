@@ -319,6 +319,28 @@ export interface PositionFieldOptions {
   onPan?: () => void;
 }
 
+// Where the privacy policy explains what a repeater query does with a position.
+export const LOCATION_POLICY_URL = "./privacy.html#location";
+
+// The line under the geolocate button saying where a position goes, with a
+// link to the policy's location section. It sits at the button because that is
+// where the user decides to hand over a device location, and the policy is
+// what Google Play asks an app to point to at that moment. The link opens a
+// new tab: following it in place would unload the page and lose the channels
+// being edited.
+function createLocationNote(): HTMLParagraphElement {
+  const note = document.createElement("p");
+  note.className = "modal-geo-note";
+  note.append("Your position is sent to the repeater directory to find nearby repeaters. ");
+  const link = document.createElement("a");
+  link.href = LOCATION_POLICY_URL;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = "Privacy policy";
+  note.appendChild(link);
+  return note;
+}
+
 // A latitude/longitude pair on one row, and a Maidenhead locator sharing its
 // row with the geolocate and clear buttons. The locator is a two-way
 // alternative way to enter the position, not a filter of its own — every
@@ -401,12 +423,14 @@ export function createPositionField(
   const clearButton = createEraseButton("Clear location");
 
   // The locator shares its row with the two position actions: fill from the
-  // browser's geolocation, and wipe all three fields.
+  // browser's geolocation, and wipe all three fields. The location note wraps
+  // under all three (see .modal-geo-note in web/styles.css).
   const geoRow = document.createElement("div");
   geoRow.className = "modal-geo-row";
   geoRow.appendChild(locator);
   geoRow.appendChild(geolocateButton);
   geoRow.appendChild(clearButton);
+  geoRow.appendChild(createLocationNote());
 
   // The preview: a tile canvas, a stand-in line for when there is no position
   // to draw, and the OSM credit. It spans both columns of the modal grid (see

@@ -201,6 +201,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   or explanations of why something happened.
 - Analytics never sends user data — no file names, channel names, frequencies,
   search terms or coordinates.
+- `web/privacy.html` is the privacy policy Google Play requires of the Android
+  app. A change to what the app collects, stores on the device or sends, or to
+  where it sends it, updates that page and its effective date in the same PR;
+  a new destination also goes into `tests/build/privacy-policy.mjs`.
 - Avoid regressions in clone workflow:
   - Download should record the image on the selected radio's session.
   - Upload should use the session's image and fail clearly if the session holds

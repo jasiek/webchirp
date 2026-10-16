@@ -13,7 +13,7 @@
 // the bundle: Cloudflare requires it be fetched from its own URL, and a page
 // that never opens that form never contacts them.
 
-const TURNSTILE_SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+export const TURNSTILE_SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 const TURNSTILE_SITE_KEY_META = "webchirp-turnstile-site-key";
 
 /** The request header the API reads the token from. */

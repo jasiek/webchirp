@@ -505,7 +505,15 @@
             disclosure. Copy and Clear only mean anything with the log on
             screen, so they stay inside the collapsible group.
           -->
+          <!--
+            The privacy policy link sits in this bar because it is the app's
+            footer: always on screen on a desktop, and the end of the page on a
+            phone. Google Play requires a link inside the app visible during
+            normal use, and the Android app has no other way to reach the page.
+            It opens a new tab so following it cannot unload unsaved channels.
+          -->
           <div class="debug-header-actions">
+            <a class="footer-link" href="./privacy.html" target="_blank" rel="noopener">Privacy Policy</a>
             <!--
               Reopens the analytics consent banner. This panel is the page's
               bottom bar, so this is its footer link. Shipped hidden: the

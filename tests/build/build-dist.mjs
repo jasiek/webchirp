@@ -12,17 +12,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import { repoRoot, webDir } from "../support/repo-paths.mjs";
+import { CHIRP_BUNDLE_FILES, REQUIRED_FILES, runBuild, writeTree } from "../support/dist-build.mjs";
+import { webDir } from "../support/repo-paths.mjs";
 import { withTempDir } from "../support/temp-dir.mjs";
 import {
-  CHIRP_BUNDLE_DIR,
-  chirpBundleFileNames,
-  DEFAULT_CHIRP_REVISION,
   EXTRA_DRIVER_RELATIVE_FILES,
   RUNTIME_PYTHON_FILES,
 } from "../../web/js/python-sources.ts";
@@ -30,50 +27,15 @@ import { RUNTIME_PYTHON_URLS } from "../../web/js/runtime-python-urls.ts";
 import { SENTRY_SDK_MODULES } from "../../web/js/cdn-urls.ts";
 import { SENTRY_HOSTS } from "../../web/js/sentry.ts";
 
-const SCRIPT = path.join(repoRoot, "scripts", "build-dist.ts");
 // esbuild's names (name.<8 base32>.js, .css, and .js.map beside each) and the
 // Python files' (name.<10 hex>.py), the two shapes build-dist.mjs emits.
 const HASHED_NAME_RE = /\.([A-Z2-7]{8}|[0-9a-f]{10})\.[a-z]+(?:\.map)?$/;
 const PYTHON_NAME_RE = /\.([0-9a-f]{10})\.py$/;
 
-// The CHIRP archive and manifest for the pinned revision, as dist-relative
-// paths. build-dist.mjs requires them and lists them in the asset manifest.
-const CHIRP_BUNDLE_FILES = Object.values(chirpBundleFileNames(DEFAULT_CHIRP_REVISION))
-  .map((name) => `${CHIRP_BUNDLE_DIR}/${name}`);
-
-// The files build-dist.mjs refuses to build without -- the install assets, the
-// CHIRP archive, the service worker and what it caches for offline use --
-// whose contents are never read, only their presence (and the offline files'
-// digests).
-const REQUIRED_FILES = {
-  "sw.ts": "self.addEventListener(\"fetch\", () => {});\n",
-  "radio-catalog.json": "{}\n",
-  "radio-catalog-quansheng-unofficial.json": "{}\n",
-  "version.json": "{}\n",
-  "favicon.ico": "",
-  "manifest.webmanifest": "{}\n",
-  "images/icon-192.png": "",
-  "images/icon-512.png": "",
-  "images/icon-maskable-512.png": "",
-  "images/apple-touch-icon.png": "",
-  "images/screenshot-narrow.png": "",
-  "images/screenshot-wide.png": "",
-  ".well-known/assetlinks.json": "[]\n",
-  ...Object.fromEntries(CHIRP_BUNDLE_FILES.map((rel) => [rel, "not a real archive\n"])),
-};
-
 // The digest build-dist.mjs names Python files with, so a name can be checked
 // against the bytes served under it.
 function digest(buffer) {
   return createHash("sha256").update(buffer).digest("hex").slice(0, 10);
-}
-
-async function writeTree(root, files) {
-  for (const [rel, content] of Object.entries(files)) {
-    const target = path.join(root, rel);
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, content, "utf8");
-  }
 }
 
 async function walk(dir, base = dir) {
@@ -87,23 +49,6 @@ async function walk(dir, base = dir) {
     }
   }
   return out;
-}
-
-// Run the real build against a throwaway repo, surfacing its output on failure
-// — a build that dies silently would otherwise look like an empty dist/.
-// `env` adds to the environment the build inherits, minus TURNSTILE_SITE_KEY,
-// which a test sets only when it is the subject.
-function runBuild(cwd, env = {}) {
-  const { TURNSTILE_SITE_KEY: _inherited, ...inherited } = process.env;
-  return new Promise((resolve, reject) => {
-    execFile(process.execPath, [SCRIPT], { cwd, env: { ...inherited, ...env } }, (err, stdout, stderr) => {
-      if (err) {
-        reject(new Error(`build-dist failed: ${stderr || stdout}`));
-        return;
-      }
-      resolve(stdout);
-    });
-  });
 }
 
 // Build `files` into a temp repo and return every emitted path with its bytes.

@@ -10,4 +10,4 @@ export const jsDir = path.join(webDir, "js");
 export const chirpImagesDir = path.join(repoRoot, "chirp", "tests", "images");
 
 // Every static page the app ships; tests that check per-page markup loop over this.
-export const htmlPages = ["index.html", "about.html"];
+export const htmlPages = ["index.html", "about.html", "privacy.html"];
