@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.ts";
+import { LOCATION_POLICY_URL } from "../../web/js/ui/query-fields.ts";
 import { createRepeaterQuery } from "../../web/js/ui/repeater-query.ts";
 import { REQUIRED_ELEMENTS } from "../../web/js/ui/dom.ts";
 import { installIndexPage } from "../support/index-page.mjs";
@@ -836,6 +837,38 @@ test("clearing the location empties the persisted position too", async () => {
   await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(fieldByName(dom, "latitude").value, "");
   assert.equal(fieldByName(dom, "locator").value, "");
+});
+
+test("every query says by the locate button where a position goes, and links to the policy", async () => {
+  // Google Play wants the disclosure where the user hands over a location, so
+  // each directory's form carries it on the geolocate button's own row.
+  const { dom } = buildHarness();
+  installFetch([
+    { match: "/przemienniki/meta", body: META_JSON },
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/irts/meta", body: IRTS_META_JSON },
+  ]);
+  const sourceButtons = [
+    dom.channelImportPrzemiennikiEl,
+    dom.channelImportRepeaterbookEl,
+    dom.channelImportIrtsEl,
+    dom.channelImportRsgbEl,
+  ];
+  for (const sourceButton of sourceButtons) {
+    await dispatch(sourceButton, "click");
+    const note = descendants(grid(dom)).find((el) => el.classList?.contains("modal-geo-note"));
+    assert.ok(note, `${sourceButton.textContent.trim()} has no location note`);
+    assert.equal(note.parentElement, geolocateButton(dom).parentElement, "the note shares the locate button's row");
+    assert.match(note.textContent, /sent to the repeater directory/);
+    const link = note.querySelector("a");
+    assert.equal(link.getAttribute("href"), LOCATION_POLICY_URL);
+    // A new tab, so reading the policy cannot unload the channels being edited.
+    assert.equal(link.target, "_blank");
+    await dispatch(dom.repeaterQueryCancelEl, "click");
+  }
+  const policy = fs.readFileSync(path.join(repoRoot, "web", "privacy.html"), "utf8");
+  const [, fragment] = LOCATION_POLICY_URL.split("#");
+  assert.ok(policy.includes(`id="${fragment}"`), `privacy.html has no #${fragment} section for the note to open`);
 });
 
 test("geolocate fills the position fields and reports the locator", async () => {

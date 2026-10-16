@@ -15,7 +15,7 @@ import { execFile } from "node:child_process";
 import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { repoRoot, webDir } from "../support/repo-paths.mjs";
+import { htmlPages, repoRoot, webDir } from "../support/repo-paths.mjs";
 import { withTempDir } from "../support/temp-dir.mjs";
 
 const SCRIPT = path.join(repoRoot, "scripts", "build-model-pages.ts");
@@ -215,13 +215,20 @@ test("the sitemap lists every generated page and nothing that is missing", async
         `${name} is missing from sitemap.xml`,
       );
     }
-    // Only the model pages are generated here; index.html and about.html are
+    // Only the model pages are generated here; the static pages are
     // committed, so the sitemap may name them without this tree holding them.
     for (const url of listed) {
       const name = url.split("/radios/")[1];
       if (name) {
         assert.ok(pages.has(name), `sitemap.xml lists ${url}, which was not generated`);
       }
+    }
+    // The static pages are a hand-written list in renderSitemap, so a new one
+    // is missing from the sitemap until someone remembers to add it.
+    const host = (await readFile(path.join(repoRoot, "CNAME"), "utf8")).trim();
+    for (const page of htmlPages) {
+      const url = `https://${host}/${page === "index.html" ? "" : page}`;
+      assert.ok(listed.includes(url), `sitemap.xml does not list ${url}`);
     }
   });
 });

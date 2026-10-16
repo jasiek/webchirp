@@ -491,7 +491,15 @@
             disclosure. Copy and Clear only mean anything with the log on
             screen, so they stay inside the collapsible group.
           -->
+          <!--
+            The privacy policy link sits in this bar because it is the app's
+            footer: always on screen on a desktop, and the end of the page on a
+            phone. Google Play requires a link inside the app visible during
+            normal use, and the Android app has no other way to reach the page.
+            It opens a new tab so following it cannot unload unsaved channels.
+          -->
           <div class="debug-header-actions">
+            <a class="debug-privacy-link" href="./privacy.html" target="_blank" rel="noopener">Privacy Policy</a>
             <button id="report-issue" type="button">Report Bug</button>
             <div id="debug-actions" class="debug-actions" hidden>
               <button id="debug-copy" type="button">Copy</button>

@@ -1050,6 +1050,7 @@ function renderSitemap(
   const urls = [
     `${baseUrl}/`,
     `${baseUrl}/about.html`,
+    `${baseUrl}/privacy.html`,
     `${baseUrl}/radios/index.html`,
     ...vendorSlugs.map((slug) => `${baseUrl}/radios/${slug}.html`),
     ...radios.map((radio) => `${baseUrl}/radios/${slugFor(radio)}.html`),

@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Same analytics wiring as index.html and about.html; this page describes
+         it, so it runs the same module rather than an exception to it. -->
+    <script type="module" src="./js/analytics.ts"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Google Play requires the policy to be labelled as a privacy policy and
+      reachable at a public URL, which is this page. tests/build/privacy-policy.mjs
+      checks it against the code where the code can say it: every analytics
+      parameter and every host a position or a download goes to.
+    -->
+    <title>Privacy Policy | WebCHIRP</title>
+    <meta
+      name="description"
+      content="What WebCHIRP, the website and the Android app, collects, where it goes, how long it is kept, and how to have it deleted."
+    />
+    <link rel="canonical" href="https://webchirp.org/privacy.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="WebCHIRP" />
+    <meta property="og:title" content="WebCHIRP Privacy Policy" />
+    <meta
+      property="og:description"
+      content="What WebCHIRP, the website and the Android app, collects, where it goes, how long it is kept, and how to have it deleted."
+    />
+    <meta property="og:url" content="https://webchirp.org/privacy.html" />
+    <meta property="og:image" content="https://webchirp.org/images/social-preview.png" />
+    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./images/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0d5ea8" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="about-page privacy-page">
+    <main class="about-shell">
+      <article class="about-card">
+        <div class="about-header">
+          <h1>Privacy Policy</h1>
+          <a class="toolbar-link" href="./index.html">Back to App</a>
+        </div>
+        <p class="privacy-effective">Effective 15 October 2026.</p>
+        <p>
+          This policy covers WebCHIRP: the website at
+          <a href="https://webchirp.org/">webchirp.org</a> (formerly codeplug.org) and the
+          WebCHIRP Android app (<code>com.hf2j.webchirp</code>), which shows that same website.
+          Everything below applies to both.
+        </p>
+
+        <h2 id="summary">In short</h2>
+        <ul>
+          <li>There are no accounts and no ads, and your data is never sold.</li>
+          <li>
+            Your codeplugs, radio images and channel lists stay on your device. They are never
+            uploaded.
+          </li>
+          <li>
+            The app sends usage statistics to Google Analytics and error reports to Sentry. Both
+            leave out file names, channel names, frequencies, search terms and coordinates.
+          </li>
+          <li>
+            A position, as coordinates or a locator, leaves your device only when you search
+            for repeaters near it.
+          </li>
+          <li>A bug report is filed only if you submit it on GitHub yourself.</li>
+        </ul>
+
+        <h2 id="who">Who we are</h2>
+        <p>
+          WebCHIRP is developed and published by <strong>HF2J</strong>, the developer named on the
+          Google Play listing, who decides how the data described here is used.
+        </p>
+        <ul>
+          <li>Privacy contact: <a href="mailto:privacy@webchirp.org">privacy@webchirp.org</a></li>
+          <li>Website: <a href="https://webchirp.org/">https://webchirp.org/</a></li>
+          <li>Android app: WebCHIRP, package <code>com.hf2j.webchirp</code></li>
+          <li>
+            Source code:
+            <a href="https://github.com/jasiek/webchirp" target="_blank" rel="noreferrer">github.com/jasiek/webchirp</a>.
+            WebCHIRP is open source, so every line that handles your data can be read there.
+          </li>
+        </ul>
+
+        <h2 id="analytics">Usage statistics (Google Analytics)</h2>
+        <p>
+          On webchirp.org and codeplug.org the app uses Google Analytics 4, provided by Google,
+          which processes the data for us as a service provider. Copies of WebCHIRP hosted
+          anywhere else do not load it. It tells us which radios people use and where the app
+          fails, so we know what to fix.
+        </p>
+        <p>What is collected:</p>
+        <ul>
+          <li>
+            Pages viewed, and events for actions in the app: choosing a radio, connecting a
+            cable, reading from or writing to a radio, loading or exporting a file, editing
+            channels and settings, querying a repeater directory, installing the app and
+            using it offline.
+          </li>
+          <li>
+            Details of those events: the radio's make, model and CHIRP driver; how it was
+            connected; whether a step worked, how long it took and what kind of error stopped
+            it; how many channels were involved; the file format (CSV or IMG) but never the file
+            name; which repeater directory you queried, the country you filtered on, how many
+            repeaters came back, and whether the query used a position (yes or no, never the
+            position itself); and whether the app runs in a browser tab or as an installed app.
+          </li>
+          <li>
+            A random identifier kept in Google Analytics cookies (<code>_ga</code> and
+            <code>_ga_*</code>, which expire after two years) so that visits from the same
+            browser can be counted together.
+          </li>
+          <li>
+            Your browser, operating system, screen size and language, which Google Analytics
+            records with every visit.
+          </li>
+          <li>
+            Your approximate location (country and city), which Google works out from your IP
+            address. Google Analytics 4 does not log or store the IP address itself.
+          </li>
+        </ul>
+        <details>
+          <summary>Every event parameter the app sends</summary>
+          <p>
+            <code>display_mode</code>, <code>install_outcome</code>, <code>radio</code>,
+            <code>radio_module</code>, <code>radio_class</code>, <code>method</code>,
+            <code>duration_ms</code>, <code>stage</code>, <code>error_kind</code>,
+            <code>error_type</code>, <code>catalog_source</code>, <code>transport</code>,
+            <code>channel_count</code>, <code>channel_count_bucket</code>,
+            <code>codeplug_source</code>, <code>format</code>, <code>import_source</code>,
+            <code>import_mode</code>, <code>outcome</code>, <code>repeater_source</code>,
+            <code>result_count</code>, <code>country</code>, <code>located</code>,
+            <code>preset</code>, <code>first_column</code>, <code>issue_count</code>,
+            <code>field_count</code>, <code>tab</code>, <code>served_from</code>,
+            <code>launch_count</code>, <code>delivery</code>, <code>event_count</code>,
+            <code>dropped_count</code>, <code>launch_count_bucket</code>.
+          </p>
+        </details>
+        <p>
+          Events that happen while you are offline wait in your browser's storage and are sent
+          the next time the app loads online. Google keeps user-level and event-level data for
+          14 months and then deletes it. Google explains how it uses this data in
+          <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noreferrer">How Google uses information from sites or apps that use our services</a>.
+        </p>
+
+        <h2 id="errors">Error reports (Sentry)</h2>
+        <p>
+          On webchirp.org and codeplug.org the app reports errors to Sentry, a service run by
+          Functional Software, Inc. that processes the data for us as a service provider. The
+          data is stored in Sentry's European Union region, in Germany. Copies of WebCHIRP hosted
+          anywhere else do not load it.
+        </p>
+        <ul>
+          <li>
+            When something goes wrong, the report holds the error and where in the code it
+            happened (including CHIRP's Python traceback), the page address, your browser and
+            operating system, the selected radio's make, model and driver, and the last few app
+            steps before the error, such as buttons pressed and requests made. Anything printed
+            to the browser console is left out.
+          </li>
+          <li>
+            The app also sends counts and timings of its operations, labelled only with the
+            radio and driver, the outcome and kind of error, the browser family and platform,
+            the connection type, the file format, a channel-count range and the repeater
+            directory.
+          </li>
+          <li>
+            Before anything is sent, the app removes web address query strings (where a repeater
+            search carries its coordinates), file names, quoted values, Maidenhead locators, and
+            numbers that look like frequencies or coordinates.
+          </li>
+          <li>
+            Sentry is set up with <code>sendDefaultPii</code> off: the app sends no cookies and
+            does not ask Sentry to store your IP address.
+          </li>
+          <li>
+            Reports that cannot be sent while you are offline wait, already cleaned, in your
+            browser's storage and are sent later.
+          </li>
+        </ul>
+        <p>
+          Sentry deletes reports after at most 90 days. See
+          <a href="https://sentry.io/privacy/" target="_blank" rel="noreferrer">Sentry's privacy policy</a>.
+        </p>
+
+        <h2 id="location">Location</h2>
+        <p>
+          WebCHIRP never reads your location in the background and never stores it. A position
+          is used only by the repeater query (the przemienniki.net, RepeaterBook, IRTS and RSGB
+          buttons above the channel grid), to find repeaters near it. You give the query a
+          position in one of these ways:
+        </p>
+        <ul>
+          <li>
+            Pressing the 🛰️ "Use current location" button. Your browser or the Android app asks
+            your permission first, and the app then reads your device's precise position once.
+          </li>
+          <li>Typing coordinates or a Maidenhead locator, picking a place name, or dragging the map.</li>
+        </ul>
+        <p>Where the position goes:</p>
+        <ul>
+          <li>
+            <strong>przemienniki.net, RepeaterBook and IRTS:</strong> the latitude and longitude
+            are sent with your search filters to <code>api.webchirp.org</code>, a server run by
+            the developer, which fetches the results from that directory for you. The directory
+            does not see your IP address.
+          </li>
+          <li>
+            <strong>Place names:</strong> the text you type, and any position already set as a
+            hint, are sent to <code>api.webchirp.org</code>.
+          </li>
+          <li>
+            <strong>RSGB:</strong> your browser asks the Radio Society of Great Britain's
+            repeater API (<code>api-beta.rsgb.online</code>) for the 4-character locator squares
+            around the position, each more than 100 km across. The exact coordinates are not
+            sent, but the RSGB sees your IP address. See the
+            <a href="https://rsgb.org/main/privacy-policy/" target="_blank" rel="noreferrer">RSGB privacy policy</a>.
+          </li>
+          <li>
+            <strong>Maps:</strong> the preview map, and the maps of repeaters in a result or the
+            channel grid, load map images from the OpenStreetMap Foundation
+            (<code>tile.openstreetmap.org</code>). The images requested cover the area around the
+            position, so the tile server learns roughly where you looked, along with your IP
+            address. See the
+            <a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noreferrer">OpenStreetMap Foundation privacy policy</a>.
+          </li>
+          <li>
+            <strong>Channel maps:</strong> hovering a channel's location in the grid sends its
+            name, when the name is a repeater callsign, to <code>api.webchirp.org</code> to find
+            where that repeater is.
+          </li>
+        </ul>
+        <p>
+          <code>api.webchirp.org</code> keeps request logs, which include your IP address and
+          the query with its coordinates, for 30 days and then deletes them. The position you
+          set stays in the open page's memory so the form remembers it, and is forgotten when
+          the page is closed. Google Analytics records only whether a query had a position, never
+          the position, and error reports have coordinates and locators removed.
+        </p>
+
+        <h2 id="on-device">What stays on your device</h2>
+        <ul>
+          <li>
+            Codeplugs, radio images, channel lists and radio settings are handled entirely in
+            your browser. Files you load are read on your device, and files you export are saved
+            where you choose. None of it is uploaded.
+          </li>
+          <li>
+            A cookie, <code>webchirp_last_radio</code>, remembers the make and model you last
+            selected so it is chosen for you next time. It expires after one year. Like any
+            cookie it travels with requests to webchirp.org, but nothing on the server reads it.
+          </li>
+          <li>
+            Local storage holds analytics events waiting to be sent after an offline session
+            (<code>webchirp-analytics-replay</code>) and a count of launches made offline
+            (<code>webchirp-offline-launches</code>, <code>webchirp-offline-reported-build</code>).
+          </li>
+          <li>
+            Session storage holds a flag saying the page was opened from the Android app
+            (<code>webchirp-android-app</code>). It is removed when the tab or app is closed.
+          </li>
+          <li>
+            Browser storage also holds error reports waiting to be sent, and a copy of the app's
+            own files so that it works offline.
+          </li>
+        </ul>
+        <p>
+          You can remove all of it by clearing webchirp.org's site data in your browser. The
+          Android app runs inside your browser (usually Chrome), so on Android clear the site
+          data for webchirp.org in that browser's settings.
+        </p>
+
+        <h2 id="issue-reports">Bug reports</h2>
+        <p>
+          The Report Bug button opens a new issue form on GitHub, filled in with the selected
+          radio's make and model, the USB vendor and product IDs of the last cable connected,
+          your browser's user agent, the CHIRP version, and the last 40 or so lines of the Debug
+          Output panel, which can include channel data, frequencies and radio traffic. Nothing
+          is sent until you read the form and submit it, which needs a GitHub account. Submitted
+          issues are public. Remove anything you do not want to publish before submitting, or
+          email us to have an issue removed. GitHub's
+          <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noreferrer">privacy statement</a>
+          applies to what you submit there.
+        </p>
+
+        <h2 id="downloads">Hosting and downloads</h2>
+        <ul>
+          <li>
+            The website is hosted on GitHub Pages. GitHub receives your IP address with each page
+            request, under its
+            <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noreferrer">privacy statement</a>.
+          </li>
+          <li>
+            To run CHIRP's radio drivers, the app downloads Pyodide (Python for the browser) and
+            other libraries, including the Sentry library, from the jsDelivr CDN
+            (<code>cdn.jsdelivr.net</code>). jsDelivr sees your IP address and browser with those
+            requests, under its
+            <a href="https://www.jsdelivr.com/terms/privacy-policy" target="_blank" rel="noreferrer">privacy policy</a>.
+          </li>
+        </ul>
+
+        <h2 id="permissions">Device permissions</h2>
+        <ul>
+          <li>Location: asked for only when you press 🛰️ in a repeater query.</li>
+          <li>
+            USB, serial port and Bluetooth: asked for only when you connect a programming cable
+            or adapter, and used only to talk to your radio.
+          </li>
+        </ul>
+        <p>Refusing either permission leaves the rest of the app working.</p>
+
+        <h2 id="security">How data is protected</h2>
+        <p>
+          Every connection the app makes, to its own website and API and to every service named
+          here, uses HTTPS, so data is encrypted in transit. There are no accounts, so there
+          are no passwords to leak. Error reports are cleaned on your device before they leave
+          it, and the code that does it is public.
+        </p>
+
+        <h2 id="sharing">What we do not do</h2>
+        <ul>
+          <li>No accounts and no sign-in.</li>
+          <li>No advertising.</li>
+          <li>
+            No selling or renting of data. Data goes only to the services named on this page,
+            for the purposes described here.
+          </li>
+        </ul>
+
+        <h2 id="retention">How long data is kept</h2>
+        <ul>
+          <li>Google Analytics: 14 months.</li>
+          <li>Sentry: at most 90 days.</li>
+          <li><code>api.webchirp.org</code> request logs: 30 days.</li>
+          <li>
+            The RSGB, the OpenStreetMap Foundation, jsDelivr and GitHub: under their own
+            policies, linked above.
+          </li>
+          <li>
+            On your device: until you clear it. The <code>webchirp_last_radio</code> cookie
+            expires after one year, the Google Analytics cookies after two.
+          </li>
+        </ul>
+
+        <h2 id="children">Children</h2>
+        <p>
+          WebCHIRP is a tool for radio operators and is not directed at children under 13. We do
+          not knowingly collect data from children. If you believe a child has sent us data,
+          email us and we will delete it.
+        </p>
+
+        <h2 id="choices">Your choices and deleting your data</h2>
+        <ul>
+          <li>
+            To ask what data we hold about you, or to have it deleted, email
+            <a href="mailto:privacy@webchirp.org">privacy@webchirp.org</a>. Nothing we collect
+            carries your name, so tell us roughly when you used the app and, for analytics data,
+            the value of your <code>_ga</code> cookie, so we can find it.
+          </li>
+          <li>
+            A content blocker that blocks Google Analytics or Sentry stops them without stopping
+            the app. Google also offers a
+            <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noreferrer">Google Analytics opt-out browser add-on</a>.
+          </li>
+          <li>You can refuse the location permission and type a position instead, or none.</li>
+          <li>You can clear WebCHIRP's site data at any time, as described above.</li>
+        </ul>
+
+        <h2 id="changes">Changes to this policy</h2>
+        <p>
+          When this policy changes, the date at the top changes with it. Every past version is
+          public in the
+          <a href="https://github.com/jasiek/webchirp/commits/master/web/privacy.html" target="_blank" rel="noreferrer">page's history on GitHub</a>.
+        </p>
+
+        <h2 id="contact">Contact</h2>
+        <p>
+          HF2J, <a href="mailto:privacy@webchirp.org">privacy@webchirp.org</a>
+        </p>
+      </article>
+      <footer class="page-footer">
+        <a href="./index.html">WebCHIRP</a>
+        ·
+        <a href="./about.html">About</a>
+      </footer>
+    </main>
+  </body>
+</html>
