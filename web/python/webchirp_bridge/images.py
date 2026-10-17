@@ -24,7 +24,10 @@ from webchirp_bridge.radio_memories import (
     _apply_rows_to_radio_instance,
     _read_radio_payload,
 )
-from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
+from webchirp_bridge.radio_settings import (
+    _raise_for_refused_settings,
+    _validate_and_apply_radio_settings,
+)
 from webchirp_bridge.runtime_errors import (
     ImageDetectionError,
     RuntimePreconditionError,
@@ -105,8 +108,7 @@ def export_image_base64(
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
     )
-    if not settings_result["valid"]:
-        raise RuntimeUnsupportedError("Radio settings validation failed before export")
+    _raise_for_refused_settings(settings_result, "export")
     image_data = session.record_radio(radio, origin)
     return {
         **_image_payload(image_data),

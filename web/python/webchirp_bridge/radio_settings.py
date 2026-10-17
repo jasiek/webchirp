@@ -17,14 +17,16 @@ from typing import TYPE_CHECKING
 
 from chirp import (
     chirp_common,
+    errors as chirp_errors,
     settings as chirp_settings,
 )
 
 from webchirp_bridge.jsbridge import _log_debug
+from webchirp_bridge.runtime_errors import SettingsRefusedError
 from webchirp_bridge.session import resolve_session
 
 if TYPE_CHECKING:
-    from typing import Any, Iterable, Optional, Sequence, TypeAlias
+    from typing import Any, Callable, Iterable, Optional, Sequence, TypeAlias
 
     # What the settings walkers recurse over: the top-level RadioSettings is a
     # list subclass, every node below it is a RadioSettingGroup -- including
@@ -37,6 +39,15 @@ if TYPE_CHECKING:
     # value object's id(): the tree is alive for the whole apply-and-serialize
     # pass, and position or path cannot tell apart duplicate sibling names.
     RejectedValues: TypeAlias = dict[int, Any]
+    # A driver's refusal of a setting the user edited: the setting's path and
+    # the driver's reason.
+    Refusals: TypeAlias = list[tuple[list[str], str]]
+
+
+# How CHIRP says a value is unacceptable. There are two classes of that name,
+# chirp.settings' for setting values and chirp.errors' for memories, and
+# drivers' set_settings() raise both.
+SETTING_REFUSALS = (chirp_settings.InvalidValueError, chirp_errors.InvalidValueError)
 
 
 def _settings_unavailable_payload(
@@ -305,11 +316,14 @@ def _apply_serialized_settings(
     issues: list[dict[str, Any]],
     prefix: list[str],
     rejected: RejectedValues,
+    changed: list[list[str]],
 ) -> None:
     """Apply serialized UI settings onto a fresh CHIRP settings tree.
 
     A value CHIRP refuses is reported in issues and its submission recorded in
-    rejected, so the reply can echo what the user typed (issue 97).
+    rejected, so the reply can echo what the user typed (issue 97). The path
+    of every setting that took a new value is appended to changed, so the
+    caller can tell an edit from a payload that only echoes the radio.
     """
     children = payload_children or []
     actual_children = _settings_container_children(actual_container)
@@ -329,7 +343,7 @@ def _apply_serialized_settings(
         path = prefix + [child_id]
         if payload.get("kind") == "group":
             _apply_serialized_settings(
-                actual_child, payload.get("children") or [], issues, path, rejected
+                actual_child, payload.get("children") or [], issues, path, rejected, changed
             )
             continue
 
@@ -374,6 +388,9 @@ def _apply_serialized_settings(
             except Exception as exc:
                 issues.append(_setting_issue(path, value_index, exc))
                 rejected[id(target)] = next_value
+                continue
+            if path not in changed:
+                changed.append(path)
 
 
 def _settings_child_is_writable(setting: chirp_settings.RadioSettingGroup) -> bool:
@@ -436,6 +453,70 @@ def _prune_dead_settings(container: SettingsContainer) -> list[str]:
     return dropped
 
 
+def _attributed_apply_callback(
+    setting: chirp_settings.RadioSetting,
+    path: list[str],
+    edited: bool,
+    refusals: Refusals,
+) -> Callable[[], Any]:
+    """One setting's apply callback, with a refusal routed by who chose the value.
+
+    See ``_attribute_apply_callbacks`` for the two routes.
+    """
+    run = setting.run_apply_callback
+
+    def attributed() -> Any:
+        try:
+            return run()
+        except SETTING_REFUSALS as exc:
+            if edited:
+                refusals.append((path, str(exc)))
+                raise
+            _log_debug(
+                "Left %s as read: the driver refused the value it reported (%s)"
+                % (".".join(path), exc)
+            )
+            return None
+
+    return attributed
+
+
+def _attribute_apply_callbacks(
+    container: SettingsContainer,
+    prefix: list[str],
+    changed: list[list[str]],
+    refusals: Refusals,
+) -> None:
+    """Wrap every apply callback so a driver's refusal names its setting.
+
+    Drivers that write through apply callbacks (kguv9dplus among them) check
+    ranges inside the callback, so a value set_value() accepted can still be
+    refused once ``set_settings()`` runs, and the exception names no setting.
+    Wrapping each callback in the copy handed to the driver tells two cases
+    apart. A setting the user left alone holds the value the driver rendered
+    from the image, so its refusal is the driver failing to round-trip itself:
+    it is logged and skipped, and those bytes stay as read, as if there had
+    been no edit at all. A refusal of an edited setting is recorded in
+    refusals and re-raised, so the write stops and the user is told which
+    value to correct. Paths are matched by name, so an unedited twin of an
+    edited setting under a duplicate group name counts as edited: that errs
+    toward stopping the write rather than skipping an edit.
+    """
+    for element in _settings_container_children(container):
+        path = prefix + [str(element.get_name())]
+        if isinstance(element, chirp_settings.RadioSetting):
+            if element.has_apply_callback():
+                # An instance attribute shadows the method, which is what the
+                # driver calls: chirp/chirp/settings.py:647-648.
+                setattr(
+                    element,
+                    "run_apply_callback",
+                    _attributed_apply_callback(element, path, path in changed, refusals),
+                )
+        elif isinstance(element, chirp_settings.RadioSettingGroup):
+            _attribute_apply_callbacks(element, path, changed, refusals)
+
+
 def _validate_and_apply_radio_settings(
     radio: chirp_common.Radio,
     serialized_groups: Sequence[dict[str, Any]],
@@ -449,6 +530,19 @@ def _validate_and_apply_radio_settings(
     valid) with the traceback in the debug panel, so the channels still make
     it through. Submitted settings cannot be applied without a tree, so that
     case still raises rather than silently dropping the user's edits.
+
+    The driver's ``set_settings()`` runs only when a submitted value differs
+    from the one the tree read. Export and upload submit the panel's whole
+    tree, so without that gate every write replayed every setting through the
+    driver, and a driver can refuse a value it rendered itself: kguv9dplus
+    shows a VFO frequency of 0 as "", and its apply callback parses "" back as
+    0 Hz, outside the band, and raises (WEBCHIRP-FRONTEND-2D). Desktop CHIRP
+    calls ``set_settings()`` only from the editor's change handler
+    (``_changed``, ``chirp/chirp/wxui/settingsedit.py:202-209``); a write with no edit
+    leaves the image's settings bytes exactly as they were read. When the
+    write does run, a driver's refusal of an edited value comes back as an
+    issue on that setting, and one of an unedited value is skipped
+    (``_attribute_apply_callbacks``).
     """
     rf = radio.get_features()
     if not bool(getattr(rf, "has_settings", False)):
@@ -466,14 +560,17 @@ def _validate_and_apply_radio_settings(
         return {"valid": True, "issues": [], "settings": []}
     issues = []
     rejected: RejectedValues = {}
-    _apply_serialized_settings(settings_tree, serialized_groups, issues, [], rejected)
+    changed: list[list[str]] = []
+    _apply_serialized_settings(settings_tree, serialized_groups, issues, [], rejected, changed)
     if issues:
         return {
             "valid": False,
             "issues": issues,
             "settings": _serialize_radio_settings(settings_tree, rejected),
         }
-    if apply_changes:
+    if apply_changes and not changed:
+        _log_debug("No radio setting was changed; the image's settings are written as read.")
+    elif apply_changes:
         # Prune a copy, not the tree itself: the serialized reply below still
         # has to show the user every setting the radio reported, including the
         # ones CHIRP declined to load.
@@ -484,8 +581,72 @@ def _validate_and_apply_radio_settings(
                 "Skipping %d setting(s) CHIRP cannot write: %s"
                 % (len(dropped), ", ".join(dropped))
             )
-        radio.set_settings(writable_tree)
+        refusals: Refusals = []
+        _attribute_apply_callbacks(writable_tree, [], changed, refusals)
+        try:
+            radio.set_settings(writable_tree)
+        except SETTING_REFUSALS:
+            # Only a refusal pinned on an edit is the user's to fix; any other
+            # is a value the runtime handed the driver, and stays a defect.
+            if not refusals:
+                raise
+        # Checked after a clean return too: a driver that logs a callback's
+        # exception and carries on has still not written the user's edit.
+        if refusals:
+            return {
+                "valid": False,
+                "issues": [_setting_issue(path, 0, reason) for path, reason in refusals],
+                "settings": _serialize_radio_settings(settings_tree),
+            }
     return {"valid": True, "issues": [], "settings": _serialize_radio_settings(settings_tree)}
+
+
+def _setting_label(nodes: Sequence[dict[str, Any]], path: Sequence[str]) -> str:
+    """The labels along a setting's path in a serialized tree, for a message.
+
+    Falls back to the dotted ids when the path does not resolve, so a message
+    always names something.
+    """
+    labels: list[str] = []
+    children = nodes
+    for setting_id in path:
+        node = next((child for child in children if child.get("id") == setting_id), None)
+        if node is None:
+            return ".".join(path)
+        labels.append(str(node.get("label") or setting_id))
+        children = node.get("children") or []
+    return " > ".join(labels)
+
+
+def _raise_for_refused_settings(result: dict[str, Any], action: str) -> None:
+    """Raise SettingsRefusedError when a write's settings step refused a value.
+
+    result is what ``_validate_and_apply_radio_settings`` returned for the
+    write; action is the user's word for it ("export", "upload"). Every issue
+    goes to the debug panel; the message names the first, which is what the
+    notice shows.
+    """
+    if result["valid"]:
+        return
+    issues = result["issues"]
+    for issue in issues:
+        _log_debug(
+            "Setting %s refused: %s" % (".".join(issue["path"]), issue["message"])
+        )
+    first = issues[0] if issues else {"path": [], "message": "no reason given"}
+    others = len(issues) - 1
+    raise SettingsRefusedError(
+        "The radio refused %s: %s. Correct it in Settings, then %s again.%s"
+        % (
+            _setting_label(result["settings"], first["path"]) or "a setting",
+            str(first["message"]).rstrip("."),
+            action,
+            " %d other setting(s) were refused too; see Debug Output." % others
+            if others > 0
+            else "",
+        ),
+        issues,
+    )
 
 
 def get_radio_settings(session_id: str) -> dict[str, Any]:

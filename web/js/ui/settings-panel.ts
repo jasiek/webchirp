@@ -1,5 +1,6 @@
 import { errorSummary } from "./format.ts";
 import { radioEventParams, trackEvent } from "./analytics.ts";
+import { refusedSettingIssues } from "../runtime-errors.ts";
 import { normalizeSettingValue } from "./setting-values.ts";
 import { requireRuntimeApi } from "./state.ts";
 import type { UiContext } from "../types/ui-context.js";
@@ -407,19 +408,44 @@ export function createSettingsPanel(ctx: UiContext) {
     applyLoadedState(nextState, options);
   }
 
+  // Record each issue against the field it names, so the field and its tab
+  // render as invalid until the user edits it.
+  function markInvalid(issue: SettingIssue): void {
+    const path = Array.isArray(issue?.path) ? issue.path : [];
+    const key = settingKey(path, Number(issue?.valueIndex || 0));
+    invalidKeys.add(key);
+    invalidMessages.set(key, String(issue?.message || "Invalid value"));
+  }
+
   // Record per-setting issues reported by the upload preflight so the affected
   // fields and their tabs render as invalid.
   function applyValidationIssues(issues: readonly SettingIssue[] | null | undefined): void {
     (issues || []).forEach((issue) => {
+      markInvalid(issue);
       const path = Array.isArray(issue?.path) ? issue.path : [];
-      const valueIndex = Number(issue?.valueIndex || 0);
-      const key = settingKey(path, valueIndex);
-      invalidKeys.add(key);
-      invalidMessages.set(key, String(issue?.message || "Invalid value"));
       log.logDebug(
-        `PREFLIGHT INVALID setting=${path.join(".") || "<unknown>"} value=${valueIndex}: ${issue?.message || "Invalid value"}`,
+        `PREFLIGHT INVALID setting=${path.join(".") || "<unknown>"} value=${Number(issue?.valueIndex || 0)}: ${issue?.message || "Invalid value"}`,
       );
     });
+  }
+
+  // Mark the settings a failed export or upload says the radio refused
+  // (SettingsRefusedError) and open the tab holding the first, so the field
+  // the notice names is the one shown in red. The preflight cannot catch
+  // every such refusal: a driver checks some values only while writing them.
+  // The runtime has already logged each one to Debug Output. Any other
+  // failure leaves the panel as it is.
+  function markRefused(error: unknown): void {
+    const issues = refusedSettingIssues(error);
+    if (issues.length === 0) {
+      return;
+    }
+    issues.forEach(markInvalid);
+    const tab = String(issues[0].path[0] ?? "");
+    if (findSettingsTabNode(tab)) {
+      activeTab = tab;
+    }
+    render();
   }
 
   return {
@@ -436,6 +462,7 @@ export function createSettingsPanel(ctx: UiContext) {
     clearInvalid,
     ensureActiveTab,
     applyValidationIssues,
+    markRefused,
     invalidCount: () => invalidKeys.size,
     getGroups: () => settingsState.groups,
     // Replace the settings tree with the one upload, export or the preflight
