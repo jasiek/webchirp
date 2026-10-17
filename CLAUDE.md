@@ -248,6 +248,12 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `CUSTOM_DIMENSIONS` (`web/js/analytics.ts`) or GA collects it and shows it
   nowhere, and never send user data — no file names, channel names, frequencies,
   search terms or coordinates.
+- `web/privacy.html` is the privacy policy Google Play requires of the Android
+  app. A change to what the app collects, stores on the device or sends, or to
+  where it sends it, updates that page and its effective date in the same PR.
+  `tests/build/privacy-policy.mjs` fails when the page does not name an
+  analytics parameter or the current repeater API, RSGB, map tile or CDN host;
+  a new destination has to be added to that test as well as to the page.
 - When on a worktree other than the master branch run a dev server on a port other than 8000.
 - Avoid regressions in clone workflow:
   - Download should record the image on the selected radio's session.
