@@ -229,17 +229,19 @@ test("runtime failures group by class, method and the function that raised them"
 });
 
 test("beforeSend sets the runtime grouping key and leaves other errors to Sentry", () => {
-  const error = runtimeCallError("RadioError", "Header short read", {
-    origin: { module: "chirp.drivers.uvk5_egzumer", function: "_receive_reply" },
+  // A driver tripping over an empty read: reported, unlike a driver's own
+  // complaint about the radio (tests/channels/chirp-error-filter.mjs).
+  const error = runtimeCallError("TypeError", "ord() expected a character, but string of length 0 found", {
+    origin: { module: "chirp.drivers.anytone778uv", function: "_read" },
   }, "download_selected_radio");
   const event = initOptions().beforeSend(
     { exception: { values: [{ type: error.name, value: error.message }] } },
     { originalException: error },
   );
   assert.deepEqual(event.fingerprint, [
-    "runtime-call", "RadioError", "download_selected_radio", "chirp.drivers.uvk5_egzumer._receive_reply",
+    "runtime-call", "TypeError", "download_selected_radio", "chirp.drivers.anytone778uv._read",
   ]);
-  assert.equal(event.contexts.python.raised_in, "chirp.drivers.uvk5_egzumer._receive_reply");
+  assert.equal(event.contexts.python.raised_in, "chirp.drivers.anytone778uv._read");
 
   const plain = new Error("something else broke");
   const plainEvent = initOptions().beforeSend(

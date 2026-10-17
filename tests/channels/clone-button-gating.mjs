@@ -569,3 +569,48 @@ test("a port lost mid-transfer shows at once, and Connect returns when the trans
   assert.equal(connects, 2);
   assert.equal(controls.download.disabled, false);
 });
+
+// Sentry drops a driver's own clone failures (isDriverCloneFailure,
+// web/js/sentry.ts), so a transport that loses bytes shows only as a clone
+// failure rate that moves with the transport. Every outcome has to carry it,
+// successes too, and a failure that follows a lost port keeps the transport
+// the clone started over: the loss clears the connection's before the
+// failure arrives.
+test("every clone outcome carries the transport the clone started over", async (t) => {
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const metrics = [];
+  await initSentry(makeWindow(), { loadSdk: async () => ({
+    init() {},
+    withScope() {},
+    captureException() {},
+    metrics: {
+      count: (name, value, options) => metrics.push({ name, ...options }),
+      distribution() {},
+    },
+  }) });
+  const write = createDeferred();
+  const { ui, controls } = await bootConnectedUi({
+    serialConnect: async () => ({ connected: true, transport: "webusb", message: "ok" }),
+    downloadSelectedRadio: async () => ({
+      headers: CLONE_HEADERS, rows: [{ Location: "1", Name: "ONE" }], settings: CLONE_SETTINGS,
+    }),
+    uploadSelectedRadio: () => write.promise,
+  });
+
+  await dispatch(controls.download, "click");
+  await flushMicrotasks();
+  await dispatch(controls.upload, "click");
+  await flushMicrotasks();
+  ui.onSerialPortLost("USB VID:PID 0x0403:0x6015");
+  write.reject(new Error("Port is not connected."));
+  await flushMicrotasks();
+
+  const outcomes = metrics
+    .filter((metric) => metric.name === "flow.completed" && metric.attributes.flow.startsWith("radio_"))
+    .map(({ attributes }) => [attributes.flow, attributes.outcome, attributes.transport]);
+  assert.deepEqual(outcomes, [
+    ["radio_download", "ok", "webusb"],
+    ["radio_upload", "failed", "webusb"],
+  ]);
+});

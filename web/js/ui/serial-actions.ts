@@ -506,16 +506,26 @@ export function createSerialActions(ctx: UiContext) {
   // days, from a property someone has to go and read; the metric answers it as
   // a rate a dashboard can watch and an alert can fire on, which is what a
   // driver that breaks in a new browser release needs.
+  //
+  // Every outcome carries the transport the clone ran over, successes as well
+  // as failures, because the rate is what reads it. Sentry drops the events of
+  // a driver's own clone failures (isDriverCloneFailure, web/js/sentry.ts), so
+  // a transport that loses bytes shows only here: as a failure rate that moves
+  // with the transport across every driver. It is the one the clone started
+  // with, passed in by the caller, because a port lost mid-clone clears the
+  // connection's transport before the failure arrives.
   function trackCloneOutcome(
     eventName: string,
     radio: CatalogRadio | null,
     startedAt: number,
+    cloneTransport: string,
     params: Record<string, unknown> = {},
   ): void {
     const durationMs = Date.now() - startedAt;
+    const outcomeParams = { transport: cloneTransport || "unknown", ...params };
     trackRadioEvent(eventName, radio, {
       duration_ms: durationMs,
-      ...params,
+      ...outcomeParams,
     });
     const dimensions = CLONE_FLOW_OUTCOMES[eventName];
     if (!radio || !dimensions) {
@@ -524,7 +534,7 @@ export function createSerialActions(ctx: UiContext) {
     recordFlow(
       dimensions.flow,
       dimensions.outcome,
-      { ...radioEventParams(radio), ...params },
+      { ...radioEventParams(radio), ...outcomeParams },
       durationMs,
     );
   }
@@ -647,6 +657,8 @@ export function createSerialActions(ctx: UiContext) {
     const radio = state.selectedRadio;
     const session = ctx.session.current();
     const startedAt = Date.now();
+    // As is the transport, which a port lost mid-clone clears (handlePortLost).
+    const cloneTransport = transport;
     setCloneRunning(true);
     try {
       trackRadioEvent("radio_download", radio);
@@ -689,12 +701,12 @@ export function createSerialActions(ctx: UiContext) {
         `${makeModelLabel(radio)} download complete (${state.currentRows.length} channels).`
           + undecodedChannelsNote(result.unreadableChannels),
       );
-      trackCloneOutcome("radio_download_success", radio, startedAt, codeplugParams(state));
+      trackCloneOutcome("radio_download_success", radio, startedAt, cloneTransport, codeplugParams(state));
       if (result.ident) {
         log.logSerial(`IDENT ${result.ident}`);
       }
     } catch (error) {
-      trackCloneOutcome("radio_download_failure", radio, startedAt, cloneFailureParams(error, "transfer"));
+      trackCloneOutcome("radio_download_failure", radio, startedAt, cloneTransport, cloneFailureParams(error, "transfer"));
       log.reportActionError("Download", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -718,6 +730,8 @@ export function createSerialActions(ctx: UiContext) {
     const radio = state.selectedRadio;
     const session = ctx.session.current();
     const startedAt = Date.now();
+    // As is the transport, which a port lost mid-clone clears (handlePortLost).
+    const cloneTransport = transport;
     // Distinguishes a codeplug CHIRP itself rejected from a transfer that
     // reached the radio and failed there.
     let stage = "preflight";
@@ -761,14 +775,14 @@ export function createSerialActions(ctx: UiContext) {
       // codeplug_source is the question this event exists to answer on the
       // write path: whether people upload what they just read off the radio,
       // or a file they brought with them.
-      trackCloneOutcome("radio_upload_success", radio, startedAt, codeplugParams(state));
+      trackCloneOutcome("radio_upload_success", radio, startedAt, cloneTransport, codeplugParams(state));
     } catch (error) {
       // codeplugParams is merged in here as well as on the success and blocked
       // paths, or grouping upload outcomes by codeplug_source would count every
       // success and no failure at all. It is deliberately not done for a failed
       // *download*: there the editor still holds whatever preceded the
       // transfer, so the same dimensions would describe the wrong codeplug.
-      trackCloneOutcome("radio_upload_failure", radio, startedAt, {
+      trackCloneOutcome("radio_upload_failure", radio, startedAt, cloneTransport, {
         ...codeplugParams(state),
         ...cloneFailureParams(error, stage),
       });
