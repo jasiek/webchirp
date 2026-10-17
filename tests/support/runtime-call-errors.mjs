@@ -30,8 +30,15 @@ export const PYTHON_BASES = Object.freeze({
   ImageDetectionError: ["RuntimeUnsupportedError", "RadioError", ...EXCEPTION_BASES],
   RuntimePreconditionError: ["RuntimeUnsupportedError", "RadioError", ...EXCEPTION_BASES],
   JsException: ["JsProxy", ...EXCEPTION_BASES],
+  Exception: ["BaseException"],
   ValueError: EXCEPTION_BASES,
+  TypeError: EXCEPTION_BASES,
+  AttributeError: EXCEPTION_BASES,
 });
+
+// The classes above that Python itself defines, which the envelope names under
+// the module "builtins".
+const BUILTIN_TYPES = new Set(["Exception", "ValueError", "TypeError", "AttributeError"]);
 
 // The module each class is defined in, which is what the traceback's last
 // line and the envelope's module field name.
@@ -42,7 +49,7 @@ function defaultModule(type) {
   if (type === "JsException") {
     return "pyodide.ffi";
   }
-  if (type === "ValueError") {
+  if (BUILTIN_TYPES.has(type)) {
     return "builtins";
   }
   return "chirp.errors";
