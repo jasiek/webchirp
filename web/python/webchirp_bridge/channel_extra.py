@@ -21,17 +21,17 @@ from __future__ import annotations
 import traceback
 from typing import TYPE_CHECKING
 
-from chirp import (
-    chirp_common,
-    settings as chirp_settings,
-)
-
 from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.radio_settings import _serialize_setting_value
 from webchirp_bridge.session import resolve_session
 
 if TYPE_CHECKING:
     from typing import Any, Optional
+
+    from chirp import (
+        chirp_common,
+        settings as chirp_settings,
+    )
     from webchirp_bridge.channel_rows import Row
 
 # Driver extras ride on channel rows under a key that is not a CSV header (the

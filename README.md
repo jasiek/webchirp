@@ -17,12 +17,13 @@ Web-based CPS for amateur transceivers which runs [CHIRP](https://chirp.danplane
   catalog (`web/radio-catalog.json`) with live enumeration as a fallback. The
   sidebar names the radio in use.
 - Selection-aware **Load from radio** / **Save to radio** using the selected CHIRP
-  clone-mode driver (`sync_in`/`sync_out`), with the clone image cached per driver.
+  clone-mode driver (`sync_in`/`sync_out`).
 - Radio settings read and validated through the selected driver
   (`get_radio_settings` / `validate_radio_settings`).
 - Channel editing: insert / remove / move, copy / cut / paste, plus GMRS, FRS,
   and PMR446 band-preset generators.
-- Repeater imports from external data sources (RepeaterBook, Przemienniki).
+- Repeater imports from external directories (RepeaterBook, przemienniki.net,
+  RSGB ETCC, IRTS).
 - CSV import/export and CHIRP `.img` clone-file import/export, all round-tripped
   through CHIRP Python code.
 - Web Serial bridge (browser serial in JS, called from Python in Pyodide) with a
@@ -99,9 +100,6 @@ dispatched to a chip-specific driver:
   and `web/js/cp2102-webusb.ts` for the pattern) and still require native Web
   Serial on desktop.
 
-`npm run dev` serves with cross-origin isolation headers (`COOP`/`COEP`) so
-Pyodide synchronous JS bridging can use `SharedArrayBuffer` without warnings.
-
 For radio cloning:
 
 1. Type your radio's make, model or the name it is rebadged under into
@@ -137,12 +135,6 @@ Supported formats:
 - `--format csv`: read/write CHIRP-normalized CSV text.
 - `--format img`: read/write CHIRP `.img` clone files.
 
-The flow is:
-1. Open serial on the selected port.
-2. `radio:read` runs `download_selected_radio(module, class)` and caches the clone image in runtime before writing the requested output format.
-3. `radio:write` reads JSON/CSV/IMG input and uploads it through `upload_selected_radio(...)`; `.img` input is first loaded through CHIRP image detection so the cached image and selected driver stay aligned.
-4. Disconnect serial.
-
 ## Hardware E2E CLI test (read then write same codeplug)
 
 The older live smoke test still exists:
@@ -168,29 +160,7 @@ wrong one still echoes perfectly. The same cases run against fake hardware in
 
 ## Architecture
 
-- Entry point / wiring: `web/app.ts` connects the UI controller, runtime RPC
-  client, and serial bridge.
-- UI controller: `web/js/ui.ts` (channel table, settings editor, clipboard,
-  status/debug panels).
-- Serial bridge: `web/js/serial.ts` (native Web Serial) with WebUSB chip drivers
-  in `web/js/ftdi-webusb.ts`, `web/js/pl2303-webusb.ts`,
-  `web/js/ch340-webusb.ts` and `web/js/cp2102-webusb.ts`.
-- Main-thread runtime RPC client + Pyodide bootstrap: `web/js/runtime-rpc.ts`
-  (runs on the main thread — there is no Web Worker).
-- Python source providers: `web/js/python-sources.ts`.
-- Versioned Python runtime code: the `web/python/webchirp_bridge/` package, executed
-  into Pyodide's globals by the `web/python/runtime_bridge.py` entry point.
-- The browser runtime mounts the pinned CHIRP package into Pyodide as one archive
-  served from the app's own origin: `scripts/build-chirp-bundle.ts` (`npm run
-  build:chirp`, run by `npm run dev` and `npm run build:dist`) zips `chirp/chirp` from
-  the submodule -- without `wxui`, `cli`, `sources`, `locale`, `share` and
-  `stock_configs`, which the runtime never imports -- into `web/chirp/chirp-<pin>.zip`
-  (about 1.5 MB) next to a `chirp-<pin>.json` manifest listing the driver modules.
-  `seedPyodideRuntime()` unpacks it with `pyodide.unpackArchive`, so a driver import is
-  an ordinary file import and needs no network and no WebAssembly stack switching.
-- Command-line runtime and tests build the same archive in-process from a local CHIRP
-  checkout:
-  - `WEBCHIRP_CHIRP_DIR=/path/to/chirp npm run test:channels`
+See the Core Architecture section of [CLAUDE.md](CLAUDE.md).
 
 ## Important scope note
 
@@ -202,96 +172,3 @@ Live browser serial executes the selected CHIRP clone-mode driver
 verified end-to-end (e.g. Baofeng UV-5R). Compatibility with any given radio
 still depends on that driver's expectations and on browser transport limits, so
 treat an untested radio as unverified.
-
-## Sequence diagram (sketch) of how it all works
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant U as User
-  participant UI as ui.ts
-  participant RPC as runtime-rpc.ts
-  participant SRC as python-sources.ts
-  participant PY as webchirp_bridge<br/>(Pyodide)
-  participant S as serial.js<br/>(Web Serial / WebUSB)
-  participant R as Radio
-
-  Note over UI,S: app.ts wires the UI controller, main-thread RPC client, and serial bridge
-
-  U->>UI: Open page
-  UI->>RPC: listRadios()
-  alt Static catalog matches pinned CHIRP revision
-    RPC->>RPC: Load web/radio-catalog.json
-  else Missing / stale
-    RPC->>SRC: listDriverModules() + seedPyodideRuntime()
-    SRC-->>RPC: Driver module list + runtime bridge source
-    RPC->>PY: list_registered_radios(...)
-    PY-->>RPC: radios[]
-  end
-  RPC-->>UI: Load searchable radio catalog
-
-  U->>UI: Search for and select a radio, click Connect
-  UI->>RPC: serialConnect(baudRate)
-  RPC->>PY: webserial_connect(baud)
-  PY->>RPC: serial_open(...)
-  RPC->>S: handleSerialRpc("open")
-  S-->>R: Open serial port (Web Serial or WebUSB)
-  S-->>RPC: connected
-  RPC-->>UI: connected/status
-
-  U->>UI: Click Load from radio
-  UI->>RPC: downloadSelectedRadio({module, className})
-  RPC->>PY: ensure_radio_module(module)
-  RPC->>PY: download_selected_radio(module, className)
-  PY->>RPC: serial_prepare_clone(...)
-  RPC->>S: prepareClone(DTR/RTS, settle)
-  S-->>R: Set control lines + settle
-  S-->>RPC: prepared
-  loop sync_in() serial exchange
-    PY->>RPC: serial_write_bytes / serial_read_bytes
-    RPC->>S: writeBytes / readBytes
-    S-->>R: TX/RX bytes
-    R-->>S: TX/RX bytes
-    S-->>RPC: bytes
-    RPC-->>PY: bytes
-  end
-  PY->>PY: Cache image in LAST_IMAGE_BY_DRIVER
-  PY-->>RPC: rows + headers + settings
-  RPC-->>UI: Populate editable Channels table + Settings editor
-
-  U->>UI: Edit channels/settings, click Save to radio
-  UI->>RPC: validateRowsForUpload({rows, module, className})
-  RPC->>PY: validate_rows_for_upload(...)
-  PY-->>RPC: valid + issues
-
-  alt Preflight invalid
-    RPC-->>UI: Block upload + highlight invalid cells
-  else Preflight valid
-    UI->>RPC: uploadSelectedRadio({module, className, rows, settings})
-    RPC->>PY: ensure_radio_module(module)
-    RPC->>PY: upload_selected_radio(module, className, rows, settings)
-
-    alt Cached image exists
-      PY->>PY: Apply edited rows + settings to cached image
-      PY->>RPC: serial_prepare_clone(...)
-      RPC->>S: prepareClone(...)
-      loop sync_out() serial exchange
-        PY->>RPC: serial_write_bytes / serial_read_bytes
-        RPC->>S: writeBytes / readBytes
-        S-->>R: TX/RX bytes
-        R-->>S: TX/RX bytes
-        S-->>RPC: bytes
-        RPC-->>PY: bytes
-      end
-      PY->>PY: Refresh cached image
-      PY-->>RPC: uploaded=true
-      RPC-->>UI: Show upload success
-    else No cached image
-      PY-->>RPC: Error: download required first
-      RPC-->>UI: Show clear failure in Debug Output
-    end
-  end
-
-  Note over UI,PY: The RPC client logs full stack traces to Debug Output on runtime errors
-
-```
