@@ -111,6 +111,8 @@ and drift on each bump.
 - **ga-custom-dimensions-are-syncable** (2026-08-04): `ga:dimensions` checks `displayName` locally because Admin API creates run one at a time with no rollback. Turning the measurement ID into a property ID needs account-level visibility, hence `--property`.
 - **ga-event-scoped-slots-are-a-one-way-budget** (2026-08-07): EVENT-scoped dimensions are capped at 50, and a dimension's `parameterName` and scope can never change. Prefer adding a dimension to an event that already fires over minting a new event.
 - **browser-brand-takes-two-sources-and-an-async-probe** (2026-09-08): browser and OS are not declared as custom dimensions because GA has them built in.
+- **consent-gate-cuts-ga-counts-from-its-deploy** (2026-10-15): with basic consent mode, a visitor who declines or ignores the banner sends GA nothing at all, not even a cookieless ping, so users, sessions and every per-driver count drop from the day the banner shipped. That drop is the banner, not lost traffic; compare rates across the date, not totals.
+- **held-offline-reports-can-repeat-once** (2026-10-15): before a visitor answers the banner, `trackEvent()` holds events and returns false. `web/js/offline.ts` reads that false as "not sent", so it keeps its `offline_ready` build key and its launch counts. If the visitor then accepts on that page, the held events go out and the next page reports the same ones again. This happens at most once per visitor.
 
 ## Error reporting (Sentry)
 

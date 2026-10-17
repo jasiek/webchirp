@@ -1,15 +1,25 @@
 // Google Analytics wiring, shared by index.html and about.html.
 //
 // Everything with logic in it lives here so the two pages cannot drift: the
-// production-host gate, the gtag.js loader this module injects, the launch
-// context, the install funnel, and the trackEvent() the rest of the app sends
-// through. Loaded with type="module", so it runs after the document is parsed.
+// production-host gate, the consent gate behind it, the gtag.js loader this
+// module injects, the launch context, the install funnel, and the trackEvent()
+// the rest of the app sends through. Loaded with type="module", so it runs
+// after the document is parsed.
 //
 // Home-screen launches are the reason the display-mode plumbing exists: a
 // WebAPK sends no referrer, so without a marker its traffic is indistinguishable
 // from direct browser traffic. The manifest's start_url carries utm params for
 // session attribution; display_mode below covers every hit including ones that
 // navigate away from start_url.
+
+import {
+  CONSENT_SETTINGS_SELECTOR,
+  hideConsentBanner,
+  showConsentBanner,
+  type ConsentChoice,
+} from "./consent-banner.ts";
+
+export type { ConsentChoice } from "./consent-banner.ts";
 
 export const MEASUREMENT_ID = "G-80DP6MQ180";
 
@@ -310,23 +320,246 @@ export function isAnalyticsHost(win: Window | null | undefined): boolean {
 // reporting on.
 //
 // On a page diverted by deferAnalytics() the event is queued for replay
-// instead, and false says it was not sent.
+// instead, and false says it was not sent. Before the visitor has answered
+// the consent banner it waits in memory, and false says the same; a decline
+// drops it, and every event after it, without a trace.
 export function trackEvent(name: string, params: Record<string, unknown> = {}, win: Window | null = target): boolean {
-  const gtag = win?.gtag;
-  if (!win || typeof gtag !== "function") {
+  if (!win) {
     return false;
   }
-  const fullParams = { display_mode: detectDisplayMode(win), ...params };
+  const event = { name: String(name), params: { display_mode: detectDisplayMode(win), ...params } };
+  const consent = consentStates.get(win);
+  if (consent && consent.choice !== "granted") {
+    if (consent.choice === null) {
+      holdForConsent(consent, event);
+    }
+    return false;
+  }
+  return deliverEvent(win, event);
+}
+
+// Hand one event to gtag, or to the replay queue on a deferred page. The part
+// of trackEvent() past the consent gate, shared with the release of the
+// events that waited for an Accept.
+function deliverEvent(win: Window, event: QueuedEvent): boolean {
+  const gtag = win.gtag;
+  if (typeof gtag !== "function") {
+    return false;
+  }
   if (deferredWindows.has(win)) {
-    enqueueReplay(win, [{ name: String(name), params: fullParams }]);
+    enqueueReplay(win, [event]);
     return false;
   }
   try {
-    gtag("event", String(name), fullParams);
+    gtag("event", event.name, event.params);
   } catch {
     return false;
   }
   return true;
+}
+
+// --- Consent -----------------------------------------------------------------
+//
+// Basic consent mode: on the production host nothing is requested from Google
+// and no GA cookie is set until the visitor presses Accept on the banner
+// (web/js/consent-banner.ts). Accept defines gtag, sets the Consent Mode v2
+// defaults to denied, grants analytics_storage alone, and only then loads
+// gtag.js and configs the property. Decline loads nothing; one made after an
+// Accept on the same page switches the loaded tag off, withdraws the grant
+// and deletes the GA cookies. The choice is kept on the device under
+// CONSENT_KEY; "Cookie settings" in each page's footer reopens the banner.
+//
+// The banner asks everyone, not only EEA and UK visitors: GitHub Pages runs
+// no server code, so the page has no reliable way to know where a visitor is.
+//
+// Events tracked before an answer wait in memory, never in storage -- writing
+// them to the device is itself what needs the consent. An Accept sends them,
+// a Decline drops them, and leaving the page loses them.
+
+export const CONSENT_KEY = "webchirp-analytics-consent";
+
+// Every Consent Mode v2 type starts denied; an Accept grants analytics_storage
+// and nothing else, so the ad types stay denied for good.
+export const CONSENT_DEFAULTS = Object.freeze({
+  analytics_storage: "denied",
+  ad_storage: "denied",
+  ad_user_data: "denied",
+  ad_personalization: "denied",
+});
+
+// gtag.js's own off switch for one measurement ID: set to true, the loaded
+// tag sends nothing more for it.
+const GA_DISABLE_PROPERTY = `ga-disable-${MEASUREMENT_ID}` as const;
+
+/** One page's consent: the answer in force and what waits for one. */
+interface ConsentState {
+  /** The visitor's answer, or null while the banner is unanswered. */
+  choice: ConsentChoice | null;
+  /** Events tracked before an answer, oldest first. */
+  pending: QueuedEvent[];
+  /** Whether this page has defined gtag, configured it and requested gtag.js. */
+  started: boolean;
+}
+
+// The consent of each window initAnalytics() ran on. A window it never ran
+// on (a test's bare object) has none, and trackEvent() treats it as before
+// consent existed: whatever gtag it carries is used.
+const consentStates = new WeakMap<object, ConsentState>();
+
+// The stored answer, or null when there is none or storage cannot be read.
+export function readConsentChoice(win: Window | null | undefined): ConsentChoice | null {
+  const storage = win ? analyticsStorage(win) : null;
+  try {
+    const value = storage?.getItem(CONSENT_KEY);
+    return value === "granted" || value === "denied" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+// Keep the answer on the device. Without storage it holds for this page only,
+// and the banner asks again on the next.
+function writeConsentChoice(win: Window, choice: ConsentChoice): void {
+  try {
+    analyticsStorage(win)?.setItem(CONSENT_KEY, choice);
+  } catch {
+    // Storage full or blocked: the answer still applies to this page.
+  }
+}
+
+// Keep an event until the visitor answers, the newest REPLAY_LIMIT of them:
+// a page left open with the banner unanswered must not grow without bound.
+function holdForConsent(consent: ConsentState, event: QueuedEvent): void {
+  consent.pending.push(event);
+  if (consent.pending.length > REPLAY_LIMIT) {
+    consent.pending.splice(0, consent.pending.length - REPLAY_LIMIT);
+  }
+}
+
+// Record the visitor's answer for this page and the ones after it, and act on
+// it: Accept starts analytics and sends what waited, Decline drops it and
+// stops analytics. Called by the banner's buttons; exported for the tests.
+// Does nothing on a window initAnalytics() did not run on.
+export function setAnalyticsConsent(choice: ConsentChoice, win: Window | null = target): void {
+  const consent = win ? consentStates.get(win) : undefined;
+  if (!win || !consent) {
+    return;
+  }
+  consent.choice = choice;
+  writeConsentChoice(win, choice);
+  hideConsentBanner(win.document);
+  if (choice === "granted") {
+    startAnalytics(win, consent);
+    for (const event of consent.pending.splice(0)) {
+      deliverEvent(win, event);
+    }
+  } else {
+    consent.pending.length = 0;
+    stopAnalytics(win, consent);
+  }
+}
+
+// Show the banner for this page's window, saying what is in force if anything.
+function askForConsent(win: Window, consent: ConsentState): void {
+  showConsentBanner(win.document, consent.choice, (choice) => setAnalyticsConsent(choice, win));
+}
+
+// Reveal the page's Cookie settings controls and have them reopen the banner.
+// They ship hidden, so off the production host, where this never runs, there
+// is nothing to click.
+function bindConsentSettings(win: Window, consent: ConsentState): void {
+  const doc = win.document;
+  if (typeof doc?.querySelectorAll !== "function") {
+    return;
+  }
+  for (const control of doc.querySelectorAll<HTMLElement>(CONSENT_SETTINGS_SELECTOR)) {
+    control.hidden = false;
+    control.addEventListener("click", (event) => {
+      event.preventDefault();
+      askForConsent(win, consent);
+    });
+  }
+}
+
+// Define gtag, set the consent defaults and the grant, load the vendor tag,
+// then config with the launch context attached. gtag.js reads whatever is
+// already in dataLayer when it arrives, so the ordering between the injection
+// and the commands below does not matter; the order of the commands does: the
+// consent commands come first, so the config's page_view goes out granted.
+// A second Accept on the same page (after a Decline from Cookie settings)
+// only switches the loaded tag back on.
+//
+// display_mode goes in the config call, NOT in a preceding gtag("set"): "set"
+// reads like it sets a global parameter for later hits, but GA4 does not carry
+// custom parameters from it onto events, so the parameter silently never
+// reaches the collect payload. Config parameters do ride along with the
+// automatic page_view.
+function startAnalytics(win: Window, consent: ConsentState): void {
+  if (consent.started) {
+    if (win[GA_DISABLE_PROPERTY]) {
+      win[GA_DISABLE_PROPERTY] = false;
+    }
+    win.gtag?.("consent", "update", { analytics_storage: "granted" });
+    return;
+  }
+  consent.started = true;
+  const dataLayer = win.dataLayer || [];
+  win.dataLayer = dataLayer;
+  if (typeof win.gtag !== "function") {
+    // Mirrors the vendor snippet: gtag.js reads the pushed arguments objects,
+    // so this pushes arguments rather than an array.
+    win.gtag = function gtag() {
+      dataLayer.push(arguments);
+    };
+  }
+  win.gtag("consent", "default", { ...CONSENT_DEFAULTS });
+  win.gtag("consent", "update", { analytics_storage: "granted" });
+  loadGtagScript(win);
+  win.gtag("js", new Date());
+  win.gtag("config", MEASUREMENT_ID, { display_mode: detectDisplayMode(win) });
+}
+
+// Undo what an Accept did: the replay queue goes, a tag loaded on this page
+// is switched off and its grant withdrawn, and the GA cookies are deleted.
+// Never throws: a blocker's throwing gtag must not keep the banner up.
+function stopAnalytics(win: Window, consent: ConsentState): void {
+  try {
+    analyticsStorage(win)?.removeItem(REPLAY_KEY);
+  } catch {
+    // Blocked storage holds no queue to remove.
+  }
+  if (consent.started) {
+    win[GA_DISABLE_PROPERTY] = true;
+    try {
+      win.gtag?.("consent", "update", { analytics_storage: "denied" });
+    } catch {
+      // The off switch above already stops the tag.
+    }
+  }
+  deleteAnalyticsCookies(win);
+}
+
+// Delete the cookies GA4 sets: _ga, and _ga_<container> per property. GA puts
+// them on the registrable domain (domain=webchirp.org), so each is expired
+// with that domain and without one, whichever it was written with.
+function deleteAnalyticsCookies(win: Window): void {
+  const doc = win.document;
+  let names: string[];
+  try {
+    names = String(doc?.cookie || "").split(";").map((pair) => pair.split("=")[0].trim());
+  } catch {
+    return;
+  }
+  const hostname = String(win.location?.hostname || "");
+  for (const name of names.filter((cookie) => cookie === "_ga" || cookie.startsWith("_ga_"))) {
+    for (const domain of ["", `; domain=${hostname}`]) {
+      try {
+        doc.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${domain}`;
+      } catch {
+        // A document that will not take cookies has none to delete.
+      }
+    }
+  }
 }
 
 // --- Offline replay ----------------------------------------------------------
@@ -364,9 +597,10 @@ interface ReplayQueue {
 // window and the real one cannot leak into each other.
 const deferredWindows = new WeakSet<object>();
 
-// The window's localStorage, or null where it is missing, not a real Storage,
-// or throws to read (blocked site data, some private modes).
-function replayStorage(win: Window): Pick<Storage, "getItem" | "setItem" | "removeItem"> | null {
+// The window's localStorage, which holds the replay queue and the consent
+// answer, or null where it is missing, not a real Storage, or throws to read
+// (blocked site data, some private modes).
+function analyticsStorage(win: Window): Pick<Storage, "getItem" | "setItem" | "removeItem"> | null {
   try {
     const storage = win.localStorage;
     return typeof storage?.getItem === "function" && typeof storage.setItem === "function"
@@ -394,7 +628,7 @@ function readReplayQueue(storage: Pick<Storage, "getItem">): ReplayQueue {
 
 // Append to the queue, dropping the oldest past REPLAY_LIMIT and counting them.
 function enqueueReplay(win: Window, events: QueuedEvent[]): void {
-  const storage = replayStorage(win);
+  const storage = analyticsStorage(win);
   if (!storage || events.length === 0) {
     return;
   }
@@ -418,12 +652,24 @@ function enqueueReplay(win: Window, events: QueuedEvent[]): void {
 // out, so gtag.js cannot send it a second time should it load after all.
 // Returns whether the page is now deferred; analytics off the production host,
 // or no storage, leaves it as it was.
+//
+// Consent comes first: after a Decline there is nothing to queue, and before
+// an answer the page is marked deferred but its held events stay in memory,
+// reaching the queue only through an Accept on this page.
 export function deferAnalytics(win: Window | null = target): boolean {
-  if (!win || typeof win.gtag !== "function" || !replayStorage(win)) {
+  const consent = win ? consentStates.get(win) : undefined;
+  if (!win || consent?.choice === "denied" || !analyticsStorage(win)) {
     return false;
   }
   if (deferredWindows.has(win)) {
     return true;
+  }
+  if (consent?.choice === null) {
+    deferredWindows.add(win);
+    return true;
+  }
+  if (typeof win.gtag !== "function") {
+    return false;
   }
   deferredWindows.add(win);
   const layer = win.dataLayer || [];
@@ -446,12 +692,15 @@ export function deferAnalytics(win: Window | null = target): boolean {
 // Send what offline pages queued, oldest first, then one offline_replay
 // summary. The queue is cleared before anything is sent, so a second tab the
 // network served at the same moment finds it empty rather than sending it
-// again. Returns how many events were replayed.
+// again. Returns how many events were replayed. Only with consent granted:
+// before an answer the queue waits for a later page, and a Decline deletes it.
 export function replayDeferredAnalytics(win: Window | null = target): number {
-  if (!win || typeof win.gtag !== "function" || deferredWindows.has(win)) {
+  const consent = win ? consentStates.get(win) : undefined;
+  if (!win || (consent && consent.choice !== "granted")
+    || typeof win.gtag !== "function" || deferredWindows.has(win)) {
     return 0;
   }
-  const storage = replayStorage(win);
+  const storage = analyticsStorage(win);
   if (!storage) {
     return 0;
   }
@@ -510,7 +759,8 @@ export function bindInstallTracking(win: Window | null = target) {
 }
 
 // Request the vendor tag. The pages carry no static loader, so this is the only
-// place gtag.js is ever asked for, and it is reached only past the host gate.
+// place gtag.js is ever asked for, and it is reached only past the host gate
+// and an Accept.
 function loadGtagScript(win: Window): void {
   const doc = win?.document;
   if (typeof doc?.createElement !== "function") {
@@ -522,34 +772,28 @@ function loadGtagScript(win: Window): void {
   (doc.head || doc.documentElement)?.appendChild(script);
 }
 
-// Define gtag, load the vendor tag, then config with the launch context
-// attached. gtag.js reads whatever is already in dataLayer when it arrives, so
-// the ordering between the injection and the commands below does not matter.
-//
-// display_mode goes in the config call, NOT in a preceding gtag("set"): "set"
-// reads like it sets a global parameter for later hits, but GA4 does not carry
-// custom parameters from it onto events, so the parameter silently never
-// reaches the collect payload. Config parameters do ride along with the
-// automatic page_view.
+// Wire analytics into the page, on the production host only: the install
+// funnel, the Cookie settings controls, and then whatever the visitor's stored
+// answer allows -- analytics started at once after an Accept, nothing after a
+// Decline, and the banner when there is no answer yet. A second call on the
+// same window starts it over as a new page. Returns gtag once it is defined,
+// otherwise null.
 export function initAnalytics(win: Window | null | undefined) {
   if (!win || !isAnalyticsHost(win)) {
     return null;
   }
   target = win;
-  const dataLayer = win.dataLayer || [];
-  win.dataLayer = dataLayer;
-  if (typeof win.gtag !== "function") {
-    // Mirrors the vendor snippet: gtag.js reads the pushed arguments objects,
-    // so this pushes arguments rather than an array.
-    win.gtag = function gtag() {
-      dataLayer.push(arguments);
-    };
-  }
-  loadGtagScript(win);
-  win.gtag("js", new Date());
-  win.gtag("config", MEASUREMENT_ID, { display_mode: detectDisplayMode(win) });
+  const consent: ConsentState = { choice: readConsentChoice(win), pending: [], started: false };
+  consentStates.set(win, consent);
+  deferredWindows.delete(win);
   bindInstallTracking(win);
-  return win.gtag;
+  bindConsentSettings(win, consent);
+  if (consent.choice === "granted") {
+    startAnalytics(win, consent);
+  } else if (consent.choice === null) {
+    askForConsent(win, consent);
+  }
+  return win.gtag || null;
 }
 
 if (typeof window !== "undefined") {
