@@ -333,6 +333,12 @@ export function createRadioCatalog(ctx: UiContext) {
     if (!radio) {
       return;
     }
+    // The search box is disabled while a radio transfer runs; this covers a
+    // pick that reaches here anyway, from a list left open when it started.
+    if (ctx.serial.isCloneRunning()) {
+      hideRadioSearchResults();
+      return;
+    }
     commitSelectedRadio(radio);
     trackRadioSelected(radio, "search");
     log.logDebug(

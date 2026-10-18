@@ -34,6 +34,7 @@ function makeContext({ hasInvalidSettings = false, transport = "webserial" } = {
     radioUploadEl: pageElement("radioUploadEl"),
     liveRadioSupportWarningEl: pageElement("liveRadioSupportWarningEl"),
     unsupportedBrowserContinueEl: pageElement("unsupportedBrowserContinueEl"),
+    radioSearchEl: pageElement("radioSearchEl"),
     sidebarControlEls: [],
   };
   dom.sidebarControlEls = [
@@ -438,7 +439,7 @@ async function bootConnectedUi(runtime = {}) {
     upload: pageElement("radioUploadEl"),
   };
   await dispatch(controls.connect, "click");
-  return { ui, controls };
+  return { ui, document, controls };
 }
 
 test("a running download holds every serial control until it ends", async () => {
@@ -483,6 +484,42 @@ test("a running download holds every serial control until it ends", async () => 
     assert.equal(control.title, "", `#${control.id} must drop the busy title`);
   }
   assert.equal(controls.connect.textContent, "Disconnect");
+});
+
+const OTHER_RADIO = {
+  vendor: "Acme", model: "Other", variant: "",
+  module: "acme", className: "Other", key: "acme:Other", isLiveRadio: false,
+};
+
+test("a running transfer holds the radio search until it ends", async () => {
+  const transfer = createDeferred();
+  const { document, controls } = await bootConnectedUi({
+    listRadios: async () => ({ radios: [...CLONE_CATALOG, OTHER_RADIO] }),
+    downloadSelectedRadio: () => transfer.promise,
+  });
+  const search = pageElement("radioSearchEl");
+  const readout = pageElement("radioSelectionNameEl");
+  assert.equal(search.disabled, false);
+
+  await dispatch(controls.download, "click");
+  await flushMicrotasks();
+  assert.equal(search.disabled, true);
+  assert.equal(search.title, CLONE_RUNNING_TITLE);
+
+  // jsdom delivers key events to a disabled input, which stands in for a
+  // pick from a suggestion list left open when the transfer started.
+  selectRadioBySearch(document, "Acme Other");
+  await flushMicrotasks();
+  assert.equal(readout.textContent, "Acme Clone");
+  assert.equal(pageElement("radioSearchResultsEl").hidden, true);
+
+  transfer.resolve({ headers: CLONE_HEADERS, rows: [{ Location: "1", Name: "ONE" }], settings: CLONE_SETTINGS });
+  await flushMicrotasks();
+  assert.equal(search.disabled, false);
+  assert.equal(search.title, "");
+  selectRadioBySearch(document, "Acme Other");
+  await flushMicrotasks();
+  assert.equal(readout.textContent, "Acme Other");
 });
 
 // WEBCHIRP-FRONTEND-1W: an Android user pressed Upload three times while the

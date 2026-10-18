@@ -160,6 +160,7 @@ function makeSerialActionsContext(connectError) {
     radioUploadEl: pageElement("radioUploadEl"),
     liveRadioSupportWarningEl: pageElement("liveRadioSupportWarningEl"),
     unsupportedBrowserContinueEl: pageElement("unsupportedBrowserContinueEl"),
+    radioSearchEl: pageElement("radioSearchEl"),
     sidebarControlEls: [],
   };
   dom.sidebarControlEls = [

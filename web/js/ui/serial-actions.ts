@@ -107,8 +107,10 @@ export function createSerialActions(ctx: UiContext) {
   // one ended, usually by timing out; a Disconnect could not interrupt it,
   // only close the port after it; and a Connect after a port loss would open
   // its chooser once the user's click had expired. So every serial control
-  // waits for the transfer to end. A lost port still ends it promptly: the
-  // bridge fails every read once the port is gone.
+  // waits for the transfer to end, and so does the radio search: a radio
+  // picked mid-transfer leaves the transfer's result without the radio it ran
+  // against. A lost port still ends it promptly: the bridge fails every read
+  // once the port is gone.
   let cloneRunning = false;
   // A connect in flight, and a loss the bridge reported during it. The bridge
   // reports a loss as soon as it happens, while the connect's own result is
@@ -147,6 +149,11 @@ export function createSerialActions(ctx: UiContext) {
   function setCloneRunning(running: boolean): void {
     cloneRunning = running;
     updateSerialActionState();
+  }
+
+  // Whether a download or upload is in flight (see cloneRunning).
+  function isCloneRunning(): boolean {
+    return cloneRunning;
   }
 
   // Record whether a clone can run here at all; web/app.ts decides from the
@@ -425,6 +432,11 @@ export function createSerialActions(ctx: UiContext) {
     const togglesAllowed = actionsAllowed && !cloneRunning;
 
     setLiveRadioSupportWarningVisible(liveRadioUnsupported);
+
+    // Painted here rather than once by setCloneRunning(), like the buttons
+    // below, so no repaint mid-transfer can hand the search back early.
+    dom.radioSearchEl.disabled = !sidebarControlsEnabled || cloneRunning;
+    dom.radioSearchEl.title = cloneRunning ? CLONE_RUNNING_TITLE : "";
 
     // Connect controls by platform capability:
     // - Desktop with native Web Serial: WebSerial toggle.
@@ -819,6 +831,7 @@ export function createSerialActions(ctx: UiContext) {
     bindEvents,
     setSerialController,
     setCloneSupported,
+    isCloneRunning,
     handlePortLost,
     setSidebarControlsEnabled,
     setBrowserUnsupportedOverlayVisible,
