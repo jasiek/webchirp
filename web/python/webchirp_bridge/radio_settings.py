@@ -507,12 +507,11 @@ def _prune_dead_settings(container: SettingsContainer) -> list[str]:
 def _attributed_apply_callback(
     setting: chirp_settings.RadioSetting,
     path: list[str],
-    edited: bool,
     refusals: Refusals,
 ) -> Callable[[], Any]:
-    """One setting's apply callback, with a refusal routed by who chose the value.
+    """An edited setting's apply callback, recording a refusal against its path.
 
-    See ``_attribute_apply_callbacks`` for the two routes.
+    See ``_attribute_apply_callbacks``.
     """
     run = setting.run_apply_callback
 
@@ -520,14 +519,8 @@ def _attributed_apply_callback(
         try:
             return run()
         except SETTING_REFUSALS as exc:
-            if edited:
-                refusals.append((path, str(exc)))
-                raise
-            _log_debug(
-                "Left %s as read: the driver refused the value it reported (%s)"
-                % (".".join(path), exc)
-            )
-            return None
+            refusals.append((path, str(exc)))
+            raise
 
     return attributed
 
@@ -538,31 +531,30 @@ def _attribute_apply_callbacks(
     changed: list[list[str]],
     refusals: Refusals,
 ) -> None:
-    """Wrap every apply callback so a driver's refusal names its setting.
+    """Wrap each edited setting's apply callback so a driver's refusal names it.
 
-    Drivers that write through apply callbacks (kguv9dplus among them) check
-    ranges inside the callback, so a value set_value() accepted can still be
-    refused once ``set_settings()`` runs, and the exception names no setting.
-    Wrapping each callback in the copy handed to the driver tells two cases
-    apart. A setting the user left alone holds the value the driver rendered
-    from the image, so its refusal is the driver failing to round-trip itself:
-    it is logged and skipped, and those bytes stay as read, as if there had
-    been no edit at all. A refusal of an edited setting is recorded in
-    refusals and re-raised, so the write stops and the user is told which
-    value to correct. Paths are matched by name, so an unedited twin of an
+    A driver that writes through apply callbacks can check ranges inside the
+    callback, so a value set_value() accepted can still be refused once
+    ``set_settings()`` runs, and the exception names no setting. A refusal of
+    an edited value is recorded in refusals and re-raised, so the write stops
+    and the user is told which value to correct. A setting the user left
+    alone holds the value the driver rendered from the image, so a refusal of
+    it is the driver failing to write back its own tree -- an upstream defect,
+    worked around per driver in ``workarounds`` -- and is left to raise as the
+    driver's own error. Paths are matched by name, so an unedited twin of an
     edited setting under a duplicate group name counts as edited: that errs
-    toward stopping the write rather than skipping an edit.
+    toward naming a setting the user can correct.
     """
     for element in _settings_container_children(container):
         path = prefix + [str(element.get_name())]
         if isinstance(element, chirp_settings.RadioSetting):
-            if element.has_apply_callback():
+            if path in changed and element.has_apply_callback():
                 # An instance attribute shadows the method, which is what the
                 # driver calls: chirp/chirp/settings.py:647-648.
                 setattr(
                     element,
                     "run_apply_callback",
-                    _attributed_apply_callback(element, path, path in changed, refusals),
+                    _attributed_apply_callback(element, path, refusals),
                 )
         elif isinstance(element, chirp_settings.RadioSettingGroup):
             _attribute_apply_callbacks(element, path, changed, refusals)
@@ -585,15 +577,13 @@ def _validate_and_apply_radio_settings(
     The driver's ``set_settings()`` runs only when a submitted value differs
     from the one the tree read. Export and upload submit the panel's whole
     tree, so without that gate every write replayed every setting through the
-    driver, and a driver can refuse a value it rendered itself: kguv9dplus
-    shows a VFO frequency of 0 as "", and its apply callback parses "" back as
-    0 Hz, outside the band, and raises (WEBCHIRP-FRONTEND-2D). Desktop CHIRP
-    calls ``set_settings()`` only from the editor's change handler
-    (``_changed``, ``chirp/chirp/wxui/settingsedit.py:202-209``); a write with no edit
-    leaves the image's settings bytes exactly as they were read. When the
-    write does run, a driver's refusal of an edited value comes back as an
-    issue on that setting, and one of an unedited value is skipped
-    (``_attribute_apply_callbacks``).
+    driver, and a driver that cannot write back a value it rendered itself
+    failed every write on a setting nobody edited. Desktop CHIRP calls
+    ``set_settings()`` only from the editor's change handler (``_changed``,
+    ``chirp/chirp/wxui/settingsedit.py:202-209``); a write with no edit leaves
+    the image's settings bytes exactly as they were read. When the write does
+    run, a driver's refusal of an edited value comes back as an issue on that
+    setting (``_attribute_apply_callbacks``).
     """
     rf = radio.get_features()
     if not bool(getattr(rf, "has_settings", False)):
@@ -638,7 +628,8 @@ def _validate_and_apply_radio_settings(
             radio.set_settings(writable_tree)
         except SETTING_REFUSALS:
             # Only a refusal pinned on an edit is the user's to fix; any other
-            # is a value the runtime handed the driver, and stays a defect.
+            # is the driver refusing its own tree or a value the runtime
+            # handed it, and stays a defect.
             if not refusals:
                 raise
         # Checked after a clean return too: a driver that logs a callback's

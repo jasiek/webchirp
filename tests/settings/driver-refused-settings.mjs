@@ -3,16 +3,18 @@ import test from "node:test";
 
 import { isPythonError, refusedSettingIssues } from "../../web/js/runtime-errors.ts";
 import { initOptions } from "../../web/js/sentry.ts";
-import { loadImageFor, readCatalog, sharedHarness } from "../support/chirp.mjs";
+import { plantedImage, readCatalog, sharedHarness } from "../support/chirp.mjs";
+import { withCapturedDebugLog } from "../support/debug-log-capture.mjs";
 
-// A driver can refuse to write back a value it rendered itself. kguv9dplus
-// shows a VFO band frequency of 0 as "" (int2freq), and the apply callback
-// that writes it parses "" as 0 Hz and raises InvalidValueError because 0 Hz
-// is outside the band. Export and upload hand the panel's whole settings tree
-// back, so every export of such an image used to fail on a setting nobody had
-// touched (WEBCHIRP-FRONTEND-2D). No upstream image stores a zero there, so
-// the zero is planted.
+// What the settings step of an export or upload does with a value the driver
+// refuses. kguv9dplus shows a stored frequency of 0 as "" and refuses "" when
+// writing it back, and one user's KG-UV9GX failed every export and upload on
+// such a 0 (WEBCHIRP-FRONTEND-2D, -2E; FINDINGS
+// drivers-refuse-their-own-settings). No upstream image stores one, so it is
+// planted. The driver's workaround, and the tests that show the driver still
+// needs it, are in tests/channels/kguv9dplus-empty-frequency.mjs.
 const IMAGE = "Wouxun_KG-UV9GX.img";
+const PLANTED_FIELD = "vfo_a.band_200.freq";
 const PLANTED_SETTING = "vfo_a.band_200.freq";
 // A sibling the tests edit, in a band (108-181 MHz) where 146 MHz is valid.
 const EDITED_SETTING = "vfo_a.band_150.freq";
@@ -59,81 +61,76 @@ function settingValue(nodes, id) {
   return String(node.values[0].current).trim();
 }
 
-/** Plant a zero frequency in VFO A's 200 MHz band and serialize the image.
- *
- * Also replays the planted radio's own settings tree through the driver, the
- * way desktop CHIRP would after any edit, and reports what it refused: the
- * tests below are only worth anything while the driver still refuses it. */
-async function plantedImage(harness, match, raw) {
-  const planted = await harness.runPythonJson(
-    `
-_r = _import_radio_class(_m, _c)(memmap.MemoryMapBytes(bytes(
-    chirp_common.CloneModeRadio._strip_metadata(base64.b64decode(_b))[0])))
-_r._memobj.vfo_a.band_200.freq = 0
-_image = base64.b64encode(_image_bytes_from_radio(_r)).decode()
-_refused = ""
-try:
-    _r.set_settings(_r.get_settings())
-except chirp_settings.InvalidValueError as _exc:
-    _refused = str(_exc)
-json.dumps({"image": _image, "refused": _refused})
-    `,
-    {
-      _m: match.module,
-      _c: match.className,
-      _b: Buffer.from(raw).toString("base64"),
-    },
-  );
-  assert.match(
-    planted.refused,
-    /not with in/,
-    "the driver should still refuse to replay a zero VFO frequency",
-  );
-  return Buffer.from(planted.image, "base64");
+/** Open the image with a zero planted in VFO A's 200 MHz band frequency. */
+async function loadPlanted(harness, catalog) {
+  const { image } = await plantedImage(harness, catalog, IMAGE, { [PLANTED_FIELD]: 0 });
+  const loaded = await harness.loadCodeplugBinary(image);
+  assert.equal(settingValue(loaded.settings, PLANTED_SETTING), "");
+  return loaded;
 }
 
-test("an export that edits no setting leaves a value the driver would refuse as read", async () => {
+/** Run fn with the get_settings hook answering with each driver's own tree,
+ * as for a driver no workaround covers. */
+async function withoutSettingsWorkarounds(harness, fn) {
+  await harness.runPython(`
+import webchirp_bridge.workarounds as _hooks
+_saved_get_settings = dict(_hooks._GET_SETTINGS)
+_hooks._GET_SETTINGS.clear()
+`);
+  try {
+    return await fn();
+  } finally {
+    await harness.runPython("_hooks._GET_SETTINGS.update(_saved_get_settings)");
+  }
+}
+
+// Desktop CHIRP runs set_settings() only after an edit, so a write with none
+// hands the driver nothing to refuse, whatever the image holds.
+test("an export that edits no setting leaves the settings as read, without running the driver", async () => {
   const { harness, catalog } = await context();
-  const { match, raw } = await loadImageFor(harness, catalog, IMAGE);
-  const loaded = await harness.loadCodeplugBinary(await plantedImage(harness, match, raw));
-  assert.equal(settingValue(loaded.settings, PLANTED_SETTING), "");
+  const loaded = await loadPlanted(harness, catalog);
 
   // The panel's whole tree, unedited -- what the browser sends on export.
-  const exported = await harness.exportCodeplugBinary(
-    loaded.module,
-    loaded.className,
-    loaded.rows,
-    loaded.settings,
+  const { result: exported, log } = await withCapturedDebugLog(harness, () =>
+    harness.exportCodeplugBinary(loaded.module, loaded.className, loaded.rows, loaded.settings),
+  );
+  assert.ok(
+    log.some((line) => line.startsWith("No radio setting was changed")),
+    "set_settings() should not run",
   );
   const reloaded = await harness.loadCodeplugBinary(exported.image);
   assert.equal(settingValue(reloaded.settings, PLANTED_SETTING), "");
 });
 
-// Once the user edits something, set_settings() runs over the whole tree, and
-// the planted zero is replayed with it. Desktop CHIRP stops there with the
-// driver's message; here a refusal of a value nobody edited leaves its bytes
-// as read, and only the edits are written.
-test("an edit is written even beside a value the driver would refuse", async () => {
+// A driver refusing a value nobody edited is failing to write back its own
+// tree -- an upstream defect, not the user's to correct -- so the write stops
+// with the driver's own error rather than a notice naming the setting.
+test("a refusal of a value nobody edited stops the write with the driver's own error", async () => {
   const { harness, catalog } = await context();
-  const { match, raw } = await loadImageFor(harness, catalog, IMAGE);
-  const loaded = await harness.loadCodeplugBinary(await plantedImage(harness, match, raw));
+  const loaded = await loadPlanted(harness, catalog);
 
-  const exported = await harness.exportCodeplugBinary(
-    loaded.module,
-    loaded.className,
-    loaded.rows,
-    withValue(loaded.settings, EDITED_SETTING, "146.000000"),
+  await withoutSettingsWorkarounds(harness, () =>
+    assert.rejects(
+      harness.exportCodeplugBinary(
+        loaded.module,
+        loaded.className,
+        loaded.rows,
+        withValue(loaded.settings, EDITED_SETTING, "146.000000"),
+      ),
+      (error) => {
+        assert.ok(isPythonError(error, "InvalidValueError"), `got ${error.name}`);
+        assert.equal(error.message, "Frequency 0.000000 is not with in 219.000000-250.997500");
+        return true;
+      },
+    ),
   );
-  const reloaded = await harness.loadCodeplugBinary(exported.image);
-  assert.equal(settingValue(reloaded.settings, EDITED_SETTING), "146.000000");
-  assert.equal(settingValue(reloaded.settings, PLANTED_SETTING), "");
 });
 
 // An edit the radio refuses is the user's to correct, so the export stops
 // with a notice that names the setting, and Sentry never hears of it. Both
 // refusals are covered: CHIRP's own value check (an option the list lacks)
 // and the driver's apply callback (a frequency outside its band). The planted
-// zero rides along to show the untouched value is not the one blamed.
+// zero rides along, as it did for the user, and is not the one blamed.
 const REFUSED_EDITS = [
   {
     why: "the driver's apply callback refuses a frequency outside the band",
@@ -151,8 +148,7 @@ const REFUSED_EDITS = [
 
 test("an edit the radio refuses stops the export and names the setting", async () => {
   const { harness, catalog } = await context();
-  const { match, raw } = await loadImageFor(harness, catalog, IMAGE);
-  const loaded = await harness.loadCodeplugBinary(await plantedImage(harness, match, raw));
+  const loaded = await loadPlanted(harness, catalog);
 
   for (const { why, id, value, names } of REFUSED_EDITS) {
     await assert.rejects(
