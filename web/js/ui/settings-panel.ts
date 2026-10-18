@@ -140,7 +140,7 @@ export function createSettingsPanel(ctx: UiContext) {
       clearInvalidSetting(settingNode.path, valueIndex);
     }
     updateSummary();
-    render();
+    syncTabs();
   }
 
   function findSettingsTabNode(tabId: string): SettingNode | null {
@@ -155,6 +155,24 @@ export function createSettingsPanel(ctx: UiContext) {
       invalidKeys.has(settingKey(field.path, field.valueIndex)));
   }
 
+  // Show a field's error, or clear it, on the field's own wrapper. The error
+  // goes last, after any warning, both when the field is built and when an
+  // edit later changes its verdict.
+  function showFieldError(wrapper: HTMLElement, errorText: string): void {
+    wrapper.classList.toggle("is-invalid", Boolean(errorText));
+    let errorEl = wrapper.querySelector<HTMLElement>(".settings-field-error");
+    if (!errorText) {
+      errorEl?.remove();
+      return;
+    }
+    if (!errorEl) {
+      errorEl = document.createElement("div");
+      errorEl.className = "settings-field-error";
+      wrapper.appendChild(errorEl);
+    }
+    errorEl.textContent = errorText;
+  }
+
   function renderSettingControl(settingNode: SettingLeafNode, valueMeta: SettingValueMeta, valueIndex: number): HTMLElement {
     const wrapper = document.createElement("div");
     wrapper.className = "settings-field-control";
@@ -162,21 +180,30 @@ export function createSettingsPanel(ctx: UiContext) {
     // Mutability is per value: a multi-value setting can mix locked and
     // editable values, and the write path skips only the locked ones.
     const immutable = valueMeta.mutable === false;
-    const errorText = invalidMessages.get(key) || "";
-    wrapper.classList.toggle("is-invalid", Boolean(errorText));
     wrapper.classList.toggle("is-immutable", immutable);
 
-    const current = valueMeta.current;
+    // Store an edit and bring this field up to date with it in place: the
+    // stored value (normalization can rewrite what was typed) and its error.
+    // Rebuilding the panel instead would destroy the control the user is on,
+    // dropping keyboard focus to the page and swallowing the Tab that was
+    // moving on from it (issue #96).
+    function commit(rawValue: unknown): void {
+      setSettingValue(settingNode, valueIndex, rawValue);
+      showValue();
+      showFieldError(wrapper, invalidMessages.get(key) || "");
+    }
+
     let control: HTMLInputElement | HTMLSelectElement;
+    let showValue: () => void;
     if (valueMeta.type === "boolean") {
       const checkbox = document.createElement("input");
       control = checkbox;
       checkbox.type = "checkbox";
-      checkbox.checked = Boolean(current);
+      showValue = () => {
+        checkbox.checked = Boolean(valueMeta.current);
+      };
       checkbox.disabled = immutable;
-      checkbox.addEventListener("change", () => {
-        setSettingValue(settingNode, valueIndex, checkbox.checked);
-      });
+      checkbox.addEventListener("change", () => commit(checkbox.checked));
     } else if (valueMeta.type === "enum") {
       const select = document.createElement("select");
       control = select;
@@ -187,11 +214,11 @@ export function createSettingsPanel(ctx: UiContext) {
         optionEl.textContent = String(option);
         select.appendChild(optionEl);
       });
-      select.value = String(current ?? "");
+      showValue = () => {
+        select.value = String(valueMeta.current ?? "");
+      };
       select.disabled = immutable;
-      select.addEventListener("change", () => {
-        setSettingValue(settingNode, valueIndex, select.value);
-      });
+      select.addEventListener("change", () => commit(select.value));
     } else {
       const input = document.createElement("input");
       control = input;
@@ -212,13 +239,14 @@ export function createSettingsPanel(ctx: UiContext) {
       if (Number.isFinite(valueMeta.maxLength)) {
         input.maxLength = Number(valueMeta.maxLength);
       }
-      input.value = String(current ?? "");
+      showValue = () => {
+        input.value = String(valueMeta.current ?? "");
+      };
       input.readOnly = immutable;
       input.disabled = immutable;
-      input.addEventListener("change", () => {
-        setSettingValue(settingNode, valueIndex, input.value);
-      });
+      input.addEventListener("change", () => commit(input.value));
     }
+    showValue();
 
     wrapper.appendChild(control);
 
@@ -228,12 +256,7 @@ export function createSettingsPanel(ctx: UiContext) {
       warningEl.textContent = settingNode.warning;
       wrapper.appendChild(warningEl);
     }
-    if (errorText) {
-      const errorEl = document.createElement("div");
-      errorEl.className = "settings-field-error";
-      errorEl.textContent = errorText;
-      wrapper.appendChild(errorEl);
-    }
+    showFieldError(wrapper, invalidMessages.get(key) || "");
     return wrapper;
   }
 
@@ -308,9 +331,8 @@ export function createSettingsPanel(ctx: UiContext) {
       const tabButton = document.createElement("button");
       tabButton.type = "button";
       tabButton.className = "settings-tab";
+      tabButton.dataset.settingsTab = group.id;
       tabButton.textContent = group.label || group.id;
-      tabButton.classList.toggle("is-active", group.id === activeTab);
-      tabButton.classList.toggle("has-invalid", tabHasInvalidSettings(group));
       tabButton.addEventListener("click", () => {
         // Group ids come from the driver's own settings tree, so this says
         // which parts of a radio's configuration people actually go looking
@@ -319,12 +341,38 @@ export function createSettingsPanel(ctx: UiContext) {
           ...radioEventParams(state.selectedRadio),
           tab: String(group.id || ""),
         });
-        activeTab = group.id;
-        render();
+        openTab(group.id);
       });
       dom.settingsTabsEl.appendChild(tabButton);
     });
+    syncTabs();
     renderSettingNode(dom.settingsContentEl, activeGroup);
+  }
+
+  // Mark, on the tab buttons already in the panel, which tab is open and
+  // which hold invalid values.
+  function syncTabs(): void {
+    dom.settingsTabsEl.querySelectorAll<HTMLElement>(".settings-tab").forEach((tabButton) => {
+      const groupId = tabButton.dataset.settingsTab || "";
+      tabButton.classList.toggle("is-active", groupId === activeTab);
+      tabButton.classList.toggle("has-invalid", tabHasInvalidSettings(findSettingsTabNode(groupId)));
+    });
+  }
+
+  // Switch tabs without rebuilding the tab strip, so the tab button the user
+  // pressed keeps keyboard focus (issue #96); only the open group's controls
+  // are replaced. A group that is gone takes the full render(), which falls
+  // back to the first one.
+  function openTab(groupId: string): void {
+    activeTab = groupId;
+    const group = findSettingsTabNode(groupId);
+    if (!group) {
+      render();
+      return;
+    }
+    syncTabs();
+    dom.settingsContentEl.innerHTML = "";
+    renderSettingNode(dom.settingsContentEl, group);
   }
 
   // Keep the active tab pointing at a group that still exists.
