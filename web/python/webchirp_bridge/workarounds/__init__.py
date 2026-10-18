@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from webchirp_bridge.workarounds import ft1d, uv5r, vx8
+from webchirp_bridge.workarounds import ft1d, kguv9dplus, uv5r, vx8
 
 if TYPE_CHECKING:
     import types
@@ -67,6 +67,7 @@ _GET_SETTINGS: dict[
     tuple[str, str], Callable[[chirp_common.Radio], chirp_settings.RadioSettings]
 ] = {
     **{key: ft1d.get_settings for key in _class_keys(ft1d)},
+    **{key: kguv9dplus.get_settings for key in _class_keys(kguv9dplus)},
     **{key: vx8.get_settings for key in _class_keys(vx8)},
 }
 
