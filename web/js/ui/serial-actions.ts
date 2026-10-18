@@ -679,7 +679,12 @@ export function createSerialActions(ctx: UiContext) {
       const result = await requireRuntimeApi(state).downloadSelectedRadio({
         sessionId: await ctx.session.idOf(session),
       });
-      state.currentRows = result.rows;
+      // Described from the result rather than the editor, which may hold
+      // another codeplug by the time the outcome is reported (see below).
+      const downloaded = codeplugParams({ currentRows: result.rows, codeplugSource: "radio" });
+      if (ctx.session.isCurrent(session)) {
+        state.currentRows = result.rows;
+      }
       // The schema comes after the rows, and only now: the download just put
       // this radio's image on its session, and the runtime builds column
       // metadata from that image (get_radio_column_metadata in
@@ -691,6 +696,19 @@ export function createSerialActions(ctx: UiContext) {
       // rewrites them the next time the radio is re-selected
       // (adoptPowerLevels in web/js/ui/channel-table.ts).
       await refreshMetadataForDownloadedRadio(session);
+      // An image opened during the transfer took the editor over: its load
+      // waits behind the transfer in the runtime queue and lands while the
+      // schema above is fetched. The radio was read, so this is a success,
+      // but the image's channels and settings stay where they are.
+      if (!ctx.session.isCurrent(session)) {
+        log.setStatus(
+          `${makeModelLabel(radio)} download finished after another codeplug was opened; `
+            + "its channels were not loaded.",
+        );
+        log.logDebug("DOWNLOAD discarded: the editor moved to another session while it ran.");
+        trackCloneOutcome("radio_download_success", radio, startedAt, cloneTransport, downloaded);
+        return;
+      }
       state.currentHeaders = state.radioMetadata.headers?.length
         ? state.radioMetadata.headers
         : (result.headers || []);
@@ -713,7 +731,7 @@ export function createSerialActions(ctx: UiContext) {
         `${makeModelLabel(radio)} download complete (${state.currentRows.length} channels).`
           + undecodedChannelsNote(result.unreadableChannels),
       );
-      trackCloneOutcome("radio_download_success", radio, startedAt, cloneTransport, codeplugParams(state));
+      trackCloneOutcome("radio_download_success", radio, startedAt, cloneTransport, downloaded);
       if (result.ident) {
         log.logSerial(`IDENT ${result.ident}`);
       }
@@ -780,9 +798,14 @@ export function createSerialActions(ctx: UiContext) {
         rows: state.currentRows,
         settings: ctx.settings.getGroups(),
       });
-      ctx.settings.setGroups(uploadResult.settings);
-      ctx.settings.clearInvalid();
-      ctx.settings.render();
+      // The radio was written either way. The settings it reports back belong
+      // in the editor only while it still holds the session written from,
+      // not an image opened during the write.
+      if (ctx.session.isCurrent(session)) {
+        ctx.settings.setGroups(uploadResult.settings);
+        ctx.settings.clearInvalid();
+        ctx.settings.render();
+      }
       log.setStatus(`${makeModelLabel(radio)} upload complete.`);
       // codeplug_source is the question this event exists to answer on the
       // write path: whether people upload what they just read off the radio,

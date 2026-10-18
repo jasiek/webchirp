@@ -5,6 +5,7 @@ import { installIndexPage, pageElement } from "../support/index-page.mjs";
 import {
   createDeferred,
   dispatch,
+  emit,
   flushMicrotasks,
   selectRadioBySearch,
 } from "../support/ui-interactions.mjs";
@@ -520,6 +521,108 @@ test("a running transfer holds the radio search until it ends", async () => {
   selectRadioBySearch(document, "Acme Other");
   await flushMicrotasks();
   assert.equal(readout.textContent, "Acme Other");
+});
+
+// A one-group settings tree whose tab names where it came from, so a test can
+// tell which codeplug's settings the editor shows.
+function labelledSettings(label) {
+  return [{ ...CLONE_SETTINGS[0], id: label, label, path: [label] }];
+}
+
+// The image an Open dropped mid-transfer holds: Acme Other's, with its own
+// channel and settings.
+const IMAGE_RUNTIME = {
+  loadImage: async () => ({
+    module: "acme", className: "Other", vendor: "Acme", model: "Other",
+    headers: CLONE_HEADERS,
+    rows: [{ Location: "1", Name: "IMAGE" }],
+    settings: labelledSettings("FromImage"),
+  }),
+};
+
+// Drops a .img on the page, the way a user opens one mid-transfer.
+async function dropImage() {
+  await emit(window, "drop", {
+    dataTransfer: {
+      types: ["Files"],
+      files: [{ name: "other.img", arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }],
+    },
+  });
+  await flushMicrotasks();
+}
+
+// Whether the editor shows the image's codeplug: its radio, channel and
+// settings, with no trace of the transfer's.
+function assertEditorHoldsImage(ui, transferSettingsLabel) {
+  assert.equal(pageElement("radioSelectionNameEl").textContent, "Acme Other");
+  assert.deepEqual(ui.selectedRowsForOperations().map((row) => row.Name), ["IMAGE"]);
+  const tabs = pageElement("settingsTabsEl").textContent;
+  assert.match(tabs, /FromImage/);
+  assert.doesNotMatch(tabs, new RegExp(transferSettingsLabel));
+}
+
+// The runtime runs one call at a time, so an image opened during a download
+// loads once the transfer ends, and lands while the download fetches its
+// schema. The fakes here answer at once, so each ordering is set up by hand.
+for (const [when, duringSchema] of [["while its schema loads", true], ["before it returns", false]]) {
+  test(`a download whose editor moved to an image ${when} is not applied`, async () => {
+    const transfer = createDeferred();
+    const schema = createDeferred();
+    let holdSchema = false;
+    const { ui, controls } = await bootConnectedUi({
+      ...IMAGE_RUNTIME,
+      listRadios: async () => ({ radios: [...CLONE_CATALOG, OTHER_RADIO] }),
+      getRadioMetadata: async ({ className }) => {
+        if (holdSchema && className === "Radio") {
+          holdSchema = false;
+          await schema.promise;
+        }
+        return { headers: CLONE_HEADERS, columns: {} };
+      },
+      downloadSelectedRadio: () => transfer.promise,
+    });
+    await dispatch(controls.download, "click");
+    await flushMicrotasks();
+
+    const downloaded = {
+      headers: CLONE_HEADERS,
+      rows: [{ Location: "1", Name: "RADIO" }],
+      settings: labelledSettings("FromRadio"),
+    };
+    if (duringSchema) {
+      holdSchema = true;
+      transfer.resolve(downloaded);
+      await flushMicrotasks();
+      await dropImage();
+      schema.resolve();
+    } else {
+      await dropImage();
+      transfer.resolve(downloaded);
+    }
+    await flushMicrotasks();
+
+    assertEditorHoldsImage(ui, "FromRadio");
+    assert.match(pageElement("debugOutputEl").value, /download finished after another codeplug was opened/);
+    assert.equal(controls.download.disabled, false);
+  });
+}
+
+test("an image opened during an upload keeps its own settings", async () => {
+  const write = createDeferred();
+  const { ui, controls } = await bootConnectedUi({
+    ...IMAGE_RUNTIME,
+    listRadios: async () => ({ radios: [...CLONE_CATALOG, OTHER_RADIO] }),
+    uploadSelectedRadio: () => write.promise,
+  });
+  await dispatch(controls.upload, "click");
+  await flushMicrotasks();
+  await dropImage();
+
+  write.resolve({ settings: labelledSettings("FromUpload") });
+  await flushMicrotasks();
+  assertEditorHoldsImage(ui, "FromUpload");
+  // The write itself still happened, and says so.
+  assert.match(pageElement("debugOutputEl").value, /Acme Clone upload complete\./);
 });
 
 // WEBCHIRP-FRONTEND-1W: an Android user pressed Upload three times while the
