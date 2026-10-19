@@ -78,7 +78,7 @@ export interface PreflightResult {
 // group-by leaves those attempts out. Every key is in METRIC_ATTRIBUTES
 // (web/js/sentry.ts); a hoisted bag because the keys are not at the call
 // site's literal, which the param scanner reads.
-export function cableParams(
+function cableParams(
   cable: ChosenPortDescription | null | undefined,
 ): { chip?: string; usb_vendor_id?: string; usb_product_id?: string } {
   if (!cable) {
@@ -571,6 +571,7 @@ export function createSerialActions(ctx: UiContext) {
     radio: CatalogRadio | null,
     startedAt: number,
     cloneTransport: string,
+    cloneCable: ChosenPortDescription | null,
     params: Record<string, unknown> = {},
   ): void {
     const durationMs = Date.now() - startedAt;
@@ -585,11 +586,13 @@ export function createSerialActions(ctx: UiContext) {
     }
     // The cable rides on the metric only: GA's dimensions are a registered
     // set (CUSTOM_DIMENSIONS), and the question it answers -- which adapters
-    // clones fail over -- is the metric's.
+    // clones fail over -- is the metric's. It is the cable the clone started
+    // over, captured with the transport: a port lost mid-clone clears the
+    // connection's, and that loss is the failure a cable most needs to explain.
     recordFlow(
       dimensions.flow,
       dimensions.outcome,
-      { ...radioEventParams(radio), ...cableParams(connectedCable), ...outcomeParams },
+      { ...radioEventParams(radio), ...cableParams(cloneCable), ...outcomeParams },
       durationMs,
     );
   }
@@ -714,6 +717,7 @@ export function createSerialActions(ctx: UiContext) {
     const startedAt = Date.now();
     // As is the transport, which a port lost mid-clone clears (handlePortLost).
     const cloneTransport = transport;
+    const cloneCable = connectedCable;
     setCloneRunning(true);
     try {
       trackRadioEvent("radio_download", radio);
@@ -749,7 +753,7 @@ export function createSerialActions(ctx: UiContext) {
             + "its channels were not loaded.",
         );
         log.logDebug("DOWNLOAD discarded: the editor moved to another session while it ran.");
-        trackCloneOutcome("radio_download_success", radio, startedAt, cloneTransport, downloaded);
+        trackCloneOutcome("radio_download_success", radio, startedAt, cloneTransport, cloneCable, downloaded);
         return;
       }
       state.currentHeaders = state.radioMetadata.headers?.length
@@ -774,12 +778,12 @@ export function createSerialActions(ctx: UiContext) {
         `${makeModelLabel(radio)} download complete (${state.currentRows.length} channels).`
           + undecodedChannelsNote(result.unreadableChannels),
       );
-      trackCloneOutcome("radio_download_success", radio, startedAt, cloneTransport, downloaded);
+      trackCloneOutcome("radio_download_success", radio, startedAt, cloneTransport, cloneCable, downloaded);
       if (result.ident) {
         log.logSerial(`IDENT ${result.ident}`);
       }
     } catch (error) {
-      trackCloneOutcome("radio_download_failure", radio, startedAt, cloneTransport, cloneFailureParams(error, "transfer"));
+      trackCloneOutcome("radio_download_failure", radio, startedAt, cloneTransport, cloneCable, cloneFailureParams(error, "transfer"));
       log.reportActionError("Download", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -805,6 +809,7 @@ export function createSerialActions(ctx: UiContext) {
     const startedAt = Date.now();
     // As is the transport, which a port lost mid-clone clears (handlePortLost).
     const cloneTransport = transport;
+    const cloneCable = connectedCable;
     // Distinguishes a codeplug CHIRP itself rejected from a transfer that
     // reached the radio and failed there.
     let stage = "preflight";
@@ -853,14 +858,14 @@ export function createSerialActions(ctx: UiContext) {
       // codeplug_source is the question this event exists to answer on the
       // write path: whether people upload what they just read off the radio,
       // or a file they brought with them.
-      trackCloneOutcome("radio_upload_success", radio, startedAt, cloneTransport, codeplugParams(state));
+      trackCloneOutcome("radio_upload_success", radio, startedAt, cloneTransport, cloneCable, codeplugParams(state));
     } catch (error) {
       // codeplugParams is merged in here as well as on the success and blocked
       // paths, or grouping upload outcomes by codeplug_source would count every
       // success and no failure at all. It is deliberately not done for a failed
       // *download*: there the editor still holds whatever preceded the
       // transfer, so the same dimensions would describe the wrong codeplug.
-      trackCloneOutcome("radio_upload_failure", radio, startedAt, cloneTransport, {
+      trackCloneOutcome("radio_upload_failure", radio, startedAt, cloneTransport, cloneCable, {
         ...codeplugParams(state),
         ...cloneFailureParams(error, stage),
       });

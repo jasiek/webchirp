@@ -12,11 +12,8 @@ import {
 import { makeWindow } from "../support/fake-window.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 import { initSentry, resetSentryForTests } from "../../web/js/sentry.ts";
-import {
-  USB_CHIP_SETUP_FAILED,
-  createSerialUnsupportedError,
-  nameUsbChipSetupFailure,
-} from "../../web/js/serial-errors.ts";
+import { USB_CHIP_SETUP_FAILED, createSerialUnsupportedError } from "../../web/js/serial-errors.ts";
+import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
 // The clone buttons must stay dead until a serial port has actually been
 // opened: pressing Download with no port only ever produced a runtime error.
@@ -171,9 +168,15 @@ test("a connect's metric names the cable the chooser picked, whichever way it en
     describeChosenPort: () => PL2303_CABLE,
   };
 
+  // The failure as production sees it: serialConnect is an RPC, so the chip
+  // driver's error crosses Python and arrives as a JsException whose cause
+  // carries the name.
+  const message = "PL2303 vendor read failed (value 0x8484): stall";
   const failing = makeContext();
   failing.state.runtimeApi.serialConnect = async () => {
-    throw nameUsbChipSetupFailure(new Error("PL2303 vendor read failed (value 0x8484): stall"));
+    throw runtimeCallError("JsException", `${USB_CHIP_SETUP_FAILED}: ${message}`, {
+      js: { name: USB_CHIP_SETUP_FAILED, message },
+    }, "webserial_connect");
   };
   const failed = createSerialActions(failing);
   failed.setSerialController(controller);
@@ -197,8 +200,9 @@ test("a connect's metric names the cable the chooser picked, whichever way it en
   // The transport the chosen port would have gone over, not the "auto" the
   // click asked for, and the stage the open died in.
   assert.equal(failure.transport, "webusb");
+  // The stage is the kind; the type stays the Python class the RPC raised.
   assert.equal(failure.error_kind, "usb_chip_setup_failed");
-  assert.equal(failure.error_type, USB_CHIP_SETUP_FAILED);
+  assert.equal(failure.error_type, "JsException");
   assert.equal(success.outcome, "ok");
   for (const attributes of [failure, success]) {
     assert.equal(attributes.chip, "pl2303");
@@ -827,57 +831,33 @@ test("every clone outcome carries the transport the clone started over", async (
       headers: CLONE_HEADERS, rows: [{ Location: "1", Name: "ONE" }], settings: CLONE_SETTINGS,
     }),
     uploadSelectedRadio: () => write.promise,
+  }, {
+    capability: { supported: true, native: true },
+    async choosePort() {},
+    describeChosenPort: () => ({
+      transport: "webusb", chip: "ftdi", usbVendorId: "0x0403", usbProductId: "0x6015",
+    }),
   });
 
   await dispatch(controls.download, "click");
   await flushMicrotasks();
   await dispatch(controls.upload, "click");
   await flushMicrotasks();
+  // The loss clears the connection's transport and cable; the upload that
+  // was running over them still reports both -- the failure a cable most
+  // needs to explain is the one where the adapter went away.
   ui.onSerialPortLost("USB VID:PID 0x0403:0x6015");
   write.reject(new Error("Port is not connected."));
   await flushMicrotasks();
 
   const outcomes = metrics
     .filter((metric) => metric.name === "flow.completed" && metric.attributes.flow.startsWith("radio_"))
-    .map(({ attributes }) => [attributes.flow, attributes.outcome, attributes.transport]);
+    .map(({ attributes }) => [
+      attributes.flow, attributes.outcome, attributes.transport,
+      attributes.chip, attributes.usb_vendor_id, attributes.usb_product_id,
+    ]);
   assert.deepEqual(outcomes, [
-    ["radio_download", "ok", "webusb"],
-    ["radio_upload", "failed", "webusb"],
+    ["radio_download", "ok", "webusb", "ftdi", "0x0403", "0x6015"],
+    ["radio_upload", "failed", "webusb", "ftdi", "0x0403", "0x6015"],
   ]);
-});
-
-test("a transfer's metric names the cable of the connection it ran over", async (t) => {
-  resetSentryForTests();
-  t.after(resetSentryForTests);
-  const metrics = [];
-  await initSentry(makeWindow(), { loadSdk: async () => ({
-    init() {},
-    withScope() {},
-    captureException() {},
-    metrics: {
-      count: (name, value, options) => metrics.push({ name, ...options }),
-      distribution() {},
-    },
-  }) });
-  const { controls } = await bootConnectedUi({
-    serialConnect: async () => ({ connected: true, transport: "webusb", message: "ok" }),
-    downloadSelectedRadio: async () => { throw new Error("Radio did not respond"); },
-  }, {
-    capability: { supported: true, native: true },
-    async choosePort() {},
-    describeChosenPort: () => ({
-      transport: "webusb", chip: "ch340", usbVendorId: "0x1A86", usbProductId: "0x7523",
-    }),
-  });
-  await dispatch(controls.download, "click");
-  await flushMicrotasks();
-  const download = metrics.find(
-    (metric) => metric.name === "flow.completed" && metric.attributes.flow === "radio_download",
-  );
-  assert.ok(download, "the download reported an outcome");
-  assert.equal(download.attributes.outcome, "failed");
-  assert.equal(download.attributes.transport, "webusb");
-  assert.equal(download.attributes.chip, "ch340");
-  assert.equal(download.attributes.usb_vendor_id, "0x1A86");
-  assert.equal(download.attributes.usb_product_id, "0x7523");
 });
