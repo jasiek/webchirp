@@ -20,7 +20,12 @@
 import { SENTRY_SDK_URL, SENTRY_SDK_VERSION } from "./cdn-urls.ts";
 import { isServerOutage } from "./http-errors.ts";
 import { isPythonError, isRuntimeCallError } from "./runtime-errors.ts";
-import { isSerialPortOpenFailed, isSerialUnsupported, isUsbInterfaceBusy } from "./serial-errors.ts";
+import {
+  isSerialPortOpenFailed,
+  isSerialUnsupported,
+  isUsbDeviceOpenFailed,
+  isUsbInterfaceBusy,
+} from "./serial-errors.ts";
 import type { BrowserOptions } from "@sentry/browser";
 import type { RpcMethodName } from "./rpc-dispatch.ts";
 
@@ -265,6 +270,7 @@ export function isIgnoredError(error: unknown): boolean {
     webAssemblyMissing()
     || isSerialUnsupported(error)
     || isSerialPortOpenFailed(error)
+    || isUsbDeviceOpenFailed(error)
     || isUsbInterfaceBusy(error)
     || isNetworkFailure(error)
     || isServerOutage(error)

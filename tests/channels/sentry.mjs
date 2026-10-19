@@ -25,7 +25,14 @@ import {
   setContextProvider,
 } from "../../web/js/sentry.ts";
 import { ANALYTICS_HOSTS } from "../../web/js/analytics.ts";
-import { SERIAL_PORT_OPEN_FAILED, createSerialPortOpenFailedError } from "../../web/js/serial-errors.ts";
+import {
+  SERIAL_PORT_OPEN_FAILED,
+  USB_CHIP_SETUP_FAILED,
+  USB_DEVICE_OPEN_FAILED,
+  createSerialPortOpenFailedError,
+  createUsbDeviceOpenFailedError,
+  nameUsbChipSetupFailure,
+} from "../../web/js/serial-errors.ts";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 import { SENTRY_SDK_MODULES } from "../../web/js/cdn-urls.ts";
 import { makeWindow } from "../support/fake-window.mjs";
@@ -137,6 +144,24 @@ test("a port native Web Serial would not open is ignored by name, directly and t
     js: { name: SERIAL_PORT_OPEN_FAILED, message },
   }, "webserial_connect");
   assert.equal(isIgnoredError(throughPython), true);
+});
+
+test("a WebUSB device the browser would not open is the user's machine; a chip setup failure is ours", () => {
+  // The three stages of a WebUSB connect split the same way the native open
+  // does: the OS refusing the device, like another driver holding its
+  // interface, is dropped and counted by the metric; the chip's own setup
+  // failing is this app's driver code and stays an event.
+  const refused = createUsbDeviceOpenFailedError("PL2303: could not open USB device: Access denied.", new Error("Access denied."));
+  assert.equal(isIgnoredError(refused), true);
+  assert.equal(isIgnoredError(runtimeCallError("JsException", `${USB_DEVICE_OPEN_FAILED}: ${refused.message}`, {
+    js: { name: USB_DEVICE_OPEN_FAILED, message: refused.message },
+  }, "webserial_connect")), true);
+  const setup = nameUsbChipSetupFailure(new Error("PL2303 vendor read failed (value 0x8484): stall"));
+  assert.equal(setup.name, USB_CHIP_SETUP_FAILED);
+  assert.equal(isIgnoredError(setup), false);
+  assert.equal(isIgnoredError(runtimeCallError("JsException", `${USB_CHIP_SETUP_FAILED}: ${setup.message}`, {
+    js: { name: USB_CHIP_SETUP_FAILED, message: setup.message },
+  }, "webserial_connect")), false);
 });
 
 test("other network and serial failures remain reportable", () => {

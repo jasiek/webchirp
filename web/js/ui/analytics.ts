@@ -20,7 +20,13 @@
 import { errorDetails } from "./format.ts";
 import { errorFields } from "../error-details.ts";
 import { isRuntimeCallError, jsErrorName } from "../runtime-errors.ts";
-import { USER_GESTURE_REQUIRED, isPortSelectionCancelled } from "../serial-errors.ts";
+import {
+  USB_CHIP_SETUP_FAILED,
+  USB_DEVICE_OPEN_FAILED,
+  USB_INTERFACE_BUSY,
+  USER_GESTURE_REQUIRED,
+  isPortSelectionCancelled,
+} from "../serial-errors.ts";
 import type { CatalogRadio, RowIssue, SettingIssue } from "../runtime-rpc.ts";
 import type { UiState } from "./state.ts";
 
@@ -94,6 +100,12 @@ export function codeplugParams(
 // chooser asked for after the click's user activation lapsed is a SecurityError
 // too, but no permission was denied: the bridge renames that one, and it gets
 // its own kind.
+//
+// A WebUSB connect fails in one of three stages, each named by the chip
+// drivers (web/js/serial-errors.ts): the device would not open, its interface
+// could not be claimed (another driver holds it), or the chip's own setup
+// failed -- the one stage this app's drivers are answerable for. Without the
+// three, every one of them read as "other".
 const JS_ERROR_KINDS = new Map([
   ["NotFoundError", "serial_disconnect"],
   [USER_GESTURE_REQUIRED, "user_gesture_required"],
@@ -101,6 +113,9 @@ const JS_ERROR_KINDS = new Map([
   ["SecurityError", "permission_denied"],
   ["NetworkError", "serial_disconnect"],
   ["SerialPortOpenFailedError", "port_open_failed"],
+  [USB_DEVICE_OPEN_FAILED, "usb_device_open_failed"],
+  [USB_INTERFACE_BUSY, "usb_interface_busy"],
+  [USB_CHIP_SETUP_FAILED, "usb_chip_setup_failed"],
 ]);
 
 // Failure causes that exist only as wording: a CHIRP driver says "Radio did

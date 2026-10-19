@@ -6,7 +6,11 @@
 // stays in the subclass; how a WebUSB port names its device, reports its ids
 // and reports its own loss is written once here.
 import { errorFields } from "./error-details.ts";
-import { createUsbInterfaceBusyError } from "./serial-errors.ts";
+import {
+  createUsbDeviceOpenFailedError,
+  createUsbInterfaceBusyError,
+  nameUsbChipSetupFailure,
+} from "./serial-errors.ts";
 import { createDisconnectNotifier, watchUsbDisconnect } from "./serial-transport.ts";
 import type {
   DisconnectNotifier,
@@ -191,8 +195,10 @@ export class WebUsbTransport {
   // Chromium rejects open() with NotFoundError only when the device is gone
   // ("The device was disconnected."): unplugged after the chooser, which the
   // connect's wait in the runtime queue leaves time for. That one keeps its
-  // name, so analytics counts it as a disconnect; anything else is a plain
-  // Error. Both carry the chip and the browser's sentence for the debug panel.
+  // name, so analytics counts it as a disconnect; anything else is the named
+  // device-open failure (isUsbDeviceOpenFailed), the first of the three stages
+  // a WebUSB connect can fail in. Both carry the chip and the browser's
+  // sentence for the debug panel.
   /**
    * @param chip The prefix the driver's own errors carry ("CH340").
    */
@@ -201,11 +207,31 @@ export class WebUsbTransport {
       await this.device.open();
     } catch (error) {
       const { name, message } = errorFields(error);
-      const wrapped = new Error(`${chip}: could not open USB device: ${message || error}`, { cause: error });
+      const sentence = `${chip}: could not open USB device: ${message || error}`;
       if (name === "NotFoundError") {
+        const wrapped = new Error(sentence, { cause: error });
         wrapped.name = name;
+        throw wrapped;
       }
-      throw wrapped;
+      throw createUsbDeviceOpenFailedError(sentence, error);
+    }
+  }
+
+  // Run the chip's own setup -- everything a driver's open() does after the
+  // device is open, from selecting the configuration to the last register
+  // write before the streams start -- and name what fails in it
+  // (nameUsbChipSetupFailure): the third stage of a WebUSB connect, and the
+  // one this app's drivers are answerable for. Failures that already carry a
+  // name, the busy-interface error and the browser's disconnect, pass through
+  // as they are.
+  /**
+   * @param setup The driver's setup sequence; its value is returned.
+   */
+  async _setUpChip<T>(setup: () => Promise<T>): Promise<T> {
+    try {
+      return await setup();
+    } catch (error) {
+      throw nameUsbChipSetupFailure(error);
     }
   }
 

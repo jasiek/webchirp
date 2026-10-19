@@ -10,6 +10,11 @@ import {
   firstIssueColumn,
   radioEventParams,
 } from "../../web/js/ui/analytics.ts";
+import {
+  USB_CHIP_SETUP_FAILED,
+  USB_DEVICE_OPEN_FAILED,
+  USB_INTERFACE_BUSY,
+} from "../../web/js/serial-errors.ts";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
 // The parameters the UI attaches to its events. What these produce is what GA
@@ -230,4 +235,24 @@ test("every parameter these helpers produce is a declared dimension", () => {
     ...Object.keys(codeplugParams({ currentRows: [], codeplugSource: "csv" })),
   ];
   assert.deepEqual(produced.filter((name) => !declared.has(name)), []);
+});
+
+test("classifyErrorKind names the three stages a WebUSB connect fails in", () => {
+  // Each stage is a named error from web/js/serial-errors.ts, thrown by the
+  // chip drivers and carried across Python as a JsException's cause. Before
+  // the three had kinds, every one of them counted as "other" -- the one
+  // bucket a dashboard cannot act on.
+  for (const [name, kind] of [
+    [USB_DEVICE_OPEN_FAILED, "usb_device_open_failed"],
+    [USB_INTERFACE_BUSY, "usb_interface_busy"],
+    [USB_CHIP_SETUP_FAILED, "usb_chip_setup_failed"],
+  ]) {
+    const direct = new Error("PL2303: something in this stage failed");
+    direct.name = name;
+    assert.equal(classifyErrorKind(direct), kind);
+    const throughPython = runtimeCallError("JsException", `${name}: ${direct.message}`, {
+      js: { name, message: direct.message },
+    }, "webserial_connect");
+    assert.equal(classifyErrorKind(throughPython), kind);
+  }
 });
