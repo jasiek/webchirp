@@ -12,7 +12,11 @@ import {
 import { makeWindow } from "../support/fake-window.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 import { initSentry, resetSentryForTests } from "../../web/js/sentry.ts";
-import { createSerialUnsupportedError } from "../../web/js/serial-errors.ts";
+import {
+  USB_CHIP_SETUP_FAILED,
+  createSerialUnsupportedError,
+  nameUsbChipSetupFailure,
+} from "../../web/js/serial-errors.ts";
 
 // The clone buttons must stay dead until a serial port has actually been
 // opened: pressing Download with no port only ever produced a runtime error.
@@ -141,6 +145,93 @@ test("unsupported transports never count as failed connects while adapter failur
   assert.equal(metrics.length, 1);
   assert.equal(metrics[0].attributes.flow, "serial_connect");
   assert.equal(metrics[0].attributes.outcome, "failed");
+});
+
+// The chooser has answered before the open runs, so the cable it picked is
+// known even when the open fails -- and that is when the metric most needs
+// it: "WebUSB connects fail" becomes "PL2303 cables fail at chip setup".
+const PL2303_CABLE = Object.freeze({
+  transport: "webusb", chip: "pl2303", usbVendorId: "0x067B", usbProductId: "0x2303",
+});
+
+test("a connect's metric names the cable the chooser picked, whichever way it ends", async (t) => {
+  const createSerialActions = await loadSerialActions();
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const metrics = [];
+  await initSentry(makeWindow(), { loadSdk: async () => ({
+    init() {},
+    withScope() {},
+    captureException() {},
+    metrics: { count: (name, value, options) => metrics.push({ name, value, ...options }) },
+  }) });
+  const controller = {
+    capability: { supported: true, native: true },
+    async choosePort() {},
+    describeChosenPort: () => PL2303_CABLE,
+  };
+
+  const failing = makeContext();
+  failing.state.runtimeApi.serialConnect = async () => {
+    throw nameUsbChipSetupFailure(new Error("PL2303 vendor read failed (value 0x8484): stall"));
+  };
+  const failed = createSerialActions(failing);
+  failed.setSerialController(controller);
+  failed.setSidebarControlsEnabled(true);
+  failed.bindEvents();
+  await pressConnectToggle(failing);
+  assert.equal(metrics.length, 1);
+  const failure = metrics[0].attributes;
+
+  // Both contexts share the page's one toggle, so this press also re-runs the
+  // failing instance; the success is the last outcome recorded.
+  const succeeding = makeContext({ transport: "webusb" });
+  const ok = createSerialActions(succeeding);
+  ok.setSerialController(controller);
+  ok.setSidebarControlsEnabled(true);
+  ok.bindEvents();
+  await pressConnectToggle(succeeding);
+  const success = metrics.at(-1).attributes;
+
+  assert.equal(failure.outcome, "failed");
+  // The transport the chosen port would have gone over, not the "auto" the
+  // click asked for, and the stage the open died in.
+  assert.equal(failure.transport, "webusb");
+  assert.equal(failure.error_kind, "usb_chip_setup_failed");
+  assert.equal(failure.error_type, USB_CHIP_SETUP_FAILED);
+  assert.equal(success.outcome, "ok");
+  for (const attributes of [failure, success]) {
+    assert.equal(attributes.chip, "pl2303");
+    assert.equal(attributes.usb_vendor_id, "0x067B");
+    assert.equal(attributes.usb_product_id, "0x2303");
+  }
+});
+
+test("a connect whose chooser was dismissed names no cable", async (t) => {
+  const createSerialActions = await loadSerialActions();
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const metrics = [];
+  await initSentry(makeWindow(), { loadSdk: async () => ({
+    init() {},
+    withScope() {},
+    captureException() {},
+    metrics: { count: (name, value, options) => metrics.push({ name, value, ...options }) },
+  }) });
+  const ctx = makeContext();
+  const serial = createSerialActions(ctx);
+  serial.setSerialController({
+    capability: { supported: true, native: true },
+    async choosePort() { throw new Error("Adapter open failed"); },
+    describeChosenPort: () => null,
+  });
+  serial.setSidebarControlsEnabled(true);
+  serial.bindEvents();
+  await pressConnectToggle(ctx);
+  assert.equal(metrics.length, 1);
+  assert.equal(metrics[0].attributes.outcome, "failed");
+  assert.equal("chip" in metrics[0].attributes, false);
+  assert.equal("usb_vendor_id" in metrics[0].attributes, false);
 });
 
 test("a connected port does not override the other clone-button blocks", async () => {
@@ -412,7 +503,7 @@ const CLONE_SETTINGS = [{
 // (settings summary, radio session, debug log) it does in the app. runtime
 // overrides the stubbed runtime methods; returns the controller and the three
 // serial controls a user presses.
-async function bootConnectedUi(runtime = {}) {
+async function bootConnectedUi(runtime = {}, controller = { capability: { supported: true, native: true }, async choosePort() {} }) {
   const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
@@ -430,7 +521,7 @@ async function bootConnectedUi(runtime = {}) {
     validateRadioSettings: async () => ({ valid: true, issues: [], settings: CLONE_SETTINGS }),
     ...runtime,
   }));
-  ui.setSerialController({ capability: { supported: true, native: true }, async choosePort() {} });
+  ui.setSerialController(controller);
   await ui.init(true);
   selectRadioBySearch(document, "Acme Clone");
   await flushMicrotasks();
@@ -753,4 +844,40 @@ test("every clone outcome carries the transport the clone started over", async (
     ["radio_download", "ok", "webusb"],
     ["radio_upload", "failed", "webusb"],
   ]);
+});
+
+test("a transfer's metric names the cable of the connection it ran over", async (t) => {
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const metrics = [];
+  await initSentry(makeWindow(), { loadSdk: async () => ({
+    init() {},
+    withScope() {},
+    captureException() {},
+    metrics: {
+      count: (name, value, options) => metrics.push({ name, ...options }),
+      distribution() {},
+    },
+  }) });
+  const { controls } = await bootConnectedUi({
+    serialConnect: async () => ({ connected: true, transport: "webusb", message: "ok" }),
+    downloadSelectedRadio: async () => { throw new Error("Radio did not respond"); },
+  }, {
+    capability: { supported: true, native: true },
+    async choosePort() {},
+    describeChosenPort: () => ({
+      transport: "webusb", chip: "ch340", usbVendorId: "0x1A86", usbProductId: "0x7523",
+    }),
+  });
+  await dispatch(controls.download, "click");
+  await flushMicrotasks();
+  const download = metrics.find(
+    (metric) => metric.name === "flow.completed" && metric.attributes.flow === "radio_download",
+  );
+  assert.ok(download, "the download reported an outcome");
+  assert.equal(download.attributes.outcome, "failed");
+  assert.equal(download.attributes.transport, "webusb");
+  assert.equal(download.attributes.chip, "ch340");
+  assert.equal(download.attributes.usb_vendor_id, "0x1A86");
+  assert.equal(download.attributes.usb_product_id, "0x7523");
 });

@@ -36,6 +36,7 @@ const serialCapability = serialBridge.getCapability();
 ui.setSerialController({
   capability: serialCapability,
   choosePort: (transport) => serialBridge.choosePort(transport),
+  describeChosenPort: () => serialBridge.describeChosenPort(),
 });
 // Pyodide's run_sync — how CHIRP's blocking clone loops wait on the serial
 // bridge — needs WebAssembly JSPI (stack switching). Nothing else does: the

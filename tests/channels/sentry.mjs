@@ -385,7 +385,12 @@ test("every attribute the flow metrics send is declared", () => {
   // The counterpart to the CUSTOM_DIMENSIONS check in
   // tests/channels/ga-dimensions.mjs: a key added at a call site but not here is
   // silently dropped, which looks exactly like the flow never running.
-  for (const name of ["flow", "outcome", "radio", "radio_module", "radio_class"]) {
+  for (const name of [
+    "flow", "outcome", "radio", "radio_module", "radio_class",
+    // The cable a connect or a transfer ran over: a model of adapter, never
+    // one adapter in particular.
+    "chip", "usb_vendor_id", "usb_product_id",
+  ]) {
     assert.ok(METRIC_ATTRIBUTES.includes(name), `${name} must be declared`);
   }
   assert.equal(METRIC_ATTRIBUTES.includes("duration_ms"), false);

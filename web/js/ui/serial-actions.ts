@@ -25,6 +25,7 @@ import { requireRuntimeApi } from "./state.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { CatalogRadio, RowIssue, SettingIssue } from "../runtime-rpc.ts";
 import type { RadioSessionHandle } from "./state.ts";
+import type { ChosenPortDescription } from "../serial.ts";
 
 // How the status line words a loss the bridge caused itself, by the reason it
 // reports (PORT_LOST_REASONS); any other loss reads as a disconnect, which is
@@ -70,6 +71,26 @@ export interface PreflightResult {
   summary: string;
 }
 
+// The cable behind a connect or a transfer, as the failure metric carries it:
+// the chip family and the USB ids that name a model of adapter. Nothing when
+// no port was chosen (the chooser was dismissed, or the controller has no
+// chooser), so the keys are absent rather than "unknown" and a dashboard's
+// group-by leaves those attempts out. Every key is in METRIC_ATTRIBUTES
+// (web/js/sentry.ts); a hoisted bag because the keys are not at the call
+// site's literal, which the param scanner reads.
+export function cableParams(
+  cable: ChosenPortDescription | null | undefined,
+): { chip?: string; usb_vendor_id?: string; usb_product_id?: string } {
+  if (!cable) {
+    return {};
+  }
+  return {
+    chip: cable.chip || "none",
+    usb_vendor_id: cable.usbVendorId || "none",
+    usb_product_id: cable.usbProductId || "none",
+  };
+}
+
 // Say how many values the preflight highlighted and in which view, so a
 // blocked write sends the user to the view that holds them: a settings value
 // is never in the channel grid, whichever view is open.
@@ -89,7 +110,11 @@ function preflightSummary(rowIssues: number, settingIssues: number): string {
 export function createSerialActions(ctx: UiContext) {
   const { dom, state, log } = ctx;
 
-  let transportController: { capability?: typeof capability; choosePort(transport: string): Promise<void> } | null = null;
+  let transportController: {
+    capability?: typeof capability;
+    choosePort(transport: string): Promise<void>;
+    describeChosenPort?(): ChosenPortDescription | null;
+  } | null = null;
   let capability = { supported: false, native: false, webusb: false, webbluetooth: false };
   // Whether this browser can run a clone at all (WebAssembly JSPI). Checked
   // when a connection is started, not at init: the rest of the app works
@@ -100,6 +125,10 @@ export function createSerialActions(ctx: UiContext) {
   // Transport of the active connection, used to show one Disconnect button
   // while any serial transport is connected.
   let transport = "";
+  // The cable behind the active connection, as the chooser described it, so a
+  // transfer's metric can say which adapter it ran over. Cleared with
+  // `transport`: a lost or closed port leaves no cable to attribute to.
+  let connectedCable: ChosenPortDescription | null = null;
   // Whether a download or upload is in flight, preflight included. Runtime
   // calls run one at a time (enqueueRuntimeCall in web/js/runtime-rpc.ts), so
   // nothing pressed meanwhile runs beside the transfer: it waits behind it.
@@ -177,6 +206,10 @@ export function createSerialActions(ctx: UiContext) {
     setSerialButtonsBusy(true);
     connecting = true;
     lossDuringConnect = null;
+    // The port the chooser picked, read before the open consumes it: a failed
+    // open is exactly when the metric needs to say which cable. null until the
+    // chooser has answered, so a dismissed chooser reports no cable.
+    let chosen: ChosenPortDescription | null = null;
     try {
       const baudRate = Number(state.selectedRadio?.baudRate || 9600);
       const transportLabel = preferredTransport === "webbluetooth"
@@ -186,6 +219,7 @@ export function createSerialActions(ctx: UiContext) {
       // Before anything here awaits: the chooser needs this click's user
       // activation, which can lapse while serialConnect waits on the runtime.
       await transportController?.choosePort(preferredTransport);
+      chosen = transportController?.describeChosenPort?.() || null;
       const result = await requireRuntimeApi(state).serialConnect({ baudRate });
       connected = Boolean(result?.connected);
       if (result?.deviceName) {
@@ -209,8 +243,10 @@ export function createSerialActions(ctx: UiContext) {
         ...radioEventParams(state.selectedRadio),
         transport: transport || "unknown",
       });
+      connectedCable = chosen;
       recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.OK, {
         ...radioEventParams(state.selectedRadio),
+        ...cableParams(chosen),
         transport: transport || "unknown",
       });
       // The connect did succeed; the port went after it. Said in that order.
@@ -254,13 +290,15 @@ export function createSerialActions(ctx: UiContext) {
       }
       recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.FAILED, {
         ...radioEventParams(state.selectedRadio),
-        // What was being attempted, since nothing was negotiated. Without it a
-        // dashboard grouped by transport counts explicit transports' successes and drops
+        ...cableParams(chosen),
+        // The transport the chosen port would have gone over, when the chooser
+        // got that far, else what was being attempted. Without it a dashboard
+        // grouped by transport counts explicit transports' successes and drops
         // its failures, which reads as a success rate far better than the real
         // one. "auto" is an honest fallback value: the browser was left to choose
         // and the attempt never got far enough to say what it would have
         // chosen.
-        transport: preferredTransport || "auto",
+        transport: chosen?.transport || preferredTransport || "auto",
         error_kind: errorKind,
         error_type: errorType,
       });
@@ -287,6 +325,7 @@ export function createSerialActions(ctx: UiContext) {
       connected = Boolean(result?.connected);
       if (!connected) {
         transport = "";
+        connectedCable = null;
       }
       log.setStatus(result.message || "Serial disconnected.");
     } catch (error) {
@@ -315,6 +354,7 @@ export function createSerialActions(ctx: UiContext) {
     const lostTransport = transport || "unknown";
     connected = false;
     transport = "";
+    connectedCable = null;
     const cause = PORT_LOST_CAUSES[reason || ""] || "Serial port disconnected";
     log.setStatus(`${cause}; reconnect to continue.`);
     log.logSerial(`${cause}${deviceName ? ` (${deviceName})` : ""}.`);
@@ -543,10 +583,13 @@ export function createSerialActions(ctx: UiContext) {
     if (!radio || !dimensions) {
       return;
     }
+    // The cable rides on the metric only: GA's dimensions are a registered
+    // set (CUSTOM_DIMENSIONS), and the question it answers -- which adapters
+    // clones fail over -- is the metric's.
     recordFlow(
       dimensions.flow,
       dimensions.outcome,
-      { ...radioEventParams(radio), ...outcomeParams },
+      { ...radioEventParams(radio), ...cableParams(connectedCable), ...outcomeParams },
       durationMs,
     );
   }

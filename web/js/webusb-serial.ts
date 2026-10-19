@@ -178,6 +178,33 @@ export class CdcSerialPort extends WebUsbTransport implements SerialTransport {
   }
 }
 
+// The chip family behind a USB serial adapter, from its vendor and product
+// ids: the same four tests requestPort() below picks a driver by, so the name
+// a metric carries for a cable is the name of the driver that opened it. ""
+// for ids none of the four claims -- a CDC device on WebUSB, or a native Web
+// Serial port whose chip this app has no driver for -- and for a port with no
+// USB ids at all (a Bluetooth link, a built-in UART).
+export function chipFamilyOf(
+  device: { vendorId?: number; productId?: number } | null | undefined,
+): string {
+  if (!device || !Number.isInteger(device.vendorId)) {
+    return "";
+  }
+  if (isFtdiDevice(device)) {
+    return "ftdi";
+  }
+  if (isProlificDevice(device)) {
+    return "pl2303";
+  }
+  if (isCh340Device(device)) {
+    return "ch340";
+  }
+  if (isCp2102Device(device)) {
+    return "cp2102";
+  }
+  return "";
+}
+
 // usb is the WebUSB loss-event source every port it returns watches
 // (navigator.usb when omitted); tests pass a stand-in.
 /**

@@ -408,6 +408,14 @@ export const METRIC_ATTRIBUTES = Object.freeze([
   "platform",
   // What it was working on or over.
   "transport",
+  // The cable: the chip family behind the port (ftdi, pl2303, ch340, cp2102,
+  // cdc) and its USB vendor and product ids, as "0x067B". These name a model
+  // of adapter, never its owner -- there is no serial number here -- and they
+  // are what turns "WebUSB connects fail" into "PL2303 cables fail at chip
+  // setup", the question the failure metric exists to answer.
+  "chip",
+  "usb_vendor_id",
+  "usb_product_id",
   "format",
   "import_source",
   "codeplug_source",
