@@ -7,6 +7,7 @@ import {
   USB_CHIP_SETUP_FAILED,
   USB_DEVICE_OPEN_FAILED,
   USB_INTERFACE_BUSY,
+  isUsbChipSetupFailed,
 } from "../../web/js/serial-errors.ts";
 import { assertSerialTransport } from "../../web/js/serial-transport.ts";
 import { WebBluetoothSerialPort } from "../../web/js/webbluetooth-serial.ts";
@@ -422,9 +423,19 @@ test("every chip driver names a failure in its own chip setup", async () => {
     plain.device.controlTransferIn = async () => { throw refusal; };
     plain.device.controlTransferOut = async () => { throw refusal; };
     await assert.rejects(plain.port.open(OPEN_OPTIONS), (error) => {
-      assert.equal(error.name, USB_CHIP_SETUP_FAILED, chip);
+      assert.ok(isUsbChipSetupFailed(error), `${chip}: got ${error.name}`);
       assert.equal(error.message, refusal.message, chip);
       assert.equal(error.cause, refusal, chip);
+      return true;
+    }, chip);
+
+    // The interface describing no bulk pair is the same stage: the driver's
+    // own check, after the claim, before any register is touched.
+    const bare = createChipLoopbackPort(chip, { usb: makeEmitter(), latencyMs: 1 });
+    bare.device.configuration.interfaces[0].alternate.endpoints = [];
+    await assert.rejects(bare.port.open(OPEN_OPTIONS), (error) => {
+      assert.ok(isUsbChipSetupFailed(error), `${chip}: got ${error.name}`);
+      assert.match(error.message, /bulk IN\/OUT endpoints not found on interface 0/, chip);
       return true;
     }, chip);
 
@@ -444,14 +455,19 @@ test("every chip driver names a failure in its own chip setup", async () => {
 
 // An open refused because the device is gone keeps Chromium's NotFoundError,
 // which analytics counts as a disconnect: the adapter was unplugged after the
-// chooser, while the connect waited on the runtime. Any other refusal is the
-// named device-open failure, the first of a WebUSB connect's three stages.
-// Both keep the chip and the browser's sentence.
-test("every chip driver names an open the browser refused, keeping the disconnect's own name", async () => {
+// chooser, while the connect waited on the runtime. The user's machine
+// refusing the device -- the OS (NetworkError) or a missing permission
+// (SecurityError) -- is the named device-open failure, the first of a WebUSB
+// connect's three stages, which reporting drops. A refusal that may be this
+// app's doing, a device already open, keeps the browser's name and stays
+// reported. Every one keeps the chip and the browser's sentence.
+test("every chip driver names the refusals of an open by whose fault they are", async () => {
   for (const chip of CHIP_NAMES) {
     for (const [refusal, sentence, expectedName] of [
       ["NotFoundError", "The device was disconnected.", "NotFoundError"],
+      ["NetworkError", "Failed to open the device.", USB_DEVICE_OPEN_FAILED],
       ["SecurityError", "Access denied.", USB_DEVICE_OPEN_FAILED],
+      ["InvalidStateError", "The device is already open.", "InvalidStateError"],
     ]) {
       const { port, device } = createChipLoopbackPort(chip, { usb: makeEmitter(), latencyMs: 1 });
       device.open = async () => {

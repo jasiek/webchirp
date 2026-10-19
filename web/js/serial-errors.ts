@@ -59,13 +59,17 @@ export function isUsbInterfaceBusy(error: unknown): boolean {
   return jsErrorName(error) === USB_INTERFACE_BUSY;
 }
 
-// WebUSB refused to open the device itself (USBDevice.open), before any
-// interface was claimed or the chip touched: the OS denied access, or the
-// device is in a state the browser will not drive. Named so a failed connect
-// over WebUSB can say which of its three stages it died in -- the device, the
-// claim, or the chip's own setup -- which is what the failure metric groups by.
-// A device gone between the chooser and the open keeps the browser's
-// NotFoundError, which analytics already counts as a disconnect.
+// The user's machine refused to open the USB device itself (USBDevice.open),
+// before any interface was claimed or the chip touched: the OS declined it
+// (NetworkError), or the browser lacks a permission for it (SecurityError).
+// Named so a failed connect over WebUSB can say which of its three stages it
+// died in -- the device, the claim, or the chip's own setup -- which is what
+// the failure metric groups by, and so reporting can drop it as it drops the
+// native open's NetworkError. Only those two refusals take this name: a
+// device gone between the chooser and the open keeps the browser's
+// NotFoundError, which analytics already counts as a disconnect, and a
+// refusal that may be this app's doing (InvalidStateError for a device
+// already open) keeps its own name and stays reported.
 export const USB_DEVICE_OPEN_FAILED = "UsbDeviceOpenFailedError";
 
 // Build the error a chip driver throws when USBDevice.open() is refused.

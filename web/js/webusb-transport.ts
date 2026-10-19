@@ -195,10 +195,15 @@ export class WebUsbTransport {
   // Chromium rejects open() with NotFoundError only when the device is gone
   // ("The device was disconnected."): unplugged after the chooser, which the
   // connect's wait in the runtime queue leaves time for. That one keeps its
-  // name, so analytics counts it as a disconnect; anything else is the named
-  // device-open failure (isUsbDeviceOpenFailed), the first of the three stages
-  // a WebUSB connect can fail in. Both carry the chip and the browser's
-  // sentence for the debug panel.
+  // name, so analytics counts it as a disconnect. The user's machine refusing
+  // the device -- NetworkError for the OS declining to open it, SecurityError
+  // for a permission it does not have -- is the named device-open failure
+  // (isUsbDeviceOpenFailed), the first of the three stages a WebUSB connect
+  // can fail in, which reporting drops as the native open's NetworkError is.
+  // Anything else (InvalidStateError for a device already open, UnknownError)
+  // keeps the browser's own name and stays reported: it may be this app's
+  // doing. Every one carries the chip and the browser's sentence for the
+  // debug panel.
   /**
    * @param chip The prefix the driver's own errors carry ("CH340").
    */
@@ -208,12 +213,14 @@ export class WebUsbTransport {
     } catch (error) {
       const { name, message } = errorFields(error);
       const sentence = `${chip}: could not open USB device: ${message || error}`;
-      if (name === "NotFoundError") {
-        const wrapped = new Error(sentence, { cause: error });
-        wrapped.name = name;
-        throw wrapped;
+      if (name === "NetworkError" || name === "SecurityError") {
+        throw createUsbDeviceOpenFailedError(sentence, error);
       }
-      throw createUsbDeviceOpenFailedError(sentence, error);
+      const wrapped = new Error(sentence, { cause: error });
+      if (typeof name === "string" && name && name !== "Error") {
+        wrapped.name = name;
+      }
+      throw wrapped;
     }
   }
 

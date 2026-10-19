@@ -31,6 +31,7 @@ import {
   USB_DEVICE_OPEN_FAILED,
   createSerialPortOpenFailedError,
   createUsbDeviceOpenFailedError,
+  isUsbChipSetupFailed,
   nameUsbChipSetupFailure,
 } from "../../web/js/serial-errors.ts";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";
@@ -157,7 +158,7 @@ test("a WebUSB device the browser would not open is the user's machine; a chip s
     js: { name: USB_DEVICE_OPEN_FAILED, message: refused.message },
   }, "webserial_connect")), true);
   const setup = nameUsbChipSetupFailure(new Error("PL2303 vendor read failed (value 0x8484): stall"));
-  assert.equal(setup.name, USB_CHIP_SETUP_FAILED);
+  assert.ok(isUsbChipSetupFailed(setup));
   assert.equal(isIgnoredError(setup), false);
   assert.equal(isIgnoredError(runtimeCallError("JsException", `${USB_CHIP_SETUP_FAILED}: ${setup.message}`, {
     js: { name: USB_CHIP_SETUP_FAILED, message: setup.message },
