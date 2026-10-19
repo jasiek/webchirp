@@ -921,7 +921,12 @@ export class SerialBridge {
   }
 
   _getPortIdentity(port: SerialTransport | null): { usbVendorId: string | null; usbProductId: string | null } {
-    const info: { usbVendorId?: number; usbProductId?: number } = port?.getInfo?.() || {};
+    return this._usbIdentityOf(port?.getInfo?.() || {});
+  }
+
+  // The USB ids in a port's getInfo() answer as the UI and the metrics carry
+  // them, "0x067B", or null where the port has none (a built-in UART).
+  _usbIdentityOf(info: { usbVendorId?: number; usbProductId?: number }): { usbVendorId: string | null; usbProductId: string | null } {
     const usbVendorId = typeof info.usbVendorId === "number" && Number.isInteger(info.usbVendorId)
       ? `0x${info.usbVendorId.toString(16).padStart(4, "0").toUpperCase()}`
       : null;

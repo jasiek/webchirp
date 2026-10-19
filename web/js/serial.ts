@@ -46,7 +46,11 @@ function hasWebUsb() {
 export interface ChosenPortDescription {
   /** The transport name the port reports ("webserial", "webusb", "webbluetooth"). */
   transport: string;
-  /** The chip family (chipFamilyOf), "cdc" for a WebUSB port none of the chip drivers took, "none" for a port with no USB identity. */
+  /**
+   * The chip family (chipFamilyOf); "cdc" for a WebUSB port none of the chip
+   * drivers took; "other" for a port with USB ids this app has no driver for;
+   * "none" for a port with no USB identity.
+   */
   chip: string;
   usbVendorId: string | null;
   usbProductId: string | null;
@@ -213,8 +217,8 @@ export class BrowserSerialBridge extends SerialBridge {
     if (!port) {
       return null;
     }
-    const identity = this._getPortIdentity(port);
     const info = port.getInfo?.() || {};
+    const identity = this._usbIdentityOf(info);
     const family = chipFamilyOf({ vendorId: info.usbVendorId, productId: info.usbProductId });
     let chip = family;
     if (!chip) {
