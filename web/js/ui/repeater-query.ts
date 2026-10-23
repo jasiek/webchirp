@@ -20,7 +20,9 @@ import {
   createNumberField,
   createPositionField,
   createSelectField,
+  createTurnstileField,
 } from "./query-fields.ts";
+import { resolveTurnstileSiteKey } from "../turnstile.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { QueryField } from "./query-fields.ts";
 import type { City, FieldOption } from "./query-fields.ts";
@@ -81,7 +83,7 @@ export function createRepeaterQuery(ctx: UiContext) {
   // a service failure is visible when the user tries it, rather than silently
   // removing the action.
   const endpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
-  const sources = createRepeaterSources(ctx, { endpoints });
+  const sources = createRepeaterSources(ctx, { endpoints, turnstileSiteKey: resolveTurnstileSiteKey() });
   const sourceButtonTitles = new Map<string, string>();
   for (const source of sources) {
     sourceButtonTitles.set(source.key, dom[source.toolbarButton].title);
@@ -212,6 +214,9 @@ export function createRepeaterQuery(ctx: UiContext) {
   }
 
   function buildFields(source: RepeaterSource, loadedOptions: Record<string, FieldOption[]> | null): void {
+    for (const instance of fieldInstances) {
+      instance.dispose?.();
+    }
     dom.repeaterQueryGridEl.innerHTML = "";
     fieldInstances = [];
     positionField = null;
@@ -268,6 +273,8 @@ export function createRepeaterQuery(ctx: UiContext) {
         // The button is recreated with the field on every open, so the
         // listener attaches here rather than in bindEvents.
         field.geolocateButton.addEventListener("click", onGeolocateClick);
+      } else if (config.kind === "turnstile") {
+        instance = createTurnstileField(config);
       } else {
         const factory = FIELD_FACTORIES[config.kind];
         const options = config.optionsKey

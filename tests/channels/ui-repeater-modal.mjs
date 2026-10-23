@@ -124,8 +124,14 @@ function buildHarness({
   // every test that is not about tones wants; a list stands in for a radio
   // whose table is missing the directory's tone.
   toneOptions = null,
+  // The Turnstile site key the deployment would build in; undefined keeps the
+  // blank tag index.html ships, which leaves the check off.
+  turnstileSiteKey = undefined,
 } = {}) {
   const { document } = installIndexPage();
+  if (turnstileSiteKey !== undefined) {
+    document.querySelector('meta[name="webchirp-turnstile-site-key"]').setAttribute("content", turnstileSiteKey);
+  }
   // index.html ships the meta tag; undefined stands for a deployment without
   // one, so the tag is removed rather than blanked.
   const meta = document.querySelector('meta[name="webchirp-repeater-api-base"]');
@@ -2185,4 +2191,99 @@ test("a cached body is only reused when it covers the widened area too", async (
   // leaves nothing beyond that ring to dim, so the map would claim there is
   // nothing just outside while the repeater at 32 km went unfetched.
   assert.equal(previewCaption(dom).textContent, "2 in range, 1 just outside");
+});
+
+// Cloudflare's turnstile global as the widget sees it: each render or reset
+// issues the next token a moment later, as the real widget does once its
+// challenge passes. Installed on the page's window, which the page reset
+// restores after each test.
+function installFakeTurnstile() {
+  const fake = { rendered: [], removed: [], issued: 0 };
+  let options = null;
+  const issue = () => queueMicrotask(() => {
+    fake.issued += 1;
+    options.callback(`token-${fake.issued}`);
+  });
+  window.turnstile = {
+    render(container, renderOptions) {
+      options = renderOptions;
+      fake.rendered.push({ container, sitekey: renderOptions.sitekey });
+      issue();
+      return "widget-1";
+    },
+    reset() {
+      issue();
+    },
+    remove(widgetId) {
+      fake.removed.push(widgetId);
+    },
+  };
+  return fake;
+}
+
+const REPEATERBOOK_RXF = "<rxf><perspective>radio</perspective><repeaters></repeaters></rxf>";
+
+test("with a site key, the RepeaterBook form carries a Turnstile check and every request a fresh token", async () => {
+  const { dom, table } = buildHarness({ turnstileSiteKey: "0x4AAAAAAATestSiteKey" });
+  const fake = installFakeTurnstile();
+  const calls = installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/repeaterbook", body: REPEATERBOOK_RXF },
+  ]);
+
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  const container = grid(dom).querySelector(".modal-turnstile");
+  assert.ok(container, "the RepeaterBook form has a Turnstile container");
+  // At the foot of the form, after the map, beside the button it gates.
+  assert.equal(grid(dom).lastElementChild, container);
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+  await dispatch(dom.repeaterQueryFormEl, "submit");
+
+  assert.deepEqual(fake.rendered.map((entry) => [entry.container, entry.sitekey]), [[container, "0x4AAAAAAATestSiteKey"]]);
+  const requests = calls.filter((call) => !call.url.includes("/meta"));
+  assert.equal(requests.length, 2, "a preview and the query");
+  const tokens = requests.map((call) => call.init.headers["CF-Turnstile-Response"]);
+  assert.ok(tokens.every((token) => /^token-\d+$/.test(token)), `every request carries a token: ${tokens}`);
+  assert.notEqual(tokens[0], tokens[1], "a token is spent on one request only");
+  assert.equal(table.inserted.length, 1);
+});
+
+test("only RepeaterBook asks for a Turnstile token, and only when a site key is built in", async () => {
+  const { dom } = buildHarness({ turnstileSiteKey: "0x4AAAAAAATestSiteKey" });
+  installFakeTurnstile();
+  const calls = installFetch([
+    { match: "/przemienniki/meta", body: META_JSON },
+    { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
+  ]);
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  await chooseCountry(dom, "PL");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
+  assert.equal(grid(dom).querySelector(".modal-turnstile"), null);
+  assert.equal(queryUrl(calls).pathname, "/przemienniki");
+  assert.equal(calls.find((call) => !call.url.includes("/meta")).init.headers["CF-Turnstile-Response"], undefined);
+
+  const unkeyed = buildHarness();
+  const unkeyedCalls = installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/repeaterbook", body: REPEATERBOOK_RXF },
+  ]);
+  await dispatch(unkeyed.dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(unkeyed.dom, "PL");
+  await dispatch(unkeyed.dom.repeaterQueryFormEl, "submit");
+  assert.equal(grid(unkeyed.dom).querySelector(".modal-turnstile"), null);
+  assert.equal(unkeyedCalls.find((call) => !call.url.includes("/meta")).init.headers["CF-Turnstile-Response"], undefined);
+});
+
+test("switching away from RepeaterBook removes its Turnstile widget", async () => {
+  const { dom } = buildHarness({ turnstileSiteKey: "0x4AAAAAAATestSiteKey" });
+  const fake = installFakeTurnstile();
+  installFetch([
+    { match: "/meta", body: META_JSON },
+  ]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  // Let the script promise settle so the widget is rendered.
+  await new Promise((resolve) => setImmediate(resolve));
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  assert.deepEqual(fake.removed, ["widget-1"]);
 });

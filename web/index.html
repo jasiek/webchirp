@@ -43,6 +43,13 @@
       Removing this tag falls back to that default for every source.
     -->
     <meta name="webchirp-repeater-api-base" content="https://api.webchirp.org" />
+    <!--
+      Cloudflare Turnstile site key for the RepeaterBook query, which the API
+      refuses without a token when it holds the matching secret. Left blank
+      here: scripts/build-dist.ts fills it in from TURNSTILE_SITE_KEY. Blank
+      renders no check and sends no token.
+    -->
+    <meta name="webchirp-turnstile-site-key" content="" />
     <title>WebCHIRP | Browser-based CHIRP radio programming</title>
     <meta
       name="description"

@@ -312,6 +312,16 @@ declare global {
   }
 
   // ---------------------------------------------------------------------------
+  // Cloudflare Turnstile -- injected by web/js/turnstile.ts when the
+  // RepeaterBook query form opens on a deployment with a site key;
+  // https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/
+  // ---------------------------------------------------------------------------
+
+  interface Window {
+    turnstile?: import("../turnstile.ts").TurnstileApi;
+  }
+
+  // ---------------------------------------------------------------------------
   // navigator.standalone -- Safari on iOS/iPadOS only, true when the page was
   // launched from the home screen; web/js/analytics.ts reads it because iOS
   // never matches the display-mode media query.

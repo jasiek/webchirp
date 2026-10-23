@@ -91,9 +91,12 @@ async function walk(dir, base = dir) {
 
 // Run the real build against a throwaway repo, surfacing its output on failure
 // — a build that dies silently would otherwise look like an empty dist/.
-function runBuild(cwd) {
+// `env` adds to the environment the build inherits, minus TURNSTILE_SITE_KEY,
+// which a test sets only when it is the subject.
+function runBuild(cwd, env = {}) {
+  const { TURNSTILE_SITE_KEY: _inherited, ...inherited } = process.env;
   return new Promise((resolve, reject) => {
-    execFile(process.execPath, [SCRIPT], { cwd }, (err, stdout, stderr) => {
+    execFile(process.execPath, [SCRIPT], { cwd, env: { ...inherited, ...env } }, (err, stdout, stderr) => {
       if (err) {
         reject(new Error(`build-dist failed: ${stderr || stdout}`));
         return;
@@ -106,10 +109,10 @@ function runBuild(cwd) {
 // Build `files` into a temp repo and return every emitted path with its bytes.
 // asset-manifest.json is excluded: it carries a timestamp, so it differs between
 // any two builds by design and is not a content-hashed asset.
-async function build(files) {
+async function build(files, env = {}) {
   return withTempDir("build-dist-", async (dir) => {
     await writeTree(path.join(dir, "web"), { ...REQUIRED_FILES, ...files });
-    await runBuild(dir);
+    await runBuild(dir, env);
     const dist = path.join(dir, "dist");
     const emitted = new Map();
     for (const rel of await walk(dist)) {
@@ -455,6 +458,26 @@ test("pages point at their entries' outputs and nothing else in them changes", a
     assert.ok(html.includes(`Load ${prefix}js/app.js by hand.`), "prose must survive untouched");
     assert.ok(html.includes('src="https://cdn.example.test/lib.js"'), "a CDN script is not ours to rewrite");
   }
+});
+
+test("TURNSTILE_SITE_KEY fills the site-key meta tag and nothing else", async () => {
+  const page = "<!doctype html>\n"
+    + '<meta name="webchirp-turnstile-site-key" content="" />\n'
+    + '<meta name="description" content="" />\n'
+    + '<script type="module" src="./js/app.js"></script>\n';
+  const files = { ...appTree("export const leaf = 1;\n"), "index.html": page };
+  const keyed = text(await build(files, { TURNSTILE_SITE_KEY: "0x4AAAAAAATestSiteKey" }), "index.html");
+  assert.ok(keyed.includes('<meta name="webchirp-turnstile-site-key" content="0x4AAAAAAATestSiteKey" />'), keyed);
+  assert.ok(keyed.includes('<meta name="description" content="" />'), "another meta tag is not touched");
+  const unkeyed = text(await build(files), "index.html");
+  assert.ok(unkeyed.includes('<meta name="webchirp-turnstile-site-key" content="" />'), "unset leaves the tag blank");
+});
+
+test("a TURNSTILE_SITE_KEY that is not a site key fails the build", async () => {
+  await withTempDir("build-dist-", async (dir) => {
+    await writeTree(path.join(dir, "web"), { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n") });
+    await assert.rejects(runBuild(dir, { TURNSTILE_SITE_KEY: '"><script>' }), /not a Turnstile site key/);
+  });
 });
 
 // Exercise URL resolution through the real build, including a nested decoy

@@ -4,6 +4,8 @@ import { rememberBounded } from "./format.ts";
 import { createMapAttribution, renderStaticMap } from "./static-map-view.ts";
 import type { MapMarker } from "./static-map-view.ts";
 import { errorFields } from "../error-details.ts";
+import { createTurnstileTokens } from "../turnstile.ts";
+import type { TurnstileApi } from "../turnstile.ts";
 
 // Field components for the shared repeater-query modal. Each factory builds
 // its own DOM from a config and returns the same shape:
@@ -52,6 +54,8 @@ export interface QueryField {
   value: () => unknown;
   input?: HTMLInputElement;
   tailNodes?: Node[];
+  /** Releases what the field holds outside its own nodes; called before a rebuild. */
+  dispose?: () => void;
 }
 
 function fieldId(key: string, suffix = ""): string {
@@ -1322,5 +1326,27 @@ export function createCityField({
     input,
     list,
     clearButton,
+  };
+}
+
+// The Cloudflare Turnstile check a source can require (web/js/turnstile.ts).
+// Not an input: `value()` is the function a query calls for a fresh token, one
+// per request. It goes at the foot of the form, after the map, beside the
+// button it gates, and is invisible unless Cloudflare asks the user to click.
+// The widget loads Cloudflare's script and talks to challenges.cloudflare.com;
+// it sends nothing from the form.
+export function createTurnstileField(
+  { key, siteKey, load }: { key: string; siteKey: string; load?: () => Promise<TurnstileApi> },
+): QueryField {
+  const container = document.createElement("div");
+  container.className = "modal-turnstile";
+  const tokens = createTurnstileTokens(container, siteKey, load);
+  return {
+    key,
+    nodes: [],
+    tailNodes: [container],
+    focusTarget: null,
+    value: () => tokens.next,
+    dispose: () => tokens.remove(),
   };
 }

@@ -20,6 +20,7 @@ import {
 } from "../rsgb.ts";
 import { parseRxfRecords, rxfPreferredModes } from "../rxf.ts";
 import { withRequestTimeout } from "../request-timeout.ts";
+import { TURNSTILE_TOKEN_HEADER } from "../turnstile.ts";
 import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from "./format.ts";
 import { trackEvent } from "./analytics.ts";
 import type { RepeaterEndpoints } from "../datasources.ts";
@@ -106,6 +107,7 @@ export interface QueryRequirement {
 export type FieldConfig =
   | { kind: "city"; key: string; label: string; placeholder: string }
   | { kind: "position"; locatorPlaceholder: string }
+  | { kind: "turnstile"; key: string; siteKey: string }
   | {
     kind: "select" | "fixed" | "checkboxGroup" | "checkbox" | "number";
     key: string;
@@ -211,9 +213,19 @@ export function unmetRequirement(
   return "";
 }
 
+/** Deployment settings the directories are built from. */
+export interface RepeaterSourceOptions {
+  endpoints: RepeaterEndpoints;
+  /**
+   * The Cloudflare Turnstile site key the RepeaterBook query is checked with
+   * (web/js/turnstile.ts); blank or absent leaves the check off.
+   */
+  turnstileSiteKey?: string;
+}
+
 export function createRepeaterSources(
   ctx: UiContext,
-  { endpoints }: { endpoints: RepeaterEndpoints },
+  options: RepeaterSourceOptions,
 ): RepeaterSource[] {
   const { log } = ctx;
 
@@ -357,7 +369,7 @@ export function createRepeaterSources(
     };
   }
 
-  return createRepeaterAdapters(ctx, { endpoints }).map(sourceFromAdapter);
+  return createRepeaterAdapters(ctx, options).map(sourceFromAdapter);
 }
 
 // The registered repeater directories, in toolbar order. Separate from
@@ -365,7 +377,7 @@ export function createRepeaterSources(
 // invariants on its own (tests/channels/repeater-adapters.mjs).
 export function createRepeaterAdapters(
   ctx: UiContext,
-  { endpoints }: { endpoints: RepeaterEndpoints },
+  { endpoints, turnstileSiteKey = "" }: RepeaterSourceOptions,
 ): RepeaterDirectoryAdapter[] {
   const { log } = ctx;
 
@@ -412,6 +424,22 @@ export function createRepeaterAdapters(
     return key.toString();
   }
 
+  // The key of the Turnstile field in a form that has one; its value is the
+  // function that hands out the next token.
+  const TURNSTILE_FIELD_KEY = "turnstile";
+
+  // The headers a directory request carries: a fresh Turnstile token when the
+  // source's form has the check, nothing otherwise. Awaited before the request
+  // deadline starts, because a token can wait on the user (see
+  // TURNSTILE_TOKEN_TIMEOUT_MS) and that is not the directory being slow.
+  async function turnstileHeaders(values: QueryValues): Promise<Record<string, string>> {
+    const nextToken = values[TURNSTILE_FIELD_KEY];
+    if (typeof nextToken !== "function") {
+      return {};
+    }
+    return { [TURNSTILE_TOKEN_HEADER]: String(await nextToken()) };
+  }
+
   function normalized(values: Iterable<unknown> | null | undefined): string[] {
     return Array.from(values || [])
       .map((value) => String(value || "").trim().toLowerCase())
@@ -450,6 +478,7 @@ export function createRepeaterAdapters(
     insertLabel,
     toolbarButton,
     sourceEndpoints,
+    turnstileSiteKey: siteKey = "",
   }: {
     key: string;
     label: string;
@@ -457,6 +486,8 @@ export function createRepeaterAdapters(
     insertLabel: string;
     toolbarButton: ToolbarButtonName;
     sourceEndpoints: { apiUrl: string; metaUrl: string } | null | undefined;
+    /** Puts a Turnstile check on the form when set. */
+    turnstileSiteKey?: string;
   }): RepeaterDirectoryAdapter {
     // The preview below names its cache key "key", so the id is held apart.
     const adapterId = key;
@@ -539,8 +570,9 @@ export function createRepeaterAdapters(
       if (cached && cached.rangeKm >= radiusKm * PREVIEW_RANGE_FACTOR) {
         return { records: cached.records, unusable: cached.unusable, preferredModes };
       }
+      const headers = await turnstileHeaders(values);
       const text = await withRequestTimeout(`${label} preview`, async (signal) => {
-        const response = await fetch(url.toString(), { signal });
+        const response = await fetch(url.toString(), { headers, signal });
         if (!response.ok) {
           throw new Error(`${actionLabel} preview failed: HTTP ${response.status}`);
         }
@@ -594,6 +626,7 @@ export function createRepeaterAdapters(
         { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Warszawa" },
         { kind: "position", locatorPlaceholder: "e.g. JO91GG" },
         { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30 },
+        ...(siteKey ? [{ kind: "turnstile" as const, key: TURNSTILE_FIELD_KEY, siteKey }] : []),
       ],
       loadOptions: () => {
         if (!optionsPromise) {
@@ -641,8 +674,9 @@ export function createRepeaterAdapters(
         // Both the request and the body read sit inside the deadline: the
         // error-path read of a failed response can stall exactly as the success
         // path can, and either one strands the submit button on "Querying...".
+        const headers = await turnstileHeaders(values);
         const text = await withRequestTimeout(`${label} query`, async (signal) => {
-          const response = await fetch(url.toString(), { signal });
+          const response = await fetch(url.toString(), { headers, signal });
           if (!response.ok) {
             const body = await response.text();
             throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
@@ -973,6 +1007,8 @@ export function createRepeaterAdapters(
       insertLabel: "repeaterbook",
       toolbarButton: "channelImportRepeaterbookEl",
       sourceEndpoints: endpoints?.repeaterbook,
+      // The only directory whose API asks for a Turnstile token.
+      turnstileSiteKey,
     }),
     remoteDirectoryAdapter({
       key: "irts",
