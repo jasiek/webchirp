@@ -113,3 +113,18 @@ test("removing the widget fails pending requests and releases it", async () => {
   assert.deepEqual(turnstile.widget.removed, ["widget-1"]);
   await assert.rejects(tokens.next(), /closed/);
 });
+
+test("a script request that never settles still fails the request at the deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const tokens = createTurnstileTokens({}, "site-key", () => new Promise(() => {}));
+  const pending = tokens.next();
+  t.mock.timers.tick(TURNSTILE_TOKEN_TIMEOUT_MS);
+  await assert.rejects(pending, /did not issue a token within 60 s/);
+});
+
+test("removing the widget ends a request still waiting on the script", async () => {
+  const tokens = createTurnstileTokens({}, "site-key", () => new Promise(() => {}));
+  const pending = tokens.next();
+  tokens.remove();
+  await assert.rejects(pending, /closed/);
+});

@@ -160,20 +160,28 @@ export function createTurnstileTokens(
     }
     return turnstile;
   });
-  // A script that never loads fails whoever is waiting; next() rethrows it to
-  // later callers through the same promise.
+  // A script that never loads fails whoever is waiting.
   api.catch((error) => rejectAll(error));
 
-  async function next(): Promise<string> {
-    const turnstile = await api;
-    if (removed) {
-      throw new Error("The Cloudflare Turnstile check was closed.");
+  // Hand a token issued before anyone asked to the first request waiting.
+  function handOutReady(turnstile: TurnstileApi): void {
+    const waiter = waiters[0];
+    if (ready === null || !waiter) {
+      return;
     }
-    if (ready !== null) {
-      const token = ready;
-      ready = null;
-      turnstile.reset(widgetId);
-      return token;
+    const token = ready;
+    ready = null;
+    settle(waiter);
+    waiter.resolve(token);
+    turnstile.reset(widgetId);
+  }
+
+  // The request is registered, and its deadline started, before the script is
+  // awaited: a script request that stalls without loading or failing must
+  // still end at the deadline, and remove() must still be able to end it.
+  function next(): Promise<string> {
+    if (removed) {
+      return Promise.reject(new Error("The Cloudflare Turnstile check was closed."));
     }
     return new Promise<string>((resolve, reject) => {
       const waiter: Waiter = {
@@ -185,6 +193,10 @@ export function createTurnstileTokens(
         }, TURNSTILE_TOKEN_TIMEOUT_MS),
       };
       waiters.push(waiter);
+      api.then(handOutReady, (error) => {
+        settle(waiter);
+        reject(error);
+      });
     });
   }
 
