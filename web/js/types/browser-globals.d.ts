@@ -309,6 +309,9 @@ declare global {
   interface Window {
     gtag?: (...args: unknown[]) => void;
     dataLayer?: unknown[];
+    // gtag.js's per-property off switch, window["ga-disable-<measurement id>"]:
+    // true stops the loaded tag sending anything for that property.
+    [gaDisable: `ga-disable-${string}`]: boolean | undefined;
   }
 
   // ---------------------------------------------------------------------------

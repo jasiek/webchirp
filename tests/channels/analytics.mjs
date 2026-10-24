@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   ANALYTICS_HOSTS,
+  CONSENT_KEY,
   MEASUREMENT_ID,
   REPLAY_LIMIT,
   bindInstallTracking,
@@ -13,6 +14,7 @@ import {
   initAnalytics,
   isAnalyticsHost,
   replayDeferredAnalytics,
+  setAnalyticsConsent,
   trackEvent,
 } from "../../web/js/analytics.ts";
 import { makeWindow } from "../support/fake-window.mjs";
@@ -36,6 +38,15 @@ function eventsNamed(win, name) {
   return calls(win).filter((call) => call[0] === "event" && call[1] === name);
 }
 
+// A fake window whose visitor accepted analytics on an earlier page, which is
+// the state every test below the consent gate starts from. The gate itself is
+// tested on the real pages in analytics-consent.mjs.
+function consentedWindow(options) {
+  const win = makeWindow(options);
+  win.localStorage.setItem(CONSENT_KEY, "granted");
+  return win;
+}
+
 test("display mode reports the most app-like match", () => {
   assert.equal(detectDisplayMode(makeWindow({ displayModes: ["standalone"] })), "standalone");
   assert.equal(detectDisplayMode(makeWindow({ displayModes: ["minimal-ui"] })), "minimal-ui");
@@ -53,11 +64,11 @@ test("display mode reports the most app-like match", () => {
 });
 
 test("init attaches the launch context to config, never to a bare set", () => {
-  const win = makeWindow({ displayModes: ["standalone"] });
+  const win = consentedWindow({ displayModes: ["standalone"] });
   initAnalytics(win);
 
   const commands = calls(win).map((call) => call[0]);
-  assert.deepEqual(commands, ["js", "config"]);
+  assert.deepEqual(commands, ["consent", "consent", "js", "config"]);
 
   const [, id, params] = calls(win).find((call) => call[0] === "config");
   assert.equal(id, MEASUREMENT_ID);
@@ -110,8 +121,18 @@ test("nothing at all happens off the production host", () => {
   assert.equal(win.listenerCount("appinstalled"), 0);
 });
 
-test("the vendor tag is requested by the module, once, on the production host", () => {
+test("a first visit requests nothing until the visitor accepts", () => {
   const win = makeWindow();
+  assert.equal(initAnalytics(win), null);
+  assert.deepEqual(win.injected, []);
+  assert.equal(win.gtag, undefined);
+  setAnalyticsConsent("granted", win);
+  assert.equal(win.injected.length, 1);
+  assert.equal(win.localStorage.getItem(CONSENT_KEY), "granted");
+});
+
+test("the vendor tag is requested by the module, once, on the production host", () => {
+  const win = consentedWindow();
   initAnalytics(win);
   assert.equal(win.injected.length, 1);
   assert.equal(win.injected[0].src, `https://www.googletagmanager.com/gtag/js?id=${MEASUREMENT_ID}`);
@@ -121,17 +142,17 @@ test("the vendor tag is requested by the module, once, on the production host", 
 test("init is inert without a window and keeps an existing gtag", () => {
   assert.equal(initAnalytics(null), null);
 
-  const win = makeWindow();
+  const win = consentedWindow();
   const seen = [];
   win.gtag = (...args) => seen.push(args);
   initAnalytics(win);
   // A gtag already on the page (a manually pasted snippet, say) must not be
   // replaced, or its dataLayer and ours diverge.
-  assert.deepEqual(seen.map((call) => call[0]), ["js", "config"]);
+  assert.deepEqual(seen.map((call) => call[0]), ["consent", "consent", "js", "config"]);
 });
 
 test("trackEvent forwards params and reports when analytics is absent", () => {
-  const win = makeWindow({ displayModes: ["standalone"] });
+  const win = consentedWindow({ displayModes: ["standalone"] });
   initAnalytics(win);
   assert.equal(trackEvent("radio_download", { radio: "Baofeng UV-5R" }, win), true);
   // Every event carries the launch context, since config parameters cannot be
@@ -159,7 +180,7 @@ test("trackEvent forwards params and reports when analytics is absent", () => {
 });
 
 test("an install prompt is measured without suppressing the browser's own", () => {
-  const win = makeWindow({ displayModes: ["browser"] });
+  const win = consentedWindow({ displayModes: ["browser"] });
   initAnalytics(win);
 
   let prevented = false;
@@ -179,7 +200,7 @@ test("an install prompt is measured without suppressing the browser's own", () =
 });
 
 test("the install choice is measured once the user answers", async () => {
-  const win = makeWindow();
+  const win = consentedWindow();
   initAnalytics(win);
 
   win.dispatch("beforeinstallprompt", {
@@ -195,7 +216,7 @@ test("the install choice is measured once the user answers", async () => {
 });
 
 test("a prompt event without userChoice is survivable", () => {
-  const win = makeWindow();
+  const win = consentedWindow();
   initAnalytics(win);
   assert.doesNotThrow(() => win.dispatch("beforeinstallprompt", { preventDefault() {} }));
   assert.doesNotThrow(() => win.dispatch("beforeinstallprompt", undefined));
@@ -203,7 +224,7 @@ test("a prompt event without userChoice is survivable", () => {
 });
 
 test("appinstalled reports the mode the install happened from", () => {
-  const win = makeWindow({ displayModes: ["browser"] });
+  const win = consentedWindow({ displayModes: ["browser"] });
   initAnalytics(win);
   win.dispatch("appinstalled", {});
 
@@ -252,7 +273,7 @@ test("the encoding declaration stays inside the first 1024 bytes", () => {
 // Two pages of one browser: an offline one and a later online one, sharing
 // localStorage the way two loads of the same origin do.
 function offlineThenOnline() {
-  const offline = makeWindow({ displayModes: ["standalone"] });
+  const offline = consentedWindow({ displayModes: ["standalone"] });
   initAnalytics(offline);
   const online = makeWindow();
   online.localStorage = offline.localStorage;
@@ -316,8 +337,10 @@ test("an offline page does not replay, and off the production host nothing queue
 });
 
 test("without storage the page reports live, and a corrupt queue is ignored", () => {
+  // Without storage the answer holds for the page it was given on.
   const bare = makeWindow({ storage: false });
   initAnalytics(bare);
+  setAnalyticsConsent("granted", bare);
   assert.equal(deferAnalytics(bare), false);
   assert.equal(trackEvent("app_ready", {}, bare), true);
 

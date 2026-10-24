@@ -26,6 +26,7 @@ import { webDir } from "./repo-paths.mjs";
 
 // Same-origin with the dev server and off the production host, so the
 // analytics and error-reporting gates stay shut as they do in development.
+// A test of what happens past those gates passes another with { origin }.
 export const PAGE_ORIGIN = "http://localhost:8000/";
 
 // The markup of each web/ page parsed so far, by file name.
@@ -196,13 +197,13 @@ function failOnListenerErrors() {
 }
 
 // Parses a page under web/ (index.html unless a test names another) into a
-// new jsdom window at its own URL. Scripts are not run and no subresource is
-// fetched: the tests import the modules they exercise.
-function parsePage(name) {
+// new jsdom window at its own URL under origin. Scripts are not run and no
+// subresource is fetched: the tests import the modules they exercise.
+function parsePage(name, origin) {
   if (!pageSources.has(name)) {
     pageSources.set(name, fs.readFileSync(path.join(webDir, name), "utf8"));
   }
-  const url = new URL(name === "index.html" ? "" : name, PAGE_ORIGIN).href;
+  const url = new URL(name === "index.html" ? "" : name, origin).href;
   const dom = new JSDOM(pageSources.get(name), { url, virtualConsole: failOnListenerErrors() });
   const { window } = dom;
   addMissingLayoutApis(window);
@@ -210,6 +211,7 @@ function parsePage(name) {
   const removeTrackedListeners = instrumentListeners(window, tracked);
   return {
     name,
+    origin,
     url,
     dom,
     window,
@@ -336,6 +338,9 @@ function resetDocument() {
 //              that belong to it; switching pages parses the new one.
 //   url        the address the page is at, relative to it ("?radio=uv5r:X"),
 //              for code that reads location; reset with the page.
+//   origin     where the page is served from, PAGE_ORIGIN unless a test needs
+//              the production host ("https://webchirp.org/"); changing it
+//              parses the page anew, since a document cannot change origin.
 //   fresh      parse a new page instead of resetting the shared one.
 //   window     extra window properties (matchMedia, innerWidth, open...).
 //   navigator  extra navigator properties (clipboard, serial, onLine...).
@@ -348,6 +353,7 @@ function resetDocument() {
 export function installIndexPage({
   page: pageName = "index.html",
   url = null,
+  origin = PAGE_ORIGIN,
   fresh = false,
   window: windowOverrides = {},
   navigator: navigatorOverrides = {},
@@ -358,9 +364,9 @@ export function installIndexPage({
     page.removeTrackedListeners();
     restorePageObjects();
   }
-  if (!page || fresh || page.name !== pageName) {
+  if (!page || fresh || page.name !== pageName || page.origin !== origin) {
     page?.window.close();
-    page = parsePage(pageName);
+    page = parsePage(pageName, origin);
   } else {
     resetDocument();
   }
