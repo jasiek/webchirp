@@ -474,6 +474,15 @@ export function createRepeaterQuery(ctx: UiContext) {
     activeSource = source;
     buildFields(source, loadedOptions);
     dom.repeaterQueryTitleEl.textContent = source.title;
+    // Only a directory that asks to be credited has a link in the button row.
+    const attributionEl = dom.repeaterQueryAttributionEl;
+    attributionEl.hidden = !source.attribution;
+    attributionEl.textContent = source.attribution?.text || "";
+    if (source.attribution) {
+      attributionEl.href = source.attribution.url;
+    } else {
+      attributionEl.removeAttribute("href");
+    }
     setModalOpen(true);
     // Paired with repeater_import, this shows how many people open the filter
     // modal and never run a query.

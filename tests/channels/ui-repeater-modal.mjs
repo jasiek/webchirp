@@ -25,6 +25,7 @@ const DOM_KEYS = [
   "channelImportPrzemiennikiEl", "channelImportRepeaterbookEl", "channelImportIrtsEl", "channelImportRsgbEl",
   "repeaterQueryModalEl", "repeaterQueryFormEl", "repeaterQueryTitleEl",
   "repeaterQueryGridEl", "repeaterQueryCancelEl", "repeaterQuerySubmitEl",
+  "repeaterQueryAttributionEl",
 ];
 
 const META_JSON = JSON.stringify({
@@ -482,6 +483,30 @@ test("submitting sends the selected filters as URL parameters", async () => {
   assert.equal(table.inserted.length, 1);
   assert.equal(table.inserted[0].label, "przemienniki");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
+});
+
+test("only the RepeaterBook modal credits its directory beside the buttons", async () => {
+  const { dom } = buildHarness();
+  installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/przemienniki/meta", body: META_JSON },
+  ]);
+  const link = dom.repeaterQueryAttributionEl;
+
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  assert.equal(link.hidden, false);
+  assert.equal(link.textContent, "Data courtesy of RepeaterBook.com");
+  assert.equal(link.getAttribute("href"), "https://www.repeaterbook.com/");
+  assert.equal(link.target, "_blank");
+  // Left of the button bank: the first thing in the row, before Cancel.
+  assert.equal(link.nextElementSibling, dom.repeaterQueryCancelEl);
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+
+  // Another directory's modal must not carry RepeaterBook's credit over.
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  assert.equal(link.hidden, true);
+  assert.equal(link.textContent, "");
+  assert.equal(link.hasAttribute("href"), false);
 });
 
 test("blank optional filters are omitted from the query", async () => {

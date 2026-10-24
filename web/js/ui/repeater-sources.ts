@@ -121,6 +121,12 @@ export type FieldConfig =
 type ToolbarButtonName = { [K in keyof UiDom]: UiDom[K] extends HTMLButtonElement ? K : never }[keyof UiDom];
 
 /** A repeater directory the query modal can search. */
+/** A link crediting a directory for its data. */
+export interface SourceAttribution {
+  text: string;
+  url: string;
+}
+
 export interface RepeaterSource {
   key: string;
   /** The toolbar button that opens this source's modal. */
@@ -132,6 +138,8 @@ export interface RepeaterSource {
   label: string;
   actionLabel: string;
   insertLabel: string;
+  /** The credit the directory asks for, shown beside the modal's buttons. */
+  attribution?: SourceAttribution;
   fields: FieldConfig[];
   /** The filter dictionaries, by optionsKey; null when every option is static. */
   loadOptions: (() => Promise<Record<string, FieldOption[]>>) | null;
@@ -479,6 +487,7 @@ export function createRepeaterAdapters(
     toolbarButton,
     sourceEndpoints,
     turnstileSiteKey: siteKey = "",
+    attribution,
   }: {
     key: string;
     label: string;
@@ -488,6 +497,7 @@ export function createRepeaterAdapters(
     sourceEndpoints: { apiUrl: string; metaUrl: string } | null | undefined;
     /** Puts a Turnstile check on the form when set. */
     turnstileSiteKey?: string;
+    attribution?: SourceAttribution;
   }): RepeaterDirectoryAdapter {
     // The preview below names its cache key "key", so the id is held apart.
     const adapterId = key;
@@ -611,6 +621,7 @@ export function createRepeaterAdapters(
       label,
       actionLabel,
       insertLabel,
+      attribution,
       fields: [
         { kind: "select", key: "country", label: "Country", placeholder: "Any country", optionsKey: "country" },
         // The same starting selection as RSGB: the two bands a handheld can
@@ -1009,6 +1020,8 @@ export function createRepeaterAdapters(
       sourceEndpoints: endpoints?.repeaterbook,
       // The only directory whose API asks for a Turnstile token.
       turnstileSiteKey,
+      // RepeaterBook's terms ask that its data be credited where it is shown.
+      attribution: { text: "Data courtesy of RepeaterBook.com", url: "https://www.repeaterbook.com/" },
     }),
     remoteDirectoryAdapter({
       key: "irts",

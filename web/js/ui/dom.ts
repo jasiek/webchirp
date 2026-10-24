@@ -106,6 +106,7 @@ export const REQUIRED_ELEMENTS = {
   repeaterQueryFormEl: "#repeater-query-form",
   repeaterQueryTitleEl: "#repeater-query-title",
   repeaterQueryGridEl: "#repeater-query-grid",
+  repeaterQueryAttributionEl: "#repeater-query-attribution",
   repeaterQueryCancelEl: "#repeater-query-cancel",
   repeaterQuerySubmitEl: "#repeater-query-submit",
   channelImportRsgbEl: "#channel-import-rsgb",
@@ -190,6 +191,7 @@ export type UiElementTypes = {
   channelBulkEditCancelEl: HTMLButtonElement;
   channelBulkEditApplyEl: HTMLButtonElement;
   repeaterQueryFormEl: HTMLFormElement;
+  repeaterQueryAttributionEl: HTMLAnchorElement;
   repeaterQueryCancelEl: HTMLButtonElement;
   repeaterQuerySubmitEl: HTMLButtonElement;
   channelImportRsgbEl: HTMLButtonElement;

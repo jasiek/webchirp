@@ -2214,6 +2214,18 @@ button:disabled {
   gap: 0.5rem;
 }
 
+/* A data source's credit, at the left end of the button row. */
+.modal-attribution {
+  margin-right: auto;
+  align-self: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.modal-attribution:hover {
+  color: var(--accent);
+}
+
 .debug-output-panel {
   border-top: 1px solid var(--border);
   background: var(--debug-bg);
