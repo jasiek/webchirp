@@ -224,6 +224,13 @@ export interface RxfRecords {
   records: RepeaterRecord[];
   /** Entries with no usable frequency, reported as "frequency" skips. */
   unusable: SkippedRepeater[];
+  /**
+   * Where each unusable entry stands, by parseRxfLocation's rule, or null: a
+   * body fetched for one radius can then be cut down to a smaller one, skips
+   * included. Kept beside the skips rather than on them, so a skip reads the
+   * same as every other source's.
+   */
+  unusablePositions: Map<SkippedRepeater, { latitude: number; longitude: number } | null>;
 }
 
 // The RXF parser: one response body into RepeaterRecords. `source` is the
@@ -250,14 +257,17 @@ export function parseRxfRecords(
   }
   const records: RepeaterRecord[] = [];
   const unusable: SkippedRepeater[] = [];
+  const unusablePositions: RxfRecords["unusablePositions"] = new Map();
   for (const repeaterEl of Array.from(xmlDoc.querySelectorAll("repeaters > repeater"))) {
     const entry = readRxfEntry(repeaterEl);
     const record = rxfEntryToRecord(entry, { perspective, source });
     if (record) {
       records.push(record);
     } else {
-      unusable.push({ repeater: String(entry.qra || "").trim(), reason: "frequency" });
+      const skip: SkippedRepeater = { repeater: String(entry.qra || "").trim(), reason: "frequency" };
+      unusable.push(skip);
+      unusablePositions.set(skip, usablePosition(entry.latitude, entry.longitude));
     }
   }
-  return { perspective, records, unusable };
+  return { perspective, records, unusable, unusablePositions };
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { TURNSTILE_TOKEN_TIMEOUT_MS, createTurnstileTokens } from "../../web/js/turnstile.ts";
+import { TURNSTILE_TOKEN_TIMEOUT_MS, createTurnstileTokens, turnstileWaitReason } from "../../web/js/turnstile.ts";
 
 // A turnstile global the test drives by hand: nothing is issued until the test
 // calls issue(), fails() or timesOut(), so each case controls exactly when the
@@ -27,6 +27,8 @@ function manualTurnstile() {
     fails: (code) => widget.options["error-callback"](code),
     expires: () => widget.options["expired-callback"](),
     timesOut: () => widget.options["timeout-callback"](),
+    interactive: () => widget.options["before-interactive-callback"](),
+    ticked: () => widget.options["after-interactive-callback"](),
   };
 }
 
@@ -127,4 +129,80 @@ test("removing the widget ends a request still waiting on the script", async () 
   const pending = tokens.next();
   tokens.remove();
   await assert.rejects(pending, /closed/);
+});
+
+test("the state follows what the widget reports, and every change is heard", async () => {
+  const turnstile = manualTurnstile();
+  const tokens = createTurnstileTokens({}, "site-key", turnstile.load);
+  const heard = [];
+  tokens.subscribe(() => heard.push(tokens.state().kind));
+  assert.deepEqual(tokens.state(), { kind: "checking" });
+  await settled();
+
+  turnstile.interactive();
+  turnstile.ticked();
+  turnstile.issue("first");
+  turnstile.expires();
+  turnstile.fails("600010");
+  assert.deepEqual(tokens.state(), { kind: "failed", code: "600010" });
+  turnstile.timesOut();
+  turnstile.issue("second");
+  assert.deepEqual(heard, ["interactive", "checking", "ready", "expired", "failed", "timed-out", "ready"]);
+
+  assert.equal(await tokens.next(), "second");
+  assert.deepEqual(tokens.state(), { kind: "checking" }, "a spent token leaves the widget on the next one");
+});
+
+test("waiting() says whether a request is waiting for its token", async () => {
+  const turnstile = manualTurnstile();
+  const tokens = createTurnstileTokens({}, "site-key", turnstile.load);
+  let heard = 0;
+  tokens.subscribe(() => {
+    heard += 1;
+  });
+  assert.equal(tokens.waiting(), false);
+  const pending = tokens.next();
+  assert.equal(tokens.waiting(), true);
+  assert.equal(heard, 1, "a request starting to wait is heard");
+  await settled();
+  turnstile.issue("token");
+  assert.equal(tokens.waiting(), false, "no longer waiting once its token is handed over");
+  assert.equal(await pending, "token");
+});
+
+test("a script that cannot load leaves the check unavailable", async () => {
+  const tokens = createTurnstileTokens({}, "site-key", async () => {
+    throw new Error("blocked");
+  });
+  await settled();
+  assert.deepEqual(tokens.state(), { kind: "unavailable" });
+});
+
+test("a removed widget forgets its listeners", async () => {
+  const turnstile = manualTurnstile();
+  const tokens = createTurnstileTokens({}, "site-key", turnstile.load);
+  let heard = 0;
+  tokens.subscribe(() => {
+    heard += 1;
+  });
+  await settled();
+  tokens.remove();
+  turnstile.issue("late");
+  assert.equal(heard, 0);
+});
+
+test("every state but ready says why a request would wait, each in its own words", () => {
+  const states = [
+    { kind: "checking" },
+    { kind: "interactive" },
+    { kind: "expired" },
+    { kind: "timed-out" },
+    { kind: "failed", code: "600010" },
+    { kind: "unavailable" },
+  ];
+  const reasons = states.map(turnstileWaitReason);
+  assert.equal(turnstileWaitReason({ kind: "ready" }), "");
+  assert.ok(reasons.every((reason) => reason.length > 0), reasons.join("\n"));
+  assert.equal(new Set(reasons).size, reasons.length, "no two states read the same");
+  assert.match(turnstileWaitReason({ kind: "failed", code: "600010" }), /600010/);
 });

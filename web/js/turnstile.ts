@@ -41,7 +41,23 @@ export interface TurnstileRenderOptions {
   "expired-callback"?: () => void;
   "error-callback"?: (code: string) => boolean | void;
   "timeout-callback"?: () => void;
+  "before-interactive-callback"?: () => void;
+  "after-interactive-callback"?: () => void;
 }
+
+/**
+ * Where the widget stands, for a control that has to wait on it:
+ *   checking:    the script is loading or a challenge is running.
+ *   interactive: Cloudflare is asking the user to tick its box.
+ *   ready:       a token is held for the next request.
+ *   expired:     a held token ran out unused; the widget renews it by itself.
+ *   timed-out:   the box went unticked too long; the widget starts over.
+ *   failed:      the widget reported Cloudflare's error code; it retries.
+ *   unavailable: the script could not be loaded at all.
+ */
+export type TurnstileState =
+  | { kind: "checking" | "interactive" | "ready" | "expired" | "timed-out" | "unavailable" }
+  | { kind: "failed"; code: string };
 
 /** One widget, handing out a distinct token per request. */
 export interface TurnstileTokens {
@@ -49,6 +65,34 @@ export interface TurnstileTokens {
   next(): Promise<string>;
   /** Removes the widget; pending and later next() calls reject. */
   remove(): void;
+  /** Where the widget stands now. */
+  state(): TurnstileState;
+  /** Whether a next() call is still waiting for its token. */
+  waiting(): boolean;
+  /** Calls listener after every change to state() or waiting(); returns its unsubscribe. */
+  subscribe(listener: () => void): () => void;
+}
+
+// Why a request would have to wait for the widget, as one sentence for the
+// control it holds back, or "" when a token is waiting for it. One wording for
+// the Query API button and the map caption alike.
+export function turnstileWaitReason(state: TurnstileState): string {
+  switch (state.kind) {
+    case "ready":
+      return "";
+    case "checking":
+      return "Checking you're not a bot...";
+    case "interactive":
+      return "Tick “Verify you are human” below to continue.";
+    case "expired":
+      return "The bot check expired; checking again...";
+    case "timed-out":
+      return "The bot check timed out; checking again...";
+    case "failed":
+      return `The bot check failed (Cloudflare error ${state.code}); retrying...`;
+    case "unavailable":
+      return "The bot check could not load; a content blocker may be stopping challenges.cloudflare.com.";
+  }
 }
 
 // The deployment's site key, or "" when the meta tag is absent or blank.
@@ -92,7 +136,8 @@ export function loadTurnstile(): Promise<TurnstileApi> {
 // Render a widget into `container` and hand its tokens out one per request.
 // A token nobody has asked for yet is kept for the next caller; a token handed
 // out resets the widget, which starts on the next one straight away, so a
-// request usually finds one waiting.
+// request usually finds one waiting. state() and subscribe() are for the
+// control that would send one: it can say why it is waiting before it is used.
 export function createTurnstileTokens(
   container: HTMLElement,
   siteKey: string,
@@ -103,6 +148,21 @@ export function createTurnstileTokens(
   let ready: string | null = null;
   let removed = false;
   let widgetId: string | undefined;
+  // What the widget last reported, other than a token: state() reads "ready"
+  // whenever one is held, whatever came before it.
+  let widgetState: TurnstileState = { kind: "checking" };
+  const listeners = new Set<() => void>();
+
+  function changed(): void {
+    for (const listener of [...listeners]) {
+      listener();
+    }
+  }
+
+  function report(next: TurnstileState): void {
+    widgetState = next;
+    changed();
+  }
 
   function settle(waiter: Waiter): void {
     clearTimeout(waiter.timer);
@@ -129,6 +189,7 @@ export function createTurnstileTokens(
           const waiter = waiters[0];
           if (!waiter) {
             ready = token;
+            changed();
             return;
           }
           settle(waiter);
@@ -139,11 +200,13 @@ export function createTurnstileTokens(
               turnstile.reset(widgetId);
             }
           });
+          report({ kind: "checking" });
         },
         // The widget renews an expired token by itself; the old one must not
         // be handed out meanwhile.
         "expired-callback": () => {
           ready = null;
+          report({ kind: "expired" });
         },
         // Turnstile retries by itself, but a request waiting now would wait out
         // the whole deadline for a retry that may never succeed (a key this
@@ -151,17 +214,30 @@ export function createTurnstileTokens(
         // the error was handled.
         "error-callback": (code) => {
           rejectAll(new Error(`Cloudflare Turnstile check failed (error ${code}).`));
+          report({ kind: "failed", code: String(code) });
           return true;
         },
         "timeout-callback": () => {
           rejectAll(new Error("The Cloudflare Turnstile check timed out before it was completed."));
+          report({ kind: "timed-out" });
+        },
+        // The box appears only now: until this the check runs unseen, and
+        // after it a ticked box still has the challenge to finish.
+        "before-interactive-callback": () => {
+          report({ kind: "interactive" });
+        },
+        "after-interactive-callback": () => {
+          report({ kind: "checking" });
         },
       });
     }
     return turnstile;
   });
   // A script that never loads fails whoever is waiting.
-  api.catch((error) => rejectAll(error));
+  api.catch((error) => {
+    rejectAll(error);
+    report({ kind: "unavailable" });
+  });
 
   // Hand a token issued before anyone asked to the first request waiting.
   function handOutReady(turnstile: TurnstileApi): void {
@@ -174,6 +250,7 @@ export function createTurnstileTokens(
     settle(waiter);
     waiter.resolve(token);
     turnstile.reset(widgetId);
+    report({ kind: "checking" });
   }
 
   // The request is registered, and its deadline started, before the script is
@@ -190,9 +267,11 @@ export function createTurnstileTokens(
         timer: setTimeout(() => {
           settle(waiter);
           reject(new Error(`Cloudflare Turnstile did not issue a token within ${TURNSTILE_TOKEN_TIMEOUT_MS / 1000} s.`));
+          changed();
         }, TURNSTILE_TOKEN_TIMEOUT_MS),
       };
       waiters.push(waiter);
+      changed();
       api.then(handOutReady, (error) => {
         settle(waiter);
         reject(error);
@@ -206,6 +285,7 @@ export function createTurnstileTokens(
     }
     removed = true;
     ready = null;
+    listeners.clear();
     rejectAll(new Error("The Cloudflare Turnstile check was closed."));
     api.then((turnstile) => {
       if (widgetId !== undefined) {
@@ -214,5 +294,18 @@ export function createTurnstileTokens(
     }, () => {});
   }
 
-  return { next, remove };
+  return {
+    next,
+    remove,
+    state: () => (ready !== null ? { kind: "ready" } : widgetState),
+    waiting: () => waiters.length > 0,
+    subscribe(listener) {
+      if (!removed) {
+        listeners.add(listener);
+      }
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
 }

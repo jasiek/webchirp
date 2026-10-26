@@ -4,7 +4,7 @@ import { rememberBounded } from "./format.ts";
 import { createMapAttribution, renderStaticMap } from "./static-map-view.ts";
 import type { MapMarker } from "./static-map-view.ts";
 import { errorFields } from "../error-details.ts";
-import { createTurnstileTokens } from "../turnstile.ts";
+import { createTurnstileTokens, turnstileWaitReason } from "../turnstile.ts";
 import type { TurnstileApi } from "../turnstile.ts";
 
 // Field components for the shared repeater-query modal. Each factory builds
@@ -29,9 +29,10 @@ const FIELD_ID_PREFIX = "repeater-query-field-";
 
 /**
  * What the position field's preview is showing: nothing yet, a search in
- * flight, an answer, or one of the reasons there is none.
+ * flight, a search waiting on the bot check, an answer, or one of the reasons
+ * there is none.
  */
-export type PreviewState = "off" | "loading" | "ok" | "failed" | "offline" | "blocked" | "needed";
+export type PreviewState = "off" | "loading" | "verifying" | "ok" | "failed" | "offline" | "blocked" | "needed";
 
 /** One choice in a select or checkbox field. */
 export interface FieldOption {
@@ -56,6 +57,18 @@ export interface QueryField {
   tailNodes?: Node[];
   /** Releases what the field holds outside its own nodes; called before a rebuild. */
   dispose?: () => void;
+  /** Set by a field every directory request has to wait for (the bot check). */
+  gate?: QueryGate;
+}
+
+/** What a request waits for before it can be sent, as the shell sees it. */
+export interface QueryGate {
+  /** Why a request sent now would have to wait, or "" when it could go at once. */
+  reason(): string;
+  /** Whether a request is already waiting. */
+  waiting(): boolean;
+  /** Calls listener whenever either answer may have changed; returns its unsubscribe. */
+  subscribe(listener: () => void): () => void;
 }
 
 function fieldId(key: string, suffix = ""): string {
@@ -496,7 +509,8 @@ export function createPositionField(
   // after it previews the query the form describes (see setMarkers). Held here
   // rather than fetched here because this file contacts no directory.
   //   state:      "ok" once an answer is drawn, "loading" while the next is
-  //               fetched, "failed" when it could not be, "offline" when the
+  //               fetched, "verifying" while its request waits on the bot
+  //               check, "failed" when it could not be, "offline" when the
   //               browser reports no network, "blocked" when no
   //               radio is loaded to import into, "needed" when the source
   //               cannot be queried until a position is set, "off" when there
@@ -511,7 +525,8 @@ export function createPositionField(
   //               without a redraw still describes the squares on screen.
   //   needReason: under "needed", the shell's own sentence for what the form
   //               is still missing -- the sources word it differently, so the
-  //               caption is told rather than guessing.
+  //               caption is told rather than guessing -- and under
+  //               "verifying", where the bot check stands.
   let plot: {
     state: PreviewState;
     points: MapMarker[];
@@ -533,6 +548,8 @@ export function createPositionField(
     // under the map is where the user is already looking for the missing
     // location. Stands in only if the shell passed no reason of its own.
     needed: "Set a location to search this directory.",
+    // The same stand-in rule: the shell passes the check's own sentence.
+    verifying: "Checking you're not a bot...",
   };
 
   // Caption the map with what is drawn on it, not with what was handed in: a
@@ -540,7 +557,7 @@ export function createPositionField(
   // it under a map that has no square for it is worse than not counting it.
   function updateCount(drawn: { inRange: number; outOfRange: number } | null): void {
     plot.drawn = drawn;
-    previewCount.classList.toggle("is-loading", plot.state === "loading");
+    previewCount.classList.toggle("is-loading", plot.state === "loading" || plot.state === "verifying");
     const fixedCaption = FIXED_CAPTIONS[plot.state];
     if (fixedCaption) {
       previewCount.textContent = plot.needReason || fixedCaption;
@@ -838,7 +855,8 @@ export function createPositionField(
       schedulePreview();
     },
     // Plot what the current filters would return. `state` is "loading" while a
-    // preview is in flight, "ok" with points, "blocked" when the app could not
+    // preview is in flight ("verifying" while it waits on the bot check, with
+    // the check's sentence as `reason`), "ok" with points, "blocked" when the app could not
     // import the answer anyway, or "failed"/"off" when there is nothing to show
     // — the squares already drawn stay put while the next answer is fetched,
     // because blanking the map on every edit would make it flicker through
@@ -854,7 +872,7 @@ export function createPositionField(
       } = {},
     ) => {
       plot.state = state;
-      plot.needReason = state === "needed" ? String(reason || "") : "";
+      plot.needReason = state === "needed" || state === "verifying" ? String(reason || "") : "";
       if (state === "ok") {
         // Only an answer carries the qualifiers; "loading" and "failed" keep
         // the ones describing the squares still on screen.
@@ -1334,7 +1352,8 @@ export function createCityField({
 // per request. It goes at the foot of the form, after the map, beside the
 // button it gates, and is invisible unless Cloudflare asks the user to click.
 // The widget loads Cloudflare's script and talks to challenges.cloudflare.com;
-// it sends nothing from the form.
+// it sends nothing from the form. Its gate is how the shell holds the button
+// back, and says why, while the check has no token to give.
 export function createTurnstileField(
   { key, siteKey, load }: { key: string; siteKey: string; load?: () => Promise<TurnstileApi> },
 ): QueryField {
@@ -1348,5 +1367,10 @@ export function createTurnstileField(
     focusTarget: null,
     value: () => tokens.next,
     dispose: () => tokens.remove(),
+    gate: {
+      reason: () => turnstileWaitReason(tokens.state()),
+      waiting: () => tokens.waiting(),
+      subscribe: (listener) => tokens.subscribe(listener),
+    },
   };
 }

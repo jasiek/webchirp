@@ -19,6 +19,7 @@ import {
   squaresForRadius,
 } from "../rsgb.ts";
 import { parseRxfRecords, rxfPreferredModes } from "../rxf.ts";
+import type { RxfRecords } from "../rxf.ts";
 import { withRequestTimeout } from "../request-timeout.ts";
 import { TURNSTILE_TOKEN_HEADER } from "../turnstile.ts";
 import { countryDisplayName, flagEmojiFromCountryCode, rememberBounded } from "./format.ts";
@@ -145,7 +146,16 @@ export interface RepeaterSource {
   loadOptions: (() => Promise<Record<string, FieldOption[]>>) | null;
   previewQuery: (values: QueryValues) => Promise<PreviewSummary | null>;
   runQuery: (values: QueryValues) => Promise<void>;
+  /**
+   * What would answer Query API for these values now: "cached" a preview
+   * already fetched, "pending" one still in flight, "request" a request of the
+   * import's own. Absent for a directory whose import always asks.
+   */
+  importCoverage?: (values: QueryValues) => ImportCoverage;
 }
+
+/** See RepeaterSource.importCoverage. */
+export type ImportCoverage = "cached" | "pending" | "request";
 
 /**
  * Why a directory is being asked: "preview" feeds the map while the form is
@@ -393,8 +403,15 @@ export function createRepeaterAdapters(
   interface RemotePreviewBody {
     records: RepeaterRecord[];
     unusable: SkippedRepeater[];
+    unusablePositions: RxfRecords["unusablePositions"];
     /** The radius the request covered. */
     rangeKm: number;
+  }
+
+  /** A preview request not yet answered, which an import may wait for instead of asking again. */
+  interface RemotePreviewFlight {
+    rangeKm: number;
+    body: Promise<RemotePreviewBody>;
   }
 
   function countryOptions(codes: Iterable<string> | null | undefined): FieldOption[] {
@@ -580,6 +597,29 @@ export function createRepeaterAdapters(
       if (cached && cached.rangeKm >= radiusKm * PREVIEW_RANGE_FACTOR) {
         return { records: cached.records, unusable: cached.unusable, preferredModes };
       }
+      // Registered before the first await, so the moment the shell has asked
+      // for this preview an import of the same search knows it is coming.
+      const flight: RemotePreviewFlight = {
+        // The radius this body actually covers, not the one asked for: a later,
+        // narrower search may reuse it, a wider one may not.
+        rangeKm: radiusKm * PREVIEW_RANGE_FACTOR,
+        body: fetchPreviewBody(url, values, radiusKm * PREVIEW_RANGE_FACTOR),
+      };
+      previewFlights.set(key, flight);
+      try {
+        const body = await flight.body;
+        // Cached before the flight is forgotten, so the search is never
+        // covered by neither.
+        rememberBounded(previewCache, key, body, PREVIEW_CACHE_LIMIT);
+        return { records: body.records, unusable: body.unusable, preferredModes };
+      } finally {
+        if (previewFlights.get(key) === flight) {
+          previewFlights.delete(key);
+        }
+      }
+    }
+
+    async function fetchPreviewBody(url: URL, values: QueryValues, rangeKm: number): Promise<RemotePreviewBody> {
       const headers = await turnstileHeaders(values);
       const text = await withRequestTimeout(`${label} preview`, async (signal) => {
         const response = await fetch(url.toString(), { headers, signal });
@@ -589,15 +629,63 @@ export function createRepeaterAdapters(
         return response.text();
       });
       const parsed = parseRxfRecords(text, { source: adapterId });
-      // The radius this body actually covers, not the one asked for: a later,
-      // narrower search may reuse it, a wider one may not.
-      const body = {
-        records: parsed.records,
-        unusable: parsed.unusable,
-        rangeKm: radiusKm * PREVIEW_RANGE_FACTOR,
+      return { records: parsed.records, unusable: parsed.unusable, unusablePositions: parsed.unusablePositions, rangeKm };
+    }
+
+    // Previews asked for and not yet answered, by the same key as the cache.
+    const previewFlights = new Map<string, RemotePreviewFlight>();
+
+    // The preview, fetched or on its way, that already holds everything Query
+    // API would get for these values: the same filters and position, over at
+    // least the radius. The map shows a preview before the button is pressed,
+    // so asking the directory again -- and, for RepeaterBook, waiting out a
+    // second bot check for it -- would only fetch what is already here.
+    function coveringPreview(values: QueryValues):
+      { cached: RemotePreviewBody } | { pending: Promise<RemotePreviewBody> } | null {
+      const radiusKm = Number(values.radius);
+      if (!values.position || !Number.isFinite(radiusKm) || radiusKm <= 0) {
+        return null;
+      }
+      const key = keyWithoutRange(buildQueryUrl(values, radiusKm));
+      const cached = previewCache.get(key);
+      if (cached && cached.rangeKm >= radiusKm) {
+        return { cached };
+      }
+      const flight = previewFlights.get(key);
+      return flight && flight.rangeKm >= radiusKm ? { pending: flight.body } : null;
+    }
+
+    // What the directory would have sent for exactly `radiusKm` around
+    // `position`, cut from a body fetched for more. The directory keeps a
+    // repeater by great-circle distance (haversine, as here; its 6371 km Earth
+    // and this one's 6371.0088 km differ by centimetres at these ranges), so a
+    // narrower search is a subset of a wider one. One with no position is
+    // kept, as the preview caption counts it among what Query API inserts.
+    function withinRadius(body: RemotePreviewBody, position: QueryPosition, radiusKm: number):
+      { records: RepeaterRecord[]; unusable: SkippedRepeater[] } {
+      const kept = (latitude: number | null, longitude: number | null) => latitude === null
+        || longitude === null
+        || haversineKm(position.latitude, position.longitude, latitude, longitude) <= radiusKm;
+      return {
+        records: body.records.filter((record) => kept(record.latitude, record.longitude)),
+        unusable: body.unusable.filter((entry) => {
+          const at = body.unusablePositions.get(entry) || null;
+          return kept(at?.latitude ?? null, at?.longitude ?? null);
+        }),
       };
-      rememberBounded(previewCache, key, body, PREVIEW_CACHE_LIMIT);
-      return { records: body.records, unusable: body.unusable, preferredModes };
+    }
+
+    // The covering preview's body, waiting for it if it is still on its way.
+    // A preview that fails leaves the import to ask for itself.
+    async function previewBodyFor(values: QueryValues): Promise<RemotePreviewBody | null> {
+      const covering = coveringPreview(values);
+      if (!covering) {
+        return null;
+      }
+      if ("cached" in covering) {
+        return covering.cached;
+      }
+      return covering.pending.catch(() => null);
     }
 
     return {
@@ -617,6 +705,10 @@ export function createRepeaterAdapters(
         keys: ["country", "position"],
         message: COUNTRY_OR_POSITION_REQUIRED_MESSAGE,
       }],
+      importCoverage: (values) => {
+        const covering = coveringPreview(values);
+        return !covering ? "request" : "cached" in covering ? "cached" : "pending";
+      },
       title: `Query ${label}`,
       label,
       actionLabel,
@@ -682,23 +774,29 @@ export function createRepeaterAdapters(
         }
         const url = buildQueryUrl(values, values.radius);
         log.setStatus(`Querying ${label}...`);
-        // Both the request and the body read sit inside the deadline: the
-        // error-path read of a failed response can stall exactly as the success
-        // path can, and either one strands the submit button on "Querying...".
-        const headers = await turnstileHeaders(values);
-        const text = await withRequestTimeout(`${label} query`, async (signal) => {
-          const response = await fetch(url.toString(), { headers, signal });
-          if (!response.ok) {
-            const body = await response.text();
-            throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
-          }
-          return response.text();
-        });
-        const parsed = parseRxfRecords(text, { source: adapterId });
-        const fetched = parsed.records.length + parsed.unusable.length;
+        const preview = await previewBodyFor(values);
+        let found: { records: RepeaterRecord[]; unusable: SkippedRepeater[] };
+        if (preview && values.position) {
+          found = withinRadius(preview, values.position, Number(values.radius));
+        } else {
+          // Both the request and the body read sit inside the deadline: the
+          // error-path read of a failed response can stall exactly as the success
+          // path can, and either one strands the submit button on "Querying...".
+          const headers = await turnstileHeaders(values);
+          const text = await withRequestTimeout(`${label} query`, async (signal) => {
+            const response = await fetch(url.toString(), { headers, signal });
+            if (!response.ok) {
+              const body = await response.text();
+              throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
+            }
+            return response.text();
+          });
+          found = parseRxfRecords(text, { source: adapterId });
+        }
+        const fetched = found.records.length + found.unusable.length;
         return {
-          records: parsed.records,
-          unusable: parsed.unusable,
+          records: found.records,
+          unusable: found.unusable,
           preferredModes: rxfPreferredModes(queriedModes(values)),
           onImported: (inserted) => {
             // result_count is the point of this event: a query that returns
@@ -712,7 +810,7 @@ export function createRepeaterAdapters(
               located: values.position ? "yes" : "no",
               result_count: fetched,
             });
-            log.logDebug(`${actionLabel.toUpperCase()} QUERY ${url.toString()}`);
+            log.logDebug(`${actionLabel.toUpperCase()} QUERY ${url.toString()}${preview ? " (answered from the map preview)" : ""}`);
             log.logDebug(`${actionLabel.toUpperCase()} RESULTS ${fetched} fetched, ${inserted} inserted`);
           },
         };

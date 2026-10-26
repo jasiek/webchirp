@@ -24,7 +24,7 @@ import {
 } from "./query-fields.ts";
 import { resolveTurnstileSiteKey } from "../turnstile.ts";
 import type { UiContext } from "../types/ui-context.js";
-import type { QueryField } from "./query-fields.ts";
+import type { QueryField, QueryGate } from "./query-fields.ts";
 import type { City, FieldOption } from "./query-fields.ts";
 import type { FieldConfig, PreviewSummary, QueryValues, RepeaterSource } from "./repeater-sources.ts";
 import { errorFields } from "../error-details.ts";
@@ -123,8 +123,9 @@ export function createRepeaterQuery(ctx: UiContext) {
   // Browser-reported connectivity only. Request failures do not change this;
   // web/js/ui/connectivity.ts updates it from online/offline events.
   let online = true;
-  // Why the form as it stands cannot be queried, or "" when it can. Held
-  // beside queryInFlight because both disable the same button and either can
+  // Why the form as it stands cannot be queried -- a filter it still needs, or
+  // the bot check a request of its own would wait for -- or "" when it can.
+  // Held beside queryInFlight because both disable the same button and either can
   // change while the other holds: re-enabling after a query must not undo the
   // gate, and filling the form in mid-query must not enable the button early.
   let submitBlockedReason = "";
@@ -182,10 +183,50 @@ export function createRepeaterQuery(ctx: UiContext) {
   // outage does, so every unfilled form filed a Sentry event for something no
   // one could fix in the code.
   function refreshSubmitState() {
-    const values = fieldInstances.length > 0 ? collectValues() : {};
-    submitBlockedReason = unmetRequirement(activeSource, values);
+    const values = fieldInstances.length > 0 ? collectValues() : null;
+    submitBlockedReason = unmetRequirement(activeSource, values || {}) || (values ? gateReason(values) : "");
     applySubmitState();
   }
+
+  // The field every directory request waits for (RepeaterBook's bot check),
+  // or null when the open form has none.
+  function requestGate(): QueryGate | null {
+    return fieldInstances.find((instance) => instance.gate)?.gate || null;
+  }
+
+  // Why Query API, pressed now, would have to wait for the gate, or "" when
+  // it would not: a preview already fetched answers it without a request, and
+  // one already sent with its token answers it without another. Holding the
+  // button back is what turns "Querying..." spent waiting on a challenge into a
+  // reason given before the click.
+  function gateReason(values: QueryValues): string {
+    const gate = requestGate();
+    if (!gate) {
+      return "";
+    }
+    const coverage = activeSource.importCoverage?.(values) || "request";
+    if (coverage === "cached" || (coverage === "pending" && !gate.waiting())) {
+      return "";
+    }
+    return gate.reason();
+  }
+
+  // The gate moved -- a token arrived or was spent, Cloudflare wants a click,
+  // a check failed or expired -- so the button, and the caption that explains
+  // it, may say something different now.
+  function onGateChange(): void {
+    refreshSubmitState();
+    if (!isModalOpen()) {
+      return;
+    }
+    if (previewProgressGeneration === previewGeneration) {
+      showPreviewProgress();
+    } else if (online && state.currentHeaders.length && !collectValues().position) {
+      showUnplacedCaption();
+    }
+  }
+
+  let unsubscribeGate: (() => void) | null = null;
 
   // A city was committed in the autocomplete: its coordinates become the
   // form's position. setPosition() is the same entry point geolocation and the
@@ -214,6 +255,8 @@ export function createRepeaterQuery(ctx: UiContext) {
   }
 
   function buildFields(source: RepeaterSource, loadedOptions: Record<string, FieldOption[]> | null): void {
+    unsubscribeGate?.();
+    unsubscribeGate = null;
     for (const instance of fieldInstances) {
       instance.dispose?.();
     }
@@ -293,6 +336,7 @@ export function createRepeaterQuery(ctx: UiContext) {
       dom.repeaterQueryGridEl.appendChild(node);
     }
     bindRangeToPreview();
+    unsubscribeGate = requestGate()?.subscribe(onGateChange) || null;
   }
 
   // Feed the range filter's value to the position field, which draws it as a
@@ -323,26 +367,52 @@ export function createRepeaterQuery(ctx: UiContext) {
   // directory, whose answer must never be drawn under the first one's filters.
   let previewGeneration = 0;
   let previewTimer = 0;
+  // The generation of the preview whose wait the caption is showing, so a
+  // change in the gate can redraw it; -1 when no preview is waiting to be drawn.
+  let previewProgressGeneration = -1;
+
+  // Caption a preview still on its way: with where the bot check stands while
+  // its request waits on one, plainly loading otherwise.
+  function showPreviewProgress(): void {
+    const gate = requestGate();
+    if (gate?.waiting()) {
+      positionField?.setMarkers(null, "verifying", { reason: gate.reason() });
+    } else {
+      positionField?.setMarkers(null, "loading");
+    }
+  }
 
   async function runPreview(source: RepeaterSource, values: QueryValues): Promise<void> {
     const generation = previewGeneration;
-    positionField?.setMarkers(null, "loading");
+    previewProgressGeneration = generation;
     let result: PreviewSummary | null = null;
     try {
-      result = await source.previewQuery(values);
+      const answer = source.previewQuery(values);
+      // The preview has asked for its token, or registered itself as on its
+      // way, before its first await: an import of the same search waits on it
+      // now rather than asking again, so the button can say so straight away.
+      refreshSubmitState();
+      showPreviewProgress();
+      result = await answer;
     } catch (error) {
+      refreshSubmitState();
       if (generation !== previewGeneration) {
         return;
       }
+      previewProgressGeneration = -1;
       positionField?.setMarkers(null, "failed");
       // The whole error, as the city lookup logs it: a preview that fails
       // inside the XML parser is only diagnosable from the stack.
       log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW FAILED ${errorDetails(error)}`);
       return;
     }
+    // Whichever preview this was, its answer is cached now and may cover what
+    // the form asks.
+    refreshSubmitState();
     if (generation !== previewGeneration) {
       return;
     }
+    previewProgressGeneration = -1;
     // null is the sources' "there was nothing to ask" — a blank, zero or
     // negative radius. Reporting it as an empty answer would caption the map
     // "0 in range" and log a successful zero-result preview, when in fact no
@@ -360,6 +430,19 @@ export function createRepeaterQuery(ctx: UiContext) {
       unsupported: result.unsupported || 0,
     });
     log.logDebug(`${source.actionLabel.toUpperCase()} PREVIEW ${result.points.length} repeater(s)${result.truncated ? " (area clipped)" : ""}${result.unsupported ? `, ${result.unsupported} unsupported` : ""}${result.unmapped ? `, ${result.unmapped} unmapped` : ""}`);
+  }
+
+  // No position is not a failed preview, it is a form not yet filled in: the
+  // map is showing its stand-in line, and a count under it would be counting
+  // nothing. A form that cannot be submitted as it stands says why under the
+  // map instead of staying blank, because that is the readable half of the
+  // disabled Query API button -- a title attribute is nothing on a phone.
+  // Only when it cannot: a country-wide search is runnable and simply has no
+  // position to preview, so it keeps the blank caption -- until it has to wait
+  // for the bot check, which is said here for the same reason.
+  function showUnplacedCaption(): void {
+    const blocked = submitBlockedReason.length > 0;
+    positionField?.setMarkers([], blocked ? "needed" : "off", { reason: submitBlockedReason });
   }
 
   // Called by every control in the form. The work is deferred, so a drag that
@@ -392,16 +475,8 @@ export function createRepeaterQuery(ctx: UiContext) {
       return;
     }
     const values = collectValues();
-    // No position is not a failed preview, it is a form not yet filled in: the
-    // map is showing its stand-in line, and a count under it would be counting
-    // nothing. A form that cannot be submitted as it stands says why under the
-    // map instead of staying blank, because that is the readable half of the
-    // disabled Query API button -- a title attribute is nothing on a phone.
-    // Only when it cannot: a country-wide search is runnable and simply has no
-    // position to preview, so it keeps the blank caption.
     if (!values.position) {
-      const blocked = submitBlockedReason.length > 0;
-      positionField?.setMarkers([], blocked ? "needed" : "off", { reason: submitBlockedReason });
+      showUnplacedCaption();
       return;
     }
     const source = activeSource;
