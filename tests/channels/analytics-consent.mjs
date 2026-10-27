@@ -86,6 +86,11 @@ test("before an answer the banner asks and nothing reaches Google", async () => 
   assert.ok(![decline, accept].includes(document.activeElement), "a choice is focused for the visitor");
   assert.ok(!decline.hasAttribute("autofocus") && !accept.hasAttribute("autofocus"));
 
+  // A cookie beside the text says what this is about at a glance.
+  const icon = shown.querySelector(".consent-banner-icon");
+  assert.equal(icon.textContent, "\u{1F36A}");
+  assert.equal(icon.nextElementSibling, shown.querySelector(".consent-banner-text"), "the cookie is not left of the text");
+
   const policy = shown.querySelector("a");
   assert.equal(new URL(policy.href).pathname, "/privacy.html");
 

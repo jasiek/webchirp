@@ -63,6 +63,13 @@ export function showConsentBanner(
   banner.className = "consent-banner";
   banner.setAttribute("aria-label", "Analytics consent");
 
+  // A large cookie beside the question, so a glance says what the banner is
+  // about before a word of it is read. Decoration only: the text says it all.
+  const icon = doc.createElement("span");
+  icon.className = "consent-banner-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "\u{1F36A}";
+
   const text = doc.createElement("p");
   text.className = "consent-banner-text";
   text.append(
@@ -93,7 +100,13 @@ export function showConsentBanner(
     actions.append(button);
   }
 
-  banner.append(text, actions);
+  // The icon and the text share a row of their own, so the icon stays beside
+  // the text at any width while the buttons wrap below them on a phone.
+  const body = doc.createElement("div");
+  body.className = "consent-banner-body";
+  body.append(icon, text);
+
+  banner.append(body, actions);
   doc.body.append(banner);
   return banner;
 }
