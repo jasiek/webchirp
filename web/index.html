@@ -379,14 +379,19 @@
                 description.
               -->
               <div class="channel-toolbar-group" role="group" aria-labelledby="channel-repeater-label">
-                <span class="channel-toolbar-label" id="channel-repeater-label">Repeaters</span>
-                <button
-                  id="channel-import-przemienniki"
-                  type="button"
-                  title="Poland and neighbouring Europe: query the przemienniki.net repeater directory"
-                >
-                  <span aria-hidden="true">🇪🇺</span> przemienniki.net
-                </button>
+                <!-- Keeps the label on the same line as the first directory:
+                     the group's buttons wrap among the rest of the toolbar's,
+                     and on its own the label could end a line. -->
+                <span class="channel-toolbar-lead">
+                  <span class="channel-toolbar-label" id="channel-repeater-label">Repeaters</span>
+                  <button
+                    id="channel-import-przemienniki"
+                    type="button"
+                    title="Poland and neighbouring Europe: query the przemienniki.net repeater directory"
+                  >
+                    <span aria-hidden="true">🇪🇺</span> przemienniki.net
+                  </button>
+                </span>
                 <button
                   id="channel-import-repeaterbook"
                   type="button"
