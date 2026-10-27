@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   DEFAULT_REPEATER_API_BASE,
+  buildMursRows,
   buildRepeaterEndpoints,
   fetchCitySuggestions,
   parseCitySuggestions,
@@ -536,4 +537,35 @@ test("fetchCitySuggestions makes no request for a blank query or a missing endpo
   ]);
   assert.deepEqual(blank.seen, []);
   assert.deepEqual(blank.result, [[], []]);
+});
+
+// A driver's own Mode and Power vocabulary, for the MURS band plan.
+function mursHooks(powerOptions) {
+  return makeRowHooks({
+    columns: ["Name", "Frequency", "Duplex", "Offset", "Tone", "CrossMode", "Mode", "Power"],
+    optionsByColumn: { Mode: ["FM", "NFM", "AM"], Power: powerOptions },
+  });
+}
+
+test("buildMursRows adds the five US MURS simplex channels, narrow on 151 MHz", () => {
+  const rows = buildMursRows(mursHooks(["High", "Low"]));
+  assert.deepEqual(rows.map((row) => [row.Name, row.Frequency, row.Mode]), [
+    ["MURS 1", "151.82000", "NFM"],
+    ["MURS 2", "151.88000", "NFM"],
+    ["MURS 3", "151.94000", "NFM"],
+    // 47 CFR 95.2773 allows 20 kHz on the two 154 MHz channels.
+    ["MURS 4", "154.57000", "FM"],
+    ["MURS 5", "154.60000", "FM"],
+  ]);
+  for (const row of rows) {
+    assert.equal(row.Duplex, "");
+    assert.equal(row.Offset, "0.000000");
+    assert.equal(row.Tone, "");
+    assert.equal(row.Power, "Low", "a driver with tiers only gets its lowest");
+  }
+});
+
+test("buildMursRows picks a 2 W level, the MURS limit, over any other", () => {
+  const rows = buildMursRows(mursHooks(["5W", "Low", "2W", "0.5W"]));
+  assert.deepEqual(rows.map((row) => row.Power), Array(5).fill("2W"));
 });

@@ -21,7 +21,7 @@ Web-based CPS for amateur transceivers which runs [CHIRP](https://chirp.danplane
 - Radio settings read and validated through the selected driver
   (`get_radio_settings` / `validate_radio_settings`).
 - Channel editing: insert / remove / move, copy / cut / paste, plus GMRS, FRS,
-  and PMR446 band-preset generators.
+  MURS and PMR446 band-preset generators.
 - Repeater imports from external directories (RepeaterBook, przemienniki.net,
   RSGB ETCC, IRTS).
 - CSV import/export and CHIRP `.img` clone-file import/export, all round-tripped

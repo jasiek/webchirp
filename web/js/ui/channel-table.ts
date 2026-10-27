@@ -1,6 +1,7 @@
 import {
   buildFrsRows,
   buildGmrsRows,
+  buildMursRows,
   buildPmr446Rows,
 } from "../datasources.ts";
 import {
@@ -1310,8 +1311,8 @@ export function createChannelTable(ctx: UiContext) {
       return;
     }
     insertRowsAtSelectionOrEnd(rows, label);
-    // Which band plan gets used is a rough read on where users are: GMRS and
-    // FRS are US, PMR446 is European.
+    // Which band plan gets used is a rough read on where users are: GMRS, FRS
+    // and MURS are US, PMR446 is European.
     trackEvent("preset_channels_added", {
       ...radioEventParams(state.selectedRadio),
       preset: label,
@@ -1931,6 +1932,9 @@ export function createChannelTable(ctx: UiContext) {
     });
     dom.channelAddFrsEl.addEventListener("click", () => {
       void addBandPlanChannels(buildFrsRows, "FRS");
+    });
+    dom.channelAddMursEl.addEventListener("click", () => {
+      void addBandPlanChannels(buildMursRows, "MURS");
     });
     dom.channelAddPmr446El.addEventListener("click", () => {
       void addBandPlanChannels(buildPmr446Rows, "PMR446");

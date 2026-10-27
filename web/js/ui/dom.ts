@@ -80,6 +80,7 @@ export const REQUIRED_ELEMENTS = {
   channelBulkEditEl: "#channel-bulk-edit",
   channelAddGmrsEl: "#channel-add-gmrs",
   channelAddFrsEl: "#channel-add-frs",
+  channelAddMursEl: "#channel-add-murs",
   channelAddPmr446El: "#channel-add-pmr446",
   channelImportPrzemiennikiEl: "#channel-import-przemienniki",
   channelImportRepeaterbookEl: "#channel-import-repeaterbook",
@@ -180,6 +181,7 @@ export type UiElementTypes = {
   channelBulkEditEl: HTMLButtonElement;
   channelAddGmrsEl: HTMLButtonElement;
   channelAddFrsEl: HTMLButtonElement;
+  channelAddMursEl: HTMLButtonElement;
   channelAddPmr446El: HTMLButtonElement;
   channelImportPrzemiennikiEl: HTMLButtonElement;
   channelImportRepeaterbookEl: HTMLButtonElement;

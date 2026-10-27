@@ -66,6 +66,15 @@ const GMRS_CHANNELS = [
   { name: "GMRS 21R", frequency: "462.70000", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
   { name: "GMRS 22R", frequency: "462.72500", duplex: "+", offset: "5.000000", bandwidthKhz: 25, powerTier: "high" },
 ];
+// 47 CFR 95.2763 and 95.2773: the three 151 MHz channels are narrowband
+// (11.25 kHz), the two 154 MHz ones may be wideband (20 kHz).
+const MURS_CHANNELS = [
+  { name: "MURS 1", frequency: "151.82000", bandwidthKhz: 11.25 },
+  { name: "MURS 2", frequency: "151.88000", bandwidthKhz: 11.25 },
+  { name: "MURS 3", frequency: "151.94000", bandwidthKhz: 11.25 },
+  { name: "MURS 4", frequency: "154.57000", bandwidthKhz: 20 },
+  { name: "MURS 5", frequency: "154.60000", bandwidthKhz: 20 },
+];
 
 // Base URL of the API that fronts przemienniki.net, repeaterbook.com and IRTS.
 // The first two upstreams don't send browser CORS headers, so their query
@@ -344,6 +353,30 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }: R
       setRowValue(row, "Mode", modeValue);
     }
     const powerValue = findPowerTier(findEnumOption, channel.powerTier);
+    if (powerValue) {
+      setRowValue(row, "Power", powerValue);
+    }
+    return row;
+  });
+}
+
+// The five US MURS simplex channels. MURS allows 2 W at most (47 CFR 95.2767),
+// so a driver that labels a 2 W level gets it, and one that labels only tiers
+// gets its lowest; a driver matching neither keeps its own default power.
+export function buildMursRows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
+  return MURS_CHANNELS.map((channel) => {
+    const row = createBlankRow();
+    setRowValue(row, "Name", channel.name);
+    setRowValue(row, "Frequency", channel.frequency);
+    setRowValue(row, "Duplex", "");
+    setRowValue(row, "Offset", "0.000000");
+    setRowValue(row, "Tone", "");
+    setRowValue(row, "CrossMode", "Tone->Tone");
+    const modeValue = findBandwidthMode(findEnumOption, channel.bandwidthKhz);
+    if (modeValue) {
+      setRowValue(row, "Mode", modeValue);
+    }
+    const powerValue = findEnumOption("Power", ["2W", "2.0W", "Low", "1W", "1.0W", "0.5W", "500mW"], true);
     if (powerValue) {
       setRowValue(row, "Power", powerValue);
     }
