@@ -57,7 +57,8 @@
           </li>
           <li>
             Usage statistics go to Google Analytics only if you accept them on the cookie
-            banner. Error reports go to Sentry, which sets no cookies. Both leave out file
+            banner. Error reports and performance traces go to Sentry, which sets no cookies.
+            Both leave out file
             names, channel names, frequencies, search terms and coordinates.
           </li>
           <li>
@@ -184,6 +185,15 @@
             the connection type, the programming cable's chip family and USB vendor and
             product IDs (which name a model of adapter, never a serial number), the file
             format, a channel-count range and the repeater directory.
+          </li>
+          <li>
+            For one page load in ten, chosen at random, the app also sends a performance trace:
+            the page address, the site you arrived from, your browser and operating system, how
+            long the page and each file it loaded took, how quickly the page responded, and
+            which part of the page a slow click or key press landed on. A trace keeps the full
+            address only of the app's own files and of files from jsDelivr. For any other site
+            it keeps only the site's name, because the rest of the address can describe you: a
+            map tile's address is a position, and a callsign lookup's is the callsign.
           </li>
           <li>
             Before anything is sent, the app removes web address query strings (where a repeater
