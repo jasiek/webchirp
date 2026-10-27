@@ -3,7 +3,8 @@
 Derived from the driver's ``RadioFeatures``: which columns apply, the valid
 choices for each enumerated one, the memory bounds and the power levels with
 their wattages, so the grid can constrain edits before the upload preflight
-ever runs.
+ever runs. The Location column also lists the channels of the session's image
+the driver will not erase, so the grid can refuse to delete them.
 """
 
 from __future__ import annotations
@@ -228,7 +229,16 @@ def _column_metadata_for_session(session: Optional[RadioSession]) -> dict[str, A
         # own constructor error reaches the debug panel, rather than reporting
         # a schema the grid would treat as this radio's real one.
         radio = _blank_radio_instance(session.radio_cls)
-    return _column_metadata_for_radio(radio)
+    metadata = _column_metadata_for_radio(radio)
+    if session.undeletable_channels:
+        # The occupied slots the grid must not empty: desktop CHIRP refuses to
+        # delete these, and an upload that omits one keeps it on the radio. A
+        # fact about the session's image rather than the driver's features,
+        # recorded when its rows were read (_read_radio_payload).
+        metadata["columns"]["Location"]["undeletable"] = sorted(
+            session.undeletable_channels
+        )
+    return metadata
 
 
 def _cached_column_metadata(session: Optional[RadioSession]) -> dict[str, Any]:

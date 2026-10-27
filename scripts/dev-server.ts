@@ -20,8 +20,12 @@ import type { ServerResponse } from "node:http";
 
 import * as esbuild from "esbuild";
 
+import { defaultDevServerPort } from "./dev-server-port.ts";
+
 const webRootDir = path.resolve(process.cwd(), process.env.WEB_ROOT || "web");
-const port = Number.parseInt(process.env.PORT || "8000", 10);
+// PORT wins; otherwise 8000 in the main checkout and a fixed port of its own
+// in a linked worktree (scripts/dev-server-port.ts).
+const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : defaultDevServerPort(process.cwd());
 const host = process.env.HOST || "127.0.0.1";
 const servesAsPages = process.env.SERVE_AS === "pages";
 

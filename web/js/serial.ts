@@ -13,7 +13,7 @@ import {
 } from "./serial-errors.ts";
 import { NativeSerialPort } from "./native-serial-port.ts";
 import { SerialBridge } from "./serial-bridge.ts";
-import { createWebUsbSerial } from "./webusb-serial.ts";
+import { chipFamilyOf, createWebUsbSerial } from "./webusb-serial.ts";
 import { createWebBluetoothSerial } from "./webbluetooth-serial.ts";
 import type { SerialTransport } from "./serial-transport.ts";
 import { errorFields } from "./error-details.ts";
@@ -36,6 +36,24 @@ function nativeSerial(): Serial | undefined {
 
 function hasWebUsb() {
   return typeof navigator !== "undefined" && "usb" in navigator;
+}
+
+// What the UI may say about the port the chooser picked, before and after the
+// open: the transport it will go over and the cable behind it. Everything
+// here names a kind of adapter, never a particular one -- the failure metric
+// carries it (web/js/ui/serial-actions.ts), and metrics send nothing that
+// could identify a user.
+export interface ChosenPortDescription {
+  /** The transport name the port reports ("webserial", "webusb", "webbluetooth"). */
+  transport: string;
+  /**
+   * The chip family (chipFamilyOf); "cdc" for a WebUSB port none of the chip
+   * drivers took; "other" for a port with USB ids this app has no driver for;
+   * "none" for a port with no USB identity.
+   */
+  chip: string;
+  usbVendorId: string | null;
+  usbProductId: string | null;
 }
 
 // Check the actual chooser API so unsupported platforms never offer BLE.
@@ -187,6 +205,34 @@ export class BrowserSerialBridge extends SerialBridge {
     }
     this.setPreferredTransport(transport);
     this._chosenTransport = await this._chooseTransport();
+  }
+
+  // Describe the port choosePort() picked -- or, once open() has taken it, the
+  // live port -- for the connect's metric: which transport it goes over and
+  // which cable is behind it. null when nothing has been chosen, as after a
+  // dismissed chooser. Read by the UI between choosePort() and the open, so a
+  // failed open can still say which cable it failed on.
+  describeChosenPort(): ChosenPortDescription | null {
+    const port = this._chosenTransport || this.port;
+    if (!port) {
+      return null;
+    }
+    const info = port.getInfo?.() || {};
+    const identity = this._usbIdentityOf(info);
+    const family = chipFamilyOf({ vendorId: info.usbVendorId, productId: info.usbProductId });
+    let chip = family;
+    if (!chip) {
+      // WebUSB hands a device none of the chip drivers claim to the CDC
+      // polyfill; a native or Bluetooth port without USB ids has no chip to
+      // name, and one with ids this app has no driver for is "other".
+      chip = port.transport === "webusb" ? "cdc" : (identity.usbVendorId ? "other" : "none");
+    }
+    return {
+      transport: port.transport,
+      chip,
+      usbVendorId: identity.usbVendorId,
+      usbProductId: identity.usbProductId,
+    };
   }
 
   // The bridge's transport factory: the port choosePort() picked, once, or --

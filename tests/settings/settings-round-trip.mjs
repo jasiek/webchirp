@@ -303,7 +303,11 @@ const UNWRITABLE_BYTE_CASES = [
 ];
 
 /** Plant one byte in a fresh radio, then run the upload path's settings step
- * against it. Returns what CHIRP refused to load and whether the write stood. */
+ * against it. Returns what CHIRP refused to load and whether the write stood.
+ *
+ * The payload flips one other boolean: the driver's set_settings() only runs
+ * for a payload that edits something, and that run is what the pruning of
+ * unloadable settings protects. */
 async function applyWithPlantedByte(harness, match, raw, field, byte) {
   return harness.runPythonJson(
     `
@@ -313,9 +317,20 @@ setattr(_r._memobj.settings, _f, _v)
 _before = int(getattr(_r._memobj.settings, _f))
 _dead = [e.get_name() for e in _r.get_settings().walk()
          if any(not v.initialized for v in e)]
-_res = _validate_and_apply_radio_settings(
-    _r, _serialize_radio_settings(_r.get_settings()), apply_changes=True)
-json.dumps({"dead": _dead, "valid": _res["valid"], "issues": _res["issues"],
+_payload = _serialize_radio_settings(_r.get_settings())
+def _flip_one(_nodes):
+    for _n in _nodes:
+        if _n["kind"] == "group":
+            if _flip_one(_n["children"]):
+                return True
+        elif (_n["id"] != _f and len(_n["values"]) == 1
+              and _n["values"][0]["type"] == "boolean" and _n["values"][0]["mutable"]):
+            _n["values"][0]["current"] = not _n["values"][0]["current"]
+            return True
+    return False
+_edited = _flip_one(_payload)
+_res = _validate_and_apply_radio_settings(_r, _payload, apply_changes=True)
+json.dumps({"dead": _dead, "edited": _edited, "valid": _res["valid"], "issues": _res["issues"],
             "before": _before, "after": int(getattr(_r._memobj.settings, _f))})
     `,
     {
@@ -341,6 +356,7 @@ test("a setting CHIRP could not load does not abort the write for every other on
       result.dead.includes(field),
       `${field} (${why}) should read back uninitialized, got ${JSON.stringify(result.dead)}`,
     );
+    assert.ok(result.edited, "the payload should edit a setting, so set_settings() runs");
     assert.equal(
       result.valid,
       true,

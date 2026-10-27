@@ -399,6 +399,16 @@ test("live services, other methods and the manifest are left to the browser", as
   assert.equal(offline.respond(new Request(`${SCOPE}asset-manifest.json`)), null);
 });
 
+// DevTools rereads the page as a subresource this way; the worker passed it on
+// to a fetch that failed whenever the HTTP cache had no copy.
+test("a request only the HTTP cache may answer is left to the browser", async () => {
+  const { offline } = setup();
+  await offline.sync();
+  for (const url of [SCOPE, `${SCOPE}js/app.AAAAAAAA.js`, `${SCOPE}radio-catalog.json`, CDN_FILE]) {
+    assert.equal(offline.respond(new Request(url, { cache: "only-if-cached", mode: "same-origin" })), null, url);
+  }
+});
+
 test("a malformed manifest is refused rather than half-cached", () => {
   assert.throws(() => parseOfflineBuild({ buildHash: "aaaaaaaaaa" }, SCOPE), /offline section/);
   assert.throws(

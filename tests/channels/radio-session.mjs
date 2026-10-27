@@ -250,7 +250,7 @@ def _seeded():
         _radio.set_memory(_mem)
     return _radio
 
-_rows, _ = _radio_rows_from_instance(_seeded())
+_rows, _, _ = _radio_rows_from_instance(_seeded())
 _rows_without_2 = [_row for _row in _rows if _row["Location"] != "2"]
 
 # The session whose read could not decode channel 2: its absence from the

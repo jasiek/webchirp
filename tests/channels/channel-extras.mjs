@@ -175,7 +175,7 @@ _radio._memobj.channels[0].bcl = 1
 _radio._memobj.channels[1].bcl = 0
 _image = _image_bytes_from_radio(_radio)
 
-_rows, _unreadable = _radio_rows_from_instance(_radio)
+_rows, _unreadable, _ = _radio_rows_from_instance(_radio)
 json.dumps({"rows": _rows, "imageBase64": base64.b64encode(_image).decode("ascii")})
 `;
 

@@ -1,0 +1,55 @@
+{
+  "packageId": "com.hf2j.webchirp",
+  "host": "webchirp.org",
+  "name": "WebCHIRP",
+  "launcherName": "WebCHIRP",
+  "display": "standalone",
+  "themeColor": "#0D5EA8",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#F6F8FB",
+  "enableNotifications": true,
+  "startUrl": "/?utm_source=android_app&utm_medium=twa",
+  "iconUrl": "https://webchirp.org/images/icon-512.png",
+  "maskableIconUrl": "https://webchirp.org/images/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "android"
+  },
+  "appVersionName": "1",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://webchirp.org/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": true
+    },
+    "firstRunFlag": {
+      "enabled": true,
+      "queryParameterName": "android_app_first_open"
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://webchirp.org/",
+  "minSdkVersion": 24,
+  "orientation": "default",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1"
+}

@@ -84,3 +84,25 @@ export async function loadImageFor(harness, catalog, name) {
   const loaded = await harness.loadCodeplugBinary(raw);
   return { match, loaded, raw };
 }
+
+// One upstream test image with memory fields overwritten, for a state no
+// fixture holds. fields maps a path under the driver's _memobj
+// ("vfo_a.band_200.freq", "fm_chans[0].fm_freq") to the integer it is set to.
+// Returns the resolved catalog entry and the image's bytes, metadata
+// included, ready for loadCodeplugBinary.
+export async function plantedImage(harness, catalog, name, fields) {
+  const { match, raw } = await loadImageFor(harness, catalog, name);
+  const assignments = Object.entries(fields)
+    .map(([field, value]) => `_r._memobj.${field} = ${Math.trunc(Number(value))}`)
+    .join("\n");
+  const image = await harness.runPythonJson(
+    `
+_r = _import_radio_class(_m, _c)(memmap.MemoryMapBytes(bytes(
+    chirp_common.CloneModeRadio._strip_metadata(base64.b64decode(_b))[0])))
+${assignments}
+json.dumps(base64.b64encode(_image_bytes_from_radio(_r)).decode())
+`,
+    { _m: match.module, _c: match.className, _b: Buffer.from(raw).toString("base64") },
+  );
+  return { match, image: Buffer.from(image, "base64") };
+}

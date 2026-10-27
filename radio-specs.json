@@ -3802,6 +3802,77 @@
       "caveat": "16-channel UHF radio; figures come from reseller listings only.",
       "note": "16-channel UHF radio; reseller specs only."
     },
+    "Baofeng|DM-32UV": {
+      "formFactor": "handheld",
+      "batteryMah": 2500,
+      "charging": [
+        "usb-c",
+        "cradle"
+      ],
+      "powerW": {
+        "min": 1,
+        "max": 10
+      },
+      "bands": [
+        {
+          "band": "FM broadcast",
+          "rxMHz": [
+            65,
+            108
+          ],
+          "txMHz": null
+        },
+        {
+          "band": "Airband",
+          "rxMHz": [
+            108,
+            136
+          ],
+          "txMHz": null
+        },
+        {
+          "band": "VHF",
+          "rxMHz": [
+            136,
+            174
+          ],
+          "txMHz": [
+            136,
+            174
+          ]
+        },
+        {
+          "band": "UHF",
+          "rxMHz": [
+            400,
+            480
+          ],
+          "txMHz": [
+            400,
+            470
+          ]
+        }
+      ],
+      "modulations": [
+        "FM",
+        "AM",
+        "WFM",
+        "DMR"
+      ],
+      "display": true,
+      "inProduction": true,
+      "dualReceive": null,
+      "crossBandRepeater": null,
+      "aprs": true,
+      "gps": true,
+      "bluetoothProgramming": null,
+      "sources": [
+        "https://www.baofengradio.com/products/dm-32uv",
+        "https://www.miklor.com/COM/Review_DM32.php"
+      ],
+      "caveat": "Baofeng rates it 10 W/4 W/1 W; an independent review measured about 7.6 W on high. Transmit may be limited to ham bands in some countries.",
+      "note": "Baofeng page: 2500 mAh, USB-C plus desktop base, 10/4/1 W, RX 136-174/400-480, AM 108-136, FM 65-108, TX 136-174/400-470, GPS, APRS, colour display, in stock 2026-10. Miklor 2025 review: base and battery both charge from USB-C, measured 7.6/4.7/3.1 W, TX 400-480, wider RX 220-260 and 350-390 on some units, DM-32 is the same radio. Dual receive, cross-band repeat and Bluetooth programming not stated (Dual Watch only)."
+    },
     "Baofeng|F-11": {
       "formFactor": "handheld",
       "batteryMah": null,
@@ -32030,6 +32101,57 @@
       ],
       "caveat": "Argentine rebadge of the AnyTone AT-778UV. 25/15/5 W, 200 channels, dual watch.",
       "note": "Argentine rebadge of AnyTone AT-778UV (shared CHIRP driver). 25/15/5W, 200ch, dual watch."
+    },
+    "Zartek|ZA-758": {
+      "formFactor": "handheld",
+      "batteryMah": 1600,
+      "charging": [
+        "external"
+      ],
+      "powerW": {
+        "min": null,
+        "max": 0.5
+      },
+      "bands": [
+        {
+          "band": "PMR446",
+          "rxMHz": [
+            446.00625,
+            446.09375
+          ],
+          "txMHz": [
+            446.00625,
+            446.09375
+          ]
+        },
+        {
+          "band": "Other",
+          "rxMHz": [
+            463.975,
+            464.375
+          ],
+          "txMHz": [
+            463.975,
+            464.375
+          ]
+        }
+      ],
+      "modulations": [
+        "FM"
+      ],
+      "display": false,
+      "inProduction": null,
+      "dualReceive": false,
+      "crossBandRepeater": false,
+      "aprs": false,
+      "gps": false,
+      "bluetoothProgramming": false,
+      "sources": [
+        "https://zartek.co.za/images/zartek/products/two_way_radios/za758/ZA-758_user_manual.pdf",
+        "https://zartek.co.za/images/zartek/products/two_way_radios/za758/ZA758-info.jpg"
+      ],
+      "caveat": "South African licence-free version: 16 channels locked to eight PMR446 frequencies and five in South Africa's 464 MHz licence-free band, at 500 mW.",
+      "note": "Zartek manual (2014-01-09) spec page: 400-470 MHz hardware locked to the 446 and 464 MHz bands, 1600 mAh 3.8 V Li-ion, 500 mW, 16K0F3E/8K0F3E, PC programming by cable (GE-254). Channel table: 1-8 are 446.00625-446.09375, 1a-5a are 463.975, 464.125, 464.175, 464.325, 464.375. Charging: mains adaptor into the battery side DC jack, about 6 h. Info sheet: no display in the product photo, plug-in charger. Trappers listed it backordered in 2026-10, which does not establish discontinuation. The driver notes High is unmeasured (2 W is the ZA-748 rating)."
     },
     "Zastone|ZT-X6": {
       "formFactor": "handheld",

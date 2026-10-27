@@ -25,10 +25,10 @@ const CLASS_NAME = "UVK5RadioEgzumer";
 // Pin the retained releases and their published bytes. The v4.3.2 asset still
 // identifies itself as driver v4.3.0; its catalog label names the release.
 test("the bundled F4HWN drivers are the exact published releases", async () => {
-  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.length, 4);
+  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.length, 5);
   assert.deepEqual(
     QUANSHENG_UNOFFICIAL_DRIVERS.flatMap((driver) => driver.releases),
-    ["v4.3.2", "v5.9.0", "v6.0.0", "v6.1.0"],
+    ["v4.3.2", "v5.9.0", "v6.0.0", "v6.1.0", "v6.2.0"],
   );
   assert.deepEqual(
     (await fs.readdir(path.join(webDir, "python/extra_drivers/quansheng")))
@@ -123,7 +123,7 @@ test("unofficial mode discovers only bundled F4HWN drivers", async () => {
 test("CHIRP mode excludes bundled F4HWN drivers", async () => {
   const harness = await sharedHarness();
   const discovered = await listDriverModules(harness.pythonSource);
-  assert.equal(discovered.length, 195);
+  assert.equal(discovered.length, 196);
   assert.deepEqual(
     discovered.filter((moduleName) => QUANSHENG_UNOFFICIAL_DRIVER_MODULES.includes(moduleName)),
     [],
@@ -204,12 +204,14 @@ json.dumps({
 // Exercise the same bridge surfaces the browser reaches after a radio read:
 // codeplug parsing, row editing, settings serialization/validation and image
 // caching. An erased map avoids inventing a hardware fixture while still
-// making the driver's entire bitwise layout parse. Both v6 releases run it:
+// making the driver's entire bitwise layout parse. Every v6 release runs it:
 // v6.1.0 changed the layout (a scan-mix block, a longer write range) and adds
-// a "Mixed Scan Lists" settings group, so neither stands in for the other.
+// a "Mixed Scan Lists" settings group, and v6.2.0 adds a "TONE CALL" key
+// action, so none stands in for another.
 const V6_RELEASES = [
   { module: "f4hwn_v6", release: "v6.0.0", settingsGroups: 11 },
   { module: "f4hwn_v6_1_0", release: "v6.1.0", settingsGroups: 12 },
+  { module: "f4hwn_v6_2_0", release: "v6.2.0", settingsGroups: 12 },
 ];
 for (const { module: MODULE, release, settingsGroups } of V6_RELEASES) {
   test(`the F4HWN ${release} driver loads channels and settings through WebCHIRP`, async () => {

@@ -5,13 +5,15 @@ import { installIndexPage, pageElement } from "../support/index-page.mjs";
 import {
   createDeferred,
   dispatch,
+  emit,
   flushMicrotasks,
   selectRadioBySearch,
 } from "../support/ui-interactions.mjs";
 import { makeWindow } from "../support/fake-window.mjs";
 import { withRadioSessions } from "../support/fake-runtime-api.mjs";
 import { initSentry, resetSentryForTests } from "../../web/js/sentry.ts";
-import { createSerialUnsupportedError } from "../../web/js/serial-errors.ts";
+import { USB_CHIP_SETUP_FAILED, createSerialUnsupportedError } from "../../web/js/serial-errors.ts";
+import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 
 // The clone buttons must stay dead until a serial port has actually been
 // opened: pressing Download with no port only ever produced a runtime error.
@@ -34,6 +36,7 @@ function makeContext({ hasInvalidSettings = false, transport = "webserial" } = {
     radioUploadEl: pageElement("radioUploadEl"),
     liveRadioSupportWarningEl: pageElement("liveRadioSupportWarningEl"),
     unsupportedBrowserContinueEl: pageElement("unsupportedBrowserContinueEl"),
+    radioSearchEl: pageElement("radioSearchEl"),
     sidebarControlEls: [],
   };
   dom.sidebarControlEls = [
@@ -139,6 +142,100 @@ test("unsupported transports never count as failed connects while adapter failur
   assert.equal(metrics.length, 1);
   assert.equal(metrics[0].attributes.flow, "serial_connect");
   assert.equal(metrics[0].attributes.outcome, "failed");
+});
+
+// The chooser has answered before the open runs, so the cable it picked is
+// known even when the open fails -- and that is when the metric most needs
+// it: "WebUSB connects fail" becomes "PL2303 cables fail at chip setup".
+const PL2303_CABLE = Object.freeze({
+  transport: "webusb", chip: "pl2303", usbVendorId: "0x067B", usbProductId: "0x2303",
+});
+
+test("a connect's metric names the cable the chooser picked, whichever way it ends", async (t) => {
+  const createSerialActions = await loadSerialActions();
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const metrics = [];
+  await initSentry(makeWindow(), { loadSdk: async () => ({
+    init() {},
+    withScope() {},
+    captureException() {},
+    metrics: { count: (name, value, options) => metrics.push({ name, value, ...options }) },
+  }) });
+  const controller = {
+    capability: { supported: true, native: true },
+    async choosePort() {},
+    describeChosenPort: () => PL2303_CABLE,
+  };
+
+  // The failure as production sees it: serialConnect is an RPC, so the chip
+  // driver's error crosses Python and arrives as a JsException whose cause
+  // carries the name.
+  const message = "PL2303 vendor read failed (value 0x8484): stall";
+  const failing = makeContext();
+  failing.state.runtimeApi.serialConnect = async () => {
+    throw runtimeCallError("JsException", `${USB_CHIP_SETUP_FAILED}: ${message}`, {
+      js: { name: USB_CHIP_SETUP_FAILED, message },
+    }, "webserial_connect");
+  };
+  const failed = createSerialActions(failing);
+  failed.setSerialController(controller);
+  failed.setSidebarControlsEnabled(true);
+  failed.bindEvents();
+  await pressConnectToggle(failing);
+  assert.equal(metrics.length, 1);
+  const failure = metrics[0].attributes;
+
+  // Both contexts share the page's one toggle, so this press also re-runs the
+  // failing instance; the success is the last outcome recorded.
+  const succeeding = makeContext({ transport: "webusb" });
+  const ok = createSerialActions(succeeding);
+  ok.setSerialController(controller);
+  ok.setSidebarControlsEnabled(true);
+  ok.bindEvents();
+  await pressConnectToggle(succeeding);
+  const success = metrics.at(-1).attributes;
+
+  assert.equal(failure.outcome, "failed");
+  // The transport the chosen port would have gone over, not the "auto" the
+  // click asked for, and the stage the open died in.
+  assert.equal(failure.transport, "webusb");
+  // The stage is the kind; the type stays the Python class the RPC raised.
+  assert.equal(failure.error_kind, "usb_chip_setup_failed");
+  assert.equal(failure.error_type, "JsException");
+  assert.equal(success.outcome, "ok");
+  for (const attributes of [failure, success]) {
+    assert.equal(attributes.chip, "pl2303");
+    assert.equal(attributes.usb_vendor_id, "0x067B");
+    assert.equal(attributes.usb_product_id, "0x2303");
+  }
+});
+
+test("a connect whose chooser was dismissed names no cable", async (t) => {
+  const createSerialActions = await loadSerialActions();
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const metrics = [];
+  await initSentry(makeWindow(), { loadSdk: async () => ({
+    init() {},
+    withScope() {},
+    captureException() {},
+    metrics: { count: (name, value, options) => metrics.push({ name, value, ...options }) },
+  }) });
+  const ctx = makeContext();
+  const serial = createSerialActions(ctx);
+  serial.setSerialController({
+    capability: { supported: true, native: true },
+    async choosePort() { throw new Error("Adapter open failed"); },
+    describeChosenPort: () => null,
+  });
+  serial.setSidebarControlsEnabled(true);
+  serial.bindEvents();
+  await pressConnectToggle(ctx);
+  assert.equal(metrics.length, 1);
+  assert.equal(metrics[0].attributes.outcome, "failed");
+  assert.equal("chip" in metrics[0].attributes, false);
+  assert.equal("usb_vendor_id" in metrics[0].attributes, false);
 });
 
 test("a connected port does not override the other clone-button blocks", async () => {
@@ -410,7 +507,7 @@ const CLONE_SETTINGS = [{
 // (settings summary, radio session, debug log) it does in the app. runtime
 // overrides the stubbed runtime methods; returns the controller and the three
 // serial controls a user presses.
-async function bootConnectedUi(runtime = {}) {
+async function bootConnectedUi(runtime = {}, controller = { capability: { supported: true, native: true }, async choosePort() {} }) {
   const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
@@ -428,7 +525,7 @@ async function bootConnectedUi(runtime = {}) {
     validateRadioSettings: async () => ({ valid: true, issues: [], settings: CLONE_SETTINGS }),
     ...runtime,
   }));
-  ui.setSerialController({ capability: { supported: true, native: true }, async choosePort() {} });
+  ui.setSerialController(controller);
   await ui.init(true);
   selectRadioBySearch(document, "Acme Clone");
   await flushMicrotasks();
@@ -438,7 +535,7 @@ async function bootConnectedUi(runtime = {}) {
     upload: pageElement("radioUploadEl"),
   };
   await dispatch(controls.connect, "click");
-  return { ui, controls };
+  return { ui, document, controls };
 }
 
 test("a running download holds every serial control until it ends", async () => {
@@ -483,6 +580,144 @@ test("a running download holds every serial control until it ends", async () => 
     assert.equal(control.title, "", `#${control.id} must drop the busy title`);
   }
   assert.equal(controls.connect.textContent, "Disconnect");
+});
+
+const OTHER_RADIO = {
+  vendor: "Acme", model: "Other", variant: "",
+  module: "acme", className: "Other", key: "acme:Other", isLiveRadio: false,
+};
+
+test("a running transfer holds the radio search until it ends", async () => {
+  const transfer = createDeferred();
+  const { document, controls } = await bootConnectedUi({
+    listRadios: async () => ({ radios: [...CLONE_CATALOG, OTHER_RADIO] }),
+    downloadSelectedRadio: () => transfer.promise,
+  });
+  const search = pageElement("radioSearchEl");
+  const readout = pageElement("radioSelectionNameEl");
+  assert.equal(search.disabled, false);
+
+  await dispatch(controls.download, "click");
+  await flushMicrotasks();
+  assert.equal(search.disabled, true);
+  assert.equal(search.title, CLONE_RUNNING_TITLE);
+
+  // jsdom delivers key events to a disabled input, which stands in for a
+  // pick from a suggestion list left open when the transfer started.
+  selectRadioBySearch(document, "Acme Other");
+  await flushMicrotasks();
+  assert.equal(readout.textContent, "Acme Clone");
+  assert.equal(pageElement("radioSearchResultsEl").hidden, true);
+
+  transfer.resolve({ headers: CLONE_HEADERS, rows: [{ Location: "1", Name: "ONE" }], settings: CLONE_SETTINGS });
+  await flushMicrotasks();
+  assert.equal(search.disabled, false);
+  assert.equal(search.title, "");
+  selectRadioBySearch(document, "Acme Other");
+  await flushMicrotasks();
+  assert.equal(readout.textContent, "Acme Other");
+});
+
+// A one-group settings tree whose tab names where it came from, so a test can
+// tell which codeplug's settings the editor shows.
+function labelledSettings(label) {
+  return [{ ...CLONE_SETTINGS[0], id: label, label, path: [label] }];
+}
+
+// The image an Open dropped mid-transfer holds: Acme Other's, with its own
+// channel and settings.
+const IMAGE_RUNTIME = {
+  loadImage: async () => ({
+    module: "acme", className: "Other", vendor: "Acme", model: "Other",
+    headers: CLONE_HEADERS,
+    rows: [{ Location: "1", Name: "IMAGE" }],
+    settings: labelledSettings("FromImage"),
+  }),
+};
+
+// Drops a .img on the page, the way a user opens one mid-transfer.
+async function dropImage() {
+  await emit(window, "drop", {
+    dataTransfer: {
+      types: ["Files"],
+      files: [{ name: "other.img", arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }],
+    },
+  });
+  await flushMicrotasks();
+}
+
+// Whether the editor shows the image's codeplug: its radio, channel and
+// settings, with no trace of the transfer's.
+function assertEditorHoldsImage(ui, transferSettingsLabel) {
+  assert.equal(pageElement("radioSelectionNameEl").textContent, "Acme Other");
+  assert.deepEqual(ui.selectedRowsForOperations().map((row) => row.Name), ["IMAGE"]);
+  const tabs = pageElement("settingsTabsEl").textContent;
+  assert.match(tabs, /FromImage/);
+  assert.doesNotMatch(tabs, new RegExp(transferSettingsLabel));
+}
+
+// The runtime runs one call at a time, so an image opened during a download
+// loads once the transfer ends, and lands while the download fetches its
+// schema. The fakes here answer at once, so each ordering is set up by hand.
+for (const [when, duringSchema] of [["while its schema loads", true], ["before it returns", false]]) {
+  test(`a download whose editor moved to an image ${when} is not applied`, async () => {
+    const transfer = createDeferred();
+    const schema = createDeferred();
+    let holdSchema = false;
+    const { ui, controls } = await bootConnectedUi({
+      ...IMAGE_RUNTIME,
+      listRadios: async () => ({ radios: [...CLONE_CATALOG, OTHER_RADIO] }),
+      getRadioMetadata: async ({ className }) => {
+        if (holdSchema && className === "Radio") {
+          holdSchema = false;
+          await schema.promise;
+        }
+        return { headers: CLONE_HEADERS, columns: {} };
+      },
+      downloadSelectedRadio: () => transfer.promise,
+    });
+    await dispatch(controls.download, "click");
+    await flushMicrotasks();
+
+    const downloaded = {
+      headers: CLONE_HEADERS,
+      rows: [{ Location: "1", Name: "RADIO" }],
+      settings: labelledSettings("FromRadio"),
+    };
+    if (duringSchema) {
+      holdSchema = true;
+      transfer.resolve(downloaded);
+      await flushMicrotasks();
+      await dropImage();
+      schema.resolve();
+    } else {
+      await dropImage();
+      transfer.resolve(downloaded);
+    }
+    await flushMicrotasks();
+
+    assertEditorHoldsImage(ui, "FromRadio");
+    assert.match(pageElement("debugOutputEl").value, /download finished after another codeplug was opened/);
+    assert.equal(controls.download.disabled, false);
+  });
+}
+
+test("an image opened during an upload keeps its own settings", async () => {
+  const write = createDeferred();
+  const { ui, controls } = await bootConnectedUi({
+    ...IMAGE_RUNTIME,
+    listRadios: async () => ({ radios: [...CLONE_CATALOG, OTHER_RADIO] }),
+    uploadSelectedRadio: () => write.promise,
+  });
+  await dispatch(controls.upload, "click");
+  await flushMicrotasks();
+  await dropImage();
+
+  write.resolve({ settings: labelledSettings("FromUpload") });
+  await flushMicrotasks();
+  assertEditorHoldsImage(ui, "FromUpload");
+  // The write itself still happened, and says so.
+  assert.match(pageElement("debugOutputEl").value, /Acme Clone upload complete\./);
 });
 
 // WEBCHIRP-FRONTEND-1W: an Android user pressed Upload three times while the
@@ -568,4 +803,61 @@ test("a port lost mid-transfer shows at once, and Connect returns when the trans
   await dispatch(controls.connect, "click");
   assert.equal(connects, 2);
   assert.equal(controls.download.disabled, false);
+});
+
+// Sentry drops a driver's own clone failures (isDriverCloneFailure,
+// web/js/sentry.ts), so a transport that loses bytes shows only as a clone
+// failure rate that moves with the transport. Every outcome has to carry it,
+// successes too, and a failure that follows a lost port keeps the transport
+// the clone started over: the loss clears the connection's before the
+// failure arrives.
+test("every clone outcome carries the transport the clone started over", async (t) => {
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const metrics = [];
+  await initSentry(makeWindow(), { loadSdk: async () => ({
+    init() {},
+    withScope() {},
+    captureException() {},
+    metrics: {
+      count: (name, value, options) => metrics.push({ name, ...options }),
+      distribution() {},
+    },
+  }) });
+  const write = createDeferred();
+  const { ui, controls } = await bootConnectedUi({
+    serialConnect: async () => ({ connected: true, transport: "webusb", message: "ok" }),
+    downloadSelectedRadio: async () => ({
+      headers: CLONE_HEADERS, rows: [{ Location: "1", Name: "ONE" }], settings: CLONE_SETTINGS,
+    }),
+    uploadSelectedRadio: () => write.promise,
+  }, {
+    capability: { supported: true, native: true },
+    async choosePort() {},
+    describeChosenPort: () => ({
+      transport: "webusb", chip: "ftdi", usbVendorId: "0x0403", usbProductId: "0x6015",
+    }),
+  });
+
+  await dispatch(controls.download, "click");
+  await flushMicrotasks();
+  await dispatch(controls.upload, "click");
+  await flushMicrotasks();
+  // The loss clears the connection's transport and cable; the upload that
+  // was running over them still reports both -- the failure a cable most
+  // needs to explain is the one where the adapter went away.
+  ui.onSerialPortLost("USB VID:PID 0x0403:0x6015");
+  write.reject(new Error("Port is not connected."));
+  await flushMicrotasks();
+
+  const outcomes = metrics
+    .filter((metric) => metric.name === "flow.completed" && metric.attributes.flow.startsWith("radio_"))
+    .map(({ attributes }) => [
+      attributes.flow, attributes.outcome, attributes.transport,
+      attributes.chip, attributes.usb_vendor_id, attributes.usb_product_id,
+    ]);
+  assert.deepEqual(outcomes, [
+    ["radio_download", "ok", "webusb", "ftdi", "0x0403", "0x6015"],
+    ["radio_upload", "failed", "webusb", "ftdi", "0x0403", "0x6015"],
+  ]);
 });

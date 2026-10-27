@@ -11,11 +11,19 @@ tests it with ``isPythonError`` -- ``web/js/image-metadata.ts`` retries on
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from chirp import errors
+
+if TYPE_CHECKING:
+    from typing import Any, Optional, Sequence
 
 
 class RuntimeUnsupportedError(errors.RadioError):
-    pass
+    # What the browser needs beyond the message, as JSON-safe data, or None.
+    # rpc_error_envelope sends it as the envelope's ``details``, and JS reads it
+    # as the RuntimeCallError's ``pythonDetails``.
+    details: Optional[dict[str, Any]] = None
 
 
 class ImageDetectionError(RuntimeUnsupportedError):
@@ -47,3 +55,25 @@ class RuntimePreconditionError(RuntimeUnsupportedError):
     real failures. The debug panel still prints it in full.
     ``tests/channels/precondition-errors.mjs`` pins the two together.
     """
+
+
+class SettingsRefusedError(RuntimePreconditionError):
+    """The radio refused a setting value the user edited.
+
+    Raised by export and upload when CHIRP or the driver rejects an edited
+    setting -- a frequency outside its band, an option the list does not
+    hold. The message names the setting and carries the driver's own reason,
+    and the fix is the user's: correct the value in Settings and try again.
+    It derives from ``RuntimePreconditionError`` so the browser shows it as a
+    notice and Sentry drops it. A refusal the runtime cannot pin on an edit
+    is never raised as this class, so it stays reported.
+
+    ``details["issues"]`` lists every refused value in the shape the upload
+    preflight reports (path, valueIndex, message), so the Settings panel marks
+    the same fields red whichever of the two caught them.
+    """
+
+    def __init__(self, message: str, issues: Sequence[dict[str, Any]]) -> None:
+        """Keep the refused values' issues beside the message for the browser."""
+        super().__init__(message)
+        self.details = {"issues": [dict(issue) for issue in issues]}

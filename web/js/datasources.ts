@@ -69,7 +69,7 @@ const GMRS_CHANNELS = [
 
 // Base URL of the API that fronts przemienniki.net, repeaterbook.com and IRTS.
 // The first two upstreams don't send browser CORS headers, so their query
-// features depend on a proxy that adds them. api.codeplug.org restricts its
+// features depend on a proxy that adds them. api.webchirp.org restricts its
 // CORS allowlist to this app's own production origins -- https://codeplug.org
 // and https://webchirp.org, exact-match and https-only -- so forks hosted
 // elsewhere can point
@@ -77,7 +77,7 @@ const GMRS_CHANNELS = [
 // remains available through the default API when the override is blank.
 // Overridable per-deployment via a <meta name="webchirp-repeater-api-base">
 // tag (see index.html and buildRepeaterEndpoints).
-const DEFAULT_REPEATER_API_BASE = "https://api.codeplug.org";
+const DEFAULT_REPEATER_API_BASE = "https://api.webchirp.org";
 
 // Derive the remote-directory endpoint URLs from an API base. A blank base
 // disables the two proxy-dependent directories, but IRTS remains on the
@@ -118,7 +118,7 @@ function buildRepeaterEndpoints(apiBase: string = DEFAULT_REPEATER_API_BASE): Re
       metaUrl: `${irtsBase}/irts/meta`,
     },
     // The gazetteer behind the Place name autocomplete. It follows the IRTS
-    // rule rather than the proxy rule: it is a first-party api.codeplug.org
+    // rule rather than the proxy rule: it is a first-party api.webchirp.org
     // route and it is not a directory at all -- it only turns a place name into
     // the coordinate pair every source already filters by -- so a deployment
     // that blanks the base to switch off the two proxied directories keeps its
@@ -126,7 +126,7 @@ function buildRepeaterEndpoints(apiBase: string = DEFAULT_REPEATER_API_BASE): Re
     cities: `${irtsBase}/cities`,
     // Per-callsign position lookup for the channel grid's context map
     // (web/js/callsign-lookup.ts). Same rule as cities and IRTS: a first-party
-    // api.codeplug.org route rather than a proxied directory, so a deployment
+    // api.webchirp.org route rather than a proxied directory, so a deployment
     // that blanks the base to switch off przemienniki.net and RepeaterBook
     // keeps its maps.
     lookup: `${irtsBase}/lookup`,
@@ -158,7 +158,7 @@ const CITY_SUGGEST_TIMEOUT_MS = 4000;
 // sent; this is the ceiling the drop-down is sized for, not a request.
 const CITY_SUGGEST_MAX = 20;
 
-// Look up place names matching `query` in the api.codeplug.org gazetteer.
+// Look up place names matching `query` in the api.webchirp.org gazetteer.
 // `near` is an optional { latitude, longitude } proximity hint; the endpoint
 // takes lat and lon together or not at all, so a half-known position is sent
 // as no hint. Results are normalized to this app's { latitude, longitude }

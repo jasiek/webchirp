@@ -333,47 +333,49 @@ export class Ch340SerialPort extends WebUsbTransport implements SerialTransport 
     this._closed = false;
 
     await this._openDevice("CH340");
-    const configuration = await this._activeConfiguration("CH340");
-    const iface = configuration.interfaces[0];
-    this._interfaceNumber = iface.interfaceNumber;
-    await this._claimInterface("CH340", this._interfaceNumber);
+    await this._setUpChip(async () => {
+      const configuration = await this._activeConfiguration("CH340");
+      const iface = configuration.interfaces[0];
+      this._interfaceNumber = iface.interfaceNumber;
+      await this._claimInterface("CH340", this._interfaceNumber);
 
-    // The interface exposes an interrupt IN endpoint (modem status) alongside
-    // the bulk data pair — select the bulk endpoints explicitly.
-    for (const endpoint of iface.alternate.endpoints) {
-      if (endpoint.type !== "bulk") {
-        continue;
+      // The interface exposes an interrupt IN endpoint (modem status) alongside
+      // the bulk data pair — select the bulk endpoints explicitly.
+      for (const endpoint of iface.alternate.endpoints) {
+        if (endpoint.type !== "bulk") {
+          continue;
+        }
+        if (endpoint.direction === "in") {
+          this._inEndpoint = endpoint.endpointNumber;
+          this._inPacketSize = endpoint.packetSize || this._inPacketSize;
+        } else if (endpoint.direction === "out") {
+          this._outEndpoint = endpoint.endpointNumber;
+        }
       }
-      if (endpoint.direction === "in") {
-        this._inEndpoint = endpoint.endpointNumber;
-        this._inPacketSize = endpoint.packetSize || this._inPacketSize;
-      } else if (endpoint.direction === "out") {
-        this._outEndpoint = endpoint.endpointNumber;
+      if (!this._inEndpoint || !this._outEndpoint) {
+        throw new Error(
+          `CH340: bulk IN/OUT endpoints not found on interface ${this._interfaceNumber}`,
+        );
       }
-    }
-    if (!this._inEndpoint || !this._outEndpoint) {
-      throw new Error(
-        `CH340: bulk IN/OUT endpoints not found on interface ${this._interfaceNumber}`,
-      );
-    }
 
-    this.version = await this._readVersion();
-    if (this.version < LCR_MIN_VERSION && framingLabel(framing) !== "8N1") {
-      // The bridge never asks this (capabilities say 8N1 only once the version
-      // is known); a direct caller gets the device back and the reason.
-      await this.close();
-      throw new Error(
-        `CH340: chip version 0x${this.version.toString(16)} runs at 8N1 only `
-        + `(asked for ${framingLabel(framing)}): it keeps framing in registers `
-        + "this driver does not program",
-      );
-    }
-    await this._controlOut(REQ_SERIAL_INIT, 0, 0);
-    this.limitedPrescaler = await this._detectLimitedPrescaler();
-    await this._setBaudRateAndLineControl(baudRate, framing);
-    // Start with both control lines deasserted and the shadow in sync, so the
-    // first setSignals() call always reflects what the chip is actually doing.
-    await this._writeModemControl(0);
+      this.version = await this._readVersion();
+      if (this.version < LCR_MIN_VERSION && framingLabel(framing) !== "8N1") {
+        // The bridge never asks this (capabilities say 8N1 only once the version
+        // is known); a direct caller gets the device back and the reason.
+        await this.close();
+        throw new Error(
+          `CH340: chip version 0x${this.version.toString(16)} runs at 8N1 only `
+          + `(asked for ${framingLabel(framing)}): it keeps framing in registers `
+          + "this driver does not program",
+        );
+      }
+      await this._controlOut(REQ_SERIAL_INIT, 0, 0);
+      this.limitedPrescaler = await this._detectLimitedPrescaler();
+      await this._setBaudRateAndLineControl(baudRate, framing);
+      // Start with both control lines deasserted and the shadow in sync, so the
+      // first setSignals() call always reflects what the chip is actually doing.
+      await this._writeModemControl(0);
+    });
 
     this._setupStreams();
     this._watchDisconnect();

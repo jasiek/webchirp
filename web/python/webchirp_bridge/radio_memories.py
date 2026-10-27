@@ -34,6 +34,7 @@ from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.power_levels import _level_map_for_radio
 from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
 from webchirp_bridge.row_validation import (
+    _erased_copy,
     _immutable_policy_errors,
     _memory_slot_key,
     _prepare_row_change,
@@ -121,18 +122,28 @@ def _erase_memory(radio: chirp_common.Radio, number: int) -> None:
         radio.erase_memory_extra(number)
 
 
-def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int]]:
+def _radio_rows_from_instance(
+    radio: chirp_common.Radio,
+) -> tuple[Rows, list[int], list[int]]:
     """Extract channel rows from a radio instance using CHIRP memory API.
 
-    Returns the decoded rows and the numbers the driver refused to decode. A
-    memory that raises is skipped rather than failing the whole download, but
-    it must not vanish without trace: the traceback goes to the debug panel and
-    the number is handed back so callers can mark the slot. Those same numbers
-    are the ones `_apply_rows_to_radio_instance` must never erase, since their
-    absence from the grid reflects a decode failure, not a user deletion.
+    Returns the decoded rows, the numbers the driver refused to decode and the
+    numbers of decoded channels it will not erase. A memory that raises is
+    skipped rather than failing the whole download, but it must not vanish
+    without trace: the traceback goes to the debug panel and the number is
+    handed back so callers can mark the slot. Those same numbers are the ones
+    `_apply_rows_to_radio_instance` must never erase, since their absence from
+    the grid reflects a decode failure, not a user deletion.
+
+    A channel whose memory lists ``empty`` in ``immutable`` always exists on
+    the radio (fixed GMRS/FRS/MURS or call channels): desktop CHIRP refuses to
+    delete it, and an upload that omits it keeps it. Its number is handed back
+    so the grid can refuse the delete up front rather than let it silently not
+    happen. An empty slot is not listed, since there is no row to delete.
     """
     rows: Rows = []
     unreadable: list[int] = []
+    undeletable: list[int] = []
     numbers_by_reason: dict[str, list[int]] = {}
     trace_by_reason: dict[str, str] = {}
     for number in _iter_memory_numbers(radio):
@@ -148,6 +159,8 @@ def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int
             continue
         if getattr(mem, "empty", False):
             continue
+        if "empty" in mem.immutable:
+            undeletable.append(number)
         row = _row_from_memory(mem)
         extras = _row_extras_from_memory(mem)
         if extras:
@@ -159,7 +172,7 @@ def _radio_rows_from_instance(radio: chirp_common.Radio) -> tuple[Rows, list[int
         "could not be decoded by the driver and are missing from the channel list",
         trace_by_reason,
     )
-    return rows, unreadable
+    return rows, unreadable, undeletable
 
 
 def _read_radio_payload(
@@ -170,7 +183,8 @@ def _read_radio_payload(
     The serial download and the image load differ only in how they obtained the
     radio -- ``origin`` says which; from here on both record its image on the
     session, extract the rows, record the slots that would not decode so a
-    later upload leaves them alone, and serialize the radio-wide settings
+    later upload leaves them alone and the channels the driver will not erase
+    so the grid refuses to delete them, and serialize the radio-wide settings
     read-only.
 
     A driver whose ``get_settings()`` raises must not cost the user the
@@ -178,8 +192,9 @@ def _read_radio_payload(
     none, which the UI reads as "no Settings tab".
     """
     session.record_radio(radio, origin)
-    rows, unreadable = _radio_rows_from_instance(radio)
+    rows, unreadable, undeletable = _radio_rows_from_instance(radio)
     session.record_unreadable_channels(unreadable)
+    session.record_undeletable_channels(undeletable)
     settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
     return {
         "rows": rows,
@@ -278,6 +293,7 @@ def _apply_rows_to_radio_instance(
     # A row the user did supply for that number still writes normally: explicit
     # intent is in seen_numbers and never reaches this loop.
     protected = (session.unreadable_channels if session else set()) - seen_numbers
+    undeletable_slots: dict[str, list[int]] = {}
     for number in sorted(valid_numbers - seen_numbers - protected):
         # Omitted rows mean erase. Read first so immutable special channels are
         # protected and already-empty slots do not trigger needless writes.
@@ -289,13 +305,20 @@ def _apply_rows_to_radio_instance(
             continue
         if existing.empty:
             continue
-        erased = existing.dupe()
-        erased.empty = True
-        validation_errors = _immutable_policy_errors(radio, existing, erased)
+        # A slot the driver will not let go of (empty is immutable on fixed
+        # GMRS channels, for one) stays as it is, as it would in desktop
+        # CHIRP, which refuses to delete it. Refusing the upload instead would
+        # be an error no preflight can foresee, since an omitted channel has
+        # no row to highlight, and would leave the user re-adding every fixed
+        # channel by hand. A row that clears its Frequency is explicit, so
+        # _prepare_row_change still refuses that one.
+        validation_errors = _immutable_policy_errors(
+            radio, existing, _erased_copy(existing)
+        )
         if validation_errors:
-            raise RuntimeUnsupportedError(
-                f"Channel {number}: {'; '.join(str(error) for error in validation_errors)}"
-            )
+            reason = "; ".join(str(error) for error in validation_errors)
+            undeletable_slots.setdefault(reason, []).append(number)
+            continue
         _erase_memory(radio, number)
 
     if protected:
@@ -307,4 +330,9 @@ def _apply_rows_to_radio_instance(
     _log_grouped_channel_failures(
         unreadable_erase_slots,
         "were not erased because their current values could not be checked",
+    )
+    _log_grouped_channel_failures(
+        undeletable_slots,
+        "are missing from the channel list but were kept, because the driver "
+        "does not allow erasing them",
     )

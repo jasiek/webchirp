@@ -7,7 +7,7 @@ import { fillMapAttribution, renderStaticMap } from "./static-map-view.ts";
 import type { UiContext } from "../types/ui-context.js";
 
 // Static OSM context map for repeater channels (issue #57). Hovering a
-// Location cell whose channel name is a callsign asks api.codeplug.org where
+// Location cell whose channel name is a callsign asks api.webchirp.org where
 // that repeater is (web/js/callsign-lookup.ts) and draws the answer: a tooltip
 // on hover-capable (desktop) devices, a dismissable modal on tap for touch
 // devices. The map is non-interactive: tiles positioned so the repeater sits

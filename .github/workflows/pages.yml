@@ -37,6 +37,12 @@ jobs:
       # and the build regenerates it from the submodule pin, so this order tests
       # exactly what gets uploaded rather than the committed copy.
       - run: npm run build:dist
+        env:
+          # The Cloudflare Turnstile site key the RepeaterBook query form
+          # renders its check with (web/js/turnstile.ts). A repository
+          # variable, not a secret: the key is public and ends up in the page.
+          # Unset builds a site with no check.
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
       # Everything except test:hw, which needs a radio on a serial port.
       # A failure here fails the job, so the deploy job (needs: build) is skipped
       # and the currently-deployed site stays up.

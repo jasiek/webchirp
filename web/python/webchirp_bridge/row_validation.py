@@ -31,7 +31,7 @@ from webchirp_bridge.power_levels import (
     _level_map_for_radio,
     _valid_power_levels_for_driver,
 )
-from webchirp_bridge.row_normalization import CellOutcome, normalize_cell
+from webchirp_bridge.row_normalization import CellOutcome, _rejected, normalize_cell
 from webchirp_bridge.session import resolve_optional_session
 
 if TYPE_CHECKING:
@@ -214,6 +214,25 @@ def _immutable_policy_errors(
     return validation_errors
 
 
+def _erased_copy(existing: chirp_common.Memory) -> chirp_common.Memory:
+    """``existing`` as it would be once erased, for the immutable policy to judge.
+
+    ``Memory.__setattr__`` refuses any field listed in ``immutable``, and
+    drivers list ``empty`` there for slots that always exist, such as the
+    fixed GMRS channels of ``radioddity_gm30``. Setting it directly would
+    raise before the policy could refuse the erase in its own words, so the
+    guard is lifted for that one assignment, the way desktop CHIRP's paste
+    lifts it to renumber a memory. ``dupe`` shares the list with
+    ``existing``, which is why it is replaced rather than emptied.
+    """
+    erased = existing.dupe()
+    immutable = list(erased.immutable)
+    erased.immutable = []
+    erased.empty = True
+    erased.immutable = immutable
+    return erased
+
+
 def _memory_row_changed(
     existing: chirp_common.Memory, new: chirp_common.Memory
 ) -> bool:
@@ -265,8 +284,7 @@ def _prepare_row_change(
     if not str(row.get("Frequency", "") or "").strip():
         if existing.empty:
             return "skip", existing, [], []
-        erased = existing.dupe()
-        erased.empty = True
+        erased = _erased_copy(existing)
         return "erase", erased, [], _immutable_policy_errors(
             radio, existing, erased
         )
@@ -555,6 +573,29 @@ def _closest_power_outcome(value: Any, levels: Sequence[chirp_common.PowerLevel]
     return CellOutcome("", False, f"{text} is not a level this radio has, and gives no wattage to match; cleared")
 
 
+def _refuse_undeletable_erase(
+    outcome: CellOutcome, column: str, row: Row, undeletable: frozenset[int]
+) -> CellOutcome:
+    """``outcome``, unless it clears the Frequency of a channel the radio will not erase.
+
+    A blank Frequency erases the channel (``_prepare_row_change``), which
+    desktop CHIRP refuses for a memory whose driver lists ``empty`` as
+    immutable and the upload refuses too. Keeping the frequency, with a note,
+    is that refusal made while it is still one cell. ``undeletable`` is the
+    Location column's list (``_column_metadata_for_session``), the same one
+    the grid refuses a row delete by.
+    """
+    if column != "Frequency" or outcome.value.strip():
+        return outcome
+    location = _row_location(row)
+    if location is None or location not in undeletable:
+        return outcome
+    return _rejected(
+        row.get(column),
+        f"Channel {location} cannot be deleted on this radio; kept the previous value",
+    )
+
+
 def normalize_and_validate_rows(
     session_id: str, rows: list[RowEditRequest]
 ) -> dict[str, Any]:
@@ -567,7 +608,9 @@ def normalize_and_validate_rows(
     cell's current value as the fallback a rejected write keeps -- except a
     Power edit marked ``closestPower``, a level carried over from another
     radio, which takes this radio's closest level instead
-    (``_closest_power_outcome``). The row that
+    (``_closest_power_outcome``), and a Frequency cleared on a channel the
+    radio will not erase, which keeps its value
+    (``_refuse_undeletable_erase``). The row that
     results is then checked by ``_row_findings``, the per-row half of the
     upload preflight, so a driver's objection reaches the cell when it is
     committed rather than when the radio is written.
@@ -581,6 +624,7 @@ def normalize_and_validate_rows(
     """
     session = resolve_optional_session(session_id)
     columns = _cached_column_metadata(session)["columns"]
+    undeletable = frozenset((columns.get("Location") or {}).get("undeletable") or ())
     radio, level_map, bounds = _edit_check_context(session)
     # Built on the first edit that asks for it: reading a driver's features
     # can build a radio instance, and almost no check needs them.
@@ -603,6 +647,7 @@ def normalize_and_validate_rows(
                     row.get(column),
                     bool((edit or {}).get("allowReadOnly")),
                 )
+            outcome = _refuse_undeletable_erase(outcome, column, row, undeletable)
             row[column] = outcome.value
             cells.append({"column": column, **outcome.as_json()})
         errors, warnings = _row_findings(radio, level_map, bounds, row)

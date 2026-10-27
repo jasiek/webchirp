@@ -10,7 +10,10 @@
 // importer up the graph (issue #114) without this script reading any import
 // itself. Each page is then pointed at its entries' hashed outputs from
 // esbuild's metafile, by rewriting the src/href attribute of the tag that
-// named the source; nothing else in any file is rewritten.
+// named the source. The one other rewrite is the content of a page's
+// <meta name="webchirp-turnstile-site-key"> tag, set from the
+// TURNSTILE_SITE_KEY environment variable when it is set (web/js/turnstile.ts);
+// nothing else in any file is rewritten.
 //
 // What esbuild does not handle:
 //   * The runtime Python files (web/python/**/*.py) are fetched by URL, not
@@ -130,6 +133,16 @@ const OFFLINE_DATA_FILES = [
 const OFFLINE_OPTIONAL_GROUPS = [
   { hosts: [...SENTRY_HOSTS], urls: [...SENTRY_SDK_MODULES] },
 ];
+// The Cloudflare Turnstile site key the RepeaterBook query form checks with
+// (web/js/turnstile.ts). The pages ship its meta tag blank so a fork builds
+// without one; the deploy sets this from a repository variable. A site key is
+// public, but it is written into an attribute unescaped, so anything that is
+// not one fails the build instead.
+const TURNSTILE_SITE_KEY_META = "webchirp-turnstile-site-key";
+const TURNSTILE_SITE_KEY = (process.env.TURNSTILE_SITE_KEY || "").trim();
+if (TURNSTILE_SITE_KEY && !/^[A-Za-z0-9_-]+$/.test(TURNSTILE_SITE_KEY)) {
+  throw new Error("TURNSTILE_SITE_KEY is not a Turnstile site key");
+}
 // Source files that reach dist/ only through esbuild or the Python hashing, so
 // the verbatim copy skips them (as it skips type declarations, which only tsc
 // reads, and the pages, which are written once rewritten).
@@ -254,6 +267,22 @@ function startTags(html: string): Array<{ name: string; attrs: TagAttr[] }> {
     }
   }
   return tags;
+}
+
+// The content attribute of a page's Turnstile site-key meta tag, when the
+// build has a key to put there.
+function turnstileSiteKeyAttr(html: string): TagAttr | null {
+  if (!TURNSTILE_SITE_KEY) {
+    return null;
+  }
+  for (const tag of startTags(html)) {
+    const attr = (name: string) => tag.attrs.find((candidate) => candidate.name === name);
+    const content = attr("content");
+    if (tag.name === "meta" && attr("name")?.value === TURNSTILE_SITE_KEY_META && content && content.valueStart >= 0) {
+      return content;
+    }
+  }
+  return null;
 }
 
 // A reference to a file this build serves, as opposed to a CDN or data URL.
@@ -500,17 +529,25 @@ async function main() {
   }
 
   // Point each page at its entries' outputs. Only the src or href attribute
-  // that named the source is rewritten, at the offsets the tag parse found.
+  // that named the source is rewritten, at the offsets the tag parse found,
+  // and the Turnstile site key is written into its meta tag the same way.
   for (const [page, { html, refs }] of pageRefs) {
     const pageDir = path.dirname(page.replace(WEB_DIR, DIST_DIR));
-    let out = html;
-    for (const ref of [...refs].sort((a, b) => b.attr.valueStart - a.attr.valueStart)) {
+    const edits: Array<{ attr: TagAttr; text: string }> = refs.map((ref) => {
       // Every ref's source was handed to esbuild as an entry, so it has an output.
       let target = toPosix(path.relative(pageDir, entryOutputs.get(ref.source) as string));
       if (!target.startsWith(".")) {
         target = `./${target}`;
       }
-      out = out.slice(0, ref.attr.valueStart) + target + ref.suffix + out.slice(ref.attr.valueEnd);
+      return { attr: ref.attr, text: target + ref.suffix };
+    });
+    const siteKeyAttr = turnstileSiteKeyAttr(html);
+    if (siteKeyAttr) {
+      edits.push({ attr: siteKeyAttr, text: TURNSTILE_SITE_KEY });
+    }
+    let out = html;
+    for (const { attr, text } of edits.sort((a, b) => b.attr.valueStart - a.attr.valueStart)) {
+      out = out.slice(0, attr.valueStart) + text + out.slice(attr.valueEnd);
     }
     await mkdir(pageDir, { recursive: true });
     await writeFile(page.replace(WEB_DIR, DIST_DIR), out, "utf8");

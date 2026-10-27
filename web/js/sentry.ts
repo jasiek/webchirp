@@ -20,8 +20,14 @@
 import { SENTRY_SDK_URL, SENTRY_SDK_VERSION } from "./cdn-urls.ts";
 import { isServerOutage } from "./http-errors.ts";
 import { isPythonError, isRuntimeCallError } from "./runtime-errors.ts";
-import { isSerialPortOpenFailed, isSerialUnsupported, isUsbInterfaceBusy } from "./serial-errors.ts";
+import {
+  isSerialPortOpenFailed,
+  isSerialUnsupported,
+  isUsbDeviceOpenFailed,
+  isUsbInterfaceBusy,
+} from "./serial-errors.ts";
 import type { BrowserOptions } from "@sentry/browser";
+import type { RpcMethodName } from "./rpc-dispatch.ts";
 
 // The SDK's namespace as the CDN's +esm build exports it, typed from the npm
 // package package.json pins to the same version (tests/channels/sentry.mjs
@@ -88,7 +94,7 @@ const IGNORE_ERRORS = Object.freeze([
 ]);
 
 // The CHIRP errors that describe the user's file, the user's radio or the
-// user's cable, by class name within chirp.errors.
+// user's cable, by class name within the module that defines them.
 //
 // The rule names its classes rather than taking the module whole, because the
 // module is not a severity boundary. Upstream CHIRP is a desktop app where
@@ -100,19 +106,87 @@ const IGNORE_ERRORS = Object.freeze([
 // ones deliberately left out are the second kind and stay reportable --
 // InvalidMemoryLocation (we computed a channel bound the driver rejects),
 // FrozenMemoryError (we mutated a memory we were told not to), and the bare
-// RadioError the drivers raise as a catch-all, which is where a short read from
-// the Web Serial stand-in (web/python/webchirp_bridge/serial_pipe.py) would
-// surface -- the one failure class upstream CHIRP has never had to see.
-export const IGNORED_CHIRP_ERRORS = Object.freeze([
-  "InvalidDataError",
-  "InvalidValueError",
-  "UnsupportedToneError",
-  "ImageDetectFailed",
-  "ImageMetadataInvalidModel",
-  "RadioNoResponse",
-  "RadioNoContactLikelyK1",
-  "RadioFixedBanks",
+// RadioError the drivers raise as a catch-all. That one is dropped only where
+// a driver's clone protocol raised it (isDriverCloneFailure below); anywhere
+// else it stays a report.
+//
+// chirp.settings is here because CHIRP defines InvalidValueError twice.
+// chirp/chirp/settings.py has its own, unrelated to the chirp.errors one:
+// RadioSettingValue.set_value raises it for a setting value the radio will not
+// take, and 18 drivers import it instead of the chirp.errors class and raise it
+// from their own range checks -- kguv9dplus refusing a VFO frequency outside
+// the radio's bands (WEBCHIRP-FRONTEND-2D, -2E) is a value the driver was
+// handed and will not take, which is what the chirp.errors class means too.
+// No other listed name is defined twice in chirp/. The one raise of it that is
+// not about a value, RadioSettingValueMap rejecting a driver's malformed map,
+// happens whenever the driver builds its settings, which upstream's
+// test_settings does for every driver image before a release.
+export const IGNORED_CHIRP_ERRORS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  "chirp.errors": Object.freeze([
+    "InvalidDataError",
+    "InvalidValueError",
+    "UnsupportedToneError",
+    "ImageDetectFailed",
+    "ImageMetadataInvalidModel",
+    "RadioNoResponse",
+    "RadioNoContactLikelyK1",
+    "RadioFixedBanks",
+  ]),
+  "chirp.settings": Object.freeze(["InvalidValueError"]),
+});
+
+// The RPC methods that run a clone over the serial port, which is CHIRP's
+// sync_in or sync_out with the driver's own protocol code in charge
+// (web/python/webchirp_bridge/clone.py). Typed by the dispatcher's method
+// names, so renaming either one fails the typecheck instead of quietly
+// switching the rule off.
+const CLONE_RPC_METHODS: ReadonlySet<string> = new Set<RpcMethodName>([
+  "download_selected_radio",
+  "upload_selected_radio",
 ]);
+
+// The classes a driver raises when the radio did not answer the way its
+// protocol expected, by class and defining module: CHIRP's catch-all
+// RadioError, and the bare Exception that older drivers (h777, wouxun_common)
+// raise for the same thing. Exact on both: the subclasses of either are
+// another rule's to judge.
+const DRIVER_CLONE_COMPLAINTS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  "chirp.errors": Object.freeze(["RadioError"]),
+  builtins: Object.freeze(["Exception"]),
+});
+
+// Whether a failure is a driver's clone protocol giving up on the radio: one
+// of the DRIVER_CLONE_COMPLAINTS, raised from a chirp.drivers module during a
+// download or an upload, and chained only from others of its kind or from
+// IGNORED_CHIRP_ERRORS. A handshake the radio refused, a firmware the driver
+// does not know, a block that came back short or unacknowledged.
+//
+// This used to be reported on purpose, because a short read from the Web
+// Serial stand-in (web/python/webchirp_bridge/serial_pipe.py) would surface
+// here too, and the hope was that Sentry would show one. It never told the
+// two apart: the class is the same whether the radio or the pipe lost the
+// byte, so each event was a guess, and the fingerprint (runtimeFingerprint
+// below) opened a new issue for every driver that complained, faster than
+// archiving could close them -- 30 of 34 events over 2026-10-16/17. A pipe
+// that loses bytes now shows as a clone failure rate that moves with the
+// transport across every driver, which the flow metrics carry
+// (web/js/ui/serial-actions.ts) and a single event never could.
+//
+// What stays reported is what the driver did not say itself. A cause of any
+// other class -- an AttributeError on the pipe, a TypeError from an empty
+// read, a JsException from the serial bridge -- is a defect the driver merely
+// wrapped, so one such cause anywhere in the chain keeps the event.
+function isDriverCloneFailure(error: unknown): boolean {
+  if (!isRuntimeCallError(error) || !CLONE_RPC_METHODS.has(error.rpcMethod)) {
+    return false;
+  }
+  if (!error.pythonOrigin.module.startsWith("chirp.drivers.")) {
+    return false;
+  }
+  return isNamedIn(DRIVER_CLONE_COMPLAINTS, error.pythonType, error.pythonModule)
+    && error.pythonCauses.every((cause) => isNamedIn(DRIVER_CLONE_COMPLAINTS, cause.type, cause.module)
+      || isIgnoredChirpClass(cause.type, cause.module));
+}
 
 // What fetch() rejects with when the request never got a response -- the tab
 // went offline, a CDN was blocked, a proxy dropped the connection -- in
@@ -149,7 +223,8 @@ function webAssemblyMissing(): boolean {
 // API, a port native Web Serial would not open, a USB interface another driver
 // holds (all three named in web/js/serial-errors.ts), the network failing a
 // fetch, the host answering with an outage status (web/js/http-errors.ts),
-// the runtime's own "you have not done X yet" guard, or a CHIRP error
+// the runtime's own "you have not done X yet" guard, a driver's clone protocol
+// giving up on the radio, or a CHIRP error
 // from the list above -- or anything at all in a browser without WebAssembly,
 // which cannot run the runtime and so has nothing to report that is not that.
 // None is a bug in this app or in CHIRP. Read off the
@@ -169,7 +244,9 @@ function webAssemblyMissing(): boolean {
 // RuntimeUnsupportedError and ImageDetectionError subclass errors.RadioError,
 // so a hierarchy match on the listed classes' shared base would swallow them,
 // while an exact match leaves them -- defined in
-// webchirp_bridge.runtime_errors -- reported as before.
+// webchirp_bridge.runtime_errors -- reported as before. A class is dropped
+// only under a module the list names for it: chirp.settings is named for
+// InvalidValueError alone, so the same name from any other module is kept.
 //
 // The rule is applied to the failure and to the exception it was raised from,
 // because a wrapper describes the same circumstance as what it wraps.
@@ -193,6 +270,7 @@ export function isIgnoredError(error: unknown): boolean {
     webAssemblyMissing()
     || isSerialUnsupported(error)
     || isSerialPortOpenFailed(error)
+    || isUsbDeviceOpenFailed(error)
     || isUsbInterfaceBusy(error)
     || isNetworkFailure(error)
     || isServerOutage(error)
@@ -203,6 +281,9 @@ export function isIgnoredError(error: unknown): boolean {
   if (!isRuntimeCallError(error)) {
     return false;
   }
+  if (isDriverCloneFailure(error)) {
+    return true;
+  }
   const cause = error.pythonCauses[0];
   return isIgnoredChirpClass(error.pythonType, error.pythonModule)
     || (cause !== undefined && cause.explicit && isIgnoredChirpClass(cause.type, cause.module));
@@ -212,7 +293,14 @@ export function isIgnoredError(error: unknown): boolean {
 // IGNORED_CHIRP_ERRORS. Split out because isIgnoredError asks it twice: of the
 // failure, and of the exception the failure was raised from.
 function isIgnoredChirpClass(type: string, module: string): boolean {
-  return module === "chirp.errors" && IGNORED_CHIRP_ERRORS.includes(type);
+  return isNamedIn(IGNORED_CHIRP_ERRORS, type, module);
+}
+
+// Whether a table keyed by defining module lists a class under that module.
+// Object.hasOwn, because the module name is the Python side's text and
+// "constructor" must not find Object's.
+function isNamedIn(table: Readonly<Record<string, readonly string[]>>, type: string, module: string): boolean {
+  return Object.hasOwn(table, module) && table[module].includes(type);
 }
 
 // Script origins that are never this app: browser extensions, and the script
@@ -320,6 +408,14 @@ export const METRIC_ATTRIBUTES = Object.freeze([
   "platform",
   // What it was working on or over.
   "transport",
+  // The cable: the chip family behind the port (ftdi, pl2303, ch340, cp2102,
+  // cdc) and its USB vendor and product ids, as "0x067B". These name a model
+  // of adapter, never its owner -- there is no serial number here -- and they
+  // are what turns "WebUSB connects fail" into "PL2303 cables fail at chip
+  // setup", the question the failure metric exists to answer.
+  "chip",
+  "usb_vendor_id",
+  "usb_product_id",
   "format",
   "import_source",
   "codeplug_source",

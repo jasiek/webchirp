@@ -1,7 +1,7 @@
 // A bounded deadline for the online repeater-directory requests.
 //
 // Every one of them leaves the browser for a host this app does not control: a
-// CORS proxy for przemienniki.net and RepeaterBook, api.codeplug.org for IRTS,
+// CORS proxy for przemienniki.net and RepeaterBook, api.webchirp.org for IRTS,
 // api-beta.rsgb.online for RSGB/ETCC. A host that accepts the connection and
 // then never answers is the failure mode fetch() handles worst — the promise
 // neither resolves nor rejects until the browser's own network timeout fires,

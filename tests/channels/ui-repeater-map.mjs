@@ -5,7 +5,7 @@ import { OSM_ATTRIBUTION, OSM_COPYRIGHT_URL } from "../../web/js/staticmap.ts";
 import { installIndexPage, pageElement } from "../support/index-page.mjs";
 import { dispatch, setLayout } from "../support/ui-interactions.mjs";
 
-// One repeater's RXF entry, the shape api.codeplug.org/lookup/<CALLSIGN>
+// One repeater's RXF entry, the shape api.webchirp.org/lookup/<CALLSIGN>
 // answers with.
 function rxfEntry({ qra = "GB3KI", rx = "145.0375", tx = "145.6375", latitude = "51.370400", longitude = "1.128900" } = {}) {
   return `<repeater><qra>${qra}</qra>`

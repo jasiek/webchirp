@@ -30,6 +30,11 @@ export interface ColumnMeta {
   min?: number;
   /** int: the highest; absent for unbounded radios. */
   max?: number;
+  /**
+   * Location: the occupied slots the driver will not erase, which the grid
+   * refuses to delete; absent when there are none.
+   */
+  undeletable?: number[];
   /** freq: [low, high) in Hz. */
   bands?: Array<[number, number]>;
   /** enum: the driver's values, in its order. */

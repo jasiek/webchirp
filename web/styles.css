@@ -1799,6 +1799,17 @@ button:disabled {
   padding-top: 0;
 }
 
+/* The RepeaterBook form's Cloudflare Turnstile check (web/js/turnstile.ts):
+   below the map, across both columns, and empty unless Cloudflare asks the
+   user to click. */
+.modal-turnstile {
+  grid-column: 1 / -1;
+}
+
+.modal-turnstile:empty {
+  display: none;
+}
+
 /* A driver decides how many extras a channel has -- anytone_iii publishes
    thirteen -- so this is the one modal whose height is not something the markup
    knows, and the only one that scrolls inside its card rather than inside the
@@ -2201,6 +2212,18 @@ button:disabled {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+
+/* A data source's credit, at the left end of the button row. */
+.modal-attribution {
+  margin-right: auto;
+  align-self: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.modal-attribution:hover {
+  color: var(--accent);
 }
 
 .debug-output-panel {

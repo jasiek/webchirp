@@ -25,6 +25,7 @@ const DOM_KEYS = [
   "channelImportPrzemiennikiEl", "channelImportRepeaterbookEl", "channelImportIrtsEl", "channelImportRsgbEl",
   "repeaterQueryModalEl", "repeaterQueryFormEl", "repeaterQueryTitleEl",
   "repeaterQueryGridEl", "repeaterQueryCancelEl", "repeaterQuerySubmitEl",
+  "repeaterQueryAttributionEl",
 ];
 
 const META_JSON = JSON.stringify({
@@ -124,8 +125,14 @@ function buildHarness({
   // every test that is not about tones wants; a list stands in for a radio
   // whose table is missing the directory's tone.
   toneOptions = null,
+  // The Turnstile site key the deployment would build in; undefined keeps the
+  // blank tag index.html ships, which leaves the check off.
+  turnstileSiteKey = undefined,
 } = {}) {
   const { document } = installIndexPage();
+  if (turnstileSiteKey !== undefined) {
+    document.querySelector('meta[name="webchirp-turnstile-site-key"]').setAttribute("content", turnstileSiteKey);
+  }
   // index.html ships the meta tag; undefined stands for a deployment without
   // one, so the tag is removed rather than blanked.
   const meta = document.querySelector('meta[name="webchirp-repeater-api-base"]');
@@ -476,6 +483,30 @@ test("submitting sends the selected filters as URL parameters", async () => {
   assert.equal(table.inserted.length, 1);
   assert.equal(table.inserted[0].label, "przemienniki");
   assert.equal(dom.repeaterQueryModalEl.classList.contains("hidden"), true);
+});
+
+test("only the RepeaterBook modal credits its directory beside the buttons", async () => {
+  const { dom } = buildHarness();
+  installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/przemienniki/meta", body: META_JSON },
+  ]);
+  const link = dom.repeaterQueryAttributionEl;
+
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  assert.equal(link.hidden, false);
+  assert.equal(link.textContent, "Data courtesy of RepeaterBook.com");
+  assert.equal(link.getAttribute("href"), "https://www.repeaterbook.com/");
+  assert.equal(link.target, "_blank");
+  // Left of the button bank: the first thing in the row, before Cancel.
+  assert.equal(link.nextElementSibling, dom.repeaterQueryCancelEl);
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+
+  // Another directory's modal must not carry RepeaterBook's credit over.
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  assert.equal(link.hidden, true);
+  assert.equal(link.textContent, "");
+  assert.equal(link.hasAttribute("href"), false);
 });
 
 test("blank optional filters are omitted from the query", async () => {
@@ -939,7 +970,7 @@ test("a blank API base hides proxy sources but leaves IRTS available", async () 
   // IRTS remains visible on the default hosted endpoint and reports a service
   // failure when used instead of disappearing with the proxy-backed sources.
   await dispatch(dom.channelImportIrtsEl, "click");
-  assert.deepEqual(calls.map((call) => call.url), ["https://api.codeplug.org/irts/meta"]);
+  assert.deepEqual(calls.map((call) => call.url), ["https://api.webchirp.org/irts/meta"]);
   assert.match(log.errors.join("\n"), /^IRTS modal: Unrouted fetch:/);
 
   // RSGB needs no CORS proxy, so it stays available on such deployments.
@@ -1806,7 +1837,8 @@ const PREVIEW_LON = 20.5;
 // The caption under the map preview, which is the field's own element rather
 // than anything web/js/ui/dom.ts knows about.
 function previewCaption(dom) {
-  const match = descendants(grid(dom)).find((el) => el.className === "modal-map-preview-count");
+  // By class, not className: a caption that is waiting is also "is-loading".
+  const match = descendants(grid(dom)).find((el) => el.classList.contains("modal-map-preview-count"));
   assert.ok(match, "the map preview has a caption");
   return match;
 }
@@ -2185,4 +2217,284 @@ test("a cached body is only reused when it covers the widened area too", async (
   // leaves nothing beyond that ring to dim, so the map would claim there is
   // nothing just outside while the repeater at 32 km went unfetched.
   assert.equal(previewCaption(dom).textContent, "2 in range, 1 just outside");
+});
+
+// Cloudflare's turnstile global as the widget sees it: each render or reset
+// issues the next token a moment later, as the real widget does once its
+// challenge passes. Installed on the page's window, which the page reset
+// restores after each test.
+function installFakeTurnstile() {
+  const fake = { rendered: [], removed: [], issued: 0 };
+  let options = null;
+  const issue = () => queueMicrotask(() => {
+    fake.issued += 1;
+    options.callback(`token-${fake.issued}`);
+  });
+  window.turnstile = {
+    render(container, renderOptions) {
+      options = renderOptions;
+      fake.rendered.push({ container, sitekey: renderOptions.sitekey });
+      issue();
+      return "widget-1";
+    },
+    reset() {
+      issue();
+    },
+    remove(widgetId) {
+      fake.removed.push(widgetId);
+    },
+  };
+  return fake;
+}
+
+const REPEATERBOOK_RXF = "<rxf><perspective>radio</perspective><repeaters></repeaters></rxf>";
+
+test("with a site key, the RepeaterBook form carries a Turnstile check and every request a fresh token", async () => {
+  const { dom, table } = buildHarness({ turnstileSiteKey: "0x4AAAAAAATestSiteKey" });
+  const fake = installFakeTurnstile();
+  const calls = installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/repeaterbook", body: REPEATERBOOK_RXF },
+  ]);
+
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  const container = grid(dom).querySelector(".modal-turnstile");
+  assert.ok(container, "the RepeaterBook form has a Turnstile container");
+  // At the foot of the form, after the map, beside the button it gates.
+  assert.equal(grid(dom).lastElementChild, container);
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+  // Wider than the 45 km the 30 km preview fetched, so the query has to ask
+  // for itself -- with the token the widget issued after the preview's.
+  await editField(dom, "radius", "50");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "a token is waiting for the query");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
+
+  assert.deepEqual(fake.rendered.map((entry) => [entry.container, entry.sitekey]), [[container, "0x4AAAAAAATestSiteKey"]]);
+  const requests = calls.filter((call) => !call.url.includes("/meta"));
+  assert.equal(requests.length, 2, "a preview and the query");
+  const tokens = requests.map((call) => call.init.headers["CF-Turnstile-Response"]);
+  assert.ok(tokens.every((token) => /^token-\d+$/.test(token)), `every request carries a token: ${tokens}`);
+  assert.notEqual(tokens[0], tokens[1], "a token is spent on one request only");
+  assert.equal(table.inserted.length, 1);
+});
+
+test("only RepeaterBook asks for a Turnstile token, and only when a site key is built in", async () => {
+  const { dom } = buildHarness({ turnstileSiteKey: "0x4AAAAAAATestSiteKey" });
+  installFakeTurnstile();
+  const calls = installFetch([
+    { match: "/przemienniki/meta", body: META_JSON },
+    { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
+  ]);
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  await chooseCountry(dom, "PL");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
+  assert.equal(grid(dom).querySelector(".modal-turnstile"), null);
+  assert.equal(queryUrl(calls).pathname, "/przemienniki");
+  assert.equal(calls.find((call) => !call.url.includes("/meta")).init.headers["CF-Turnstile-Response"], undefined);
+
+  const unkeyed = buildHarness();
+  const unkeyedCalls = installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/repeaterbook", body: REPEATERBOOK_RXF },
+  ]);
+  await dispatch(unkeyed.dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(unkeyed.dom, "PL");
+  await dispatch(unkeyed.dom.repeaterQueryFormEl, "submit");
+  assert.equal(grid(unkeyed.dom).querySelector(".modal-turnstile"), null);
+  assert.equal(unkeyedCalls.find((call) => !call.url.includes("/meta")).init.headers["CF-Turnstile-Response"], undefined);
+});
+
+test("switching away from RepeaterBook removes its Turnstile widget", async () => {
+  const { dom } = buildHarness({ turnstileSiteKey: "0x4AAAAAAATestSiteKey" });
+  const fake = installFakeTurnstile();
+  installFetch([
+    { match: "/meta", body: META_JSON },
+  ]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  // Let the script promise settle so the widget is rendered.
+  await new Promise((resolve) => setImmediate(resolve));
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  assert.deepEqual(fake.removed, ["widget-1"]);
+});
+
+// A turnstile global the test answers by hand: nothing is issued until the test
+// says so, and every other report the widget can make is one call away. reset()
+// does nothing, so a spent token leaves the widget checking until the next
+// issue().
+function installManualTurnstile() {
+  let options = null;
+  window.turnstile = {
+    render(_container, renderOptions) {
+      options = renderOptions;
+      return "widget-1";
+    },
+    reset() {},
+    remove() {},
+  };
+  return {
+    issue: (token) => options.callback(token),
+    interactive: () => options["before-interactive-callback"](),
+    ticked: () => options["after-interactive-callback"](),
+    fails: (code) => options["error-callback"](code),
+    expires: () => options["expired-callback"](),
+    timesOut: () => options["timeout-callback"](),
+  };
+}
+
+const TURNSTILE_TEST_SITE_KEY = "0x4AAAAAAATestSiteKey";
+const CHECKING = "Checking you're not a bot...";
+const TICK_THE_BOX = "Tick “Verify you are human” below to continue.";
+
+// What the user can see of the button's state: whether it can be pressed, the
+// title a hover shows, and the caption under the map, which is the same reason
+// for a screen with no hover.
+function submitState(dom) {
+  const caption = previewCaption(dom);
+  return {
+    disabled: dom.repeaterQuerySubmitEl.disabled,
+    title: dom.repeaterQuerySubmitEl.title,
+    caption: caption.hidden ? "" : caption.textContent,
+  };
+}
+
+test("Query API waits for the bot check when the search needs a request of its own, and says why", async () => {
+  const { dom } = buildHarness({ turnstileSiteKey: TURNSTILE_TEST_SITE_KEY });
+  const turnstile = installManualTurnstile();
+  const calls = installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/repeaterbook", body: REPEATERBOOK_RXF },
+  ]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  // A country-wide search: no position, so no preview, and the query is a
+  // request of its own.
+  await chooseCountry(dom, "PL");
+  assert.deepEqual(submitState(dom), { disabled: true, title: CHECKING, caption: CHECKING });
+
+  await flush();
+  turnstile.interactive();
+  assert.deepEqual(submitState(dom), { disabled: true, title: TICK_THE_BOX, caption: TICK_THE_BOX });
+  turnstile.ticked();
+  assert.deepEqual(submitState(dom), { disabled: true, title: CHECKING, caption: CHECKING });
+
+  const failed = "The bot check failed (Cloudflare error 600010); retrying...";
+  turnstile.fails("600010");
+  assert.deepEqual(submitState(dom), { disabled: true, title: failed, caption: failed });
+  const timedOut = "The bot check timed out; checking again...";
+  turnstile.timesOut();
+  assert.deepEqual(submitState(dom), { disabled: true, title: timedOut, caption: timedOut });
+
+  turnstile.issue("token-a");
+  assert.deepEqual(submitState(dom), { disabled: false, title: "", caption: "" });
+  const expired = "The bot check expired; checking again...";
+  turnstile.expires();
+  assert.deepEqual(submitState(dom), { disabled: true, title: expired, caption: expired });
+
+  turnstile.issue("token-b");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  await dispatch(dom.repeaterQueryFormEl, "submit");
+  const query = calls.find((call) => !call.url.includes("/meta"));
+  assert.equal(query.init.headers["CF-Turnstile-Response"], "token-b", "the expired token was never sent");
+});
+
+test("while a preview waits for the bot check, the map and the button say so", async () => {
+  const { dom } = buildHarness({ turnstileSiteKey: TURNSTILE_TEST_SITE_KEY });
+  const turnstile = installManualTurnstile();
+  const calls = installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/repeaterbook", body: previewRxf(NEAR_11KM) },
+  ]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+
+  // The preview has asked for a token and is waiting; Query API would wait for
+  // the same one.
+  assert.deepEqual(submitState(dom), { disabled: true, title: CHECKING, caption: CHECKING });
+  turnstile.interactive();
+  assert.deepEqual(submitState(dom), { disabled: true, title: TICK_THE_BOX, caption: TICK_THE_BOX });
+
+  turnstile.issue("token-a");
+  // The token went to the preview's request, and Query API will take that
+  // request's answer: it waits for no second check, so it can be pressed now.
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  assert.equal(dom.repeaterQuerySubmitEl.title, "");
+  await flush();
+  assert.equal(previewCaption(dom).textContent, "1 in range");
+  assert.deepEqual(previewCalls(calls, "/repeaterbook").map((call) => call.init.headers["CF-Turnstile-Response"]), ["token-a"]);
+});
+
+// No usable frequency: the import reports it as a frequency skip.
+function unusableRepeaterAt(latitude, call) {
+  return `
+    <repeater>
+      <qra>SR${call}</qra><mode>fm</mode>
+      <location><latitude>${latitude}</latitude><longitude>${PREVIEW_LON}</longitude></location>
+    </repeater>
+  `;
+}
+
+test("Query API inserts what the map preview already fetched, cut to its radius, without asking again", async () => {
+  const { dom, table, log } = buildHarness({ turnstileSiteKey: TURNSTILE_TEST_SITE_KEY });
+  installFakeTurnstile();
+  const calls = installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    {
+      match: "/repeaterbook",
+      body: previewRxf(NEAR_11KM, NEAR_21KM, unusableRepeaterAt(PREVIEW_LAT + 0.1, "U1"), unusableRepeaterAt(PREVIEW_LAT + 0.189, "U2")),
+    },
+  ]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await setPreviewPosition(dom);
+  await editField(dom, "radius", "20");
+  await afterPreviewQuery();
+  assert.match(previewCaption(dom).textContent, /^1 in range, 1 just outside/);
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+
+  await dispatch(dom.repeaterQueryFormEl, "submit");
+
+  const requests = calls.filter((call) => !call.url.includes("/meta"));
+  assert.equal(requests.length, 1, "only the preview's request");
+  assert.equal(new URL(requests[0].url).searchParams.get("range"), "30");
+  // What the directory would have sent for 20 km: the station at 11 km, and
+  // only the unusable entry inside the ring among the skips.
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["SRA"]);
+  assert.ok(log.statuses.includes("Inserted 1 channel(s); skipped 1 outside its frequency range."), log.statuses.join("\n"));
+  assert.ok(log.debug.some((line) => /range=20.*\(answered from the map preview\)$/.test(line)), log.debug.join("\n"));
+});
+
+test("Query API pressed while the preview's request is on its way takes that answer", async () => {
+  const { dom, table } = buildHarness({ turnstileSiteKey: TURNSTILE_TEST_SITE_KEY });
+  installFakeTurnstile();
+  const calls = [];
+  let releasePreview;
+  const previewHeld = new Promise((resolve) => {
+    releasePreview = resolve;
+  });
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: async (url, init) => {
+      const text = String(url);
+      calls.push({ url: text, init });
+      if (text.includes("/meta")) {
+        return { ok: true, status: 200, text: async () => META_JSON };
+      }
+      await previewHeld;
+      return { ok: true, status: 200, text: async () => previewRxf(NEAR_11KM) };
+    },
+  });
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+  assert.equal(calls.filter((call) => !call.url.includes("/meta")).length, 1, "the preview is on its way");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "its token is spent, so nothing waits on the check");
+
+  const submitted = dispatch(dom.repeaterQueryFormEl, "submit");
+  await flush();
+  releasePreview();
+  await submitted;
+  await flush();
+
+  assert.equal(calls.filter((call) => !call.url.includes("/meta")).length, 1, "the query asked nothing of its own");
+  assert.deepEqual(table.inserted[0].rows.map((row) => row.Name), ["SRA"]);
 });

@@ -3,7 +3,7 @@ import { parseRxfRecords } from "./rxf.ts";
 
 // Per-callsign position lookup behind the channel grid's context map
 // (web/js/ui/repeater-map.ts). Hovering a Location cell asks
-// api.codeplug.org/lookup/<CALLSIGN> where that repeater is, rather than the
+// api.webchirp.org/lookup/<CALLSIGN> where that repeater is, rather than the
 // map reading a coordinate the import stamped onto the row -- so a map is
 // available for every channel whose name is a callsign, including ones typed
 // by hand, read off a radio or loaded from a .img file, not only ones this

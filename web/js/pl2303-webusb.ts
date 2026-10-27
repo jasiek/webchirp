@@ -336,52 +336,54 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
     this._closed = false;
 
     await this._openDevice("PL2303");
-    const configuration = await this._activeConfiguration("PL2303");
-    const iface = configuration.interfaces[0];
-    this._interfaceNumber = iface.interfaceNumber;
-    await this._claimInterface("PL2303", this._interfaceNumber);
+    await this._setUpChip(async () => {
+      const configuration = await this._activeConfiguration("PL2303");
+      const iface = configuration.interfaces[0];
+      this._interfaceNumber = iface.interfaceNumber;
+      await this._claimInterface("PL2303", this._interfaceNumber);
 
-    // The PL2303 exposes an interrupt IN endpoint (modem status) alongside
-    // the bulk data pair — select bulk endpoints explicitly.
-    for (const endpoint of iface.alternate.endpoints) {
-      if (endpoint.type !== "bulk") {
-        continue;
+      // The PL2303 exposes an interrupt IN endpoint (modem status) alongside
+      // the bulk data pair — select bulk endpoints explicitly.
+      for (const endpoint of iface.alternate.endpoints) {
+        if (endpoint.type !== "bulk") {
+          continue;
+        }
+        if (endpoint.direction === "in") {
+          this._inEndpoint = endpoint.endpointNumber;
+          this._inPacketSize = endpoint.packetSize || this._inPacketSize;
+        } else if (endpoint.direction === "out") {
+          this._outEndpoint = endpoint.endpointNumber;
+        }
       }
-      if (endpoint.direction === "in") {
-        this._inEndpoint = endpoint.endpointNumber;
-        this._inPacketSize = endpoint.packetSize || this._inPacketSize;
-      } else if (endpoint.direction === "out") {
-        this._outEndpoint = endpoint.endpointNumber;
+      if (!this._inEndpoint || !this._outEndpoint) {
+        throw new Error(
+          `PL2303: bulk IN/OUT endpoints not found on interface ${this._interfaceNumber}`,
+        );
       }
-    }
-    if (!this._inEndpoint || !this._outEndpoint) {
-      throw new Error(
-        `PL2303: bulk IN/OUT endpoints not found on interface ${this._interfaceNumber}`,
-      );
-    }
 
-    const descriptor = await this._readDeviceDescriptor();
-    // Only probe the legacy register when the ladder actually needs it.
-    const needsProbe =
-      Number(descriptor.deviceClass) !== 0x02
-      && Number(descriptor.maxPacketSize0) === 64
-      && Number(descriptor.usbVersion) === 0x200
-      && Number(descriptor.deviceVersion) !== 0x300
-      && Number(descriptor.deviceVersion) !== 0x500;
-    const hxStatus = needsProbe ? await this._probeHxStatus() : true;
-    this.chipType = detectPl2303Type({ ...descriptor, hxStatus });
+      const descriptor = await this._readDeviceDescriptor();
+      // Only probe the legacy register when the ladder actually needs it.
+      const needsProbe =
+        Number(descriptor.deviceClass) !== 0x02
+        && Number(descriptor.maxPacketSize0) === 64
+        && Number(descriptor.usbVersion) === 0x200
+        && Number(descriptor.deviceVersion) !== 0x300
+        && Number(descriptor.deviceVersion) !== 0x500;
+      const hxStatus = needsProbe ? await this._probeHxStatus() : true;
+      this.chipType = detectPl2303Type({ ...descriptor, hxStatus });
 
-    if (!this._isHxn()) {
-      await this._legacyStartup();
-    }
-    await this._purgeBuffers();
-    await this._setFlowControlNone();
-    await this._setLineCoding(baudRate, framing);
-    // Start with both control lines deasserted and the shadow in sync, so the
-    // first setSignals() call always reflects what the chip is actually doing:
-    // close() leaves the lines as they were, so the chip can still hold DTR or
-    // RTS from an earlier session while a new port object's shadow reads 0.
-    await this._writeControlLines(0);
+      if (!this._isHxn()) {
+        await this._legacyStartup();
+      }
+      await this._purgeBuffers();
+      await this._setFlowControlNone();
+      await this._setLineCoding(baudRate, framing);
+      // Start with both control lines deasserted and the shadow in sync, so the
+      // first setSignals() call always reflects what the chip is actually doing:
+      // close() leaves the lines as they were, so the chip can still hold DTR or
+      // RTS from an earlier session while a new port object's shadow reads 0.
+      await this._writeControlLines(0);
+    });
 
     this._setupStreams();
     this._watchDisconnect();

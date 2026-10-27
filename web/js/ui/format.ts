@@ -291,7 +291,7 @@ export function countryDisplayName(countryCode: string): string {
 }
 
 // Build a short user-facing label for a selected radio catalog entry.
-export function makeModelLabel(radio: CatalogRadio & { releaseLabel?: string }): string {
+export function makeModelLabel(radio: CatalogRadio): string {
   const base = `${radio.vendor} ${radio.model}`;
   const variant = String(radio.releaseLabel || radio.variant || "").trim();
   return variant ? `${base} — ${variant}` : base;

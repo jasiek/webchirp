@@ -295,41 +295,43 @@ export class FtdiSerialPort extends WebUsbTransport implements SerialTransport {
     this._closed = false;
 
     await this._openDevice("FTDI");
-    const configuration = await this._activeConfiguration("FTDI");
-    const iface = configuration.interfaces[0];
-    this._interfaceNumber = iface.interfaceNumber;
-    await this._claimInterface("FTDI", this._interfaceNumber);
+    await this._setUpChip(async () => {
+      const configuration = await this._activeConfiguration("FTDI");
+      const iface = configuration.interfaces[0];
+      this._interfaceNumber = iface.interfaceNumber;
+      await this._claimInterface("FTDI", this._interfaceNumber);
 
-    // Current FTDI parts expose a bare bulk pair here, but filter on type
-    // anyway so a variant that adds an interrupt endpoint (as PL2303 and CH340
-    // do for modem status) cannot silently bind the wrong endpoint.
-    for (const endpoint of iface.alternate.endpoints) {
-      if (endpoint.type !== "bulk") {
-        continue;
+      // Current FTDI parts expose a bare bulk pair here, but filter on type
+      // anyway so a variant that adds an interrupt endpoint (as PL2303 and CH340
+      // do for modem status) cannot silently bind the wrong endpoint.
+      for (const endpoint of iface.alternate.endpoints) {
+        if (endpoint.type !== "bulk") {
+          continue;
+        }
+        if (endpoint.direction === "in") {
+          this._inEndpoint = endpoint.endpointNumber;
+          this._inPacketSize = endpoint.packetSize || this._inPacketSize;
+        } else if (endpoint.direction === "out") {
+          this._outEndpoint = endpoint.endpointNumber;
+        }
       }
-      if (endpoint.direction === "in") {
-        this._inEndpoint = endpoint.endpointNumber;
-        this._inPacketSize = endpoint.packetSize || this._inPacketSize;
-      } else if (endpoint.direction === "out") {
-        this._outEndpoint = endpoint.endpointNumber;
+      if (!this._inEndpoint || !this._outEndpoint) {
+        throw new Error(
+          `FTDI: bulk IN/OUT endpoints not found on interface ${this._interfaceNumber}`,
+        );
       }
-    }
-    if (!this._inEndpoint || !this._outEndpoint) {
-      throw new Error(
-        `FTDI: bulk IN/OUT endpoints not found on interface ${this._interfaceNumber}`,
-      );
-    }
 
-    await this._controlOut(SIO_RESET, 0x0000, PORT_INDEX);
-    // Purge both FIFOs so stale bytes from a previous session can never be
-    // misread as protocol responses (mirrors native driver init).
-    await this._controlOut(SIO_RESET, SIO_RESET_PURGE_RX, PORT_INDEX);
-    await this._controlOut(SIO_RESET, SIO_RESET_PURGE_TX, PORT_INDEX);
-    const baud = ftdiConvertBaudrate(baudRate, ftdiBaudFamily(this.device));
-    await this._controlOut(SIO_SET_BAUD_RATE, baud.value, baud.index);
-    await this._controlOut(SIO_SET_DATA, ftdiDataValue(framing), PORT_INDEX);
-    await this._controlOut(SIO_SET_FLOW_CTRL, 0x0000, PORT_INDEX);
-    await this._controlOut(SIO_SET_LATENCY_TIMER, LATENCY_TIMER_MS, PORT_INDEX);
+      await this._controlOut(SIO_RESET, 0x0000, PORT_INDEX);
+      // Purge both FIFOs so stale bytes from a previous session can never be
+      // misread as protocol responses (mirrors native driver init).
+      await this._controlOut(SIO_RESET, SIO_RESET_PURGE_RX, PORT_INDEX);
+      await this._controlOut(SIO_RESET, SIO_RESET_PURGE_TX, PORT_INDEX);
+      const baud = ftdiConvertBaudrate(baudRate, ftdiBaudFamily(this.device));
+      await this._controlOut(SIO_SET_BAUD_RATE, baud.value, baud.index);
+      await this._controlOut(SIO_SET_DATA, ftdiDataValue(framing), PORT_INDEX);
+      await this._controlOut(SIO_SET_FLOW_CTRL, 0x0000, PORT_INDEX);
+      await this._controlOut(SIO_SET_LATENCY_TIMER, LATENCY_TIMER_MS, PORT_INDEX);
+    });
 
     this._setupStreams();
     this._watchDisconnect();

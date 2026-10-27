@@ -1,0 +1,31 @@
+# Holds a pull request to the rules about the change itself rather than the
+# tree: RELEASE_NOTES.md is left for master, no commit message links an agent
+# session, and every new dependency is named in the description. The checks
+# are scripts/check-pull-request.ts (tested by tests/build/pull-request-rules.mjs).
+# Editing the description re-runs it, so a missing dependency is fixed there.
+name: Pull request rules
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The base commit and every commit on the branch are read from git.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+      - name: Check the pull request
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/check-pull-request.ts

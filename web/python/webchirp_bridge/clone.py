@@ -17,13 +17,17 @@ from typing import TYPE_CHECKING
 from chirp import chirp_common
 from js import serial_prepare_clone
 
+from webchirp_bridge import workarounds
 from webchirp_bridge.channel_rows import _csv_text_for_rows
 from webchirp_bridge.jsbridge import _await_js, _js_to_py, _log_debug, _make_status_logger
 from webchirp_bridge.radio_memories import (
     _apply_rows_to_radio_instance,
     _read_radio_payload,
 )
-from webchirp_bridge.radio_settings import _validate_and_apply_radio_settings
+from webchirp_bridge.radio_settings import (
+    _raise_for_refused_settings,
+    _validate_and_apply_radio_settings,
+)
 from webchirp_bridge.runtime_errors import RuntimePreconditionError, RuntimeUnsupportedError
 from webchirp_bridge.serial_pipe import WebSerialPipe, _serial_pipe_timeout_seconds
 from webchirp_bridge.session import ImageOrigin, resolve_session
@@ -197,13 +201,12 @@ def _upload_selected_radio_sync(
     settings_result = _validate_and_apply_radio_settings(
         radio, settings_groups or [], apply_changes=True
     )
-    if not settings_result["valid"]:
-        raise RuntimeUnsupportedError("Radio settings validation failed before upload")
+    _raise_for_refused_settings(settings_result, "upload")
     # The pipe is made after preparing the session, because preparing is what
     # reports the transport the pipe has to name; nothing above touches it.
     transport = _prepare_clone_session(image_cls)
     radio.set_pipe(_new_serial_pipe(image_cls, transport))
-    radio.sync_out()
+    workarounds.sync_out(radio)
     session.record_radio(radio, session.image_origin)
     return {"uploaded": True, "settings": settings_result["settings"]}
 

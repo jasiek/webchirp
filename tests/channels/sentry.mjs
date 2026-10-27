@@ -25,7 +25,15 @@ import {
   setContextProvider,
 } from "../../web/js/sentry.ts";
 import { ANALYTICS_HOSTS } from "../../web/js/analytics.ts";
-import { SERIAL_PORT_OPEN_FAILED, createSerialPortOpenFailedError } from "../../web/js/serial-errors.ts";
+import {
+  SERIAL_PORT_OPEN_FAILED,
+  USB_CHIP_SETUP_FAILED,
+  USB_DEVICE_OPEN_FAILED,
+  createSerialPortOpenFailedError,
+  createUsbDeviceOpenFailedError,
+  isUsbChipSetupFailed,
+  nameUsbChipSetupFailure,
+} from "../../web/js/serial-errors.ts";
 import { runtimeCallError } from "../support/runtime-call-errors.mjs";
 import { SENTRY_SDK_MODULES } from "../../web/js/cdn-urls.ts";
 import { makeWindow } from "../support/fake-window.mjs";
@@ -139,6 +147,24 @@ test("a port native Web Serial would not open is ignored by name, directly and t
   assert.equal(isIgnoredError(throughPython), true);
 });
 
+test("a WebUSB device the browser would not open is the user's machine; a chip setup failure is ours", () => {
+  // The three stages of a WebUSB connect split the same way the native open
+  // does: the OS refusing the device, like another driver holding its
+  // interface, is dropped and counted by the metric; the chip's own setup
+  // failing is this app's driver code and stays an event.
+  const refused = createUsbDeviceOpenFailedError("PL2303: could not open USB device: Access denied.", new Error("Access denied."));
+  assert.equal(isIgnoredError(refused), true);
+  assert.equal(isIgnoredError(runtimeCallError("JsException", `${USB_DEVICE_OPEN_FAILED}: ${refused.message}`, {
+    js: { name: USB_DEVICE_OPEN_FAILED, message: refused.message },
+  }, "webserial_connect")), true);
+  const setup = nameUsbChipSetupFailure(new Error("PL2303 vendor read failed (value 0x8484): stall"));
+  assert.ok(isUsbChipSetupFailed(setup));
+  assert.equal(isIgnoredError(setup), false);
+  assert.equal(isIgnoredError(runtimeCallError("JsException", `${USB_CHIP_SETUP_FAILED}: ${setup.message}`, {
+    js: { name: USB_CHIP_SETUP_FAILED, message: setup.message },
+  }, "webserial_connect")), false);
+});
+
 test("other network and serial failures remain reportable", () => {
   // The same name the browser gives an open failure, on a port lost mid-clone:
   // only the renamed open failure is dropped.
@@ -229,17 +255,19 @@ test("runtime failures group by class, method and the function that raised them"
 });
 
 test("beforeSend sets the runtime grouping key and leaves other errors to Sentry", () => {
-  const error = runtimeCallError("RadioError", "Header short read", {
-    origin: { module: "chirp.drivers.uvk5_egzumer", function: "_receive_reply" },
+  // A driver tripping over an empty read: reported, unlike a driver's own
+  // complaint about the radio (tests/channels/chirp-error-filter.mjs).
+  const error = runtimeCallError("TypeError", "ord() expected a character, but string of length 0 found", {
+    origin: { module: "chirp.drivers.anytone778uv", function: "_read" },
   }, "download_selected_radio");
   const event = initOptions().beforeSend(
     { exception: { values: [{ type: error.name, value: error.message }] } },
     { originalException: error },
   );
   assert.deepEqual(event.fingerprint, [
-    "runtime-call", "RadioError", "download_selected_radio", "chirp.drivers.uvk5_egzumer._receive_reply",
+    "runtime-call", "TypeError", "download_selected_radio", "chirp.drivers.anytone778uv._read",
   ]);
-  assert.equal(event.contexts.python.raised_in, "chirp.drivers.uvk5_egzumer._receive_reply");
+  assert.equal(event.contexts.python.raised_in, "chirp.drivers.anytone778uv._read");
 
   const plain = new Error("something else broke");
   const plainEvent = initOptions().beforeSend(
@@ -265,8 +293,8 @@ test("scrubText removes the user data a CHIRP traceback carries", () => {
   assert.equal(scrubText('Value "HOME REPEATER" is not valid'), 'Value "[value]" is not valid');
   // Search terms and coordinates ride in the query string of a failed lookup.
   assert.equal(
-    scrubText("GET https://api.codeplug.org/rsgb?lat=51.5&lon=-0.12 failed"),
-    "GET https://api.codeplug.org/rsgb?[query] failed",
+    scrubText("GET https://api.webchirp.org/rsgb?lat=51.5&lon=-0.12 failed"),
+    "GET https://api.webchirp.org/rsgb?[query] failed",
   );
 });
 
@@ -293,7 +321,7 @@ test("scrubEvent redacts messages, exception values and breadcrumbs", () => {
       values: [{ type: "RadioError", value: 'Value "HOME" rejected at 145.500000' }],
     },
     breadcrumbs: [
-      { category: "fetch", message: "fetch IO82MM", data: { url: "https://api.codeplug.org/q?lat=51.5" } },
+      { category: "fetch", message: "fetch IO82MM", data: { url: "https://api.webchirp.org/q?lat=51.5" } },
     ],
     request: { url: "https://codeplug.org/?locator=IO82MM" },
   });
@@ -307,7 +335,7 @@ test("scrubEvent redacts messages, exception values and breadcrumbs", () => {
   assert.equal(event.exception.values[0].type, "RadioError");
   assert.equal(event.exception.values[0].value, 'Value "[value]" rejected at [num]');
   assert.equal(event.breadcrumbs[0].message, "fetch [loc]");
-  assert.equal(event.breadcrumbs[0].data.url, "https://api.codeplug.org/q?[query]");
+  assert.equal(event.breadcrumbs[0].data.url, "https://api.webchirp.org/q?[query]");
   assert.equal(event.request.url, "https://codeplug.org/?[query]");
 });
 
@@ -358,7 +386,12 @@ test("every attribute the flow metrics send is declared", () => {
   // The counterpart to the CUSTOM_DIMENSIONS check in
   // tests/channels/ga-dimensions.mjs: a key added at a call site but not here is
   // silently dropped, which looks exactly like the flow never running.
-  for (const name of ["flow", "outcome", "radio", "radio_module", "radio_class"]) {
+  for (const name of [
+    "flow", "outcome", "radio", "radio_module", "radio_class",
+    // The cable a connect or a transfer ran over: a model of adapter, never
+    // one adapter in particular.
+    "chip", "usb_vendor_id", "usb_product_id",
+  ]) {
     assert.ok(METRIC_ATTRIBUTES.includes(name), `${name} must be declared`);
   }
   assert.equal(METRIC_ATTRIBUTES.includes("duration_ms"), false);

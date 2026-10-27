@@ -28,6 +28,7 @@ import {
   QUANSHENG_UNOFFICIAL_DRIVER_SET,
   seedPyodideRuntime,
 } from "./python-sources.ts";
+import { sortRadioCatalog } from "./radio-catalog-order.ts";
 import type { RuntimeInfo } from "./python-sources.ts";
 import type { RpcMethodName, RpcParams } from "./rpc-dispatch.ts";
 import type { SerialRpcHandler, SerialRpcMessage } from "./serial-globals.ts";
@@ -54,6 +55,8 @@ export interface CatalogRadio {
   isLiveRadio?: boolean;
   /** Separates drivers that share vendor and model. */
   variant?: string;
+  /** The firmware release a bundled unofficial driver was published with. */
+  releaseLabel?: string;
   /** Rebadges of the same radio, searchable by their own names. */
   aliases?: {vendor: string, model: string, variant?: string}[];
 }
@@ -279,6 +282,8 @@ export interface SessionDescription {
   hasBackingImage: boolean;
   imageSize: number;
   unreadableChannels: number[];
+  /** Channels the image held that the driver will not erase. */
+  undeletableChannels: number[];
 }
 
 /** read_image_metadata_base64: the identity an image's trailer records. */
@@ -418,15 +423,6 @@ async function ensureAllDriverModules() {
   return allDriverModulesPromise;
 }
 
-// A copy of the catalog in vendor-then-model order, as the pickers list it.
-function sortRadioCatalog(radios: CatalogRadio[]): CatalogRadio[] {
-  return radios.slice().sort((a, b) => {
-    const av = `${a.vendor} ${a.model}`;
-    const bv = `${b.vendor} ${b.model}`;
-    return av.localeCompare(bv);
-  });
-}
-
 // Prefer a prebuilt static catalog so dropdowns can populate without booting
 // Pyodide or importing every driver. Returns null if it is missing/unusable
 // or was generated from a different CHIRP revision than this runtime, so
@@ -473,13 +469,9 @@ async function loadRadioCatalogFromSources(): Promise<CatalogRadio[]> {
   const modules = await listDriverModules(pythonSource);
 
   await ensurePyodide();
-  const allRadios = await rpc<CatalogRadio[]>("list_registered_radios", { module_short_names: modules });
-
-  allRadios.sort((a, b) => {
-    const av = `${a.vendor}\u0000${a.model}`;
-    const bv = `${b.vendor}\u0000${b.model}`;
-    return av.localeCompare(bv);
-  });
+  const allRadios = sortRadioCatalog(
+    await rpc<CatalogRadio[]>("list_registered_radios", { module_short_names: modules }),
+  );
 
   radioCatalogCache = allRadios;
   radioCatalogSource = "sources";

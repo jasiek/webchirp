@@ -7,7 +7,11 @@ import {
   onInstallAvailabilityChange,
   promptInstall,
 } from "../../web/js/install-prompt.ts";
-import { ANDROID_APP_LAUNCH_PARAMS, isAndroidAppLaunch } from "../../web/js/android-app.ts";
+import {
+  ANDROID_APP_LAUNCH_FLAG,
+  ANDROID_APP_LAUNCH_PARAMS,
+  isAndroidAppLaunch,
+} from "../../web/js/android-app.ts";
 import { makeWindow } from "../support/fake-window.mjs";
 
 // Guards the one thing this module does that is not undoable from the UI: it
@@ -265,7 +269,7 @@ test("blocked site data still keeps the install off the app's launch page", () =
   assert.equal(isInstallAvailable(), false);
 });
 
-test("only the full launch query marks the app", () => {
+test("part of the launch query is an ordinary visit", () => {
   assert.equal(isAndroidAppLaunch(APP_LAUNCH_SEARCH), true);
   assert.equal(isAndroidAppLaunch(`${APP_LAUNCH_SEARCH}&radio=uv5r`), true);
   // A link that reuses one of the UTM values is an ordinary visit.
@@ -279,4 +283,16 @@ test("only the full launch query marks the app", () => {
   bindInstallPrompt(win);
   win.dispatch("beforeinstallprompt", fakePromptEvent());
   assert.equal(isInstallAvailable(), true);
+});
+
+// A webchirp.org link opened in the app arrives with its own query, not the
+// launch query, but the app's launcher adds its flag to every URL it opens.
+test("a link the app opens counts as the app by the launcher's flag", () => {
+  assert.equal(isAndroidAppLaunch(`?radio=uv5r&${ANDROID_APP_LAUNCH_FLAG}=false`), true);
+  assert.equal(isAndroidAppLaunch(`?${ANDROID_APP_LAUNCH_FLAG}=true`), true);
+
+  const win = makeWindow({ search: `?radio=uv5r&${ANDROID_APP_LAUNCH_FLAG}=false` });
+  bindInstallPrompt(win);
+  win.dispatch("beforeinstallprompt", fakePromptEvent());
+  assert.equal(isInstallAvailable(), false);
 });

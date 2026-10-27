@@ -25,6 +25,7 @@ import { requireRuntimeApi } from "./state.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { CatalogRadio, RowIssue, SettingIssue } from "../runtime-rpc.ts";
 import type { RadioSessionHandle } from "./state.ts";
+import type { ChosenPortDescription } from "../serial.ts";
 
 // How the status line words a loss the bridge caused itself, by the reason it
 // reports (PORT_LOST_REASONS); any other loss reads as a disconnect, which is
@@ -70,6 +71,26 @@ export interface PreflightResult {
   summary: string;
 }
 
+// The cable behind a connect or a transfer, as the failure metric carries it:
+// the chip family and the USB ids that name a model of adapter. Nothing when
+// no port was chosen (the chooser was dismissed, or the controller has no
+// chooser), so the keys are absent rather than "unknown" and a dashboard's
+// group-by leaves those attempts out. Every key is in METRIC_ATTRIBUTES
+// (web/js/sentry.ts); a hoisted bag because the keys are not at the call
+// site's literal, which the param scanner reads.
+function cableParams(
+  cable: ChosenPortDescription | null | undefined,
+): { chip?: string; usb_vendor_id?: string; usb_product_id?: string } {
+  if (!cable) {
+    return {};
+  }
+  return {
+    chip: cable.chip || "none",
+    usb_vendor_id: cable.usbVendorId || "none",
+    usb_product_id: cable.usbProductId || "none",
+  };
+}
+
 // Say how many values the preflight highlighted and in which view, so a
 // blocked write sends the user to the view that holds them: a settings value
 // is never in the channel grid, whichever view is open.
@@ -89,7 +110,11 @@ function preflightSummary(rowIssues: number, settingIssues: number): string {
 export function createSerialActions(ctx: UiContext) {
   const { dom, state, log } = ctx;
 
-  let transportController: { capability?: typeof capability; choosePort(transport: string): Promise<void> } | null = null;
+  let transportController: {
+    capability?: typeof capability;
+    choosePort(transport: string): Promise<void>;
+    describeChosenPort?(): ChosenPortDescription | null;
+  } | null = null;
   let capability = { supported: false, native: false, webusb: false, webbluetooth: false };
   // Whether this browser can run a clone at all (WebAssembly JSPI). Checked
   // when a connection is started, not at init: the rest of the app works
@@ -100,6 +125,10 @@ export function createSerialActions(ctx: UiContext) {
   // Transport of the active connection, used to show one Disconnect button
   // while any serial transport is connected.
   let transport = "";
+  // The cable behind the active connection, as the chooser described it, so a
+  // transfer's metric can say which adapter it ran over. Cleared with
+  // `transport`: a lost or closed port leaves no cable to attribute to.
+  let connectedCable: ChosenPortDescription | null = null;
   // Whether a download or upload is in flight, preflight included. Runtime
   // calls run one at a time (enqueueRuntimeCall in web/js/runtime-rpc.ts), so
   // nothing pressed meanwhile runs beside the transfer: it waits behind it.
@@ -107,8 +136,10 @@ export function createSerialActions(ctx: UiContext) {
   // one ended, usually by timing out; a Disconnect could not interrupt it,
   // only close the port after it; and a Connect after a port loss would open
   // its chooser once the user's click had expired. So every serial control
-  // waits for the transfer to end. A lost port still ends it promptly: the
-  // bridge fails every read once the port is gone.
+  // waits for the transfer to end, and so does the radio search: a radio
+  // picked mid-transfer leaves the transfer's result without the radio it ran
+  // against. A lost port still ends it promptly: the bridge fails every read
+  // once the port is gone.
   let cloneRunning = false;
   // A connect in flight, and a loss the bridge reported during it. The bridge
   // reports a loss as soon as it happens, while the connect's own result is
@@ -149,6 +180,11 @@ export function createSerialActions(ctx: UiContext) {
     updateSerialActionState();
   }
 
+  // Whether a download or upload is in flight (see cloneRunning).
+  function isCloneRunning(): boolean {
+    return cloneRunning;
+  }
+
   // Record whether a clone can run here at all; web/app.ts decides from the
   // WebAssembly feature check and web/js/ui.ts passes it through init().
   function setCloneSupported(supported: boolean): void {
@@ -170,6 +206,10 @@ export function createSerialActions(ctx: UiContext) {
     setSerialButtonsBusy(true);
     connecting = true;
     lossDuringConnect = null;
+    // The port the chooser picked, read before the open consumes it: a failed
+    // open is exactly when the metric needs to say which cable. null until the
+    // chooser has answered, so a dismissed chooser reports no cable.
+    let chosen: ChosenPortDescription | null = null;
     try {
       const baudRate = Number(state.selectedRadio?.baudRate || 9600);
       const transportLabel = preferredTransport === "webbluetooth"
@@ -179,6 +219,7 @@ export function createSerialActions(ctx: UiContext) {
       // Before anything here awaits: the chooser needs this click's user
       // activation, which can lapse while serialConnect waits on the runtime.
       await transportController?.choosePort(preferredTransport);
+      chosen = transportController?.describeChosenPort?.() || null;
       const result = await requireRuntimeApi(state).serialConnect({ baudRate });
       connected = Boolean(result?.connected);
       if (result?.deviceName) {
@@ -202,8 +243,10 @@ export function createSerialActions(ctx: UiContext) {
         ...radioEventParams(state.selectedRadio),
         transport: transport || "unknown",
       });
+      connectedCable = chosen;
       recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.OK, {
         ...radioEventParams(state.selectedRadio),
+        ...cableParams(chosen),
         transport: transport || "unknown",
       });
       // The connect did succeed; the port went after it. Said in that order.
@@ -247,13 +290,15 @@ export function createSerialActions(ctx: UiContext) {
       }
       recordFlow(FLOWS.SERIAL_CONNECT, OUTCOMES.FAILED, {
         ...radioEventParams(state.selectedRadio),
-        // What was being attempted, since nothing was negotiated. Without it a
-        // dashboard grouped by transport counts explicit transports' successes and drops
+        ...cableParams(chosen),
+        // The transport the chosen port would have gone over, when the chooser
+        // got that far, else what was being attempted. Without it a dashboard
+        // grouped by transport counts explicit transports' successes and drops
         // its failures, which reads as a success rate far better than the real
         // one. "auto" is an honest fallback value: the browser was left to choose
         // and the attempt never got far enough to say what it would have
         // chosen.
-        transport: preferredTransport || "auto",
+        transport: chosen?.transport || preferredTransport || "auto",
         error_kind: errorKind,
         error_type: errorType,
       });
@@ -280,6 +325,7 @@ export function createSerialActions(ctx: UiContext) {
       connected = Boolean(result?.connected);
       if (!connected) {
         transport = "";
+        connectedCable = null;
       }
       log.setStatus(result.message || "Serial disconnected.");
     } catch (error) {
@@ -308,6 +354,7 @@ export function createSerialActions(ctx: UiContext) {
     const lostTransport = transport || "unknown";
     connected = false;
     transport = "";
+    connectedCable = null;
     const cause = PORT_LOST_CAUSES[reason || ""] || "Serial port disconnected";
     log.setStatus(`${cause}; reconnect to continue.`);
     log.logSerial(`${cause}${deviceName ? ` (${deviceName})` : ""}.`);
@@ -426,6 +473,11 @@ export function createSerialActions(ctx: UiContext) {
 
     setLiveRadioSupportWarningVisible(liveRadioUnsupported);
 
+    // Painted here rather than once by setCloneRunning(), like the buttons
+    // below, so no repaint mid-transfer can hand the search back early.
+    dom.radioSearchEl.disabled = !sidebarControlsEnabled || cloneRunning;
+    dom.radioSearchEl.title = cloneRunning ? CLONE_RUNNING_TITLE : "";
+
     // Connect controls by platform capability:
     // - Desktop with native Web Serial: WebSerial toggle.
     // - Android with native Web Serial (Bluetooth RFCOMM serial ports): both
@@ -506,25 +558,41 @@ export function createSerialActions(ctx: UiContext) {
   // days, from a property someone has to go and read; the metric answers it as
   // a rate a dashboard can watch and an alert can fire on, which is what a
   // driver that breaks in a new browser release needs.
+  //
+  // Every outcome carries the transport the clone ran over, successes as well
+  // as failures, because the rate is what reads it. Sentry drops the events of
+  // a driver's own clone failures (isDriverCloneFailure, web/js/sentry.ts), so
+  // a transport that loses bytes shows only here: as a failure rate that moves
+  // with the transport across every driver. It is the one the clone started
+  // with, passed in by the caller, because a port lost mid-clone clears the
+  // connection's transport before the failure arrives.
   function trackCloneOutcome(
     eventName: string,
     radio: CatalogRadio | null,
     startedAt: number,
+    cloneTransport: string,
+    cloneCable: ChosenPortDescription | null,
     params: Record<string, unknown> = {},
   ): void {
     const durationMs = Date.now() - startedAt;
+    const outcomeParams = { transport: cloneTransport || "unknown", ...params };
     trackRadioEvent(eventName, radio, {
       duration_ms: durationMs,
-      ...params,
+      ...outcomeParams,
     });
     const dimensions = CLONE_FLOW_OUTCOMES[eventName];
     if (!radio || !dimensions) {
       return;
     }
+    // The cable rides on the metric only: GA's dimensions are a registered
+    // set (CUSTOM_DIMENSIONS), and the question it answers -- which adapters
+    // clones fail over -- is the metric's. It is the cable the clone started
+    // over, captured with the transport: a port lost mid-clone clears the
+    // connection's, and that loss is the failure a cable most needs to explain.
     recordFlow(
       dimensions.flow,
       dimensions.outcome,
-      { ...radioEventParams(radio), ...params },
+      { ...radioEventParams(radio), ...cableParams(cloneCable), ...outcomeParams },
       durationMs,
     );
   }
@@ -647,6 +715,9 @@ export function createSerialActions(ctx: UiContext) {
     const radio = state.selectedRadio;
     const session = ctx.session.current();
     const startedAt = Date.now();
+    // As is the transport, which a port lost mid-clone clears (handlePortLost).
+    const cloneTransport = transport;
+    const cloneCable = connectedCable;
     setCloneRunning(true);
     try {
       trackRadioEvent("radio_download", radio);
@@ -655,7 +726,12 @@ export function createSerialActions(ctx: UiContext) {
       const result = await requireRuntimeApi(state).downloadSelectedRadio({
         sessionId: await ctx.session.idOf(session),
       });
-      state.currentRows = result.rows;
+      // Described from the result rather than the editor, which may hold
+      // another codeplug by the time the outcome is reported (see below).
+      const downloaded = codeplugParams({ currentRows: result.rows, codeplugSource: "radio" });
+      if (ctx.session.isCurrent(session)) {
+        state.currentRows = result.rows;
+      }
       // The schema comes after the rows, and only now: the download just put
       // this radio's image on its session, and the runtime builds column
       // metadata from that image (get_radio_column_metadata in
@@ -667,6 +743,19 @@ export function createSerialActions(ctx: UiContext) {
       // rewrites them the next time the radio is re-selected
       // (adoptPowerLevels in web/js/ui/channel-table.ts).
       await refreshMetadataForDownloadedRadio(session);
+      // An image opened during the transfer took the editor over: its load
+      // waits behind the transfer in the runtime queue and lands while the
+      // schema above is fetched. The radio was read, so this is a success,
+      // but the image's channels and settings stay where they are.
+      if (!ctx.session.isCurrent(session)) {
+        log.setStatus(
+          `${makeModelLabel(radio)} download finished after another codeplug was opened; `
+            + "its channels were not loaded.",
+        );
+        log.logDebug("DOWNLOAD discarded: the editor moved to another session while it ran.");
+        trackCloneOutcome("radio_download_success", radio, startedAt, cloneTransport, cloneCable, downloaded);
+        return;
+      }
       state.currentHeaders = state.radioMetadata.headers?.length
         ? state.radioMetadata.headers
         : (result.headers || []);
@@ -689,12 +778,12 @@ export function createSerialActions(ctx: UiContext) {
         `${makeModelLabel(radio)} download complete (${state.currentRows.length} channels).`
           + undecodedChannelsNote(result.unreadableChannels),
       );
-      trackCloneOutcome("radio_download_success", radio, startedAt, codeplugParams(state));
+      trackCloneOutcome("radio_download_success", radio, startedAt, cloneTransport, cloneCable, downloaded);
       if (result.ident) {
         log.logSerial(`IDENT ${result.ident}`);
       }
     } catch (error) {
-      trackCloneOutcome("radio_download_failure", radio, startedAt, cloneFailureParams(error, "transfer"));
+      trackCloneOutcome("radio_download_failure", radio, startedAt, cloneTransport, cloneCable, cloneFailureParams(error, "transfer"));
       log.reportActionError("Download", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -718,6 +807,9 @@ export function createSerialActions(ctx: UiContext) {
     const radio = state.selectedRadio;
     const session = ctx.session.current();
     const startedAt = Date.now();
+    // As is the transport, which a port lost mid-clone clears (handlePortLost).
+    const cloneTransport = transport;
+    const cloneCable = connectedCable;
     // Distinguishes a codeplug CHIRP itself rejected from a transfer that
     // reached the radio and failed there.
     let stage = "preflight";
@@ -754,24 +846,30 @@ export function createSerialActions(ctx: UiContext) {
         rows: state.currentRows,
         settings: ctx.settings.getGroups(),
       });
-      ctx.settings.setGroups(uploadResult.settings);
-      ctx.settings.clearInvalid();
-      ctx.settings.render();
+      // The radio was written either way. The settings it reports back belong
+      // in the editor only while it still holds the session written from,
+      // not an image opened during the write.
+      if (ctx.session.isCurrent(session)) {
+        ctx.settings.setGroups(uploadResult.settings);
+        ctx.settings.clearInvalid();
+        ctx.settings.render();
+      }
       log.setStatus(`${makeModelLabel(radio)} upload complete.`);
       // codeplug_source is the question this event exists to answer on the
       // write path: whether people upload what they just read off the radio,
       // or a file they brought with them.
-      trackCloneOutcome("radio_upload_success", radio, startedAt, codeplugParams(state));
+      trackCloneOutcome("radio_upload_success", radio, startedAt, cloneTransport, cloneCable, codeplugParams(state));
     } catch (error) {
       // codeplugParams is merged in here as well as on the success and blocked
       // paths, or grouping upload outcomes by codeplug_source would count every
       // success and no failure at all. It is deliberately not done for a failed
       // *download*: there the editor still holds whatever preceded the
       // transfer, so the same dimensions would describe the wrong codeplug.
-      trackCloneOutcome("radio_upload_failure", radio, startedAt, {
+      trackCloneOutcome("radio_upload_failure", radio, startedAt, cloneTransport, cloneCable, {
         ...codeplugParams(state),
         ...cloneFailureParams(error, stage),
       });
+      ctx.settings.markRefused(error);
       log.reportActionError("Upload", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {
@@ -805,6 +903,7 @@ export function createSerialActions(ctx: UiContext) {
     bindEvents,
     setSerialController,
     setCloneSupported,
+    isCloneRunning,
     handlePortLost,
     setSidebarControlsEnabled,
     setBrowserUnsupportedOverlayVisible,

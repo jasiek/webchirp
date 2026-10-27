@@ -35,7 +35,7 @@ if "_extra_session" in globals():
     close_session(_extra_session.session_id)
 _extra_session = open_radio_session("h777", "H777Radio")
 _image = _extra_session.record_radio(_radio, ImageOrigin.FILE)
-_rows, _unreadable = _radio_rows_from_instance(_radio)
+_rows, _unreadable, _ = _radio_rows_from_instance(_radio)
 json.dumps({"rows": _rows, "imageBase64": base64.b64encode(_image).decode("ascii")})
 `;
 

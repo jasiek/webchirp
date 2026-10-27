@@ -92,16 +92,16 @@ test("a blank proxy base disables only proxy-dependent sources", () => {
       przemienniki: null,
       repeaterbook: null,
       irts: {
-        apiUrl: "https://api.codeplug.org/irts",
-        metaUrl: "https://api.codeplug.org/irts/meta",
+        apiUrl: "https://api.webchirp.org/irts",
+        metaUrl: "https://api.webchirp.org/irts/meta",
       },
       // The city gazetteer follows the IRTS rule, not the proxy rule: it
       // geocodes the position every source filters by rather than being a
       // directory itself, so blanking the base must not take it away.
-      cities: "https://api.codeplug.org/cities",
+      cities: "https://api.webchirp.org/cities",
       // Same rule for the hover map's callsign lookup: it is a first-party
       // route, not a proxied directory, so blanking the base keeps the maps.
-      lookup: "https://api.codeplug.org/lookup",
+      lookup: "https://api.webchirp.org/lookup",
     });
   }
 });
@@ -110,11 +110,11 @@ test("buildRepeaterEndpoints falls back to the default base when called with no 
   assert.deepEqual(buildRepeaterEndpoints(undefined), buildRepeaterEndpoints(DEFAULT_REPEATER_API_BASE));
 });
 
-test("the default base points at the codeplug.org proxy", () => {
-  assert.equal(DEFAULT_REPEATER_API_BASE, "https://api.codeplug.org");
+test("the default base points at the webchirp.org proxy", () => {
+  assert.equal(DEFAULT_REPEATER_API_BASE, "https://api.webchirp.org");
   const endpoints = buildRepeaterEndpoints();
-  assert.equal(endpoints.przemienniki.metaUrl, "https://api.codeplug.org/przemienniki/meta");
-  assert.equal(endpoints.irts.metaUrl, "https://api.codeplug.org/irts/meta");
+  assert.equal(endpoints.przemienniki.metaUrl, "https://api.webchirp.org/przemienniki/meta");
+  assert.equal(endpoints.irts.metaUrl, "https://api.webchirp.org/irts/meta");
 });
 
 test("IRTS radio-perspective frequencies build a usable CHIRP channel", () => {

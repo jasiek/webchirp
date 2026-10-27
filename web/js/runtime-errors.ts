@@ -9,6 +9,7 @@
 // rather than at each call site.
 
 import { errorDetails, errorFields } from "./error-details.ts";
+import type { SettingIssue } from "./runtime-rpc.ts";
 
 /**
  * One exception the failed call was chained from (`__cause__`/`__context__`),
@@ -67,6 +68,8 @@ export interface RpcErrorFields {
   causes?: Partial<PythonCause>[];
   origin?: Partial<PythonOrigin> | null;
   js?: Partial<JsCause> | null;
+  /** What a runtime error carries for the browser beyond its message. */
+  details?: Record<string, unknown> | null;
 }
 
 // A Python exception that crossed rpc_dispatch, as a JS Error. name is the
@@ -77,8 +80,9 @@ export interface RpcErrorFields {
 // full pythonTraceback the debug panel prints, pythonCauses ({type, module,
 // message, explicit} of each exception it was chained from, nearest first),
 // pythonOrigin ({module, function} that raised it), jsCause ({name, message}
-// of the JS error behind a JsException, or null) and the rpcMethod that
-// failed.
+// of the JS error behind a JsException, or null), pythonDetails (the data a
+// runtime error carries for the browser, such as the settings a
+// SettingsRefusedError names, or null) and the rpcMethod that failed.
 export class RuntimeCallError extends Error {
   pythonType: string;
   pythonBases: readonly string[];
@@ -87,6 +91,7 @@ export class RuntimeCallError extends Error {
   pythonCauses: readonly Readonly<PythonCause>[];
   pythonOrigin: Readonly<PythonOrigin>;
   jsCause: Readonly<JsCause> | null;
+  pythonDetails: Readonly<Record<string, unknown>> | null;
   rpcMethod: string;
 
   /**
@@ -112,6 +117,9 @@ export class RuntimeCallError extends Error {
     });
     this.jsCause = envelope.js
       ? Object.freeze({ name: String(envelope.js.name || ""), message: String(envelope.js.message || "") })
+      : null;
+    this.pythonDetails = envelope.details && typeof envelope.details === "object"
+      ? Object.freeze({ ...envelope.details })
       : null;
     this.rpcMethod = String(method || "");
   }
@@ -163,6 +171,32 @@ export function jsErrorName(error: unknown): string {
 // web/js/sentry.ts). A subclass of RuntimePreconditionError is one too.
 export function isUserPreconditionFailure(error: unknown): error is RuntimeCallError {
   return isPythonError(error, "RuntimePreconditionError");
+}
+
+// The settings a failed export or upload says the radio refused: the issues a
+// SettingsRefusedError (web/python/webchirp_bridge/runtime_errors.py) sends as
+// details.issues, in the shape the upload preflight reports, so the Settings
+// panel can mark them. None for any other failure. The details are JSON from
+// Python, so each field is checked rather than trusted.
+export function refusedSettingIssues(error: unknown): SettingIssue[] {
+  if (!isPythonError(error, "SettingsRefusedError")) {
+    return [];
+  }
+  const issues = error.pythonDetails?.issues;
+  if (!Array.isArray(issues)) {
+    return [];
+  }
+  return issues.flatMap((issue: unknown) => {
+    if (!issue || typeof issue !== "object") {
+      return [];
+    }
+    const { path, valueIndex, message } = issue as { path?: unknown; valueIndex?: unknown; message?: unknown };
+    return [{
+      path: Array.isArray(path) ? path.map(String) : [],
+      valueIndex: Number(valueIndex) || 0,
+      message: String(message ?? ""),
+    }];
+  });
 }
 
 // The sentence to show a user for a failure -- "No cached radio image for this

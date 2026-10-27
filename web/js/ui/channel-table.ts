@@ -952,13 +952,40 @@ export function createChannelTable(ctx: UiContext) {
     return removed;
   }
 
+  // Desktop CHIRP refuses to delete or cut a memory whose driver lists
+  // "empty" as immutable -- fixed GMRS/FRS/MURS or call channels
+  // (delete_memory_at and cb_copy_getdata in chirp/chirp/wxui/memedit.py) --
+  // and an upload that omits one keeps it on the radio, so deleting its row
+  // here would silently not happen. The runtime lists those slots on the
+  // Location column (_column_metadata_for_session). Refuses the whole removal,
+  // as a cut does there, and returns whether it did.
+  function refuseUndeletableRemoval(rows: readonly ChannelRow[], verb: string): boolean {
+    const undeletable = new Set(state.radioMetadata.columns.Location?.undeletable ?? []);
+    const locked = rows
+      .map((row) => Number(row.Location))
+      .filter((location) => undeletable.has(location));
+    if (locked.length === 0) {
+      return false;
+    }
+    const named = locked.length === 1
+      ? `Channel ${locked[0]}`
+      : `Channels ${locked.slice(0, 3).join(", ")}${locked.length > 3 ? ` and ${locked.length - 3} more` : ""}`;
+    log.setStatus(`${named} cannot be deleted on this radio; nothing was ${verb}.`);
+    log.logDebug(`CHANNEL DELETE refused: the driver does not allow erasing channel(s) ${locked.join(", ")}`);
+    return true;
+  }
+
   function removeSelectedChannelRows() {
     const selectedIndexes = sortedSelectedRowIndexes();
     if (selectedIndexes.length === 0) {
       log.setStatus("Select one or more channels to remove.");
       return;
     }
-    const removed = removeChannelRows(selectedIndexes.map((idx) => state.currentRows[idx]));
+    const rows = selectedIndexes.map((idx) => state.currentRows[idx]);
+    if (refuseUndeletableRemoval(rows, "removed")) {
+      return;
+    }
+    const removed = removeChannelRows(rows);
     log.setStatus(`Removed ${removed} selected channel(s).`);
   }
 
@@ -1048,13 +1075,21 @@ export function createChannelTable(ctx: UiContext) {
 
   // Serialize the explicitly selected rows (never the select-nothing-means-
   // all-rows fallback: cut would otherwise silently delete every channel).
-  function selectedChannelTsv(actionLabel: string): { tsv: string; count: number; rows: ChannelRow[] } | null {
+  // A cut is refused here, before anything reaches the clipboard, when it
+  // would remove a channel the radio cannot delete.
+  function selectedChannelTsv(
+    actionLabel: string,
+    remove: boolean,
+  ): { tsv: string; count: number; rows: ChannelRow[] } | null {
     const selectedIndexes = sortedSelectedRowIndexes();
     if (selectedIndexes.length === 0) {
       log.setStatus(`Select one or more channels to ${actionLabel}.`);
       return null;
     }
     const rows = selectedIndexes.map((idx) => state.currentRows[idx]);
+    if (remove && refuseUndeletableRemoval(rows, "cut")) {
+      return null;
+    }
     return {
       tsv: serializeRowsToTsv(rows),
       count: rows.length,
@@ -1063,7 +1098,7 @@ export function createChannelTable(ctx: UiContext) {
   }
 
   function copySelectedChannels(event: ClipboardEvent): void {
-    const payload = selectedChannelTsv("copy");
+    const payload = selectedChannelTsv("copy", false);
     // A copy event always carries its clipboard; null only for a synthetic one.
     if (!payload || !event.clipboardData) {
       return;
@@ -1074,7 +1109,7 @@ export function createChannelTable(ctx: UiContext) {
   }
 
   function cutSelectedChannels(event: ClipboardEvent): void {
-    const payload = selectedChannelTsv("cut");
+    const payload = selectedChannelTsv("cut", true);
     if (!payload || !event.clipboardData) {
       return;
     }
@@ -1085,7 +1120,7 @@ export function createChannelTable(ctx: UiContext) {
   }
 
   async function writeChannelTsvToClipboard(actionLabel: string, remove: boolean): Promise<void> {
-    const payload = selectedChannelTsv(actionLabel);
+    const payload = selectedChannelTsv(actionLabel, remove);
     if (!payload) {
       return;
     }
@@ -1102,7 +1137,11 @@ export function createChannelTable(ctx: UiContext) {
     }
     if (remove) {
       // The write may have been parked behind a permission prompt; delete the
-      // rows that were serialized, not whatever is selected now.
+      // rows that were serialized, not whatever is selected now -- unless a
+      // move meanwhile put one of them on a slot the radio cannot delete.
+      if (refuseUndeletableRemoval(payload.rows, "cut")) {
+        return;
+      }
       const removed = removeChannelRows(payload.rows);
       log.setStatus(`Cut ${removed} channel(s) to clipboard.`);
     } else {

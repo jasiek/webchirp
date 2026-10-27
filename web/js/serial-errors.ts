@@ -59,9 +59,67 @@ export function isUsbInterfaceBusy(error: unknown): boolean {
   return jsErrorName(error) === USB_INTERFACE_BUSY;
 }
 
+// The user's machine refused to open the USB device itself (USBDevice.open),
+// before any interface was claimed or the chip touched: the OS declined it
+// (NetworkError), or the browser lacks a permission for it (SecurityError).
+// Named so a failed connect over WebUSB can say which of its three stages it
+// died in -- the device, the claim, or the chip's own setup -- which is what
+// the failure metric groups by, and so reporting can drop it as it drops the
+// native open's NetworkError. Only those two refusals take this name: a
+// device gone between the chooser and the open keeps the browser's
+// NotFoundError, which analytics already counts as a disconnect, and a
+// refusal that may be this app's doing (InvalidStateError for a device
+// already open) keeps its own name and stays reported.
+export const USB_DEVICE_OPEN_FAILED = "UsbDeviceOpenFailedError";
+
+// Build the error a chip driver throws when USBDevice.open() is refused.
+export function createUsbDeviceOpenFailedError(message: string, cause: unknown): Error {
+  const error = new Error(message, { cause });
+  error.name = USB_DEVICE_OPEN_FAILED;
+  return error;
+}
+
+// Recognize that outcome by name, in JS or after crossing Python.
+export function isUsbDeviceOpenFailed(error: unknown): boolean {
+  return jsErrorName(error) === USB_DEVICE_OPEN_FAILED;
+}
+
+// The device opened and its interface was claimed, but programming the chip
+// failed: a control transfer stalled, a register read came back empty, the
+// endpoints were not where the driver expected them. These are the failures
+// this app's own chip drivers are answerable for -- a chip-type ladder that
+// picks the wrong register map ends here -- so, unlike the two above, this one
+// is reported.
+export const USB_CHIP_SETUP_FAILED = "UsbChipSetupFailedError";
+
+// Recognize that outcome by name, in JS or after crossing Python.
+export function isUsbChipSetupFailed(error: unknown): boolean {
+  return jsErrorName(error) === USB_CHIP_SETUP_FAILED;
+}
+
+// Name a failure thrown while a chip driver was setting its chip up. A failure
+// that already carries a name -- the browser's NotFoundError for a device
+// unplugged mid-setup, the busy-interface error -- says something more exact
+// and is left as it is; a plain Error becomes the chip-setup error, keeping
+// its sentence for the debug panel and itself as the cause.
+export function nameUsbChipSetupFailure(error: unknown): unknown {
+  const { name, message } = errorFields(error);
+  if (name && name !== "Error") {
+    return error;
+  }
+  const named = new Error(String(message || error), { cause: error });
+  named.name = USB_CHIP_SETUP_FAILED;
+  return named;
+}
+
 // The named transport failures a wrapper must not erase: reporting recognizes
 // them by name alone, so a plain Error around one would be reported after all.
-const PRESERVED_TRANSPORT_FAILURES: readonly string[] = [USB_INTERFACE_BUSY, SERIAL_PORT_OPEN_FAILED];
+const PRESERVED_TRANSPORT_FAILURES: readonly string[] = [
+  USB_INTERFACE_BUSY,
+  SERIAL_PORT_OPEN_FAILED,
+  USB_DEVICE_OPEN_FAILED,
+  USB_CHIP_SETUP_FAILED,
+];
 
 // Wrap a transport failure in a sentence of the caller's, keeping the failure
 // as the cause and, when it is one of the names above, its name too -- the

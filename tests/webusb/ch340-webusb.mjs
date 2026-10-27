@@ -229,7 +229,7 @@ test("Ch340SerialPort.open() refuses a non-8N1 frame on a pre-0x30 chip and hand
 
   await assert.rejects(
     port.open({ baudRate: 9600, parity: "even" }),
-    /^Error: CH340: chip version 0x27 runs at 8N1 only \(asked for 8E1\)/,
+    /^UsbChipSetupFailedError: CH340: chip version 0x27 runs at 8N1 only \(asked for 8E1\)/,
   );
   assert.deepEqual(controlOut, [], "nothing may be configured for a frame the chip cannot carry");
   assert.equal(released, 1);

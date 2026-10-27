@@ -53,11 +53,11 @@ def _webchirp_coverage_start() -> None:
 def _webchirp_coverage_fragment() -> str:
     """Stop tracing and return this process's slice of the result as JSON.
 
-    Every .py in the package is analysed, not only the ones that were imported,
-    so a module this process never loaded is reported with all of its
-    statements missing rather than omitted. Otherwise Python coverage would
-    have the same blind spot V8 coverage has, where an unloaded file is absent
-    from the denominator instead of scoring zero.
+    Every .py in the package, subpackages included, is analysed, not only the
+    ones that were imported, so a module this process never loaded is reported
+    with all of its statements missing rather than omitted. Otherwise Python
+    coverage would have the same blind spot V8 coverage has, where an unloaded
+    file is absent from the denominator instead of scoring zero.
 
     Paths are Pyodide filesystem paths; the caller maps them back to
     web/python/. Line numbers are absolute and need no adjustment.
@@ -66,7 +66,7 @@ def _webchirp_coverage_fragment() -> str:
         return json.dumps({})
     _coverage.stop()
     files: dict[str, dict[str, list[int]]] = {}
-    for path in sorted(Path(_PACKAGE_DIR).glob("*.py")):
+    for path in sorted(Path(_PACKAGE_DIR).rglob("*.py")):
         name = str(path)
         # analysis2() parses the file whether or not it was ever imported, and
         # returns (filename, statements, excluded, missing, missing_formatted).

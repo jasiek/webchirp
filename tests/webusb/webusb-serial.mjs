@@ -7,7 +7,14 @@ import {
   isFtdiDevice,
   stripFtdiStatusBytes,
 } from "../../web/js/ftdi-webusb.ts";
-import { CDC_CLAIM_RETRY_DELAYS_MS, CdcSerialPort, createWebUsbSerial } from "../../web/js/webusb-serial.ts";
+import {
+  CDC_CLAIM_RETRY_DELAYS_MS,
+  CdcSerialPort,
+  WEBUSB_CHIP_DRIVERS,
+  chipFamilyOf,
+  createWebUsbSerial,
+} from "../../web/js/webusb-serial.ts";
+import { CHIP_NAMES, createChipLoopbackPort } from "../support/loopback-harness.mjs";
 import { isUsbInterfaceBusy } from "../../web/js/serial-errors.ts";
 import { makeEmitter } from "../support/fake-serial.mjs";
 import { withNavigator } from "../support/globals.mjs";
@@ -159,4 +166,22 @@ test("CDC open throws any other open failure at once, without retrying", async (
   assert.equal(polyfillPort.opens, 1);
   assert.deepEqual(sleeps, []);
   assert.equal(usb.listenerCount("disconnect"), 0);
+});
+
+test("chipFamilyOf names the driver that requestPort() would pick, for every chip the harness drives", () => {
+  // The harness profiles are the ids each driver claims; the table the
+  // provider picks from is what names them, so a driver added to one and not
+  // the other fails here rather than reporting as "cdc".
+  assert.deepEqual(WEBUSB_CHIP_DRIVERS.map((driver) => driver.family).sort(), [...CHIP_NAMES].sort());
+  for (const chip of CHIP_NAMES) {
+    const { device, port } = createChipLoopbackPort(chip, { usb: makeEmitter() });
+    assert.equal(chipFamilyOf(device), chip);
+    const driver = WEBUSB_CHIP_DRIVERS.find((candidate) => candidate.matches(device));
+    assert.equal(driver.family, chip);
+    assert.ok(port instanceof driver.create(device, { usb: makeEmitter() }).constructor, chip);
+  }
+  // A CDC device, a port with no USB identity, and nothing at all.
+  assert.equal(chipFamilyOf({ vendorId: 0x2e8a, productId: 0x000c }), "");
+  assert.equal(chipFamilyOf({}), "");
+  assert.equal(chipFamilyOf(null), "");
 });

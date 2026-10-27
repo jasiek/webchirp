@@ -91,6 +91,9 @@ class RadioSession:
     ``unreadable_channels`` are the numbers ``get_memory`` raised on when the
     image was read; they were never in the grid, so their absence from the
     rows is not a deletion and the upload path must not erase them.
+    ``undeletable_channels`` are the channels that image held which the
+    driver will not erase (``empty`` in their ``Memory.immutable``); the grid
+    refuses to delete them, as desktop CHIRP does.
     """
 
     session_id: str
@@ -101,6 +104,7 @@ class RadioSession:
     image: Optional[bytes] = None
     image_origin: ImageOrigin = ImageOrigin.NONE
     unreadable_channels: set[int] = field(default_factory=set)
+    undeletable_channels: set[int] = field(default_factory=set)
     # Values derived from the image, kept until the image changes; see image_memo.
     _image_memos: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
     _image_memo_key: tuple[Any, ...] = field(default=(), repr=False, compare=False)
@@ -269,6 +273,14 @@ class RadioSession:
         """
         self.unreadable_channels = {int(number) for number in numbers}
 
+    def record_undeletable_channels(self, numbers: Iterable[int]) -> None:
+        """Record which channels the image held that the driver will not erase.
+
+        Always overwrites, like ``record_unreadable_channels``: they are a fact
+        about the image just read, and another radio's image may have none.
+        """
+        self.undeletable_channels = {int(number) for number in numbers}
+
     def describe(self) -> dict[str, Any]:
         """The session as JSON for the browser and the tests: identity and state, no bytes."""
         return {
@@ -280,6 +292,7 @@ class RadioSession:
             "hasBackingImage": self.has_backing_image,
             "imageSize": len(self.image) if self.image is not None else 0,
             "unreadableChannels": sorted(self.unreadable_channels),
+            "undeletableChannels": sorted(self.undeletable_channels),
         }
 
 

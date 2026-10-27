@@ -18,10 +18,10 @@ import os
 import tempfile
 from typing import TYPE_CHECKING
 
-from chirp import chirp_common
-
 if TYPE_CHECKING:
     from typing import Iterator, Optional
+
+    from chirp import chirp_common
 
 
 def _blank_radio_instance(radio_cls: type[chirp_common.Radio]) -> chirp_common.Radio:

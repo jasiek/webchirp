@@ -8,6 +8,7 @@ import {
   QUANSHENG_UNOFFICIAL_DRIVER_SET,
   QUANSHENG_UNOFFICIAL_DRIVERS,
 } from "../web/js/python-sources.ts";
+import { sortRadioCatalog } from "../web/js/radio-catalog-order.ts";
 import { createTestRadioHarness } from "../tests/support/radio-harness.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -25,15 +26,6 @@ const QUANSHENG_OUTPUT_PATH = path.join(
 // the opposite -- the app downloads that on every load, which is why the
 // per-radio capabilities live here instead of being folded into it.
 const FEATURES_PATH = path.join(REPO_ROOT, "radio-features.json");
-
-// Match the catalog ordering used by the browser runtime (web/js/runtime-rpc.ts).
-function sortRadioCatalog(radios: CatalogRadio[]): CatalogRadio[] {
-  return radios.slice().sort((a, b) => {
-    const av = `${a.vendor}\u0000${a.model}`;
-    const bv = `${b.vendor}\u0000${b.model}`;
-    return av.localeCompare(bv);
-  });
-}
 
 async function resolveChirpRevision(chirpPackageDir: string): Promise<string> {
   try {
@@ -53,6 +45,7 @@ async function resolveChirpRevision(chirpPackageDir: string): Promise<string> {
 interface CatalogRadio {
   vendor: string;
   model: string;
+  releaseLabel?: string;
   [field: string]: unknown;
 }
 

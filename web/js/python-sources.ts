@@ -7,7 +7,7 @@ import { createHttpStatusError } from "./http-errors.ts";
 // all match this revision; scripts/build-catalog.ts and the bundle build
 // enforce it at build time and the runtime rejects a mismatched static catalog
 // or bundle manifest.
-export const DEFAULT_CHIRP_REVISION = "7a4123ad3364fc4db4bf272805c1aa9bb4230f8e";
+export const DEFAULT_CHIRP_REVISION = "ec452b25de84be125ce933a79115d5428f7f2ba8";
 export const DEFAULT_DRIVER_SET = "chirp";
 export const QUANSHENG_UNOFFICIAL_DRIVER_SET = "quansheng-unofficial";
 export const DRIVER_SETS = Object.freeze([
@@ -43,6 +43,12 @@ export const QUANSHENG_UNOFFICIAL_DRIVERS = Object.freeze([
     relPath: "extra_drivers/quansheng/f4hwn_v6_1_0.py",
     releases: ["v6.1.0"],
     sha256: "ccbf2ec24c5bfb49ab089a2ae0289a305f3ed6812f2de90a36e6186961913462",
+  },
+  {
+    module: "f4hwn_v6_2_0",
+    relPath: "extra_drivers/quansheng/f4hwn_v6_2_0.py",
+    releases: ["v6.2.0"],
+    sha256: "89334fcc60d1730bf41f35664609540896889100a7d90cc855c0450311a26008",
   },
 ]);
 export const EXTRA_DRIVER_RELATIVE_FILES = Object.freeze(
@@ -82,6 +88,11 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
   "webchirp_bridge/runtime_errors.py",
   "webchirp_bridge/serial_pipe.py",
   "webchirp_bridge/session.py",
+  "webchirp_bridge/workarounds/__init__.py",
+  "webchirp_bridge/workarounds/ft1d.py",
+  "webchirp_bridge/workarounds/kguv9dplus.py",
+  "webchirp_bridge/workarounds/uv5r.py",
+  "webchirp_bridge/workarounds/vx8.py",
 ]);
 
 // Where the CHIRP archive lives under web/ (and so under dist/), and the two

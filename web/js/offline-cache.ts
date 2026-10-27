@@ -276,7 +276,7 @@ const PINNED_CDN_PATH = /^\/npm\/(?:@[^/]+\/)?[^/@]+@\d+\.\d+\.\d+(?:[-+][\w.]+)
 export interface OfflineCache {
   /**
    * The response for a request, or null when the worker should leave it to
-   * the browser (non-GET, other hosts, asset-manifest.json).
+   * the browser (non-GET, only-if-cached, other hosts, asset-manifest.json).
    */
   respond(request: Request, options?: RespondOptions): Promise<Response> | null;
   /**
@@ -595,7 +595,11 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
   }
 
   function respond(request: Request, { clientId, waitUntil }: RespondOptions = {}): Promise<Response> | null {
-    if (request.method !== "GET") {
+    // An only-if-cached request (DevTools rereading the page, for one) may
+    // only be answered by the HTTP cache. Passed on through fetch() it fails
+    // whenever that cache has no copy, and the failure is logged as this
+    // worker's own uncaught error.
+    if (request.method !== "GET" || request.cache === "only-if-cached") {
       return null;
     }
     const url = new URL(request.url);

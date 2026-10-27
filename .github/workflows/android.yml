@@ -1,0 +1,48 @@
+# Builds the Android app (android/, the Gradle project Bubblewrap generates
+# from android/twa-manifest.json) whenever it or this workflow changes, so a
+# project that no longer builds fails on its own pull request rather than on
+# release day. The bundle is unsigned: signing needs the upload key, which
+# never enters the repository (android/README.md). Whether the project still
+# matches the site -- host, package, launch query, icons -- is checked by
+# tests/build/android-app.mjs, which coverage.yml runs on every pull request.
+name: Android app
+
+on:
+  pull_request:
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  push:
+    branches: [master]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      # gradlew runs the committed gradle-wrapper.jar, so check it is one
+      # Gradle actually released before running it.
+      - uses: gradle/actions/wrapper-validation@v4
+      # The Android Gradle Plugin needs JDK 17 or newer; 17 is what Bubblewrap
+      # installs for local builds.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      # The runner image carries the Android SDK (ANDROID_HOME) with its
+      # licences accepted, so the plugin fetches any platform it lacks.
+      - run: ./gradlew --no-daemon bundleRelease

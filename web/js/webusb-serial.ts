@@ -143,7 +143,13 @@ export class CdcSerialPort extends WebUsbTransport implements SerialTransport {
   // has already closed the device again), because right after a close it is
   // most often Android still releasing the previous claim; once the retries
   // run out it is the named busy-interface error the chip drivers throw.
-  // Any other failure is thrown at once.
+  // Any other failure is thrown at once, and deliberately unnamed: the
+  // polyfill folds the device open, the configuration and the line coding
+  // into one "Error setting up device: ..." sentence, so naming it as either
+  // the device-open or the chip-setup stage would be a guess, and the metric
+  // would then say the wrong stage with confidence. A CDC failure reports as
+  // error_kind "other" with chip "cdc", and its sentence reaches Sentry,
+  // which is where the stage can still be read.
   async open(options: SerialOpenOptions) {
     for (let attempt = 0; ; attempt += 1) {
       try {
@@ -178,6 +184,36 @@ export class CdcSerialPort extends WebUsbTransport implements SerialTransport {
   }
 }
 
+// The chip drivers, in the order requestPort() tries them: each knows the
+// devices it drives and builds its port. One table for both the provider and
+// chipFamilyOf(), so the family a metric carries for a cable is by
+// construction the driver that opened it -- a fifth driver added here is
+// picked and named in the same edit.
+export const WEBUSB_CHIP_DRIVERS: ReadonlyArray<{
+  family: string;
+  matches: (device: Partial<USBDevice> | null | undefined) => boolean;
+  create: (device: USBDevice, options: WebUsbTransportOptions) => SerialTransport;
+}> = Object.freeze([
+  { family: "ftdi", matches: isFtdiDevice, create: (device, options) => new FtdiSerialPort(device, options) },
+  { family: "pl2303", matches: isProlificDevice, create: (device, options) => new Pl2303SerialPort(device, options) },
+  { family: "ch340", matches: isCh340Device, create: (device, options) => new Ch340SerialPort(device, options) },
+  { family: "cp2102", matches: isCp2102Device, create: (device, options) => new Cp2102SerialPort(device, options) },
+]);
+
+// The chip family behind a USB serial adapter, from its vendor and product
+// ids: the driver in WEBUSB_CHIP_DRIVERS that claims them. "" for ids none
+// of them claims -- a CDC device on WebUSB, or a native Web Serial port whose
+// chip this app has no driver for -- and for a port with no USB ids at all (a
+// Bluetooth link, a built-in UART).
+export function chipFamilyOf(
+  device: { vendorId?: number; productId?: number } | null | undefined,
+): string {
+  if (!device || !Number.isInteger(device.vendorId)) {
+    return "";
+  }
+  return WEBUSB_CHIP_DRIVERS.find((driver) => driver.matches(device))?.family || "";
+}
+
 // usb is the WebUSB loss-event source every port it returns watches
 // (navigator.usb when omitted); tests pass a stand-in.
 /**
@@ -196,17 +232,9 @@ export function createWebUsbSerial({ loadCdcSerialPort, usb }: {
         throw new Error("WebUSB is not available in this browser.");
       }
       const device = await navigator.usb.requestDevice({ filters: USB_DEVICE_FILTERS });
-      if (isFtdiDevice(device)) {
-        return new FtdiSerialPort(device, { usb });
-      }
-      if (isProlificDevice(device)) {
-        return new Pl2303SerialPort(device, { usb });
-      }
-      if (isCh340Device(device)) {
-        return new Ch340SerialPort(device, { usb });
-      }
-      if (isCp2102Device(device)) {
-        return new Cp2102SerialPort(device, { usb });
+      const driver = WEBUSB_CHIP_DRIVERS.find((candidate) => candidate.matches(device));
+      if (driver) {
+        return driver.create(device, { usb });
       }
       const PolyfillSerialPort = await loadCdc();
       return new CdcSerialPort(new PolyfillSerialPort(device), device, { usb });

@@ -1,0 +1,12 @@
+# Gradle's and Bubblewrap's build output and local state.
+.gradle/
+/build/
+/app/build/
+local.properties
+*.apk
+*.aab
+*.idsig
+
+# Signing keys never enter the repository (README.md says where they live).
+*.keystore
+*.jks
