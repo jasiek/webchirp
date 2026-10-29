@@ -50,6 +50,12 @@ export const QUANSHENG_UNOFFICIAL_DRIVERS = Object.freeze([
     releases: ["v6.2.0"],
     sha256: "89334fcc60d1730bf41f35664609540896889100a7d90cc855c0450311a26008",
   },
+  {
+    module: "f4hwn_v6_3_0",
+    relPath: "extra_drivers/quansheng/f4hwn_v6_3_0.py",
+    releases: ["v6.3.0"],
+    sha256: "a307886d90b6481b441c2cd34b622c8dacfc2080a34fc1e0ea2377054ee4ef96",
+  },
 ]);
 export const EXTRA_DRIVER_RELATIVE_FILES = Object.freeze(
   QUANSHENG_UNOFFICIAL_DRIVERS.map((driver) => driver.relPath),
