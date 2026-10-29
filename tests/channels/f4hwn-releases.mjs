@@ -123,7 +123,7 @@ test("unofficial mode discovers only bundled F4HWN drivers", async () => {
 test("CHIRP mode excludes bundled F4HWN drivers", async () => {
   const harness = await sharedHarness();
   const discovered = await listDriverModules(harness.pythonSource);
-  assert.equal(discovered.length, 196);
+  assert.equal(discovered.length, 200);
   assert.deepEqual(
     discovered.filter((moduleName) => QUANSHENG_UNOFFICIAL_DRIVER_MODULES.includes(moduleName)),
     [],
