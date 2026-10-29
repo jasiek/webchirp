@@ -22064,6 +22064,24 @@
       "caveat": "2 W max; 16 channels, all in the 462 MHz FRS range. Retevis says USB charging (not Type-C).",
       "note": "2W max. Maker says USB charging (not Type-C)."
     },
+    "Retevis|RB48": {
+      "formFactor": null,
+      "batteryMah": null,
+      "charging": null,
+      "powerW": null,
+      "bands": null,
+      "modulations": null,
+      "display": null,
+      "inProduction": null,
+      "dualReceive": null,
+      "crossBandRepeater": null,
+      "aprs": null,
+      "gps": null,
+      "bluetoothProgramming": null,
+      "sources": [],
+      "caveat": "",
+      "note": "Added by CHIRP 0b4076d9; not yet researched."
+    },
     "Retevis|RB615": {
       "formFactor": "handheld",
       "batteryMah": 1100,
@@ -22416,6 +22434,24 @@
       ],
       "caveat": "",
       "note": ""
+    },
+    "Retevis|RB648": {
+      "formFactor": null,
+      "batteryMah": null,
+      "charging": null,
+      "powerW": null,
+      "bands": null,
+      "modulations": null,
+      "display": null,
+      "inProduction": null,
+      "dualReceive": null,
+      "crossBandRepeater": null,
+      "aprs": null,
+      "gps": null,
+      "bluetoothProgramming": null,
+      "sources": [],
+      "caveat": "",
+      "note": "Added by CHIRP 0b4076d9; not yet researched."
     },
     "Retevis|RB75": {
       "formFactor": "handheld",
@@ -23890,6 +23926,24 @@
       ],
       "caveat": "UHF; hidden digital-tube display.",
       "note": "UHF; hidden digital-tube display"
+    },
+    "Retevis|RT86A": {
+      "formFactor": null,
+      "batteryMah": null,
+      "charging": null,
+      "powerW": null,
+      "bands": null,
+      "modulations": null,
+      "display": null,
+      "inProduction": null,
+      "dualReceive": null,
+      "crossBandRepeater": null,
+      "aprs": null,
+      "gps": null,
+      "bluetoothProgramming": null,
+      "sources": [],
+      "caveat": "",
+      "note": "Added by CHIRP 0b4076d9; not yet researched."
     },
     "Retevis|RT86S": {
       "formFactor": "handheld",
@@ -26060,6 +26114,24 @@
       ],
       "caveat": "TH-9000D UHF version.",
       "note": "TH-9000D UHF version."
+    },
+    "TYT|UVL-15W": {
+      "formFactor": null,
+      "batteryMah": null,
+      "charging": null,
+      "powerW": null,
+      "bands": null,
+      "modulations": null,
+      "display": null,
+      "inProduction": null,
+      "dualReceive": null,
+      "crossBandRepeater": null,
+      "aprs": null,
+      "gps": null,
+      "bluetoothProgramming": null,
+      "sources": [],
+      "caveat": "",
+      "note": "Added by CHIRP 0b4076d9; not yet researched."
     },
     "Talkpod|A36plus": {
       "formFactor": "handheld",
@@ -29134,6 +29206,24 @@
       "caveat": "70 cm max: FT-7800 40 W, FT-7900 45 W. US version with cellular bands blocked. Receiver covers 108–520, 700–999.99 MHz.",
       "note": "70cm max: FT-7800 40 W, FT-7900 45 W. US version, cellular blocked."
     },
+    "Yaesu|FT-8000R": {
+      "formFactor": null,
+      "batteryMah": null,
+      "charging": null,
+      "powerW": null,
+      "bands": null,
+      "modulations": null,
+      "display": null,
+      "inProduction": null,
+      "dualReceive": null,
+      "crossBandRepeater": null,
+      "aprs": null,
+      "gps": null,
+      "bluetoothProgramming": null,
+      "sources": [],
+      "caveat": "",
+      "note": "Added by CHIRP 0b4076d9; not yet researched."
+    },
     "Yaesu|FT-8100": {
       "formFactor": "mobile",
       "batteryMah": null,
@@ -30990,6 +31080,24 @@
       ],
       "caveat": "SBR-14LI pack. Bluetooth is for headsets only. US version with cellular bands blocked.",
       "note": "SBR-14LI pack; charging connector not verified. Bluetooth is for headsets only. US, cellular blocked."
+    },
+    "Yaesu|FTM-150E": {
+      "formFactor": null,
+      "batteryMah": null,
+      "charging": null,
+      "powerW": null,
+      "bands": null,
+      "modulations": null,
+      "display": null,
+      "inProduction": null,
+      "dualReceive": null,
+      "crossBandRepeater": null,
+      "aprs": null,
+      "gps": null,
+      "bluetoothProgramming": null,
+      "sources": [],
+      "caveat": "",
+      "note": "Added by CHIRP 0b4076d9; not yet researched."
     },
     "Yaesu|FTM-300DR": {
       "formFactor": "mobile",
