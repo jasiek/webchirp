@@ -25,10 +25,10 @@ const CLASS_NAME = "UVK5RadioEgzumer";
 // Pin the retained releases and their published bytes. The v4.3.2 asset still
 // identifies itself as driver v4.3.0; its catalog label names the release.
 test("the bundled F4HWN drivers are the exact published releases", async () => {
-  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.length, 5);
+  assert.equal(QUANSHENG_UNOFFICIAL_DRIVERS.length, 6);
   assert.deepEqual(
     QUANSHENG_UNOFFICIAL_DRIVERS.flatMap((driver) => driver.releases),
-    ["v4.3.2", "v5.9.0", "v6.0.0", "v6.1.0", "v6.2.0"],
+    ["v4.3.2", "v5.9.0", "v6.0.0", "v6.1.0", "v6.2.0", "v6.3.0"],
   );
   assert.deepEqual(
     (await fs.readdir(path.join(webDir, "python/extra_drivers/quansheng")))
@@ -207,11 +207,13 @@ json.dumps({
 // making the driver's entire bitwise layout parse. Every v6 release runs it:
 // v6.1.0 changed the layout (a scan-mix block, a longer write range) and adds
 // a "Mixed Scan Lists" settings group, and v6.2.0 adds a "TONE CALL" key
-// action, so none stands in for another.
+// action, so none stands in for another. v6.3.0 changes only the driver's
+// version string, but it is still a module of its own to import.
 const V6_RELEASES = [
   { module: "f4hwn_v6", release: "v6.0.0", settingsGroups: 11 },
   { module: "f4hwn_v6_1_0", release: "v6.1.0", settingsGroups: 12 },
   { module: "f4hwn_v6_2_0", release: "v6.2.0", settingsGroups: 12 },
+  { module: "f4hwn_v6_3_0", release: "v6.3.0", settingsGroups: 12 },
 ];
 for (const { module: MODULE, release, settingsGroups } of V6_RELEASES) {
   test(`the F4HWN ${release} driver loads channels and settings through WebCHIRP`, async () => {
