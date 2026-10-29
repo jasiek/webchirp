@@ -22065,22 +22065,45 @@
       "note": "2W max. Maker says USB charging (not Type-C)."
     },
     "Retevis|RB48": {
-      "formFactor": null,
-      "batteryMah": null,
-      "charging": null,
-      "powerW": null,
-      "bands": null,
-      "modulations": null,
-      "display": null,
-      "inProduction": null,
-      "dualReceive": null,
-      "crossBandRepeater": null,
-      "aprs": null,
-      "gps": null,
-      "bluetoothProgramming": null,
-      "sources": [],
-      "caveat": "",
-      "note": "Added by CHIRP 0b4076d9; not yet researched."
+      "formFactor": "handheld",
+      "batteryMah": 2000,
+      "charging": [
+        "usb-c",
+        "cradle"
+      ],
+      "powerW": {
+        "min": null,
+        "max": 2
+      },
+      "bands": [
+        {
+          "band": "FRS",
+          "rxMHz": [
+            462.55,
+            467.7125
+          ],
+          "txMHz": [
+            462.55,
+            467.7125
+          ]
+        }
+      ],
+      "modulations": [
+        "FM"
+      ],
+      "display": true,
+      "inProduction": true,
+      "dualReceive": false,
+      "crossBandRepeater": false,
+      "aprs": false,
+      "gps": false,
+      "bluetoothProgramming": false,
+      "sources": [
+        "https://www.retevis.com/products/rb48-waterproof-heavy-duty-walkie-talkies",
+        "https://en.wikipedia.org/wiki/Family_Radio_Service"
+      ],
+      "caveat": "US FRS version; 11 NOAA weather receive channels. The GMRS RB48 Plus/RB48P and the RB48 Pro are different radios.",
+      "note": "Retevis product page (fetched 2026-10-29): license-free FRS, 2W output, 2000mAh battery (BL48 3.7V sold separately), about 12 h of use, IP67, LCD (FAQ mentions the LCD screen film), 11 NOAA channels with weather alerts. Charging: Type-C direct charging plus a dual-seat charger. A Type-C programming cable is sold for RB48/RB648, so the USB-C port is on the radio. Schema.org availability InStock. The page Spec tab and Relevant Documents are empty, and no manual is linked. Third-party manuals (manuals.plus, device.report) returned 403. FRS range 462.55-467.7125 is from Wikipedia FRS (the 22 channels). No Weather band row: no source lists the 11 NOAA frequencies and a band needs at least one range, so the weather receive is stated in the caveat only. Power min is null: only 2W is published, and the driver's 0.5W Low is not confirmed. FCC ID 2A3OORB48 appears only in a search snippet; fccid.io returned 403, so it is not used. Modulation FM is from the driver (FM/NFM) and FRS rules, not a Retevis page. Driver: 22 ch, 400-520 MHz (wider than sold), 2W/0.5W."
     },
     "Retevis|RB615": {
       "formFactor": "handheld",
@@ -22436,22 +22459,45 @@
       "note": ""
     },
     "Retevis|RB648": {
-      "formFactor": null,
-      "batteryMah": null,
-      "charging": null,
-      "powerW": null,
-      "bands": null,
-      "modulations": null,
-      "display": null,
-      "inProduction": null,
-      "dualReceive": null,
-      "crossBandRepeater": null,
-      "aprs": null,
-      "gps": null,
-      "bluetoothProgramming": null,
-      "sources": [],
-      "caveat": "",
-      "note": "Added by CHIRP 0b4076d9; not yet researched."
+      "formFactor": "handheld",
+      "batteryMah": 2000,
+      "charging": [
+        "usb-c",
+        "cradle"
+      ],
+      "powerW": {
+        "min": null,
+        "max": 0.5
+      },
+      "bands": [
+        {
+          "band": "PMR446",
+          "rxMHz": [
+            446.00625,
+            446.19375
+          ],
+          "txMHz": [
+            446.00625,
+            446.19375
+          ]
+        }
+      ],
+      "modulations": [
+        "FM"
+      ],
+      "display": true,
+      "inProduction": true,
+      "dualReceive": false,
+      "crossBandRepeater": false,
+      "aprs": false,
+      "gps": false,
+      "bluetoothProgramming": false,
+      "sources": [
+        "https://www.retevis.com/products/retevis-rb648-ip67-pmr446-waterproof-walkie-talkies-with-ip55-speaker-mic-20-pack",
+        "https://en.wikipedia.org/wiki/PMR446"
+      ],
+      "caveat": "EU PMR446 version, 0.5 W; the RB48 is its US FRS sister. The RB648P, RB648 Plus and RB648 Pro are different UHF radios.",
+      "note": "Retevis RB648 page (fetched 2026-10-29): 'a PMR446 0.5W professional two-way radio', license-free, 2000mAh Li-ion, about 12 h of use and 48 h standby, IP67, 'power-level display on the LCD', 'Type-C direct charging, a USB port, or the dual-seat charger', vibrate/ring call alert. Schema.org availability InStock. The older URL retevis.com/rb648-waterproof-heavy-duty-walkie-talkies now returns 404. The Spec tab is empty and no manual is linked; the manuals.plus RB648/RB48 manual returned 403. The band range is the 16 analogue PMR446 channels (Wikipedia, and CHIRP's bandplan_iaru_r1.PMR446_FREQS), which matches the driver's 16 channels. The driver's 2W High level is inherited and conflicts with the 0.5W Retevis states and PMR446 permits. Min is null: no low level is published. Modulation FM is from the driver and PMR446 rules. No NOAA (driver has no weather setting; EU model)."
     },
     "Retevis|RB75": {
       "formFactor": "handheld",
@@ -23928,22 +23974,45 @@
       "note": "UHF; hidden digital-tube display"
     },
     "Retevis|RT86A": {
-      "formFactor": null,
-      "batteryMah": null,
-      "charging": null,
-      "powerW": null,
-      "bands": null,
-      "modulations": null,
-      "display": null,
-      "inProduction": null,
-      "dualReceive": null,
-      "crossBandRepeater": null,
-      "aprs": null,
-      "gps": null,
-      "bluetoothProgramming": null,
-      "sources": [],
-      "caveat": "",
-      "note": "Added by CHIRP 0b4076d9; not yet researched."
+      "formFactor": "handheld",
+      "batteryMah": 2500,
+      "charging": [
+        "cradle"
+      ],
+      "powerW": {
+        "min": null,
+        "max": 5
+      },
+      "bands": [
+        {
+          "band": "GMRS",
+          "rxMHz": [
+            462.55,
+            467.7125
+          ],
+          "txMHz": [
+            462.55,
+            467.725
+          ]
+        }
+      ],
+      "modulations": [
+        "FM"
+      ],
+      "display": false,
+      "inProduction": true,
+      "dualReceive": false,
+      "crossBandRepeater": false,
+      "aprs": false,
+      "gps": false,
+      "bluetoothProgramming": false,
+      "sources": [
+        "https://v3.retevis.com/Themes/Retevis/Assets/files/download/Manuals_Portable_Radios/RT86A-GMRS-MANUALS-A1-20241014.pdf",
+        "https://v3.retevis.com/Themes/Retevis/Assets/files/download/Manuals_Portable_Radios/RT86A-UHF-Manuals-A1-20241014.pdf",
+        "https://www.retevis.com/products/retevis-rt86a-long-distance-business-radio-with-mic-gain"
+      ],
+      "caveat": "US GMRS version (30 channels); a 32-channel UHF version is also sold. No screen, LED indicator only. Some older listings claimed 10 W.",
+      "note": "GMRS manual A1 20241014: Frequency Range GMRS, 30 channels, Modulation FM, 7.4V DC, current <=2.5A. Channel table: ch1-7 and 15-22 simplex at 5W, ch8-14 (467.5625-467.7125) at 0.5W, ch23-30 repeater TX 467.55-467.725 / RX 462.55-462.725 at 5W, in a column titled 'Max Input power'. Three power levels (low/mid/high by beeps), wattages for each not given. Controls: channel knob, volume knob, indicator LED, PF1/PF2, SP/MIC jack, no display. Charging is described only as dropping the radio into the charging base, and the box contains a charging base plus a Type-C cable, so charging is listed as cradle only. The product page's 'Type-C charging' likely feeds the base, but where the port sits is not confirmed. No NOAA or weather appears in the manual. The UHF/EU manual has 32 channels (2 zones x16), 7.4V, EU RED declaration; that is not the CHIRP layout. Retevis product page (all RT86A URLs redirect to one page): 2500mAh, 17 h work / 120 h standby, Type-C charging with base, three power modes, versions General and GMRS, InStock. Conflict: a search snippet quoted an older Retevis GMRS 4-pack listing as 'H:10W; M:5w L:1W', and some URL slugs still say 10W. The current page shows no wattage and the old version could not be read. The manual's 5W is used; the 10W may belong to the UHF version. GMRS rules cap handhelds at 5W. Retevis software page lists separate RT86A GMRS and UHF programming software, which confirms the two versions. The driver targets the GMRS version, inferred from its 30-channel memory count. Driver: 30 ch, 400-520 MHz, 2/1/0.5W inherited from RT86S, so not authoritative. Bluetooth is not mentioned; 'wireless copy' is radio-to-radio cloning, not Bluetooth."
     },
     "Retevis|RT86S": {
       "formFactor": "handheld",
@@ -26116,22 +26185,76 @@
       "note": "TH-9000D UHF version."
     },
     "TYT|UVL-15W": {
-      "formFactor": null,
-      "batteryMah": null,
-      "charging": null,
-      "powerW": null,
-      "bands": null,
-      "modulations": null,
-      "display": null,
-      "inProduction": null,
-      "dualReceive": null,
-      "crossBandRepeater": null,
-      "aprs": null,
-      "gps": null,
+      "formFactor": "handheld",
+      "batteryMah": 3800,
+      "charging": [
+        "usb-c",
+        "cradle"
+      ],
+      "powerW": {
+        "min": null,
+        "max": 15
+      },
+      "bands": [
+        {
+          "band": "FM broadcast",
+          "rxMHz": [
+            64,
+            108
+          ],
+          "txMHz": null
+        },
+        {
+          "band": "Airband",
+          "rxMHz": [
+            108,
+            134
+          ],
+          "txMHz": null
+        },
+        {
+          "band": "VHF",
+          "rxMHz": [
+            136,
+            174
+          ],
+          "txMHz": [
+            136,
+            174
+          ]
+        },
+        {
+          "band": "UHF",
+          "rxMHz": [
+            400,
+            480
+          ],
+          "txMHz": [
+            400,
+            480
+          ]
+        }
+      ],
+      "modulations": [
+        "FM",
+        "AM",
+        "WFM"
+      ],
+      "display": true,
+      "inProduction": true,
+      "dualReceive": true,
+      "crossBandRepeater": true,
+      "aprs": true,
+      "gps": true,
       "bluetoothProgramming": null,
-      "sources": [],
-      "caveat": "",
-      "note": "Added by CHIRP 0b4076d9; not yet researched."
+      "sources": [
+        "https://www.hamradio.co.uk/tyt-uvl15w",
+        "https://rfcharge.com/products/tyt-uvl-15w-dual-band-fm-transceiver-with-gps-aprs-and-airband",
+        "https://tyt888.en.made-in-china.com/product/qGNpVKvOrYRc/China-Tyt-Uvl-15W-Ultra-High-15W-Output-Power-Cross-Band-Repeater-Very-Long-Distance-Two-Way-Radio-Cross-Band-Repeater.html",
+        "https://hamradioshop.pl/en/handheld-transceivers/7746-tyt-uvl-15w-gps-aprs-15w-5904996576936.html"
+      ],
+      "caveat": "GPS/APRS/Bluetooth version as sold by ML&S (UK). TYT's manual marks these as optional and lists wider TX limits (136-200/260-580 MHz). Some kits list USB-C only on an optional pack.",
+      "note": "TYT product page tyt888.com/pro_info211.html has empty spec tabs. Main source: TYT English neutral 2026 user manual, linked from the ML&S product page (hosted on ML&S's SharePoint; that share link is not cited here because it is a personal account URL). Its spec table says TX 136-200/260-580 MHz; RX 108-134 MHz AM and 108-580 MHz FM; 1000 channels; 11.1 VDC; 456 g with battery and antenna; 3800 mAh; output power 15 W; modulation FM. Its features list says dual band dual receive ('A band and B band receive together'), cross band repeater, FM radio, NOAA weather (10 WX channels), and APRS, GPS (GPS/BDS/GLONASS) and Bluetooth all marked (Optional). The TX power menu offers Low/Medium/High/Ultra High with no wattages, so min is null. The CHIRP driver has 1/5/15 W but is not a source; manuals.plus pages quote 15 W Hi / 5 W Low but returned 403 and were not read. ML&S: 136-174 and 400-480 MHz, up to 15 W, built-in Bluetooth, GPS and APRS, 3600 mAh battery with USB-C charging, desktop cradle included, '200 memory channels' (conflicts with the manual's 1000). Battery: 3800 mAh from the manual; also rfcharge and hamradioshop.pl ('original TYT battery 3800mAh 11.1V'). ML&S says 3600 mAh; TYT's made-in-china store says 3500-4000 mAh. TX bands use the ML&S 136-174/400-480 figures, which match the CHIRP driver's own TX check (136-174/400-480). The manual's 136-200/260-580 TX is treated as the unlocked hardware range and only noted in the caveat. Airband 108-134 is from the manual; rfcharge and the TYT made-in-china listing say 108-136. FM broadcast 64-108 is from rfcharge and the TYT made-in-china listing; the manual gives no FM-radio range. Weather band left out: no frequencies published. Charging: ML&S and rfcharge say USB-C plus cradle; the TYT made-in-china listing says 'Type C battery (Optional)'. bluetoothProgramming null: the manual says Bluetooth slave mode carries TNC data and 'communication with mobile apps or PC' but never says programming. The CHIRP driver docstring says the protocol also runs over Bluetooth, which is not a published retail claim. inProduction true: listed on TYT's current analog product pages, firmware posted 2026-09-23, ML&S in stock. Not found: FCC ID, per-band power, low-power wattage."
     },
     "Talkpod|A36plus": {
       "formFactor": "handheld",
@@ -29207,22 +29330,72 @@
       "note": "70cm max: FT-7800 40 W, FT-7900 45 W. US version, cellular blocked."
     },
     "Yaesu|FT-8000R": {
-      "formFactor": null,
+      "formFactor": "mobile",
       "batteryMah": null,
-      "charging": null,
-      "powerW": null,
-      "bands": null,
-      "modulations": null,
-      "display": null,
-      "inProduction": null,
-      "dualReceive": null,
-      "crossBandRepeater": null,
-      "aprs": null,
-      "gps": null,
-      "bluetoothProgramming": null,
-      "sources": [],
-      "caveat": "",
-      "note": "Added by CHIRP 0b4076d9; not yet researched."
+      "charging": [],
+      "powerW": {
+        "min": 5,
+        "max": 50
+      },
+      "bands": [
+        {
+          "band": "General coverage",
+          "rxMHz": [
+            110,
+            550
+          ],
+          "txMHz": null
+        },
+        {
+          "band": "2 m",
+          "rxMHz": [
+            144,
+            148
+          ],
+          "txMHz": [
+            144,
+            148
+          ]
+        },
+        {
+          "band": "70 cm",
+          "rxMHz": [
+            430,
+            450
+          ],
+          "txMHz": [
+            430,
+            450
+          ]
+        },
+        {
+          "band": "General coverage",
+          "rxMHz": [
+            750,
+            1300
+          ],
+          "txMHz": null
+        }
+      ],
+      "modulations": [
+        "FM",
+        "AM"
+      ],
+      "display": true,
+      "inProduction": false,
+      "dualReceive": true,
+      "crossBandRepeater": true,
+      "aprs": false,
+      "gps": false,
+      "bluetoothProgramming": false,
+      "sources": [
+        "https://www.rigpix.com/yaesu/ft8000r.htm",
+        "https://radiomanual.info/schemi/YAESU_VU/FT-8000R_review_1997.pdf",
+        "https://www.universal-radio.com/catalog/fm_txvrs/FT8000.html",
+        "https://www.manualslib.com/manual/381774/Yaesu-Ft-8000r.html"
+      ],
+      "caveat": "US version: TX 144–148/430–450 MHz (European: 144–146/430–440). 35 W max on 70 cm. Receives 110–550 and 750–1300 MHz, cellular blocked. AM receive is airband only.",
+      "note": "RigPix: Europe TX 144-146/430-440, USA TX 144-148/430-450, RX 110-550/750-1300 (USA cellular blocked); power 2 m 50/10/5 W, 70 cm 35/10/5 W; TX FM/NFM, RX AM/FM/NFM; twin RX VV/VU/UU; discontinued. Amateur Radio (Australia) July 1997 review (VK3OM): RX 110-550 and 750-1300 MHz, cellular blocked; AM chosen automatically on airband; TX FM on the two ham bands only; dual receive same-band or cross-band; can be set up as a cross band repeater; 50 W/35 W with 10 and 5 W levels on both bands; 'Omni-Glow' LCD. Universal Radio: same power, RX 110-550/750-1300 less cellular, V+V/U+U/V+U receive, cross-band repeat listed, discontinued and replaced by FT-8100R. ManualsLib: only the Operating Manual's table of contents was readable; it lists 'Cross-Band Repeater Operation' (p.57); spec page 4 not readable. Could not read a Yaesu manual or spec sheet, so the US TX ranges rest on RigPix and radiomuseum.org (which also gives TX 144-148/430-450). Conflicts: RigReference lists Low 3 W; RigPix, Universal, the review and the CHIRP driver all say 5 W, so 5 is used. Memory count differs between sources (RigPix 100 = 50/band, review 108 = 54/band, Universal 110 = 55/band; driver 50 per side); not a field. RigPix and radiomuseum give the year as 2003, which contradicts reviews dated 1996/1997 (QST Dec 1996, PW Mar 1997, AR Jul 1997). CHIRP driver ft8000r.py: Left 110-280 MHz, Right 280-550 and 750-1000 MHz; High 50 W left / 35 W right, Mid 10, Low 5; modes FM, AM; it stops at 1000 MHz where every source says 1300. aprs/gps/bluetoothProgramming false: no source lists them, and RigPix's feature list (CTCSS encoder, DTMF, ARS, dimmer, 1200/9600 packet jack) has none of them. CTCSS decode needs the optional FTS-22 board (driver prompt)."
     },
     "Yaesu|FT-8100": {
       "formFactor": "mobile",
@@ -31082,22 +31255,73 @@
       "note": "SBR-14LI pack; charging connector not verified. Bluetooth is for headsets only. US, cellular blocked."
     },
     "Yaesu|FTM-150E": {
-      "formFactor": null,
+      "formFactor": "mobile",
       "batteryMah": null,
-      "charging": null,
-      "powerW": null,
-      "bands": null,
-      "modulations": null,
-      "display": null,
-      "inProduction": null,
-      "dualReceive": null,
-      "crossBandRepeater": null,
-      "aprs": null,
-      "gps": null,
-      "bluetoothProgramming": null,
-      "sources": [],
-      "caveat": "",
-      "note": "Added by CHIRP 0b4076d9; not yet researched."
+      "charging": [],
+      "powerW": {
+        "min": 5,
+        "max": 55
+      },
+      "bands": [
+        {
+          "band": "Airband",
+          "rxMHz": [
+            108,
+            137
+          ],
+          "txMHz": null
+        },
+        {
+          "band": "General coverage",
+          "rxMHz": [
+            137,
+            550
+          ],
+          "txMHz": null
+        },
+        {
+          "band": "2 m",
+          "rxMHz": [
+            144,
+            146
+          ],
+          "txMHz": [
+            144,
+            146
+          ]
+        },
+        {
+          "band": "70 cm",
+          "rxMHz": [
+            430,
+            440
+          ],
+          "txMHz": [
+            430,
+            440
+          ]
+        }
+      ],
+      "modulations": [
+        "FM",
+        "AM"
+      ],
+      "display": true,
+      "inProduction": true,
+      "dualReceive": true,
+      "crossBandRepeater": false,
+      "aprs": false,
+      "gps": false,
+      "bluetoothProgramming": false,
+      "sources": [
+        "https://www.yaesu.com/product-detail.aspx?Model=FTM-150R&CatName=VHF/UHF%20Mobile%20Transceivers",
+        "https://www.yaesu.com/Files/4CB3F875-1018-01AF-FAF21EE346767CA2/FTM-150R_E_OM_ENG_EH086M201_2504A-GS.pdf",
+        "https://www.yaesu.com/Files/4CB3F875-1018-01AF-FAF21EE346767CA2/FTM-150R_E_AM_ENG_2411-A.pdf",
+        "https://rigpix.com/yaesu/ftm150easp.htm",
+        "https://passion-radio.com/mobile/ftm150e-2967.html"
+      ],
+      "caveat": "European FTM-150E: transmits 144–146 and 430–440 MHz; other versions transmit up to 148 and 450 MHz. 55 W on 2 m, 50 W on 70 cm. Bluetooth (BU-5 option) is for headsets only.",
+      "note": "Yaesu FTM-150R/E Operating Manual (2504A-GS) specs: TX 144-148 or 144-146 MHz, 430-450 or 430-440 MHz, depending on version; RX 108-137 (AIR), 137-174, 174-400, 400-550 MHz; emission F2D/F3E; RF power 55 W (144) / 50 W (430) / 25 W / 5 W; AM fixed on 108-137 and 300-320 MHz (USA 300-336). Features list: simultaneous reception of two frequencies V+V/U+U/V+U/U+V; optional BU-5 Bluetooth for hands-free headsets; 1103 memory channels; microSD. The Operating Manual and the Advance Manual (2411-A) have no mention of cross band repeat, APRS or GPS (searched text, including the full setup menu), so those three are false. RigPix (FTM-150E ASP): Europe TX 144-146/430-440, RX 108-550; 55/25/5 W on 2 m, 50/25/5 W on 70 cm; TX FM/NFM, RX AM/FM/NFM; true twin RX; Bluetooth via BU-5 option; made 2024-202x. The CHIRP driver's _tx_bands are 144-146/430-440 (IARU Region 1, the European version), so the European TX limits were taken from RigPix plus the driver; Yaesu's manual gives them only as 'depends on version'. The driver's valid_bands stop at 480 MHz (the radio refused more on the test unit), narrower than the 550 MHz spec. yaesu.com lists the FTM-150R (US) as current and does not list the E; European retailers (passion-radio, WiMo, RigPix 2024-) sell the E, so inProduction true. A version without ASP (SPU-1 optional) also exists; RF specs are the same. bluetoothProgramming false: BU-5 is hands-free audio only (manual); programming is by the DATA jack/SD card with ADMS-17. Weather-channel bank (162 MHz) sits inside the general coverage range."
     },
     "Yaesu|FTM-300DR": {
       "formFactor": "mobile",
