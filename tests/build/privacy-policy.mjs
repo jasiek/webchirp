@@ -78,13 +78,15 @@ test("the policy names every host the site is deployed to", async () => {
   // a new destination for every visitor, not only for one feature's users.
   const html = await readPage(POLICY);
   const workflow = await readFile(path.join(repoRoot, ".github", "workflows", "pages.yml"), "utf8");
+  // Matched on the action a deploy step uses, which is what every step has to
+  // name, rather than on its arguments.
   const hosts = [
-    ["actions/deploy-pages", "GitHub Pages"],
-    ["wrangler pages deploy", "Cloudflare Pages"],
+    [/uses:\s*actions\/deploy-pages@/, "GitHub Pages"],
+    [/uses:\s*cloudflare\/wrangler-action@/, "Cloudflare Pages"],
   ];
-  assert.ok(hosts.some(([step]) => workflow.includes(step)), "pages.yml deploys to a host this test knows");
+  assert.ok(hosts.some(([step]) => step.test(workflow)), "pages.yml deploys to a host this test knows");
   for (const [step, host] of hosts) {
-    if (workflow.includes(step)) {
+    if (step.test(workflow)) {
       assert.ok(html.includes(host), `pages.yml deploys to ${host}, which ${POLICY} does not name`);
     }
   }
