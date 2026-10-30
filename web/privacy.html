@@ -40,7 +40,7 @@
           <h1>Privacy Policy</h1>
           <a class="toolbar-link" href="./index.html">Back to App</a>
         </div>
-        <p class="privacy-effective">Effective 26 October 2026.</p>
+        <p class="privacy-effective">Effective 29 October 2026.</p>
         <p>
           This policy covers WebCHIRP: the website at
           <a href="https://webchirp.org/">webchirp.org</a> (formerly codeplug.org) and the
@@ -268,8 +268,8 @@
           Cloudflare, Inc. receives your IP address and information about your browser and
           device. Each RepeaterBook search then carries a single-use token from Turnstile to
           <code>api.webchirp.org</code>, which checks it with Cloudflare. A page that never
-          opens the RepeaterBook query never contacts Cloudflare, and the other directories
-          need no check. See Cloudflare's
+          opens the RepeaterBook query never loads Turnstile, and the other directories need
+          no check. See Cloudflare's
           <a href="https://www.cloudflare.com/turnstile-privacy-policy/" target="_blank" rel="noreferrer">Turnstile Privacy Addendum</a>.
         </p>
 
@@ -325,8 +325,11 @@
         <h2 id="downloads">Hosting and downloads</h2>
         <ul>
           <li>
-            The website is hosted on GitHub Pages. GitHub receives your IP address with each page
-            request, under its
+            The website is hosted on Cloudflare Pages and GitHub Pages. Whichever of Cloudflare
+            and GitHub serves a page request receives your IP address and browser with it, under
+            Cloudflare's
+            <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noreferrer">privacy policy</a>
+            or GitHub's
             <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noreferrer">privacy statement</a>.
           </li>
           <li>
