@@ -4,7 +4,10 @@
     "target": {
       "namespace": "android_app",
       "package_name": "com.hf2j.webchirp",
-      "sha256_cert_fingerprints": []
+      "sha256_cert_fingerprints": [
+        "17:B6:39:84:DB:3B:FC:81:A7:4B:CF:EB:9E:A3:FB:E3:E2:8A:43:6E:DB:48:42:03:69:96:9B:A9:B8:D0:2F:E0",
+        "99:BC:4D:D4:83:1D:59:97:7F:9F:4C:48:28:42:69:FA:37:CD:3A:CF:33:B6:D0:15:59:65:D3:B6:DF:FD:1D:8B"
+      ]
     }
   }
 ]
