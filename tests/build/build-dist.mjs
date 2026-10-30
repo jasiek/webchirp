@@ -443,8 +443,10 @@ test("nested pages resolve asset URLs from the web root and retain URL suffixes"
   const app = hashedNameOf(emitted, "js/app");
   const styles = hashedNameOf(emitted, "styles");
   const html = text(emitted, "radios/model.html");
-  assert.ok(html.includes('../' + app + '?version=1#entry'));
-  assert.ok(html.includes('../' + styles + '?theme=light#sheet'));
+  // A root-relative ref stays root-relative, so a page the host serves at
+  // another path (404.html) still finds it.
+  assert.ok(html.includes('"/' + app + '?version=1#entry"'));
+  assert.ok(html.includes('"/' + styles + '?theme=light#sheet"'));
   assert.match(text(emitted, app), /root entry/);
   assert.doesNotMatch(text(emitted, app), /wrong nested entry/);
   assert.match(text(emitted, styles), /color: red/);

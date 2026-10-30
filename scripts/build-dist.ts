@@ -535,7 +535,13 @@ async function main() {
     const pageDir = path.dirname(page.replace(WEB_DIR, DIST_DIR));
     const edits: Array<{ attr: TagAttr; text: string }> = refs.map((ref) => {
       // Every ref's source was handed to esbuild as an entry, so it has an output.
-      let target = toPosix(path.relative(pageDir, entryOutputs.get(ref.source) as string));
+      const output = entryOutputs.get(ref.source) as string;
+      // A root-relative ref stays root-relative: 404.html is served at whatever
+      // path was missing, where a page-relative URL would resolve elsewhere.
+      if (ref.attr.value.startsWith("/")) {
+        return { attr: ref.attr, text: `/${toPosix(path.relative(DIST_DIR, output))}${ref.suffix}` };
+      }
+      let target = toPosix(path.relative(pageDir, output));
       if (!target.startsWith(".")) {
         target = `./${target}`;
       }
