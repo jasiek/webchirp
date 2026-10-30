@@ -163,15 +163,20 @@ function buildCacheName(buildHash: string): string {
   return `${BUILD_CACHE_PREFIX}${buildHash}`;
 }
 
-// The URL a page is cached under: its path, without the query a link or the
-// web manifest's start_url adds (the page reads that itself), and with a
-// directory resolved to its index.html the way the server resolves it.
-function pageKey(url: URL): string {
+// The URLs a page may be cached under, most likely first: its path, without
+// the query a link or the web manifest's start_url adds (the page reads that
+// itself), and with a directory resolved to its index.html the way the server
+// resolves it. An extensionless path is Cloudflare Pages' clean URL, which it
+// redirects /about.html to: it stands for about.html or about/index.html.
+function pageKeys(url: URL): string[] {
   const key = new URL(url.pathname, url.origin);
   if (key.pathname.endsWith("/")) {
-    key.pathname += "index.html";
+    return [`${key.href}index.html`];
   }
-  return key.href;
+  if (!key.pathname.slice(key.pathname.lastIndexOf("/")).includes(".")) {
+    return [`${key.href}.html`, `${key.href}/index.html`];
+  }
+  return [key.href];
 }
 
 // Read the offline section of asset-manifest.json (scripts/build-dist.ts) into
@@ -583,8 +588,9 @@ export function createOfflineCache(env: OfflineEnv): OfflineCache {
       }
     };
     const { current } = await state();
-    const key = navigate ? pageKey(url) : url.href;
-    if (current?.mutableUrls.includes(key)) {
+    const keys = navigate ? pageKeys(url) : [url.href];
+    const key = keys.find((candidate) => current?.mutableUrls.includes(candidate));
+    if (current && key) {
       return networkFirst(request, key, current.buildHash, record);
     }
     if (!current || navigate) {

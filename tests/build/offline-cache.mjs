@@ -338,6 +338,21 @@ test("offline, a page comes from the cached build whatever its query", async () 
   assert.equal(await bodyOf(offline.respond(subresource(`${SCOPE}radio-catalog.json`))), '{"a":1}');
 });
 
+test("offline, a page's clean URL finds the cached .html page", async () => {
+  // Cloudflare Pages redirects /about.html to /about, so that is the URL a
+  // visitor reloads; the build lists the page under its .html name.
+  const build = deploy("dddddddddd", {
+    files: { "index.html": "<p>D</p>", "about.html": "<p>about</p>", "radios/index.html": "<p>radios</p>" },
+    assets: {},
+  });
+  const { site, offline } = setup(build);
+  await offline.sync();
+  site.offline = true;
+  assert.equal(await bodyOf(offline.respond(navigation(`${SCOPE}about`))), "<p>about</p>");
+  assert.equal(await bodyOf(offline.respond(navigation(`${SCOPE}about.html`))), "<p>about</p>");
+  assert.equal(await bodyOf(offline.respond(navigation(`${SCOPE}radios`))), "<p>radios</p>");
+});
+
 test("a network that never answers falls back to the cache after the timeout", async () => {
   const { site, offline } = setup();
   await offline.sync();
