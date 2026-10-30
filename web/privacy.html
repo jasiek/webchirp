@@ -40,7 +40,7 @@
           <h1>Privacy Policy</h1>
           <a class="toolbar-link" href="./index.html">Back to App</a>
         </div>
-        <p class="privacy-effective">Effective 29 October 2026.</p>
+        <p class="privacy-effective">Effective 30 October 2026.</p>
         <p>
           This policy covers WebCHIRP: the website at
           <a href="https://webchirp.org/">webchirp.org</a> (formerly codeplug.org) and the
@@ -59,6 +59,10 @@
             Usage statistics go to Google Analytics only if you accept them on the cookie
             banner. Error reports go to Sentry, which sets no cookies. Both leave out file
             names, channel names, frequencies, search terms and coordinates.
+          </li>
+          <li>
+            Cloudflare counts page views on webchirp.org without cookies and without
+            identifying you.
           </li>
           <li>
             A position, as coordinates or a locator, leaves your device only when you search
@@ -161,6 +165,20 @@
           are waiting. Google keeps user-level and event-level data for
           14 months and then deletes it. Google explains how it uses this data in
           <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noreferrer">How Google uses information from sites or apps that use our services</a>.
+        </p>
+
+        <h2 id="page-views">Page views (Cloudflare Web Analytics)</h2>
+        <p>
+          webchirp.org is served through Cloudflare, which adds its Web Analytics script to each
+          page. The script loads from <code>static.cloudflareinsights.com</code> and reports
+          to <code>cloudflareinsights.com</code> the page address, the referring page, your
+          browser, operating system and device type, and how long the page took to load.
+          Cloudflare uses your IP address to work out the country and does not store it. It
+          sets no cookies and keeps no identifier, so one visit cannot be linked to another,
+          and it runs whether or not you accept the cookie banner. See Cloudflare's
+          <a href="https://www.cloudflare.com/web-analytics/" target="_blank" rel="noreferrer">Web Analytics</a>
+          page and its
+          <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noreferrer">privacy policy</a>.
         </p>
 
         <h2 id="errors">Error reports (Sentry)</h2>
@@ -405,7 +423,8 @@
             Cookie settings at the bottom of the page and then Decline, to turn it off.
           </li>
           <li>
-            A content blocker that blocks Sentry stops it without stopping the app.
+            A content blocker that blocks Sentry or Cloudflare Web Analytics stops it without
+            stopping the app.
           </li>
           <li>You can refuse the location permission and type a position instead, or none.</li>
           <li>You can clear WebCHIRP's site data at any time, as described above.</li>

@@ -92,6 +92,16 @@ test("the policy names every host the site is deployed to", async () => {
   }
 });
 
+test("the policy names the hosts the edge-injected page-view beacon talks to", async () => {
+  // Cloudflare injects this script into every page at the edge (webchirp-hosting's
+  // analytics.tf), so nothing in this repository names these hosts for the test
+  // above to read.
+  const html = await readPage(POLICY);
+  for (const host of ["static.cloudflareinsights.com", "cloudflareinsights.com"]) {
+    assert.ok(html.includes(`<code>${host}</code>`), `${POLICY} does not name ${host}`);
+  }
+});
+
 test("the app and the about page link to the policy where it can be seen", async () => {
   for (const page of ["index.html", "about.html"]) {
     const { document } = new JSDOM(await readPage(page)).window;
