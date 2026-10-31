@@ -1,5 +1,35 @@
 # Release Notes
 
+## 2026-10-30
+- Added the Android app (`com.hf2j.webchirp`), a Trusted Web Activity that opens webchirp.org full-screen once the site's Digital Asset Links trust its Play signing key; the Install button is hidden inside it (#265, #268, #270, #301).
+- Google Analytics now loads and sets cookies only after Accept on a consent banner, and a privacy policy is linked from inside the app (#271, #272).
+- Added a MURS button that inserts the five US MURS channels, narrow or wide FM per channel at the radio's 2 W or lowest power level (#292).
+- Updated the bundled CHIRP to 0b4076d9, adding the Baofeng DM-32UV, Zartek ZA-758, Retevis RT86A/RB48/RB648, Yaesu FT-8000R/FTM-150E, TYT UVL-15W and the UV-K5 on losehu firmware, and loading VX-8 memories programmed from the keypad (#297).
+- `?drivers=quansheng-unofficial` now also offers F4HWN v6.2.0 and v6.3.0, and lists the releases oldest first (#274, #296).
+- RepeaterBook queries now pass a Cloudflare Turnstile bot check, Query API reuses the map preview's results instead of fetching again, and the modal credits RepeaterBook.com (#287, #288, #289, #291).
+- przemienniki.net repeaters that list several modes, such as FM and D-STAR, now keep every mode, so an FM search around London finds 17 repeaters instead of 0 (#246).
+- The channel toolbar is now compact and flows as one row, taking a phone's toolbar from 249px to 142px tall (#294).
+- The site now also deploys to Cloudflare Pages, repeater queries go to api.webchirp.org, a missing page returns a real 404, and the privacy policy names Cloudflare hosting and Web Analytics (#273, #298, #299, #300).
+- A short scroll down a long channel list no longer keeps scrolling to the last channel (#263).
+- Power from a CSV or another radio now moves to the selected radio's closest level, as desktop CHIRP does, instead of a watt value the upload refused (#264).
+- Unedited radio settings no longer block binary export or upload, and a setting the radio refuses is marked in the Settings panel instead of failing the write (#267).
+- Settings edits survive a reply that carries no settings, and a driver whose settings fail to read still loads its channels (#247, #248).
+- Editing a setting keeps keyboard focus in the Settings panel instead of rebuilding it (#284).
+- Binary export now stops at channels the driver would refuse as highlighted cells, and at blank or duplicate Locations instead of silently overwriting a memory (#260, #269).
+- Radios with fixed channels, such as the Baofeng GM-15Pro's GMRS channels, now upload with those channels missing from the grid, and the grid refuses to delete them (#279, #283).
+- Download, Upload and radio selection are held while a transfer runs, and a transfer's result never lands in another radio's grid (#256, #285).
+- Connect now opens the port chooser from the click itself, so WebUSB on Android no longer fails with a SecurityError while the runtime is busy (#255).
+- Every port the serial bridge drops is now reported, so Upload no longer fails later with "Port is not connected." (#257).
+- WebUSB cables now check bulk writes, honour data bits, stop bits and parity, and read input control lines; FTDI AM and hi-speed chips get their own baud encoding, and PL2303 cables drop DTR/RTS at open so a reconnect starts clean (#243, #258, #259).
+- Yaesu FT1D-family and VX-8 SmartBeacon low-speed limits now follow each profile, fixing an FT5D binary export crash (#280).
+- A finished UV-5R upload with Range Override set now reports success instead of "Upload failed" (#277).
+- Browsers without WebAssembly, such as Safari in Lockdown Mode, now get the explanation that radio programming is unavailable instead of a page that never initialises (#254).
+- Host outages, link-scanner rejections, driver clone give-ups and both CHIRP `InvalidValueError` classes are no longer filed as Sentry bugs, and runtime failures are grouped by the Python function that raised them (#252, #253, #254, #276, #281).
+- WebUSB connect failures now name the stage that failed, and clone metrics carry the cable and transport (#281, #286).
+- The service worker now leaves `only-if-cached` requests to the browser, ending a "Failed to fetch" console error during RepeaterBook queries (#290).
+- CLAUDE.md rules are now enforced by tests and CI checks, and upstream CHIRP driver workarounds have one home behind hooks; no user-visible change (#278, #282).
+- Bumped undici to 7.30.1; no user-visible change (#295).
+
 ## 2026-10-11
 - After one online visit the app loads and boots radio drivers with no network, served whole from a service worker cache, while online visits still get the latest deploy (#230).
 - Channel edits are now checked by the radio's driver as each cell is committed, showing the typed value as pending until the driver answers, instead of only at upload (#224).
