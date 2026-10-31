@@ -1,5 +1,5 @@
-// Build dist/, the tree .github/workflows/pages.yml deploys to Cloudflare Pages
-// and GitHub Pages.
+// Build dist/, the tree .github/workflows/pages.yml deploys to Cloudflare
+// Pages.
 //
 // JavaScript and CSS go through esbuild. The entry points are whatever the
 // pages load -- every local <script type="module" src> and
@@ -50,7 +50,7 @@
 // use, cached best-effort and only there (OFFLINE_OPTIONAL_GROUPS).
 //
 // _headers is the response-header file Cloudflare Pages reads from the root of
-// a deploy (GitHub Pages ignores it and serves it as a plain file). It marks
+// a deploy. It marks
 // the directories and patterns in IMMUTABLE_PATHS cacheable for a year without
 // revalidation, and the build fails if any file it emits under them is not
 // one of its immutable names. Everything else keeps Cloudflare's default,

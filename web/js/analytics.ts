@@ -370,7 +370,7 @@ function deliverEvent(win: Window, event: QueuedEvent): boolean {
 // CONSENT_KEY; "Cookie settings" in each page's footer reopens the banner.
 //
 // The banner asks everyone, not only EEA and UK visitors: the site is static
-// files on Cloudflare Pages and GitHub Pages with no server code, so the page
+// files on Cloudflare Pages with no server code, so the page
 // has no reliable way to know where a visitor is.
 //
 // Events tracked before an answer wait in memory, never in storage -- writing
