@@ -546,9 +546,9 @@ function slugFor(radio: Pick<CatalogEntry, "vendor" | "model">): string {
 }
 
 // A vendor hub's filename. Hubs sit in the same flat directory as the model
-// pages so that introducing them moved no model page: GitHub Pages serves
-// static files with no redirect rules available, so a URL that changes is a
-// URL whose accumulated ranking starts again from zero.
+// pages so that introducing them moved no model page: the site must also
+// work on GitHub Pages, which has no redirect rules, so a URL that changes is
+// a URL whose accumulated ranking starts again from zero.
 function vendorSlugFor(vendor: string): string {
   return slugify(vendor);
 }
