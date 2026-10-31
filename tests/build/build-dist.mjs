@@ -379,6 +379,19 @@ test("type stubs beside the Python stay out of dist", async () => {
   assert.ok(![...emitted.keys()].some((rel) => rel.endsWith(".pyi")));
 });
 
+// web/chirp/ is ignored and never cleaned, so a checkout that built the
+// previous pin still holds that pair beside the current one.
+test("another pin's CHIRP bundle left in web/chirp/ is not shipped", async () => {
+  const stalePin = "0".repeat(40);
+  const emitted = await build({
+    ...appTree("export const leaf = 1;\n"),
+    [`chirp/chirp-${stalePin}.zip`]: "an earlier pin's archive\n",
+    [`chirp/chirp-${stalePin}.json`]: "{}\n",
+  });
+  const shipped = [...emitted.keys()].filter((rel) => rel.startsWith("chirp/")).sort();
+  assert.deepEqual(shipped, [...CHIRP_BUNDLE_FILES].sort());
+});
+
 test("a missing offline file fails the build", async () => {
   await withTempDir("build-dist-", async (dir) => {
     const files = { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n") };

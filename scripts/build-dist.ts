@@ -25,7 +25,10 @@
 //     deriving the unhashed URLs the dev server serves.
 //   * The CHIRP archive and manifest (web/chirp/, scripts/build-chirp-bundle.ts)
 //     are named after the pin, so they are copied as they are, required, and
-//     listed in the asset manifest for retention.
+//     listed in the asset manifest for retention. Only the pinned pair is
+//     copied: web/chirp/ is ignored and never cleaned, so a checkout that has
+//     built other pins still holds theirs, and retention, not this build, is
+//     what carries an earlier pin into a deploy.
 //   * Everything else -- the web manifest and icons, the radio catalogs,
 //     version.json, sitemap.xml, robots.txt, favicon, .well-known/ -- is
 //     copied verbatim.
@@ -525,13 +528,16 @@ async function main() {
   // it is named here so that leaving it out is never silent. Type stubs
   // (.d.ts, and the .pyi pyright reads beside the Python) stay behind too.
   // File by file rather than one recursive copy, so a directory that held
-  // only source modules (web/js/ui/) does not reappear in dist/ empty.
+  // only source modules (web/js/ui/) does not reappear in dist/ empty. Of
+  // web/chirp/, only the pinned pair (see the header).
   for (const file of webFiles) {
+    const rel = toPosix(path.relative(WEB_DIR, file));
     if (BUILT_EXTS.has(path.extname(file)) || file.endsWith(".d.ts") || file.endsWith(".pyi")
-      || file.endsWith(".html")) {
+      || file.endsWith(".html")
+      || (rel.startsWith(`${CHIRP_BUNDLE_DIR}/`) && !CHIRP_BUNDLE_FILES.includes(rel))) {
       continue;
     }
-    const target = path.join(DIST_DIR, path.relative(WEB_DIR, file));
+    const target = path.join(DIST_DIR, rel);
     await mkdir(path.dirname(target), { recursive: true });
     await copyFile(file, target);
   }
