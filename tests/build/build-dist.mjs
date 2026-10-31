@@ -330,6 +330,55 @@ test("the service worker ships unhashed at the root as a classic script", async 
   assert.match(sw, /addEventListener\("fetch"/);
 });
 
+// The rules Cloudflare Pages applies, parsed back from _headers.
+function headerRules(emitted) {
+  const rules = new Map();
+  let pattern = null;
+  for (const line of text(emitted, "_headers").split("\n").filter(Boolean)) {
+    if (line.startsWith(" ")) {
+      rules.get(pattern).push(line.trim());
+    } else {
+      pattern = line;
+      rules.set(pattern, []);
+    }
+  }
+  return rules;
+}
+
+function matchesHeaderPattern(pattern, rel) {
+  const re = pattern.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+  return new RegExp(`^${re}$`).test(`/${rel}`);
+}
+
+test("_headers marks every hashed output immutable and nothing else", async () => {
+  const emitted = await build(appTree("export const leaf = 1;\n"));
+  const rules = headerRules(emitted);
+  for (const headers of rules.values()) {
+    assert.deepEqual(headers, ["Cache-Control: public, max-age=31536000, immutable"]);
+  }
+  for (const rel of emitted.keys()) {
+    const matching = [...rules.keys()].filter((pattern) => matchesHeaderPattern(pattern, rel));
+    const immutable = HASHED_NAME_RE.test(path.basename(rel)) || CHIRP_BUNDLE_FILES.includes(rel);
+    assert.equal(matching.length, immutable ? 1 : 0, `${rel} matches ${matching.join(", ") || "no rule"}`);
+  }
+});
+
+test("an unhashed file where _headers promises immutability fails the build", async () => {
+  await withTempDir("build-dist-", async (dir) => {
+    await writeTree(path.join(dir, "web"), {
+      ...REQUIRED_FILES,
+      ...appTree("export const leaf = 1;\n"),
+      "python/notes.txt": "copied verbatim under a fixed name\n",
+    });
+    await assert.rejects(runBuild(dir), /python\/notes\.txt would be served as immutable/);
+  });
+});
+
+test("type stubs beside the Python stay out of dist", async () => {
+  const emitted = await build({ ...appTree("export const leaf = 1;\n"), "python/typings/js.pyi": "x: int\n" });
+  assert.ok(![...emitted.keys()].some((rel) => rel.endsWith(".pyi")));
+});
+
 test("a missing offline file fails the build", async () => {
   await withTempDir("build-dist-", async (dir) => {
     const files = { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n") };
