@@ -11,9 +11,8 @@
 //
 // The same server also serves the built site for the browser tests
 // (tests/e2e): WEB_ROOT=dist serves that directory instead of web/, and
-// SERVE_AS=pages leaves out the isolation headers, because neither host sends
-// them (GitHub Pages cannot, and the Cloudflare Pages deploy ships no
-// _headers file) and the tests should see the site as it is served. Cloudflare
+// SERVE_AS=pages leaves out the isolation headers, because the deploy's
+// _headers file sets none and the tests should see the site as it is served. Cloudflare
 // Pages' clean-URL redirects (/about.html to /about) are not emulated.
 import fs from "node:fs";
 import path from "node:path";

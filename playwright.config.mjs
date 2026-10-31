@@ -1,6 +1,6 @@
 // Playwright configuration for the browser tests in tests/e2e
 // (npm run test:e2e). They run against the built site, dist/, served without
-// isolation headers as Cloudflare Pages and GitHub Pages serve it, in Chromium
+// isolation headers as Cloudflare Pages serves it, in Chromium
 // only: Web Serial, WebUSB and Web Bluetooth are
 // Chromium APIs, so the app's own audience is Chromium.
 //

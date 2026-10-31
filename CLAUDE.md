@@ -246,13 +246,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Keep controls and labels task-oriented and explicit.
 
 ## Other considerations
-- webchirp.org is served by Cloudflare Pages. `.github/workflows/pages.yml`
-  deploys the same `dist/` to GitHub Pages too, and which host answers for the
-  domain is chosen in jasiek/webchirp-hosting (with the DNS, the Pages project
-  and Cloudflare Web Analytics), not here. Until the GitHub Pages deploy is
-  removed the site must work on either host, so nothing may depend on a custom
-  HTTP header, a redirect rule or a cache lifetime, none of which GitHub Pages
-  can set.
+- webchirp.org is served by Cloudflare Pages, which `.github/workflows/pages.yml`
+  deploys `dist/` to. The DNS, the Pages project and Cloudflare Web Analytics
+  live in jasiek/webchirp-hosting, not here. Response headers go in the
+  `_headers` file `scripts/build-dist.ts` writes.
 - `web/.well-known/assetlinks.json` is the Digital Asset Links statement for the
   Android app. Its fingerprints must include the Play App Signing key's
   SHA-256, not only the upload key's.

@@ -5,8 +5,7 @@
 // scripts/build-dist.ts bundles this into dist/sw.js under a fixed name at the
 // site root: a worker controls only the pages at or below its own URL, and the
 // browser finds a new version by fetching the same URL again (bypassing the
-// HTTP cache, so a host's max-age -- ten minutes on GitHub Pages -- does not
-// delay an update). The dev server never serves it -- there is no sw.js in
+// HTTP cache, so no max-age the host sets can delay an update). The dev server never serves it -- there is no sw.js in
 // web/ -- and
 // web/js/offline.ts does not register it there.
 import { createOfflineCache } from "./js/offline-cache.ts";

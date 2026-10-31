@@ -121,7 +121,7 @@ test("the unreachable-host failure explains the domain-move ordering", async () 
     );
     assert.match(
       result.stderr,
-      /Pages only learns a new domain from a deploy/,
+      /must already serve the previous build/,
       "the failure must say why landing the CNAME change first cannot work",
     );
   }));
