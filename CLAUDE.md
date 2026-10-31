@@ -1,4 +1,4 @@
-This repository hosts a browser-based CHIRP interface (`web/`) that executes CHIRP Python code in Pyodide and communicates with radios via Web Serial.
+This repository hosts a browser-based CHIRP interface (`web/`) that executes CHIRP Python code in Pyodide and communicates with radios via Web Serial, WebUSB or Web Bluetooth. It is served at https://webchirp.org/ and wrapped as an Android app (`android/`).
 
 ## Core Architecture
 - `web/app.ts`: Browser entry point: wires the UI, the runtime RPC client and
@@ -23,10 +23,14 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `tests/webusb/serial-transport-conformance.mjs` runs one set of cases against
   every implementation -- a new transport joins its table.
 - `web/js/ui.ts`: Composes the UI modules and exposes `createUiController()`.
-- `web/js/ui/`: One module per UI area — `channel-table`, `settings-panel`,
-  `radio-catalog`, `radio-session`, `repeater-query`, `codeplug-io`,
-  `serial-actions`, plus the shared `dom`, `state`, `debug-log`, `issue-report`,
-  `format`, `analytics` and `channel-values` helpers. `radio-session` owns the
+- `web/js/ui/`: One module per UI area — `channel-table` (with its
+  `channel-bulk-edit` and `channel-extra` modals), `settings-panel` (with
+  `setting-fields` and `setting-values`), `radio-catalog`, `radio-session`,
+  `repeater-query` (with `query-fields` and `repeater-sources`),
+  `repeater-map` and `static-map-view` (the static OSM maps), `codeplug-io`,
+  `serial-actions`, `install-button` and `connectivity`, plus the shared `dom`,
+  `state`, `debug-log`, `progress`, `notice-modal`, `issue-report`, `format`,
+  `analytics`, `metrics` and `channel-values` helpers. `radio-session` owns the
   runtime session handle behind the selected radio: selecting a radio opens a
   session, changing it closes the old one and opens the next, an image load
   hands over the session the runtime opened for the image's driver, and every
@@ -84,9 +88,11 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `row_normalization` (the one implementation of the grid's column rules,
   `normalize_cell`), `row_validation` (the upload preflight and the per-edit
   `normalize_and_validate_rows`, which share the per-row `_row_findings`),
-  `radio_memories`, `radio_settings`, `column_metadata`,
+  `radio_memories`, `radio_settings`, `channel_extra` (a driver's per-channel
+  settings behind the grid's Extra column), `column_metadata`,
   `images`, plus `jsbridge` (JS-boundary helpers), `runtime_errors` and `rpc`
-  (the `RPC_METHODS` table and `rpc_dispatch`). `__init__.py` only installs
+  (the `RPC_METHODS` table and `rpc_dispatch`), and the `workarounds`
+  package (see Rules for Agents). `__init__.py` only installs
   the shims CHIRP needs before import.
 - Offline use: the service worker (`web/sw.ts`, logic in
   `web/js/offline-cache.ts`, registered by `web/js/offline.ts` on the built
@@ -201,6 +207,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   or explanations of why something happened.
 - Analytics never sends user data — no file names, channel names, frequencies,
   search terms or coordinates.
+- Sentry filtering (`web/js/sentry.ts`) drops an error in code only when it is
+  never a defect and can be recognised by its class, where it was raised, or
+  the browser. An error that only its wording tells apart from a defect stays
+  reported, and is archived in Sentry if it is a known circumstance.
 - `web/privacy.html` is the privacy policy Google Play requires of the Android
   app. A change to what the app collects, stores on the device or sends, or to
   where it sends it, updates that page and its effective date in the same PR;
@@ -236,7 +246,13 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Keep controls and labels task-oriented and explicit.
 
 ## Other considerations
-- This is currently hosted on GitHub Pages = we can't set custom http headers on files, and can't control cache time.
+- webchirp.org is served by Cloudflare Pages. `.github/workflows/pages.yml`
+  deploys the same `dist/` to GitHub Pages too, and which host answers for the
+  domain is chosen in jasiek/webchirp-hosting (with the DNS, the Pages project
+  and Cloudflare Web Analytics), not here. Until the GitHub Pages deploy is
+  removed the site must work on either host, so nothing may depend on a custom
+  HTTP header, a redirect rule or a cache lifetime, none of which GitHub Pages
+  can set.
 - `web/.well-known/assetlinks.json` is the Digital Asset Links statement for the
   Android app. Its fingerprints must include the Play App Signing key's
   SHA-256, not only the upload key's.
@@ -256,7 +272,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Include clear commit messages that describe user-visible behavior or architectural impact.
 - If model is other than Anthropic/OpenAI, add a Co-Authored-By: <model name and parameters> at the end of the commit message
 - Never use backticks (`) anywhere in any generated command to execute.
-- When on master, update RELEASE_NOTES.md based on PRs which were merged in with current date. Each entry is a single line: the user-visible change plus the PR number, no multi-sentence detail. At the same time run `npm run screenshots` to regenerate images/screenshot.png, images/screenshot-for-opengraph.png, and web/images/social-preview.png from the current version of the app. When you do this, also consolidate/update FINDINGS.md so that it is always up to date.
+- When on master, update RELEASE_NOTES.md based on PRs which were merged in with current date. Each entry is a single line: the user-visible change plus the PR number, no multi-sentence detail. At the same time run `npm run screenshots` to regenerate images/screenshot.png, images/screenshot-for-opengraph.png, web/images/social-preview.png and the two install-dialog screenshots, web/images/screenshot-wide.png and web/images/screenshot-narrow.png, from the current version of the app. When you do this, also consolidate/update FINDINGS.md so that it is always up to date.
 
 ## Code Review
 - If you are an OpenAI agent, use Astra Medium when performing code review.
