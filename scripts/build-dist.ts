@@ -1,4 +1,5 @@
-// Build dist/, the tree GitHub Pages serves (.github/workflows/pages.yml).
+// Build dist/, the tree .github/workflows/pages.yml deploys to Cloudflare Pages
+// and GitHub Pages.
 //
 // JavaScript and CSS go through esbuild. The entry points are whatever the
 // pages load -- every local <script type="module" src> and

@@ -103,7 +103,7 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
 
 // Where the CHIRP archive lives under web/ (and so under dist/), and the two
 // files it consists of for a given pin. Named by the pin rather than by
-// content so the URL is immutable on GitHub Pages without scripts/build-dist.ts
+// content so the URL is immutable on either host without scripts/build-dist.ts
 // learning a new hashing rule; scripts/build-chirp-bundle.ts writes them and
 // scripts/retain-deployed-assets.ts carries the previous pin's pair forward.
 // The names are not hashed by the build, so unlike the runtime files above

@@ -1,6 +1,7 @@
 // The app in a real browser: what the headless unit tests cannot see because
 // jsdom does no layout and runs no Pyodide. The page is the built site
-// (dist/), served the way GitHub Pages serves it; see playwright.config.mjs.
+// (dist/), served without isolation headers as both hosts serve it; see
+// playwright.config.mjs.
 //
 // The steps that drive the app come from scripts/app-driver.ts, the same ones
 // scripts/update-screenshots.ts uses.

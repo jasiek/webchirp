@@ -1,8 +1,10 @@
 // HTTP status failures, named so reporting can tell a host outage from a
 // missing file without reading the sentence.
 //
-// The app is served by GitHub Pages, which answers a 502 or 503 now and then
-// for a file that is there a moment later. fetchOk() (web/js/python-sources.ts)
+// GitHub Pages, which served the app when this was written, answered a 502 or
+// 503 now and then for a file that was there a moment later; whether Cloudflare
+// Pages, which serves it now, does the same is not known, and the rule is the
+// same either way. fetchOk() (web/js/python-sources.ts)
 // used to throw a plain Error for every status, and the runtime bootstrap
 // reported each one as a crash -- a host hiccup filed as a bug, once per
 // visitor who hit it. A 404 is different: it is the deploy answering that a
