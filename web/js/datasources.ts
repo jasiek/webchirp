@@ -170,12 +170,19 @@ const CITY_SUGGEST_MAX = 20;
 // Look up place names matching `query` in the api.webchirp.org gazetteer.
 // `near` is an optional { latitude, longitude } proximity hint; the endpoint
 // takes lat and lon together or not at all, so a half-known position is sent
-// as no hint. Results are normalized to this app's { latitude, longitude }
-// shape, and an entry without a usable coordinate pair is dropped.
+// as no hint. `countries` restricts the answer to those two-letter codes: a
+// filter, not a ranking nudge, so nothing outside them comes back. The
+// endpoint refuses the whole request over one malformed code, so anything that
+// is not two letters is left out, and a list left empty restricts nothing.
+// Results are normalized to this app's { latitude, longitude } shape, and an
+// entry without a usable coordinate pair is dropped.
 export async function fetchCitySuggestions(
   citiesUrl: string,
   query: string,
-  near: { latitude?: number; longitude?: number } | null = null,
+  { near = null, countries = [] }: {
+    near?: { latitude?: number; longitude?: number } | null;
+    countries?: readonly string[];
+  } = {},
 ) {
   const text = String(query ?? "").trim();
   if (!citiesUrl || text.length === 0) {
@@ -188,6 +195,15 @@ export async function fetchCitySuggestions(
   if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
     url.searchParams.set("lat", String(latitude));
     url.searchParams.set("lon", String(longitude));
+  }
+  // Sorted and deduplicated so one set of countries is one URL, whatever
+  // order the form listed them in.
+  const codes = Array.from(new Set(countries
+    .map((code) => String(code ?? "").trim().toUpperCase())
+    .filter((code) => /^[A-Z]{2}$/.test(code))))
+    .sort();
+  if (codes.length > 0) {
+    url.searchParams.set("countries", codes.join(","));
   }
   // The body is read inside the deadline for the same reason every other
   // directory request reads it there: fetch() resolves on headers alone.

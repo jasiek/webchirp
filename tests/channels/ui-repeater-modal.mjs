@@ -1775,6 +1775,48 @@ test("the chosen city persists across a reopen and a source switch", async () =>
   assert.equal(fieldByName(dom, "latitude").value, "50.061430");
 });
 
+// The countries= of every gazetteer request so far, in order.
+function cityLookupCountries(calls) {
+  return calls
+    .filter((call) => call.url.includes("/cities"))
+    .map((call) => new URL(call.url).searchParams.get("countries"));
+}
+
+async function typeCity(dom, text) {
+  const city = fieldByName(dom, "city");
+  city.value = text;
+  await dispatch(city, "input");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+test("a place name lookup is limited to the offered countries, then to the chosen one", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
+
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  // No country chosen: every country the picker lists, since a place outside
+  // them is somewhere the directory has nothing near.
+  await typeCity(dom, "krak");
+  const select = countrySelect(dom);
+  select.value = "PL";
+  await dispatch(select, "change");
+  // The same text again: the answer for every country is not the answer for
+  // one, so it is asked for rather than replayed from the field's cache.
+  await typeCity(dom, "krak");
+
+  assert.deepEqual(cityLookupCountries(calls), ["DE,PL", "PL"]);
+});
+
+test("an RSGB place name lookup stays in the UK", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([{ match: "/cities", body: KRAKOW_JSON }]);
+
+  await dispatch(dom.channelImportRsgbEl, "click");
+  await typeCity(dom, "manch");
+
+  assert.deepEqual(cityLookupCountries(calls), ["GB"]);
+});
+
 test("restoring a city costs no lookup", async () => {
   const { dom } = buildHarness();
   const calls = installFetch([

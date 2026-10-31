@@ -102,6 +102,9 @@ export function createRepeaterQuery(ctx: UiContext) {
   let fieldInstances: QueryField[] = [];
   let positionField: ReturnType<typeof createPositionField> | null = null;
   let cityField: ReturnType<typeof createCityField> | null = null;
+  // Every country the open form's Country picker offers, so a Place name
+  // lookup with no country chosen still stays inside the directory's coverage.
+  let countryChoices: string[] = [];
   const positionState = { latitudeText: "", longitudeText: "" };
   // What the Place name box last settled on. Kept for the same reason
   // the coordinates are: it is where the user is, which does not change with
@@ -264,6 +267,7 @@ export function createRepeaterQuery(ctx: UiContext) {
     fieldInstances = [];
     positionField = null;
     cityField = null;
+    countryChoices = [];
     // Nodes a field wants at the foot of the grid rather than at its own place
     // in the config order. Only the position field's map preview uses this: it
     // pictures the whole query, range circle included, so it belongs after the
@@ -277,7 +281,8 @@ export function createRepeaterQuery(ctx: UiContext) {
           // The field contacts nothing itself. No position hint is sent: the
           // ranking it buys is not worth putting the form's location in a query
           // string on every keystroke. fetchCitySuggestions still takes it.
-          search: (query) => fetchCitySuggestions(endpoints.cities, query),
+          search: (query) => fetchCitySuggestions(endpoints.cities, query, { countries: cityCountries() }),
+          searchScope: () => cityCountries().join(","),
           // Not reportActionError: a failed suggestion is not a failed action
           // and must not take over the status line the real query uses.
           onError: (error) => log.logDebug(`CITY LOOKUP FAILED ${errorDetails(error)}`),
@@ -325,6 +330,9 @@ export function createRepeaterQuery(ctx: UiContext) {
           : config.options;
         // Each factory reads the options of its own kind off the config.
         instance = (factory as (config: FieldConfig) => QueryField)({ ...config, options });
+        if (config.key === "country") {
+          countryChoices = (options || []).map((option) => option.value);
+        }
       }
       for (const node of instance.nodes) {
         dom.repeaterQueryGridEl.appendChild(node);
@@ -484,6 +492,15 @@ export function createRepeaterQuery(ctx: UiContext) {
       previewTimer = 0;
       runPreview(source, values);
     }, PREVIEW_QUERY_DEBOUNCE_MS);
+  }
+
+  // The countries a Place name lookup is restricted to: the one the form's
+  // Country field holds, or while it holds none every country it offers -- a
+  // place outside them is a position the directory has no repeaters near. A
+  // form with no Country field, or an empty list, restricts nothing.
+  function cityCountries(): string[] {
+    const chosen = String(fieldInstances.find((instance) => instance.key === "country")?.value() ?? "").trim();
+    return chosen ? [chosen] : countryChoices;
   }
 
   function collectValues(): QueryValues {

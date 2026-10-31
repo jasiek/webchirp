@@ -1037,12 +1037,13 @@ export function createRepeaterAdapters(
       fields: [
         // The directory is UK-only, so the country is fixed rather than
         // chosen: a picker with one entry is a control that cannot do
-        // anything.
+        // anything. Its value is what keeps the Place name lookup in the UK.
         {
           kind: "fixed",
           key: "country",
           label: "Country",
           text: `${flagEmojiFromCountryCode(RSGB_COUNTRY_CODE)} ${RSGB_COUNTRY_LABEL}`,
+          value: RSGB_COUNTRY_CODE,
         },
         {
           kind: "checkboxGroup",

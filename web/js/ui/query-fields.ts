@@ -960,6 +960,12 @@ export interface CityFieldOptions {
   /** The place kept from last time. */
   initial?: {city?: City | null};
   search: (query: string) => Promise<City[]>;
+  /**
+   * What else the answer to search() depends on, such as the countries it is
+   * restricted to. An answer is reused only for the same text in the same
+   * scope.
+   */
+  searchScope?: () => string;
   /** For the debug panel. */
   onError?: (error: unknown) => void;
   onSelect?: (city: City) => void;
@@ -987,6 +993,7 @@ export function createCityField({
   placeholder = "e.g. Manchester",
   initial = {},
   search,
+  searchScope,
   onError,
   onSelect,
   onClear,
@@ -1089,7 +1096,8 @@ export function createCityField({
   // Bumped on every keystroke, commit and cancel, so a response that lands
   // after a later one has rendered can bow out.
   let searchGeneration = 0;
-  // Answered queries, keyed by the typed text. See CITY_CACHE_LIMIT.
+  // Answered queries, keyed by the search scope and the typed text. See
+  // CITY_CACHE_LIMIT.
   const cache = new Map();
 
   function setNote(text: string): void {
@@ -1216,7 +1224,7 @@ export function createCityField({
     setNote(results.length === 0 ? "No matching places." : "");
   }
 
-  async function runSearch(text: string): Promise<void> {
+  async function runSearch(text: string, cacheKey: string): Promise<void> {
     const generation = searchGeneration;
     let results: City[] = [];
     try {
@@ -1237,7 +1245,7 @@ export function createCityField({
     }
     // A failed lookup is deliberately not cached: the next keystroke should
     // retry rather than replay the outage for the rest of the modal session.
-    rememberBounded(cache, text, results, CITY_CACHE_LIMIT);
+    rememberBounded(cache, cacheKey, results, CITY_CACHE_LIMIT);
     // Superseded by a later keystroke or by a commit while this was in flight.
     if (generation !== searchGeneration) {
       return;
@@ -1267,7 +1275,10 @@ export function createCityField({
     if (typeof search !== "function") {
       return;
     }
-    const cached = cache.get(text);
+    // Read now rather than when the answer lands: the answer is to the scope
+    // the request went out with.
+    const cacheKey = `${searchScope?.() ?? ""}\n${text}`;
+    const cached = cache.get(cacheKey);
     if (cached) {
       showResults(cached, text);
       return;
@@ -1275,7 +1286,7 @@ export function createCityField({
     // The previous verdict belongs to the previous text; left up while the
     // next request runs it reads as the verdict on what is being typed now.
     setNote("");
-    runSearch(text);
+    runSearch(text, cacheKey);
   });
 
   input.addEventListener("keydown", (event) => {
