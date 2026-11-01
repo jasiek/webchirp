@@ -10,6 +10,10 @@ platform :android do
       skip_upload_apk: true,
       skip_upload_aab: true,
       skip_upload_changelogs: true,
+      # The listing is app-wide, but supply still looks up the track's release
+      # before uploading it, and fails on a track with none. Production has
+      # none until the first public release; internal testing has one.
+      track: "internal",
       # Uploads only images whose content changed, instead of replacing all.
       sync_image_upload: true
     )
