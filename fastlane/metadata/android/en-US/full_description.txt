@@ -1,0 +1,22 @@
+Program your amateur and two-way radios from your phone or tablet. Plug in a USB programming cable through an OTG adapter, pick your radio, then read, edit and write its channels and settings. No PC needed.
+
+WebCHIRP runs the same open-source CHIRP drivers as the desktop program, so it covers the same long list of handhelds and mobiles from Baofeng, Quansheng, Yaesu, Kenwood, Icom, Retevis, TYT, AnyTone, Radioddity and many more.
+
+WHAT YOU CAN DO
+• Download your radio's memory and upload your changes back
+• Edit channels in a spreadsheet-style grid: frequency, offset, tones, mode, power and name
+• Insert, move, copy, paste and bulk-edit channels
+• Add GMRS, FRS, MURS or PMR446 channel sets with one tap
+• Import nearby repeaters from RepeaterBook, przemienniki.net, RSGB ETCC and IRTS, with a map preview
+• Change radio settings in the driver's own Settings editor
+• Open and save CHIRP .img and CSV files, compatible with desktop CHIRP
+• Every channel is checked before upload: a value the radio would refuse is highlighted, not written
+
+CABLES
+Works with common USB serial programming cables built on FTDI, Prolific PL2303, CH340 and CP2102 chips.
+
+PRIVACY
+No accounts, no ads. Your codeplugs, radio images and channel lists stay on your device and are never uploaded. A position leaves your device only when you search for repeaters near it. Usage statistics are sent only if you accept them.
+
+OPEN SOURCE
+WebCHIRP is the Android app for webchirp.org. It is free, open source and built on CHIRP, the community radio programming software. It is an independent project, not affiliated with the CHIRP developers.

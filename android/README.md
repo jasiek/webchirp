@@ -69,3 +69,23 @@ app signing key it holds (Play App Signing). Both stay out of the repository:
    `web/.well-known/assetlinks.json` (add the upload key's too, for test builds
    installed outside Play). Until that is deployed, the app opens with a URL
    bar.
+
+## Store listing
+
+The Play Store listing -- title, short and full description, phone
+screenshots -- lives in `fastlane/metadata/android/en-US/` and is uploaded
+with [fastlane supply](https://docs.fastlane.tools/actions/supply/). The
+screenshots are captured from the app by `npm run screenshots`, like the
+site's own. The content rating, Data safety form and other declarations are
+not in it; change those in Play Console.
+
+1. Once, create a Google Cloud service account with a JSON key, invite its
+   email in Play Console under Users and permissions with access to this app,
+   and keep the key outside the repository.
+
+2. Upload the listing:
+
+   ```sh
+   brew install fastlane
+   PLAY_JSON_KEY_FILE=/path/to/key.json fastlane metadata
+   ```
