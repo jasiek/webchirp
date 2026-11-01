@@ -50,6 +50,12 @@
       renders no check and sends no token.
     -->
     <meta name="webchirp-turnstile-site-key" content="" />
+    <!--
+      The API's TURNSTILE_BYPASS_TOKEN, sent as a Bearer token in place of a
+      Turnstile token. Always blank here and in dist/: only npm run dev fills
+      it, from the same environment variable (scripts/dev-turnstile-bypass.ts).
+    -->
+    <meta name="webchirp-turnstile-bypass-token" content="" />
     <title>WebCHIRP | Browser-based CHIRP radio programming</title>
     <meta
       name="description"
