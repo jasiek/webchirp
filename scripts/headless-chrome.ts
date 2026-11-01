@@ -116,31 +116,22 @@ async function launchChrome(
   return { child, wsUrl };
 }
 
-// What a DevTools Protocol command resolves to, or an event carries: the
-// protocol's own JSON, whose shape depends on the method, so each caller reads
-// the fields it asked for.
+// What a DevTools Protocol command resolves to: the protocol's own JSON, whose
+// shape depends on the method, so each caller reads the fields it asked for.
 export type CdpResult = any;
 
 export class CdpClient {
   socket: WebSocket;
   nextId: number;
   pending: Map<number, { resolve: (result: CdpResult) => void; reject: (error: Error) => void }>;
-  listeners: Map<string, Array<(params: CdpResult, sessionId?: string) => void>>;
 
   constructor(socket: WebSocket) {
     this.socket = socket;
     this.nextId = 1;
     this.pending = new Map();
-    this.listeners = new Map();
     socket.addEventListener("message", (event: MessageEvent) => {
       const message = JSON.parse(String(event.data));
-      if (!message.id) {
-        for (const listener of this.listeners.get(message.method) || []) {
-          listener(message.params, message.sessionId);
-        }
-        return;
-      }
-      const waiter = this.pending.get(message.id);
+      const waiter = message.id ? this.pending.get(message.id) : undefined;
       if (waiter) {
         const { resolve, reject } = waiter;
         this.pending.delete(message.id);
@@ -167,11 +158,6 @@ export class CdpClient {
       this.pending.set(id, { resolve, reject });
       this.socket.send(JSON.stringify({ id, method, params, sessionId }));
     });
-  }
-
-  // Calls listener with every event of this method, from any session.
-  on(method: string, listener: (params: CdpResult, sessionId?: string) => void) {
-    this.listeners.set(method, [...(this.listeners.get(method) || []), listener]);
   }
 
   close() {
