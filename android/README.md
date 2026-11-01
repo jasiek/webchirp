@@ -76,7 +76,8 @@ The Play Store listing -- title, short and full description, phone
 screenshots -- lives in `fastlane/metadata/android/en-US/` and is uploaded
 with [fastlane supply](https://docs.fastlane.tools/actions/supply/). The
 screenshots are captured from the app by `npm run screenshots`, like the
-site's own. The content rating, Data safety form and other declarations are
+site's own; one queries RepeaterBook live, so the run needs the API's
+`TURNSTILE_BYPASS_TOKEN` (see the top-level README). The content rating, Data safety form and other declarations are
 not in it; change those in Play Console.
 
 1. Once, create a Google Cloud service account with a JSON key, invite its
