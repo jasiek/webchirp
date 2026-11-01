@@ -480,6 +480,17 @@ test("TURNSTILE_SITE_KEY fills the site-key meta tag and nothing else", async ()
   assert.ok(unkeyed.includes('<meta name="webchirp-turnstile-site-key" content="" />'), "unset leaves the tag blank");
 });
 
+test("TURNSTILE_BYPASS_TOKEN never reaches dist/", async () => {
+  // Only the dev server fills this tag (scripts/dev-turnstile-bypass.ts): a
+  // build run where the variable happens to be set must still ship it blank.
+  const page = "<!doctype html>\n"
+    + '<meta name="webchirp-turnstile-bypass-token" content="" />\n'
+    + '<script type="module" src="./js/app.js"></script>\n';
+  const files = { ...appTree("export const leaf = 1;\n"), "index.html": page };
+  const built = text(await build(files, { TURNSTILE_BYPASS_TOKEN: "0123456789abcdef0123456789abcdef" }), "index.html");
+  assert.ok(built.includes('<meta name="webchirp-turnstile-bypass-token" content="" />'), built);
+});
+
 test("a TURNSTILE_SITE_KEY that is not a site key fails the build", async () => {
   await withTempDir("build-dist-", async (dir) => {
     await writeTree(path.join(dir, "web"), { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n") });

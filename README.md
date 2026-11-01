@@ -41,6 +41,14 @@ npm run dev
 
 Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/).
 
+RepeaterBook queries against `api.webchirp.org` need a Cloudflare Turnstile
+token, which the dev page cannot get. Set `TURNSTILE_BYPASS_TOKEN` to the API's
+token of that name and the dev page sends it in place of one:
+
+```bash
+TURNSTILE_BYPASS_TOKEN=0123456789abcdef0123456789abcdef npm run dev
+```
+
 The default and `?drivers=chirp` use the pinned upstream CHIRP drivers. Use
 `?drivers=quansheng-unofficial` to load only the bundled unofficial Quansheng
 F4HWN driver catalog. Choose the firmware release in the radio picker to load

@@ -79,9 +79,9 @@ const MURS_CHANNELS = [
 // Base URL of the API that fronts przemienniki.net, repeaterbook.com and IRTS.
 // The first two upstreams don't send browser CORS headers, so their query
 // features depend on a proxy that adds them. api.webchirp.org restricts its
-// CORS allowlist to this app's own production origins -- https://codeplug.org
-// and https://webchirp.org, exact-match and https-only -- so forks hosted
-// elsewhere can point
+// CORS allowlist to this app's own origins -- https://codeplug.org,
+// https://webchirp.org, and localhost or 127.0.0.1 on any port for npm run
+// dev -- so forks hosted elsewhere can point
 // this at their own proxy or leave it blank to disable those two sources. IRTS
 // remains available through the default API when the override is blank.
 // Overridable per-deployment via a <meta name="webchirp-repeater-api-base">

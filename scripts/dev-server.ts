@@ -1,5 +1,5 @@
 // The development server: web/ as it is on disk, with the isolation headers
-// the app expects, plus one transform. The sources are TypeScript, which no
+// the app expects, plus one transform (two with the bypass token below). The sources are TypeScript, which no
 // browser loads, so a request for a .ts file is answered with that file
 // type-stripped by esbuild's transform API -- as JavaScript, with an inline
 // source map back to the .ts -- and everything else is served static. The
@@ -7,7 +7,8 @@
 // src="./app.ts">) and the modules import each other by their .ts names, so
 // the URL a browser asks for is always the file on disk: nothing maps a .js
 // request onto a .ts file. scripts/build-dist.ts reads the same script tags
-// and hands the same entries to esbuild for dist/.
+// and hands the same entries to esbuild for dist/. With TURNSTILE_BYPASS_TOKEN
+// set, pages are also served with it filled in (scripts/dev-turnstile-bypass.ts).
 //
 // The same server also serves the built site for the browser tests
 // (tests/e2e): WEB_ROOT=dist serves that directory instead of web/, and
@@ -22,6 +23,7 @@ import type { ServerResponse } from "node:http";
 import * as esbuild from "esbuild";
 
 import { defaultDevServerPort } from "./dev-server-port.ts";
+import { fillTurnstileBypassToken, readTurnstileBypassToken } from "./dev-turnstile-bypass.ts";
 
 const webRootDir = path.resolve(process.cwd(), process.env.WEB_ROOT || "web");
 // PORT wins; otherwise 8000 in the main checkout and a fixed port of its own
@@ -29,6 +31,9 @@ const webRootDir = path.resolve(process.cwd(), process.env.WEB_ROOT || "web");
 const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : defaultDevServerPort(process.cwd());
 const host = process.env.HOST || "127.0.0.1";
 const servesAsPages = process.env.SERVE_AS === "pages";
+// Written into the pages it serves (scripts/dev-turnstile-bypass.ts), never
+// into the built site the browser tests see.
+const turnstileBypassToken = servesAsPages ? "" : readTurnstileBypassToken(process.env);
 
 const MIME_BY_EXT: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
@@ -159,6 +164,15 @@ const server = createServer((req, res) => {
     return;
   }
   const contentType = MIME_BY_EXT[ext] || "application/octet-stream";
+  if (ext === ".html" && turnstileBypassToken) {
+    const html = fillTurnstileBypassToken(fs.readFileSync(filePath, "utf8"), turnstileBypassToken);
+    applyIsolationHeaders(res);
+    res.statusCode = 200;
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", Buffer.byteLength(html));
+    res.end(method === "HEAD" ? undefined : html);
+    return;
+  }
   applyIsolationHeaders(res);
   res.statusCode = 200;
   res.setHeader("Content-Type", contentType);
