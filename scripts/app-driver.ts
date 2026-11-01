@@ -111,3 +111,61 @@ export function rsgbQueryOutcome(): { done: boolean; count: number; failed: stri
   }
   return { done: false, count: 0, failed: debugText.match(/RSGB ETCC QUERY ERROR[^\n]*/)?.[0] || "" };
 }
+
+// Clicks the element selector names, as a tap on it would. Returns false when
+// the page has no such element.
+export function clickElement(selector: string): boolean {
+  const element = document.querySelector(selector) as HTMLElement | null;
+  element?.click();
+  return Boolean(element);
+}
+
+// How many channels the grid holds, read from the rows web/js/ui/state.ts
+// exposes as currentRows (exposeCurrentRowsForDebugging).
+export function channelRowCount(): number {
+  return (globalThis as { currentRows?: unknown[] }).currentRows?.length || 0;
+}
+
+// Picks a country in the open repeater query and types a place name, which
+// starts the Place name field's lookup. Returns false until the form has
+// built those fields: a directory's opens once its dictionary has loaded.
+export function fillRepeaterQuery({ country, place }: { country: string; place: string }): boolean {
+  const countryEl = document.querySelector("#repeater-query-field-country") as HTMLSelectElement | null;
+  const placeEl = document.querySelector("#repeater-query-field-city") as HTMLInputElement | null;
+  if (!countryEl || !placeEl) {
+    return false;
+  }
+  countryEl.value = country;
+  countryEl.dispatchEvent(new Event("change", { bubbles: true }));
+  placeEl.focus();
+  placeEl.value = place;
+  placeEl.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+}
+
+// Takes the Place name field's top suggestion with a tap, once the lookup has
+// listed any. Returns false while the list is still closed.
+export function pickFirstPlaceSuggestion(): boolean {
+  const list = document.querySelector("#repeater-query-field-city-listbox") as HTMLElement | null;
+  const option = list?.querySelector("[role=option]") as HTMLElement | null;
+  if (!list || list.hidden || !option) {
+    return false;
+  }
+  option.click();
+  return true;
+}
+
+// The query modal's map preview caption once it has found repeaters, such as
+// "12 in range, 3 just outside"; empty until then. A preview answered before
+// the position settled can caption "0 in range" on its way there.
+export function repeaterPreviewCount(): string {
+  const text = document.querySelector(".modal-map-preview-count")?.textContent || "";
+  return /\b[1-9]\d* in range/.test(text) ? text : "";
+}
+
+// Whether the Radio Settings view shows the radio's settings rather than its
+// placeholder.
+export function radioSettingsShown(): boolean {
+  const content = document.querySelector("#settings-content") as HTMLElement | null;
+  return Boolean(content && !content.hidden && content.childElementCount > 0);
+}
