@@ -1,0 +1,1 @@
+Program ham and two-way radios over USB with CHIRP drivers. No PC needed.

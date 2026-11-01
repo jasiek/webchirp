@@ -1,0 +1,17 @@
+default_platform(:android)
+
+platform :android do
+  # Pushes the store listing in fastlane/metadata/android -- title, short and
+  # full description, phone screenshots -- and nothing else: releases are
+  # still uploaded by hand (android/README.md).
+  desc "Upload the Play Store listing text and screenshots"
+  lane :metadata do
+    upload_to_play_store(
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_changelogs: true,
+      # Uploads only images whose content changed, instead of replacing all.
+      sync_image_upload: true
+    )
+  end
+end
