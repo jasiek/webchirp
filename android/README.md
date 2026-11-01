@@ -81,8 +81,10 @@ site's own; one queries RepeaterBook live, so the run needs the API's
 not in it; change those in Play Console.
 
 1. Once, create a Google Cloud service account with a JSON key, invite its
-   email in Play Console under Users and permissions with access to this app,
-   and keep the key outside the repository.
+   email in Play Console under Users and permissions, and keep the key outside
+   the repository. Give it **Manage store presence** for this app: without it
+   the upload runs and then fails at "Validating all changes with Google Play"
+   with "The caller does not have permission".
 
 2. Upload the listing:
 
