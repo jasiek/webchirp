@@ -269,7 +269,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Include clear commit messages that describe user-visible behavior or architectural impact.
 - If model is other than Anthropic/OpenAI, add a Co-Authored-By: <model name and parameters> at the end of the commit message
 - Never use backticks (`) anywhere in any generated command to execute.
-- When on master, update RELEASE_NOTES.md based on PRs which were merged in with current date. Each entry is a single line: the user-visible change plus the PR number, no multi-sentence detail. At the same time run `npm run screenshots` to regenerate images/screenshot.png, images/screenshot-for-opengraph.png, web/images/social-preview.png and the two install-dialog screenshots, web/images/screenshot-wide.png and web/images/screenshot-narrow.png, from the current version of the app. When you do this, also consolidate/update FINDINGS.md so that it is always up to date.
+- When on master, update RELEASE_NOTES.md based on PRs which were merged in with current date. Each entry is a single line: the user-visible change plus the PR number, no multi-sentence detail. At the same time run `npm run screenshots` to regenerate images/screenshot.png, images/screenshot-for-opengraph.png, web/images/social-preview.png and the two install-dialog screenshots, web/images/screenshot-wide.png and web/images/screenshot-narrow.png, and the Play Store phone screenshots in fastlane/metadata/android/en-US/images/phoneScreenshots/, from the current version of the app. When you do this, also consolidate/update FINDINGS.md so that it is always up to date.
 
 ## Code Review
 - If you are an OpenAI agent, use Astra Medium when performing code review.
