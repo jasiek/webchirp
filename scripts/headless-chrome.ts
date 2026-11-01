@@ -46,18 +46,24 @@ function findChromeBinary() {
 }
 
 // Starts scripts/dev-server.ts on port and resolves once it answers, so the
-// first page load cannot race its startup.
+// first page load cannot race its startup. An early exit is reported with what
+// the server printed to stderr, which says why (a malformed
+// TURNSTILE_BYPASS_TOKEN, for one).
 async function startDevServer(port: number): Promise<ChildProcessByStdio<null, Readable, Readable>> {
   const child = spawn(process.execPath, [path.join(repoRootDir, "scripts", "dev-server.ts")], {
     cwd: repoRootDir,
     env: { ...process.env, HOST: "127.0.0.1", PORT: String(port) },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  let stderrText = "";
+  child.stderr.on("data", (chunk) => {
+    stderrText += String(chunk);
+  });
   const url = `http://127.0.0.1:${port}/`;
   const deadline = Date.now() + 15000;
   for (;;) {
     if (child.exitCode !== null) {
-      throw new Error(`Dev server exited early with code ${child.exitCode}.`);
+      throw new Error(`Dev server exited early with code ${child.exitCode}.\n${stderrText}`);
     }
     try {
       const response = await fetch(url, { method: "HEAD" });
