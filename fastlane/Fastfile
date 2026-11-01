@@ -18,4 +18,30 @@ platform :android do
       sync_image_upload: true
     )
   end
+
+  # Replaces every Data safety answer with fastlane/data-safety.csv, the
+  # Play Console's own export format. supply has no action for it, so this
+  # calls the Play Developer API's dataSafety method through the client
+  # supply already bundles. The upload is not an edit: it takes effect at
+  # once, with nothing to validate or roll back first.
+  desc "Upload the Data safety form from fastlane/data-safety.csv"
+  lane :data_safety do
+    require "googleauth"
+    require "google/apis/androidpublisher_v3"
+
+    labels = File.read(File.expand_path("data-safety.csv", __dir__))
+    key_file = CredentialsManager::AppfileConfig.try_fetch_value(:json_key_file)
+    UI.user_error!("Set PLAY_JSON_KEY_FILE to the service account's JSON key.") unless key_file
+
+    publisher = Google::Apis::AndroidpublisherV3::AndroidPublisherService.new
+    publisher.authorization = Google::Auth::ServiceAccountCredentials.make_creds(
+      json_key_io: File.open(File.expand_path(key_file)),
+      scope: Google::Apis::AndroidpublisherV3::AUTH_ANDROIDPUBLISHER
+    )
+    publisher.data_application_safety(
+      CredentialsManager::AppfileConfig.try_fetch_value(:package_name),
+      Google::Apis::AndroidpublisherV3::SafetyLabelsUpdateRequest.new(safety_labels: labels)
+    )
+    UI.success("Data safety answers uploaded.")
+  end
 end

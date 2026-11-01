@@ -92,3 +92,19 @@ not in it; change those in Play Console.
    brew install fastlane
    PLAY_JSON_KEY_FILE=/path/to/key.json fastlane metadata
    ```
+
+## Data safety
+
+The Data safety form lives in `fastlane/data-safety.csv`, in the format Play
+Console's Data safety page exports (Export to CSV) and imports. Its answers
+restate `web/privacy.html`, so a change to one changes the other in the same
+PR; `tests/build/data-safety.mjs` checks the form is complete and consistent,
+but not that it matches the policy. When Play adds questions, export the form
+again and carry the answers over.
+
+```sh
+PLAY_JSON_KEY_FILE=/path/to/key.json fastlane data_safety
+```
+
+The upload replaces the whole form and takes effect at once: unlike the
+listing, there is no edit to validate first.
