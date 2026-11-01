@@ -2829,25 +2829,33 @@ button:disabled {
   }
 
   /* Serial Bridge disclosure becomes collapsible on mobile so the channel list
-     isn't pushed down the page. */
+     isn't pushed down the page. Its triangle sits left of the label and turns
+     like Debug Output's (.debug-toggle-icon). */
   .left-panel-summary {
     pointer-events: auto;
     cursor: pointer;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0.35rem;
     margin-bottom: 0.4rem;
     min-height: 2.75rem;
+    user-select: none;
   }
 
-  .left-panel-summary::after {
-    content: "\25BE";
-    color: var(--muted);
+  .left-panel-summary:hover {
+    color: var(--accent);
   }
 
-  .serial-bridge:not([open]) .left-panel-summary::after {
+  .left-panel-summary::before {
     content: "\25B8";
+    display: inline-block;
+    font-size: 1rem;
+    line-height: 1;
+    transition: transform 120ms ease;
+  }
+
+  .serial-bridge[open] .left-panel-summary::before {
+    transform: rotate(90deg);
   }
 
   /* The natural-width, horizontally-scrolling table now applies at all
