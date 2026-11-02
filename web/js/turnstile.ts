@@ -9,11 +9,10 @@
 // fills it from TURNSTILE_SITE_KEY, and a blank key renders no widget and sends
 // no header -- the API only asks for one when it holds the matching secret.
 //
-// npm run dev builds in no site key, so against the production API it fills
-// <meta name="webchirp-turnstile-bypass-token"> instead
-// (scripts/dev-turnstile-bypass.ts): the API lets a request carrying its
-// TURNSTILE_BYPASS_TOKEN as a Bearer credential skip the check, and the form
-// then renders no widget. dist/ always ships that tag blank.
+// npm run dev builds in no site key, so the form renders no widget there; with
+// the API's TURNSTILE_BYPASS_TOKEN set, the dev server forwards the page's API
+// requests and adds the token itself (scripts/dev-turnstile-bypass.ts), so this
+// module never sees it.
 //
 // The script loads from Cloudflare on the first RepeaterBook open, never from
 // the bundle: Cloudflare requires it be fetched from its own URL, and a page
@@ -21,7 +20,6 @@
 
 export const TURNSTILE_SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 const TURNSTILE_SITE_KEY_META = "webchirp-turnstile-site-key";
-const TURNSTILE_BYPASS_TOKEN_META = "webchirp-turnstile-bypass-token";
 
 /** The request header the API reads the token from. */
 export const TURNSTILE_TOKEN_HEADER = "CF-Turnstile-Response";
@@ -105,12 +103,6 @@ export function turnstileWaitReason(state: TurnstileState): string {
 // The deployment's site key, or "" when the meta tag is absent or blank.
 export function resolveTurnstileSiteKey(): string {
   const meta = document.querySelector(`meta[name="${TURNSTILE_SITE_KEY_META}"]`);
-  return String(meta?.getAttribute("content") || "").trim();
-}
-
-// The dev server's bypass token, or "" when the meta tag is absent or blank.
-export function resolveTurnstileBypassToken(): string {
-  const meta = document.querySelector(`meta[name="${TURNSTILE_BYPASS_TOKEN_META}"]`);
   return String(meta?.getAttribute("content") || "").trim();
 }
 
