@@ -27,7 +27,7 @@ import { defaultDevServerPort } from "./dev-server-port.ts";
 import {
   forwardApiRequest,
   pointApiBaseAtProxy,
-  proxiedApiUrl,
+  proxiedApiRoute,
   readApiBase,
   readTurnstileBypassToken,
 } from "./dev-turnstile-bypass.ts";
@@ -141,10 +141,10 @@ const server = createServer((req, res) => {
     return;
   }
 
-  const apiTarget = turnstileBypassToken ? proxiedApiUrl(req.url || "/", proxiedApiBase) : null;
-  if (apiTarget) {
+  const apiRoute = turnstileBypassToken ? proxiedApiRoute(req.url || "/") : null;
+  if (apiRoute !== null) {
     applyIsolationHeaders(res);
-    forwardApiRequest(req, res, apiTarget, turnstileBypassToken).catch((error) => {
+    forwardApiRequest(req, res, proxiedApiBase, apiRoute, turnstileBypassToken).catch((error) => {
       console.error(error);
       res.destroy();
     });

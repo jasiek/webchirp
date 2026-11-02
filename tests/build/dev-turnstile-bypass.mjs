@@ -15,7 +15,7 @@ import { delay, findFreePort } from "../../scripts/app-driver.ts";
 import {
   DEV_API_PROXY_PATH,
   pointApiBaseAtProxy,
-  proxiedApiUrl,
+  proxiedApiRoute,
   readApiBase,
   readTurnstileBypassToken,
 } from "../../scripts/dev-turnstile-bypass.ts";
@@ -61,12 +61,11 @@ test("a page without the tag is served unchanged", () => {
 });
 
 test("only requests under the proxy path are forwarded, with their route and query", () => {
-  const base = "https://api.example.org/";
-  assert.equal(proxiedApiUrl(`${DEV_API_PROXY_PATH}/repeaterbook?country=gb`, base), "https://api.example.org/repeaterbook?country=gb");
-  assert.equal(proxiedApiUrl(`${DEV_API_PROXY_PATH}/cities`, base), "https://api.example.org/cities");
-  assert.equal(proxiedApiUrl("/index.html", base), null);
+  assert.equal(proxiedApiRoute(`${DEV_API_PROXY_PATH}/repeaterbook?country=gb`), "/repeaterbook?country=gb");
+  assert.equal(proxiedApiRoute(`${DEV_API_PROXY_PATH}/cities`), "/cities");
+  assert.equal(proxiedApiRoute("/index.html"), null);
   // A file that merely starts with the same letters is still a file.
-  assert.equal(proxiedApiUrl(`${DEV_API_PROXY_PATH}-notes.txt`, base), null);
+  assert.equal(proxiedApiRoute(`${DEV_API_PROXY_PATH}-notes.txt`), null);
 });
 
 // Serves one request handler on a free port for the duration of fn.
@@ -118,7 +117,10 @@ test("the dev server forwards API requests and adds the token only to RepeaterBo
     seen.push({ url: req.url, authorization: req.headers.authorization });
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ route: req.url }));
-  }, async (apiBase) => {
+  }, async (apiOrigin) => {
+    // Mounted below a path, as a fork's own proxy may be: the token goes by
+    // the route the page asked for, not the path the API ends up at.
+    const apiBase = `${apiOrigin}/api`;
     await withTempDir("dev-api-proxy-", async (webRoot) => {
       await writeFile(path.join(webRoot, "index.html"), `<!doctype html>\n${API_BASE_TAG(apiBase)}\n`);
       await withDevServer(webRoot, { TURNSTILE_BYPASS_TOKEN: TOKEN }, async (origin) => {
@@ -129,14 +131,14 @@ test("the dev server forwards API requests and adds the token only to RepeaterBo
         const answer = await fetch(`${origin}${DEV_API_PROXY_PATH}/repeaterbook?country=gb`);
         assert.equal(answer.status, 200);
         assert.match(answer.headers.get("content-type"), /application\/json/);
-        assert.deepEqual(await answer.json(), { route: "/repeaterbook?country=gb" });
+        assert.deepEqual(await answer.json(), { route: "/api/repeaterbook?country=gb" });
         await fetch(`${origin}${DEV_API_PROXY_PATH}/przemienniki?country=pl`);
       });
     });
   });
   assert.deepEqual(seen, [
-    { url: "/repeaterbook?country=gb", authorization: `Bearer ${TOKEN}` },
-    { url: "/przemienniki?country=pl", authorization: undefined },
+    { url: "/api/repeaterbook?country=gb", authorization: `Bearer ${TOKEN}` },
+    { url: "/api/przemienniki?country=pl", authorization: undefined },
   ]);
 });
 

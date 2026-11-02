@@ -58,31 +58,33 @@ export function pointApiBaseAtProxy(html: string, origin: string): string {
   );
 }
 
-// The API URL a request for requestUrl forwards to, or null when requestUrl is
+// The API route a request for requestUrl asks for -- its path and query below
+// the proxy, such as "/repeaterbook?country=gb" -- or null when requestUrl is
 // not under the proxy.
-export function proxiedApiUrl(requestUrl: string, apiBase: string): string | null {
+export function proxiedApiRoute(requestUrl: string): string | null {
   const route = requestUrl.startsWith(DEV_API_PROXY_PATH) ? requestUrl.slice(DEV_API_PROXY_PATH.length) : null;
-  if (route === null || !/^(\/|\?|$)/.test(route)) {
-    return null;
-  }
-  return `${apiBase.replace(/\/+$/, "")}${route}`;
+  return route !== null && /^(\/|\?|$)/.test(route) ? route : null;
 }
 
-// Forwards req to target and answers res with the API's status, headers and
-// body, adding the token to a RepeaterBook request. An API that cannot be
+// Forwards req for route to the API at apiBase and answers res with the API's
+// status, headers and body, adding the token to a RepeaterBook request. The
+// route is matched as the page asked for it, so an API mounted below a path
+// (https://proxy.example/api) gets the token too. An API that cannot be
 // reached answers 502, as a gateway would.
 export async function forwardApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  target: string,
+  apiBase: string,
+  route: string,
   token: string,
 ): Promise<void> {
+  const target = `${apiBase.replace(/\/+$/, "")}${route}`;
   const headers: Record<string, string> = {};
   const accept = req.headers.accept;
   if (accept) {
     headers.accept = accept;
   }
-  if (BEARER_ROUTE.test(new URL(target).pathname)) {
+  if (BEARER_ROUTE.test(route)) {
     headers.authorization = `Bearer ${token}`;
   }
   let response: Response;
