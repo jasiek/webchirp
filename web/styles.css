@@ -742,6 +742,23 @@ body {
   gap: 0.6rem;
 }
 
+/* The group a phone folds away (web/js/ui/toolbar-menu.ts). At this width it
+   has no box of its own: its members are flex items of .toolbar-actions like
+   Load and Export, and the toggle that would show it is hidden. */
+.toolbar-more {
+  display: contents;
+}
+
+.toolbar-more-toggle {
+  display: none;
+}
+
+/* Install leads the row when the toolbar is unfolded, ahead of Load and
+   Export, even though the markup keeps it inside the group a phone folds. */
+.toolbar-more > .toolbar-install {
+  order: -1;
+}
+
 /* Anchor the export choices below their button even when the toolbar wraps. */
 .toolbar-export {
   position: relative;
@@ -2791,13 +2808,67 @@ button:disabled {
     overflow: visible;
   }
 
+  /* One row: the title on the left, Load, Export and the fold's toggle on the
+     right. The title gives up width first, letting the version line wrap. */
   .toolbar {
-    flex-wrap: wrap;
+    position: relative;
     gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .toolbar-title {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .toolbar-actions {
+    flex: 0 0 auto;
+    gap: 0.4rem;
+  }
+
+  /* Export sits at the right edge now, so its choices open leftwards. */
+  .toolbar-export-menu {
+    left: auto;
+    right: 0;
+  }
+
+  .toolbar-more-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    padding: 0;
+  }
+
+  .toolbar-more-toggle svg {
+    width: 1.25rem;
+    height: 1.25rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+
+  /* The folded group drops down under the whole header, across its width,
+     over the page rather than pushing it down. */
+  .toolbar-more {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 10;
     flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bar);
+    box-shadow: 0 0.35rem 0.8rem rgba(0, 0, 0, 0.2);
+  }
+
+  .toolbar-more.is-open {
+    display: flex;
   }
 
   /* Stack sidebar above the editor; let both size to content and the page scroll. */

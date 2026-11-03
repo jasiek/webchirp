@@ -28,7 +28,8 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `setting-fields` and `setting-values`), `radio-catalog`, `radio-session`,
   `repeater-query` (with `query-fields` and `repeater-sources`),
   `repeater-map` and `static-map-view` (the static OSM maps), `codeplug-io`,
-  `serial-actions`, `install-button` and `connectivity`, plus the shared `dom`,
+  `serial-actions`, `install-button`, `toolbar-menu` (the phone toolbar's fold) and
+  `connectivity`, plus the shared `dom`,
   `state`, `debug-log`, `progress`, `notice-modal`, `issue-report`, `format`,
   `analytics`, `metrics` and `channel-values` helpers. `radio-session` owns the
   runtime session handle behind the selected radio: selecting a radio opens a
