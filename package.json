@@ -20,6 +20,7 @@
     "coverage:show": "node scripts/coverage-report.ts",
     "test:ci": "npm run check:syntax && npm run check:types && npm run check:js && npm run check:python && npm run coverage",
     "ga:dimensions": "node scripts/ga-dimensions.ts",
+    "phone": "node scripts/phone-preview.ts",
     "radio:read": "node scripts/radio-codeplug.ts read",
     "radio:write": "node scripts/radio-codeplug.ts write",
     "test": "npm run check:syntax && npm run check:types && npm run check:js && npm run test:channels && npm run test:webusb && npm run test:settings && npm run test:build",
