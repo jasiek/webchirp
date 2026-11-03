@@ -241,11 +241,6 @@ export interface RepeaterSourceOptions {
    * (web/js/turnstile.ts); blank or absent leaves the check off.
    */
   turnstileSiteKey?: string;
-  /**
-   * The dev server's stand-in for a Turnstile token (web/js/turnstile.ts);
-   * when set, it replaces the check.
-   */
-  turnstileBypassToken?: string;
 }
 
 export function createRepeaterSources(
@@ -402,7 +397,7 @@ export function createRepeaterSources(
 // invariants on its own (tests/channels/repeater-adapters.mjs).
 export function createRepeaterAdapters(
   ctx: UiContext,
-  { endpoints, turnstileSiteKey = "", turnstileBypassToken = "" }: RepeaterSourceOptions,
+  { endpoints, turnstileSiteKey = "" }: RepeaterSourceOptions,
 ): RepeaterDirectoryAdapter[] {
   const { log } = ctx;
 
@@ -510,8 +505,7 @@ export function createRepeaterAdapters(
     insertLabel,
     toolbarButton,
     sourceEndpoints,
-    turnstileSiteKey = "",
-    turnstileBypassToken: bypassToken = "",
+    turnstileSiteKey: siteKey = "",
     attribution,
   }: {
     key: string;
@@ -522,25 +516,12 @@ export function createRepeaterAdapters(
     sourceEndpoints: { apiUrl: string; metaUrl: string } | null | undefined;
     /** Puts a Turnstile check on the form when set. */
     turnstileSiteKey?: string;
-    /** Sent in place of a Turnstile token when set, so the form has no check. */
-    turnstileBypassToken?: string;
     attribution?: SourceAttribution;
   }): RepeaterDirectoryAdapter {
     // The preview below names its cache key "key", so the id is held apart.
     const adapterId = key;
     const apiUrl = sourceEndpoints?.apiUrl || "";
     const metaUrl = sourceEndpoints?.metaUrl || "";
-    const siteKey = bypassToken ? "" : turnstileSiteKey;
-
-    // What a directory request carries to get past the API's Turnstile check:
-    // the bypass token when there is one, otherwise a token from the form's
-    // widget, if it has one.
-    async function requestHeaders(values: QueryValues): Promise<Record<string, string>> {
-      if (bypassToken) {
-        return { Authorization: `Bearer ${bypassToken}` };
-      }
-      return turnstileHeaders(values);
-    }
 
     // The dictionary is fetched once and cached for the session; a failed
     // fetch clears the cache so the next open retries instead of staying
@@ -641,7 +622,7 @@ export function createRepeaterAdapters(
     }
 
     async function fetchPreviewBody(url: URL, values: QueryValues, rangeKm: number): Promise<RemotePreviewBody> {
-      const headers = await requestHeaders(values);
+      const headers = await turnstileHeaders(values);
       const text = await withRequestTimeout(`${label} preview`, async (signal) => {
         const response = await fetch(url.toString(), { headers, signal });
         if (!response.ok) {
@@ -805,7 +786,7 @@ export function createRepeaterAdapters(
           // Both the request and the body read sit inside the deadline: the
           // error-path read of a failed response can stall exactly as the success
           // path can, and either one strands the submit button on "Querying...".
-          const headers = await requestHeaders(values);
+          const headers = await turnstileHeaders(values);
           const text = await withRequestTimeout(`${label} query`, async (signal) => {
             const response = await fetch(url.toString(), { headers, signal });
             if (!response.ok) {
@@ -1143,7 +1124,6 @@ export function createRepeaterAdapters(
       sourceEndpoints: endpoints?.repeaterbook,
       // The only directory whose API asks for a Turnstile token.
       turnstileSiteKey,
-      turnstileBypassToken,
       // RepeaterBook's terms ask that its data be credited where it is shown.
       attribution: { text: "Data courtesy of RepeaterBook.com", url: "https://www.repeaterbook.com/" },
     }),
