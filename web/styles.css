@@ -2809,21 +2809,23 @@ button:disabled {
   }
 
   /* One row: the title on the left, Load, Export and the fold's toggle on the
-     right. The title gives up width first, letting the version line wrap. */
+     right. .toolbar-actions dissolves so its members, the fold included, are
+     the header's own flex items: the fold can then wrap onto a full-width line
+     of its own. The title's zero basis keeps it from pushing Load and Export
+     onto that line; it gives up width first, letting the version line wrap. */
   .toolbar {
-    position: relative;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.4rem;
     padding: 0.6rem 0.75rem;
   }
 
   .toolbar-title {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
   }
 
   .toolbar-actions {
-    flex: 0 0 auto;
-    gap: 0.4rem;
+    display: contents;
   }
 
   /* Export sits at the right edge now, so its choices open leftwards. */
@@ -2849,22 +2851,15 @@ button:disabled {
     stroke-linecap: round;
   }
 
-  /* The folded group drops down under the whole header, across its width,
-     over the page rather than pushing it down. */
+  /* Unfolded, the group is a row of its own under the title, pushing the
+     page down rather than covering it. */
   .toolbar-more {
     display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    z-index: 10;
+    flex: 1 1 100%;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.6rem 0.75rem;
-    border-bottom: 1px solid var(--border);
-    background: var(--bar);
-    box-shadow: 0 0.35rem 0.8rem rgba(0, 0, 0, 0.2);
+    padding-top: 0.1rem;
   }
 
   .toolbar-more.is-open {
