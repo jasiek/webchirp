@@ -1679,10 +1679,9 @@ button:disabled {
      by overflowing equally at both ends, and overflow past the *start* edge is
      outside the scroll range — so the top of a tall dialog cannot be reached
      at all. flex-start plus the card's auto margins centres it while there is
-     room and keeps its top edge reachable once there is not. The repeater
-     query form clears 1100px on a phone once every label and control stacks,
-     which is what makes this the difference between a usable dialog and one
-     whose Cancel button is off-screen. */
+     room and keeps its top edge reachable once there is not, which is the
+     difference between a usable dialog on a phone and one whose Cancel button
+     is off-screen. */
   align-items: flex-start;
   justify-content: center;
   overflow: auto;
@@ -1822,6 +1821,46 @@ button:disabled {
 #repeater-query-modal .modal-field-label:has(+ input[type="checkbox"]),
 #repeater-query-modal .modal-field-label:has(+ .modal-fixed-value) {
   padding-top: 0;
+}
+
+/* A field sharing the previous one's row (the range beside "Only working"),
+   built by web/js/ui/repeater-query.ts. The row's own label sits beside the
+   checkbox it follows, so it needs no offset, and a radius is a few digits, so
+   its box is sized for them rather than for the column. */
+#repeater-query-modal .modal-inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+}
+
+/* Sized so "Distance (km)" and its box fit beside the checkbox in a 412px
+   phone's control column; a narrower one wraps the box under them. */
+#repeater-query-modal .modal-inline-row .modal-field-label {
+  padding-top: 0;
+  margin-left: 0.5rem;
+}
+
+#repeater-query-modal .modal-inline-row input[type="number"] {
+  width: 4.5rem;
+}
+
+/* The longest form in the app, and on a phone it ran past the bottom of the
+   screen, taking the Query API button with it. Capped at the viewport like the
+   extras editor below: the fields scroll inside the card and the title and the
+   buttons stay put. */
+#repeater-query-modal .modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2rem);
+}
+
+#repeater-query-modal .modal-grid {
+  overflow-y: auto;
+  /* See #channel-extra-modal .modal-grid. */
+  min-height: 0;
+  /* Room for a focused control's outline, which the scroll box would clip. */
+  padding: 2px;
 }
 
 /* The RepeaterBook form's Cloudflare Turnstile check (web/js/turnstile.ts):
@@ -2033,21 +2072,6 @@ button:disabled {
   line-height: 1;
 }
 
-/* The line under the locator row saying where a position goes
-   (web/js/ui/query-fields.ts). It spans the row's three tracks so it wraps
-   under the locator and both buttons rather than squeezing into the first. */
-.modal-geo-note {
-  grid-column: 1 / -1;
-  margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.3;
-  color: var(--muted);
-}
-
-.modal-geo-note a {
-  color: inherit;
-}
-
 /* The Place name autocomplete (web/js/ui/query-fields.ts): a text box with
    a suggestion list that overlays the fields under it. Positioned rather than
    in flow, so a list that appears on a keystroke does not shove Latitude,
@@ -2109,14 +2133,22 @@ button:disabled {
   color: #fff;
 }
 
+/* The name is what the user is matching against, so it keeps its full width
+   and the region and country after it give way first: on a phone the box is
+   narrow enough that sharing the shortfall cut every name to a few letters.
+   Only a name too long for the whole row is truncated. */
 .modal-city-name {
+  flex: 0 0 auto;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .modal-city-context {
-  flex: 0 1 auto;
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: right;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
