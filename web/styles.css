@@ -2824,6 +2824,13 @@ button:disabled {
     min-width: 0;
   }
 
+  /* The title may be narrower than the name and the Offline badge together,
+     so the badge drops under the name rather than running into Load. */
+  .toolbar-heading {
+    flex-wrap: wrap;
+    row-gap: 0.2rem;
+  }
+
   .toolbar-actions {
     display: contents;
   }
