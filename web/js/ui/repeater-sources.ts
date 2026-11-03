@@ -115,6 +115,8 @@ export type FieldConfig =
     label: string;
     optionsKey?: string;
     options?: FieldOption[];
+    /** Shares the previous field's row, after its control, instead of taking its own. */
+    sameRow?: boolean;
     [option: string]: unknown;
   };
 
@@ -741,13 +743,15 @@ export function createRepeaterAdapters(
         { kind: "checkboxGroup", key: "bands", label: "Band", name: "band", optionsKey: "bands", defaults: ["2m", "70cm"] },
         { kind: "checkboxGroup", key: "modes", label: "Mode", name: "mode", optionsKey: "modes", defaults: ["fm"] },
         { kind: "checkbox", key: "only", label: "Only working", checked: true },
+        // A short number, so it shares the checkbox's row rather than taking
+        // one of its own.
+        { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30, sameRow: true },
         // Above the coordinates because it is how most people know where they
         // are: picking a place fills latitude, longitude and the locator and
         // recentres the preview, so the two rows below read as the result of
         // this one rather than as something to fill in by hand.
         { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Warszawa" },
         { kind: "position", locatorPlaceholder: "e.g. JO91GG" },
-        { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30 },
         ...(siteKey ? [{ kind: "turnstile" as const, key: TURNSTILE_FIELD_KEY, siteKey }] : []),
       ],
       loadOptions: () => {
@@ -1092,12 +1096,6 @@ export function createRepeaterAdapters(
           defaults: RSGB_DEFAULT_MODES,
         },
         { kind: "checkbox", key: "only", label: "Only operational", checked: true },
-        // Above the coordinates because it is how most people know where they
-        // are: picking a place fills latitude, longitude and the locator and
-        // recentres the preview, so the two rows below read as the result of
-        // this one rather than as something to fill in by hand.
-        { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Manchester" },
-        { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
         {
           kind: "number",
           key: "radius",
@@ -1106,7 +1104,14 @@ export function createRepeaterAdapters(
           max: 500,
           step: 1,
           value: RSGB_DEFAULT_RADIUS_KM,
+          sameRow: true,
         },
+        // Above the coordinates because it is how most people know where they
+        // are: picking a place fills latitude, longitude and the locator and
+        // recentres the preview, so the two rows below read as the result of
+        // this one rather than as something to fill in by hand.
+        { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Manchester" },
+        { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
       ],
       loadOptions: null,
       query: (values, purpose) => {

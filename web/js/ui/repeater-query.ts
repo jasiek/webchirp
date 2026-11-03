@@ -319,6 +319,7 @@ export function createRepeaterQuery(ctx: UiContext) {
           // position can be compared. Which source was open, never where the
           // drag landed — the coordinates stay in the form.
           onPan: () => trackEvent("repeater_map_panned", { repeater_source: activeSource.key }),
+          onRangeChange: (km) => setRangeFromMap(km),
         });
         positionField = field;
         instance = field;
@@ -338,8 +339,19 @@ export function createRepeaterQuery(ctx: UiContext) {
           countryChoices = (options || []).map((option) => option.value);
         }
       }
-      for (const node of instance.nodes) {
-        dom.repeaterQueryGridEl.appendChild(node);
+      // A field that shares the previous one's row joins its control in a row
+      // of their own (.modal-inline-row in web/styles.css), label and all, so
+      // the grid still sees one label and one control.
+      const previousControl = dom.repeaterQueryGridEl.lastElementChild;
+      if ("sameRow" in config && config.sameRow && previousControl) {
+        const row = document.createElement("div");
+        row.className = "modal-inline-row";
+        previousControl.replaceWith(row);
+        row.append(previousControl, ...instance.nodes);
+      } else {
+        for (const node of instance.nodes) {
+          dom.repeaterQueryGridEl.appendChild(node);
+        }
       }
       tailNodes.push(...(instance.tailNodes || []));
       fieldInstances.push(instance);
@@ -353,9 +365,10 @@ export function createRepeaterQuery(ctx: UiContext) {
 
   // Feed the range filter's value to the position field, which draws it as a
   // circle on its map preview and frames the map around it. This runs after
-  // the build loop rather than inside it because the range field is declared
-  // after the position field it has to reach — and both are rebuilt on every
-  // open, so the listener is attached here rather than in bindEvents.
+  // the build loop rather than inside it because the two fields are built in
+  // config order, and whichever comes first cannot reach the other yet -- and
+  // both are rebuilt on every open, so the listener is attached here rather
+  // than in bindEvents.
   function bindRangeToPreview() {
     const range = fieldInstances.find((instance) => instance.key === RANGE_FIELD_KEY);
     const field = positionField;
@@ -367,6 +380,27 @@ export function createRepeaterQuery(ctx: UiContext) {
     const applyRange = () => field.setRangeKm(Number(range.value()));
     range.input.addEventListener("input", applyRange);
     applyRange();
+  }
+
+  // A pinch on the map preview asks for a radius. It is written into the range
+  // box within the box's own limits and step, and announced with the input
+  // event typing would fire, so the map, the directory preview and the submit
+  // state all follow it exactly as they follow a typed value. Answers with the
+  // radius the box now holds.
+  function setRangeFromMap(km: number): number {
+    const input = fieldInstances.find((instance) => instance.key === RANGE_FIELD_KEY)?.input;
+    if (!input || !Number.isFinite(km)) {
+      return Number.NaN;
+    }
+    const step = Number(input.step) || 1;
+    const min = input.min === "" ? step : Number(input.min);
+    const max = input.max === "" ? Number.POSITIVE_INFINITY : Number(input.max);
+    const next = Math.min(max, Math.max(min, Math.round(km / step) * step));
+    if (input.value !== String(next)) {
+      input.value = String(next);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    return next;
   }
 
   // Ask the active source what its current filters would return, and hand the

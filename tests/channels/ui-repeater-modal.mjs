@@ -4,7 +4,6 @@ import path from "node:path";
 import test from "node:test";
 
 import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.ts";
-import { LOCATION_POLICY_URL } from "../../web/js/ui/query-fields.ts";
 import { createRepeaterQuery } from "../../web/js/ui/repeater-query.ts";
 import { REQUIRED_ELEMENTS } from "../../web/js/ui/dom.ts";
 import { installIndexPage } from "../support/index-page.mjs";
@@ -856,6 +855,49 @@ test("the preview draws the range filter's circle and follows edits to it", asyn
   assert.ok(zoomOf() < defaultZoom, "a wider range zooms the preview out");
 });
 
+test("the range shares the working-only row instead of taking one of its own", async () => {
+  const { dom } = buildHarness();
+  const sources = [
+    [dom.channelImportPrzemiennikiEl, () => installFetch([{ match: "/meta", body: META_JSON }])],
+    [dom.channelImportRsgbEl, () => installRsgbFetch({})],
+  ];
+  for (const [sourceButton, installSourceFetch] of sources) {
+    installSourceFetch();
+    await dispatch(sourceButton, "click");
+    const row = fieldByName(dom, "radius").parentElement;
+    assert.equal(row.className, "modal-inline-row");
+    assert.equal(row.parentElement, grid(dom), "the row is the grid cell beside the checkbox's label");
+    assert.equal(fieldByName(dom, "only").parentElement, row);
+    // Its own label rides in the row with it, so the grid still pairs one
+    // label with one control.
+    assert.ok(row.querySelector(`label[for="${fieldByName(dom, "radius").id}"]`));
+    await dispatch(dom.repeaterQueryCancelEl, "click");
+  }
+});
+
+test("a pinch on the map writes the radius into the range box, within its limits", async () => {
+  const { dom } = buildHarness();
+  installRsgbFetch({});
+  await openRsgb(dom);
+  await setPreviewPosition(dom);
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const canvas = previewCanvas(dom);
+  const range = fieldByName(dom, "radius");
+  const start = Number(range.value);
+
+  await dispatch(canvas, "pointerdown", { pointerId: 1, isPrimary: true, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(canvas, "pointerdown", { pointerId: 2, isPrimary: false, button: 0, clientX: 200, clientY: 100 });
+  // Fingers twice as far apart: the map is twice as close, the ring covers half.
+  await dispatch(canvas, "pointermove", { pointerId: 2, clientX: 300, clientY: 100 });
+  assert.equal(range.value, String(Math.round(start / 2)));
+  // Squeezed far past RSGB's 500 km cap: the box stops at it.
+  await dispatch(canvas, "pointermove", { pointerId: 2, clientX: 101, clientY: 100 });
+  assert.equal(range.value, "500");
+  await dispatch(canvas, "pointerup", { pointerId: 2 });
+  await dispatch(canvas, "pointerup", { pointerId: 1 });
+  assert.equal(fieldByName(dom, "latitude").value, String(PREVIEW_LAT), "a pinch never moves the position");
+});
+
 test("clearing the location empties the persisted position too", async () => {
   const { dom } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }]);
@@ -873,38 +915,6 @@ test("clearing the location empties the persisted position too", async () => {
   await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(fieldByName(dom, "latitude").value, "");
   assert.equal(fieldByName(dom, "locator").value, "");
-});
-
-test("every query says by the locate button where a position goes, and links to the policy", async () => {
-  // Google Play wants the disclosure where the user hands over a location, so
-  // each directory's form carries it on the geolocate button's own row.
-  const { dom } = buildHarness();
-  installFetch([
-    { match: "/przemienniki/meta", body: META_JSON },
-    { match: "/repeaterbook/meta", body: META_JSON },
-    { match: "/irts/meta", body: IRTS_META_JSON },
-  ]);
-  const sourceButtons = [
-    dom.channelImportPrzemiennikiEl,
-    dom.channelImportRepeaterbookEl,
-    dom.channelImportIrtsEl,
-    dom.channelImportRsgbEl,
-  ];
-  for (const sourceButton of sourceButtons) {
-    await dispatch(sourceButton, "click");
-    const note = descendants(grid(dom)).find((el) => el.classList?.contains("modal-geo-note"));
-    assert.ok(note, `${sourceButton.textContent.trim()} has no location note`);
-    assert.equal(note.parentElement, geolocateButton(dom).parentElement, "the note shares the locate button's row");
-    assert.match(note.textContent, /sent to the repeater directory/);
-    const link = note.querySelector("a");
-    assert.equal(link.getAttribute("href"), LOCATION_POLICY_URL);
-    // A new tab, so reading the policy cannot unload the channels being edited.
-    assert.equal(link.target, "_blank");
-    await dispatch(dom.repeaterQueryCancelEl, "click");
-  }
-  const policy = fs.readFileSync(path.join(repoRoot, "web", "privacy.html"), "utf8");
-  const [, fragment] = LOCATION_POLICY_URL.split("#");
-  assert.ok(policy.includes(`id="${fragment}"`), `privacy.html has no #${fragment} section for the note to open`);
 });
 
 test("geolocate fills the position fields and reports the locator", async () => {

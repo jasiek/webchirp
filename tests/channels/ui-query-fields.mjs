@@ -751,6 +751,89 @@ test("the drag ignores secondary buttons", async () => {
   assert.deepEqual(field.value(), before);
 });
 
+// A field whose pinch the test answers the way the shell does: it takes the
+// radius, rounded and capped at `max`, and hands it back to the field.
+function buildPinchableField({ max = Number.POSITIVE_INFINITY } = {}) {
+  const ranges = [];
+  const built = buildDraggableField({
+    onRangeChange: (km) => {
+      ranges.push(km);
+      const accepted = Math.min(max, Math.round(km));
+      built.field.setRangeKm(accepted);
+      return accepted;
+    },
+  });
+  return { ...built, ranges };
+}
+
+// Two fingers 100px apart, the second then moved to `toX` on the same line.
+async function pinchMap(previewCanvas, toX) {
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 1, isPrimary: true, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 2, isPrimary: false, button: 0, clientX: 200, clientY: 100 });
+  await dispatch(previewCanvas, "pointermove", { pointerId: 2, clientX: toX, clientY: 100 });
+}
+
+test("pinching the map changes the search radius, not the position", async () => {
+  const { field, previewCanvas, changes, pans, ranges } = buildPinchableField();
+  const before = field.value();
+  const firstTile = previewCanvas.children[0];
+
+  // Spread to twice the distance: the map zooms in, so the fixed ring covers
+  // half the ground.
+  await pinchMap(previewCanvas, 300);
+  assert.equal(ranges.at(-1), 15);
+  // Scaled in place rather than redrawn per move; the ring and marker stay.
+  assert.equal(previewCanvas.children[0], firstTile);
+  for (const transform of tileTransforms(previewCanvas)) {
+    assert.match(transform, /scale\(2\)$/);
+  }
+  assert.equal(previewCanvas.lastElementChild.style.transform, "");
+
+  await dispatch(previewCanvas, "pointerup", { pointerId: 2 });
+  assert.notEqual(previewCanvas.children[0], firstTile, "release redraws at the new radius");
+  assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => ""));
+  // The finger left behind is not a drag.
+  await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: 200, clientY: 200 });
+  await dispatch(previewCanvas, "pointerup", { pointerId: 1 });
+  assert.deepEqual(field.value(), before);
+  assert.deepEqual(changes, []);
+  assert.deepEqual(pans, []);
+});
+
+test("a pinch stops zooming the map at the range's limit", async () => {
+  const { previewCanvas } = buildPinchableField({ max: 40 });
+  // Squeezed to half: 60 km asked for, 40 accepted, so the map shrinks only
+  // to 30/40 of its size.
+  await pinchMap(previewCanvas, 150);
+  for (const transform of tileTransforms(previewCanvas)) {
+    assert.match(transform, /scale\(0\.75\)$/);
+  }
+});
+
+test("a second finger settles the drag the first one started", async () => {
+  const { field, previewCanvas, pans } = buildPinchableField();
+  const before = field.value();
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 1, isPrimary: true, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: 160, clientY: 100 });
+  const dragged = field.value();
+  assert.ok(dragged.longitude < before.longitude);
+
+  await dispatch(previewCanvas, "pointerdown", { pointerId: 2, isPrimary: false, button: 0, clientX: 260, clientY: 100 });
+  assert.deepEqual(pans, [true], "the drag so far counts as one");
+  assert.equal(previewCanvas.classList.contains("is-panning"), false);
+  // From here the first finger is half of a pinch, not a drag.
+  await dispatch(previewCanvas, "pointermove", { pointerId: 1, clientX: 60, clientY: 100 });
+  assert.deepEqual(field.value(), dragged);
+});
+
+test("without a range to change, two fingers leave the map alone", async () => {
+  const { field, previewCanvas } = buildDraggableField();
+  const before = field.value();
+  await pinchMap(previewCanvas, 300);
+  assert.deepEqual(tileTransforms(previewCanvas), tilesIn(previewCanvas).map(() => ""));
+  assert.deepEqual(field.value(), before);
+});
+
 test("the drawn map extends past the viewport so a drag has somewhere to go", () => {
   const { previewCanvas } = buildDraggableField();
   const lefts = tilesIn(previewCanvas).map((tile) => Number.parseFloat(tile.style.left));

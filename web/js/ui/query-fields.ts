@@ -317,28 +317,13 @@ export interface PositionFieldOptions {
   onChange?: (latitudeText: string, longitudeText: string) => void;
   /** Once per drag of the map that moved it. */
   onPan?: () => void;
-}
-
-// Where the privacy policy explains what a repeater query does with a position.
-export const LOCATION_POLICY_URL = "./privacy.html#location";
-
-// The line under the geolocate button saying where a position goes, with a
-// link to the policy's location section. It sits at the button because that is
-// where the user decides to hand over a device location, and the policy is
-// what Google Play asks an app to point to at that moment. The link opens a
-// new tab: following it in place would unload the page and lose the channels
-// being edited.
-function createLocationNote(): HTMLParagraphElement {
-  const note = document.createElement("p");
-  note.className = "modal-geo-note";
-  note.append("Your position is sent to the repeater directory to find nearby repeaters. ");
-  const link = document.createElement("a");
-  link.href = LOCATION_POLICY_URL;
-  link.target = "_blank";
-  link.rel = "noopener";
-  link.textContent = "Privacy policy";
-  note.appendChild(link);
-  return note;
+  /**
+   * A two-finger pinch on the map asks for this search radius, in km. The
+   * range is a sibling field, so the shell writes it there and answers with
+   * the radius it accepted (clamped to the field's limits), or NaN when there
+   * is no range to change.
+   */
+  onRangeChange?: (km: number) => number;
 }
 
 // A latitude/longitude pair on one row, and a Maidenhead locator sharing its
@@ -361,8 +346,13 @@ function createLocationNote(): HTMLParagraphElement {
 // coordinates under the marker, which stays pinned to the centre. `onPan()`
 // fires once per drag that actually moved, so the shell can count it the way
 // it counts geolocation — where the drag ended up is not reported.
+//
+// A two-finger pinch on the map changes the search radius instead: spreading
+// the fingers zooms in, so the ring, which keeps its size on screen, covers
+// less ground. The radius goes out through `onRangeChange(km)`, because the
+// range is a sibling field the shell owns.
 export function createPositionField(
-  { key = "position", locatorPlaceholder, initial = {}, onChange, onPan }: PositionFieldOptions = {},
+  { key = "position", locatorPlaceholder, initial = {}, onChange, onPan, onRangeChange }: PositionFieldOptions = {},
 ) {
   const latitude = document.createElement("input");
   latitude.id = fieldId(key, "latitude");
@@ -423,14 +413,12 @@ export function createPositionField(
   const clearButton = createEraseButton("Clear location");
 
   // The locator shares its row with the two position actions: fill from the
-  // browser's geolocation, and wipe all three fields. The location note wraps
-  // under all three (see .modal-geo-note in web/styles.css).
+  // browser's geolocation, and wipe all three fields.
   const geoRow = document.createElement("div");
   geoRow.className = "modal-geo-row";
   geoRow.appendChild(locator);
   geoRow.appendChild(geolocateButton);
   geoRow.appendChild(clearButton);
-  geoRow.appendChild(createLocationNote());
 
   // The preview: a tile canvas, a stand-in line for when there is no position
   // to draw, and the OSM credit. It spans both columns of the modal grid (see
@@ -617,8 +605,8 @@ export function createPositionField(
     // A drag writes the coordinate fields on every pointermove; redrawing
     // under it would refetch the tile grid dozens of times across one gesture
     // and yank the map out from under the pointer. The drag redraws itself,
-    // when it rebases and when it ends.
-    if (drag) {
+    // when it rebases and when it ends; a pinch, when it ends.
+    if (drag || pinch) {
       return;
     }
     if (previewTimer) {
@@ -643,9 +631,9 @@ export function createPositionField(
   //
   // Never during a drag: a directory answer landing mid-gesture would recentre
   // the tiles under a drag still measuring from the old origin, and the basemap
-  // would jump away from the pointer. endDrag redraws anyway.
+  // would jump away from the pointer. endDrag and endPinch redraw anyway.
   function refreshPreview() {
-    if (drag) {
+    if (drag || pinch) {
       return;
     }
     cancelScheduledPreview();
@@ -678,6 +666,14 @@ export function createPositionField(
   // to count. Null whenever no drag is running.
   let drag: { pointerId: number; startX: number; startY: number; latitude: number; longitude: number; zoom: number; moved: boolean } | null = null;
 
+  // Every pointer down on the map, at its latest position. A second one turns
+  // the gesture into a pinch.
+  const pointers = new Map<number, { x: number; y: number }>();
+
+  // The in-progress pinch: its two pointers, how far apart they started, and
+  // the radius at that moment. Null whenever no pinch is running.
+  let pinch: { ids: number[]; startDistance: number; startRangeKm: number } | null = null;
+
   // Offset the map without redrawing it. The tiles and the repeater squares
   // move (they mark places on the ground); the centre marker and the range
   // ring do not (they mark the position being chosen, always the viewport
@@ -697,6 +693,69 @@ export function createPositionField(
         child.style.transform = pinShift;
       }
     }
+  }
+
+  // Scale the map about the viewport centre without redrawing it. As with a
+  // pan, the tiles and repeater squares move and the marker and ring do not:
+  // the ring keeping its size while the ground grows under it is what shows
+  // the radius shrinking. A square moves with its place but keeps its size.
+  function zoomTiles(scale: number): void {
+    // The canvas is square (see renderPreview), so one centre serves both axes.
+    const centre = lastPreviewWidth / 2;
+    for (const child of (previewCanvas.children as HTMLCollectionOf<HTMLElement>)) {
+      const className = String(child.className || "");
+      const dx = (Number.parseFloat(child.style.left) - centre) * (scale - 1);
+      const dy = (Number.parseFloat(child.style.top) - centre) * (scale - 1);
+      if (className === "repeater-map-tile") {
+        child.style.transformOrigin = "0 0";
+        child.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+      } else if (className.startsWith("repeater-map-pin")) {
+        child.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      }
+    }
+  }
+
+  function pinchDistance(): number {
+    const [first, second] = (pinch?.ids ?? []).map((id) => pointers.get(id));
+    return first && second ? Math.hypot(second.x - first.x, second.y - first.y) : 0;
+  }
+
+  // A pinch needs somewhere to send the radius and a radius to start from; a
+  // source with no range filter leaves two fingers doing nothing.
+  function startPinch(): void {
+    if (typeof onRangeChange !== "function" || !(rangeKm > 0)) {
+      return;
+    }
+    pinch = { ids: [...pointers.keys()], startDistance: 0, startRangeKm: rangeKm };
+    pinch.startDistance = pinchDistance();
+    if (!(pinch.startDistance > 0)) {
+      pinch = null;
+    }
+  }
+
+  function movePinch(): void {
+    if (!pinch || typeof onRangeChange !== "function") {
+      return;
+    }
+    const spread = pinchDistance() / pinch.startDistance;
+    if (!(spread > 0)) {
+      return;
+    }
+    const wanted = pinch.startRangeKm / spread;
+    const accepted = onRangeChange(wanted);
+    // Rounding to the field's step is no reason to stop following the
+    // fingers; a limit is, so past one the map stops zooming with them.
+    const scale = Math.abs(accepted - wanted) <= 0.5 ? spread : pinch.startRangeKm / accepted;
+    if (Number.isFinite(scale) && scale > 0) {
+      zoomTiles(scale);
+    }
+  }
+
+  // The tiles are still scaled and only cover the old framing; one real
+  // render at the new radius replaces them.
+  function endPinch(): void {
+    pinch = null;
+    renderPreview();
   }
 
   // Where the centre lands once the map has been dragged by (dx, dy): dragging
@@ -730,6 +789,23 @@ export function createPositionField(
     if (!lastPreviewZoom) {
       return;
     }
+    // A primary pointer starts a gesture afresh, so a pointer whose release
+    // never arrived cannot turn the next single touch into a pinch.
+    if (event.isPrimary !== false) {
+      pointers.clear();
+    }
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    previewCanvas.setPointerCapture?.(event.pointerId);
+    event.preventDefault?.();
+    if (pointers.size > 1) {
+      // The second finger makes it a pinch: whatever the first one dragged
+      // stays dragged, and from here on the fingers set the radius.
+      if (pointers.size === 2 && !pinch) {
+        settleDrag();
+        startPinch();
+      }
+      return;
+    }
     drag = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -739,14 +815,23 @@ export function createPositionField(
       zoom: lastPreviewZoom,
       moved: false,
     };
-    // Capture, so a drag that leaves the little map keeps being this map's
-    // drag instead of ending wherever the pointer crossed the border.
-    previewCanvas.setPointerCapture?.(event.pointerId);
+    // Captured above, so a drag that leaves the little map keeps being this
+    // map's drag instead of ending wherever the pointer crossed the border.
     previewCanvas.classList.add("is-panning");
-    event.preventDefault?.();
   });
 
   previewCanvas.addEventListener("pointermove", (event) => {
+    const tracked = pointers.get(event.pointerId);
+    if (tracked) {
+      tracked.x = event.clientX;
+      tracked.y = event.clientY;
+    }
+    if (pinch) {
+      if (pinch.ids.includes(event.pointerId)) {
+        movePinch();
+      }
+      return;
+    }
     if (!drag || event.pointerId !== drag.pointerId) {
       return;
     }
@@ -775,14 +860,30 @@ export function createPositionField(
     panTiles(dx, dy);
   });
 
-  function endDrag(event: PointerEvent): void {
-    if (!drag || (event && event.pointerId !== drag.pointerId)) {
+  function endGesture(event: PointerEvent): void {
+    pointers.delete(event.pointerId);
+    if (pinch) {
+      if (pinch.ids.includes(event.pointerId)) {
+        endPinch();
+      }
+      return;
+    }
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    previewCanvas.releasePointerCapture?.(event.pointerId);
+    settleDrag();
+  }
+
+  // Finish the drag where it was left: on release, or when a second finger
+  // turns it into a pinch.
+  function settleDrag(): void {
+    if (!drag) {
       return;
     }
     const moved = drag.moved;
     drag = null;
     previewCanvas.classList.remove("is-panning");
-    previewCanvas.releasePointerCapture?.(event?.pointerId);
     if (!moved) {
       return;
     }
@@ -796,8 +897,8 @@ export function createPositionField(
     }
   }
 
-  previewCanvas.addEventListener("pointerup", endDrag);
-  previewCanvas.addEventListener("pointercancel", endDrag);
+  previewCanvas.addEventListener("pointerup", endGesture);
+  previewCanvas.addEventListener("pointercancel", endGesture);
 
   latitude.addEventListener("input", () => {
     refreshLocatorFromCoords();
