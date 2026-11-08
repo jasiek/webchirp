@@ -32485,6 +32485,24 @@
       "caveat": "South African licence-free version: 16 channels locked to eight PMR446 frequencies and five in South Africa's 464 MHz licence-free band, at 500 mW.",
       "note": "Zartek manual (2014-01-09) spec page: 400-470 MHz hardware locked to the 446 and 464 MHz bands, 1600 mAh 3.8 V Li-ion, 500 mW, 16K0F3E/8K0F3E, PC programming by cable (GE-254). Channel table: 1-8 are 446.00625-446.09375, 1a-5a are 463.975, 464.125, 464.175, 464.325, 464.375. Charging: mains adaptor into the battery side DC jack, about 6 h. Info sheet: no display in the product photo, plug-in charger. Trappers listed it backordered in 2026-10, which does not establish discontinuation. The driver notes High is unmeasured (2 W is the ZA-748 rating)."
     },
+    "Zastone|ZT-D9000": {
+      "formFactor": null,
+      "batteryMah": null,
+      "charging": null,
+      "powerW": null,
+      "bands": null,
+      "modulations": null,
+      "display": null,
+      "inProduction": null,
+      "dualReceive": null,
+      "crossBandRepeater": null,
+      "aprs": null,
+      "gps": null,
+      "bluetoothProgramming": null,
+      "sources": [],
+      "caveat": "",
+      "note": "Added by CHIRP 37585913; not yet researched."
+    },
     "Zastone|ZT-X6": {
       "formFactor": "handheld",
       "batteryMah": null,

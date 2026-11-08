@@ -7,7 +7,7 @@ import { createHttpStatusError } from "./http-errors.ts";
 // all match this revision; scripts/build-catalog.ts and the bundle build
 // enforce it at build time and the runtime rejects a mismatched static catalog
 // or bundle manifest.
-export const DEFAULT_CHIRP_REVISION = "0b4076d9b19a2a133d11f31546cff8153b39eb89";
+export const DEFAULT_CHIRP_REVISION = "37585913cc72c32dcc1c86654339920e78fdf207";
 export const DEFAULT_DRIVER_SET = "chirp";
 export const QUANSHENG_UNOFFICIAL_DRIVER_SET = "quansheng-unofficial";
 export const DRIVER_SETS = Object.freeze([
