@@ -12,7 +12,7 @@ import {
 import { assertSerialTransport } from "../../web/js/serial-transport.ts";
 import { WebBluetoothSerialPort } from "../../web/js/webbluetooth-serial.ts";
 import { CdcSerialPort } from "../../web/js/webusb-serial.ts";
-import { makeBluetoothDongle } from "../support/fake-bluetooth.mjs";
+import { makeBluetoothDongle, makeBluetoothRadio } from "../support/fake-bluetooth.mjs";
 import { makeEmitter } from "../support/fake-serial.mjs";
 import { tick } from "../support/globals.mjs";
 import { CHIP_NAMES, createChipLoopbackPort, createEchoPort } from "../support/loopback-harness.mjs";
@@ -30,6 +30,8 @@ import { NodeSerialPort } from "../support/node-serial-port.mjs";
 //                                Web Serial-shaped port
 //   webbluetooth-bt1ad           WebBluetoothSerialPort over the BT-1AD GATT
 //                                fake with TX jumpered to RX
+//   webbluetooth-ffe0            WebBluetoothSerialPort over a radio's own
+//                                FFE0/FFE1 GATT fake, echoing writes
 //   node-serialport              NodeSerialPort over serialport's own
 //                                SerialPortMock (MockBinding, echo on), which
 //                                runs the real stream code without a device
@@ -111,6 +113,18 @@ function bluetoothFixture() {
   };
 }
 
+// A radio's own Bluetooth (FFE0/FFE1): loss is the link dropping, no lines.
+function bluetoothRadioFixture() {
+  const radio = makeBluetoothRadio({ echo: true });
+  return {
+    port: new WebBluetoothSerialPort(radio.device, { settleMs: 0 }),
+    usbDevice: null,
+    deviceLineWrites: NO_SIGNALS,
+    loseDevice: () => radio.device.emit("gattserverdisconnected", { target: radio.device }),
+    loseOtherDevice: () => makeBluetoothRadio().device.emit("gattserverdisconnected", {}),
+  };
+}
+
 let mockPortCount = 0;
 
 // node-serialport over MockBinding. A line change is the binding's set(); loss
@@ -157,6 +171,7 @@ const TRANSPORTS = [
   { name: "cdc-polyfill", create: cdcFixture },
   { name: "webserial-native", create: nativeFixture },
   { name: "webbluetooth-bt1ad", create: bluetoothFixture },
+  { name: "webbluetooth-ffe0", create: bluetoothRadioFixture },
   { name: "node-serialport", create: nodeFixture },
 ];
 
@@ -506,6 +521,7 @@ test("each transport declares the capabilities its adapter has", async () => {
     "cdc-polyfill": { transport: "webusb", framing: true, signals: true, reconfigure: "reopen" },
     "webserial-native": { transport: "webserial", framing: true, signals: true, reconfigure: "reopen" },
     "webbluetooth-bt1ad": { transport: "webbluetooth", framing: false, signals: false, reconfigure: "update" },
+    "webbluetooth-ffe0": { transport: "webbluetooth", framing: false, signals: false, reconfigure: "update" },
     "node-serialport": { transport: "node", framing: true, signals: true, reconfigure: "update" },
   });
 });
