@@ -66,7 +66,8 @@ if (serialCapability.webusb && !serialCapability.native) {
   );
 }
 if (serialCapability.webbluetooth) {
-  ui.logSerial("Use WebBluetooth for a BT-1AD BLE programming dongle used with Ola Radio.");
+  ui.logSerial("Use WebBluetooth for a radio with built-in Bluetooth programming "
+    + "(turn on its wireless programming option first) or a BT-1AD BLE programming dongle used with Ola Radio.");
 }
 // Keep this version cached so the next visit loads without a network.
 void registerOfflineSupport({

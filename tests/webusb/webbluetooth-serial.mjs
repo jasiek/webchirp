@@ -4,7 +4,8 @@ import { BrowserSerialBridge } from "../../web/js/serial.ts";
 import { isPortSelectionCancelled } from "../../web/js/serial-errors.ts";
 import { WebBluetoothSerialPort, createWebBluetoothSerial } from "../../web/js/webbluetooth-serial.ts";
 import { bt1adDriver } from "../../web/js/webbluetooth/bt-1ad.ts";
-import { makeBluetoothDongle } from "../support/fake-bluetooth.mjs";
+import { ffe0UartDriver } from "../../web/js/webbluetooth/ffe0-uart.ts";
+import { makeBluetoothDongle, makeBluetoothRadio } from "../support/fake-bluetooth.mjs";
 import { withNavigator, tick } from "../support/globals.mjs";
 
 // Open the actual provider without its hardware settling delay in unit tests.
@@ -28,15 +29,19 @@ async function openBridge(t, dongle = makeBluetoothDongle()) {
   return { bridge, port, ...dongle };
 }
 
-test("Bluetooth chooser filters BF98 advertising and grants the distinct FF00 UART service", async (t) => {
+test("Bluetooth chooser lists BT-1AD and built-in FFE0 radios and grants both UART services", async (t) => {
   const dongle = makeBluetoothDongle();
   let requested;
   withNavigator(t, { bluetooth: { async requestDevice(options) { requested = options; return dongle.device; } } });
   const port = await createWebBluetoothSerial().requestPort();
   assert.equal(port.device, dongle.device);
   assert.deepEqual(requested, {
-    filters: [{ services: ["0000bf98-0000-1000-8000-00805f9b34fb"] }],
-    optionalServices: ["0000ff00-0000-1000-8000-00805f9b34fb"],
+    filters: [
+      { services: ["0000bf98-0000-1000-8000-00805f9b34fb"] },
+      { services: ["0000ffe0-0000-1000-8000-00805f9b34fb"] },
+      { namePrefix: "walkie-talkie" },
+    ],
+    optionalServices: ["0000ff00-0000-1000-8000-00805f9b34fb", "0000ffe0-0000-1000-8000-00805f9b34fb"],
   });
 });
 
@@ -250,4 +255,77 @@ test("explicit Bluetooth selection overrides wired providers and fails clearly w
   delete navigator.bluetooth;
   bridge.setPreferredTransport("webbluetooth");
   assert.throws(() => bridge._ensureSerial(), /Web Bluetooth is not supported/);
+});
+
+// Built-in radio Bluetooth (FFE0/FFE1): one characteristic both ways, no rate.
+async function openRadio(t, radio = makeBluetoothRadio()) {
+  const port = new WebBluetoothSerialPort(radio.device, { settleMs: 0 });
+  t.after(() => port.close());
+  await port.open({ baudRate: 115200 });
+  return { port, ...radio };
+}
+
+test("a built-in FFE0 radio is matched after BT-1AD misses, subscribed and never sent a rate", async (t) => {
+  const { calls, port } = await openRadio(t);
+  assert.equal(port.driverName, "Built-in Bluetooth (FFE0)");
+  assert.deepEqual(calls, [
+    { operation: "connect" },
+    { operation: "service:0000ff00-0000-1000-8000-00805f9b34fb" },
+    { operation: "service:0000ffe0-0000-1000-8000-00805f9b34fb" },
+    { operation: "characteristic:ffe1" },
+    { operation: "ffe1:subscribe" },
+  ]);
+  await port.reconfigure({ baudRate: 9600 });
+  assert.equal(calls.length, 5, "a rate change must not touch the radio");
+  assert.deepEqual(port.capabilities, { framing: false, signals: false, reconfigure: "update" });
+});
+
+test("FFE1 writes go out in acknowledged twenty-byte chunks, in order", async (t) => {
+  const { calls, port } = await openRadio(t);
+  const writer = port.writable.getWriter();
+  const bytes = Uint8Array.from({ length: 45 }, (_, i) => i);
+  await writer.write(bytes);
+  writer.releaseLock();
+  const writes = calls.filter((call) => call.operation.startsWith("ffe1:") && call.bytes);
+  assert.deepEqual(writes.map((call) => call.operation), ["ffe1:response", "ffe1:response", "ffe1:response"]);
+  assert.deepEqual(writes.flatMap((call) => call.bytes), Array.from(bytes));
+  assert.deepEqual(writes.map((call) => call.bytes.length), [20, 20, 5]);
+});
+
+test("FFE1 without write responses falls back to unacknowledged writes", async (t) => {
+  const radio = makeBluetoothRadio({ properties: { writeWithoutResponse: true, notify: true } });
+  const { calls, port } = await openRadio(t, radio);
+  const writer = port.writable.getWriter();
+  await writer.write(Uint8Array.of(1, 2, 3));
+  writer.releaseLock();
+  assert.deepEqual(calls.at(-1), { operation: "ffe1:command", bytes: [1, 2, 3] });
+});
+
+test("FFE1 notifications reach the readable stream", async (t) => {
+  const radio = makeBluetoothRadio({ echo: true });
+  const { port } = await openRadio(t, radio);
+  const reader = port.readable.getReader();
+  const writer = port.writable.getWriter();
+  await writer.write(Uint8Array.of(0x06));
+  writer.releaseLock();
+  const { value } = await reader.read();
+  reader.releaseLock();
+  assert.deepEqual(Array.from(value), [0x06]);
+});
+
+test("an FFE1 that cannot notify or be written is not a radio UART", async () => {
+  for (const properties of [{ write: true }, { notify: true }]) {
+    const radio = makeBluetoothRadio({ properties });
+    const port = new WebBluetoothSerialPort(radio.device, { settleMs: 0 });
+    await assert.rejects(port.open({ baudRate: 115200 }), /No supported BLE serial driver/);
+    assert.equal(radio.device.gatt.connected, false);
+    assert.ok(radio.calls.every((call) => !/:subscribe|:response|:command/.test(call.operation)));
+  }
+});
+
+test("built-in Bluetooth refuses settings other than 8N1 before subscribing", async () => {
+  const radio = makeBluetoothRadio();
+  const port = new WebBluetoothSerialPort(radio.device, { drivers: [ffe0UartDriver] });
+  await assert.rejects(port.open({ baudRate: 115200, parity: "even" }), /8N1/);
+  assert.ok(radio.calls.every((call) => call.operation !== "ffe1:subscribe"));
 });
