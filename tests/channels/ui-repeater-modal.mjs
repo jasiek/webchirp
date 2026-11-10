@@ -128,15 +128,10 @@ function buildHarness({
   // The Turnstile site key the deployment would build in; undefined keeps the
   // blank tag index.html ships, which leaves the check off.
   turnstileSiteKey = undefined,
-  // The bypass token npm run dev would fill in; undefined keeps the tag blank.
-  turnstileBypassToken = undefined,
 } = {}) {
   const { document } = installIndexPage();
   if (turnstileSiteKey !== undefined) {
     document.querySelector('meta[name="webchirp-turnstile-site-key"]').setAttribute("content", turnstileSiteKey);
-  }
-  if (turnstileBypassToken !== undefined) {
-    document.querySelector('meta[name="webchirp-turnstile-bypass-token"]').setAttribute("content", turnstileBypassToken);
   }
   // index.html ships the meta tag; undefined stands for a deployment without
   // one, so the tag is removed rather than blanked.
@@ -2393,43 +2388,6 @@ test("only RepeaterBook asks for a Turnstile token, and only when a site key is 
   await dispatch(unkeyed.dom.repeaterQueryFormEl, "submit");
   assert.equal(grid(unkeyed.dom).querySelector(".modal-turnstile"), null);
   assert.equal(unkeyedCalls.find((call) => !call.url.includes("/meta")).init.headers["CF-Turnstile-Response"], undefined);
-});
-
-test("with a bypass token, RepeaterBook sends it as a Bearer credential and renders no check", async () => {
-  const bypass = "0123456789abcdef0123456789abcdef";
-  // A site key as well, to show the token wins: the widget would only make
-  // the user wait for a token the request no longer needs.
-  const { dom, table } = buildHarness({ turnstileSiteKey: "0x4AAAAAAATestSiteKey", turnstileBypassToken: bypass });
-  const fake = installFakeTurnstile();
-  const calls = installFetch([
-    { match: "/repeaterbook/meta", body: META_JSON },
-    { match: "/repeaterbook", body: REPEATERBOOK_RXF },
-  ]);
-  await dispatch(dom.channelImportRepeaterbookEl, "click");
-  assert.equal(grid(dom).querySelector(".modal-turnstile"), null);
-  await setPreviewPosition(dom);
-  await afterPreviewQuery();
-  await editField(dom, "radius", "50");
-  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
-  await dispatch(dom.repeaterQueryFormEl, "submit");
-
-  assert.deepEqual(fake.rendered, []);
-  const requests = calls.filter((call) => !call.url.includes("/meta"));
-  assert.equal(requests.length, 2, "a preview and the query");
-  for (const request of requests) {
-    assert.deepEqual(request.init.headers, { Authorization: `Bearer ${bypass}` });
-  }
-  assert.equal(table.inserted.length, 1);
-
-  // Only RepeaterBook's API asks for it, so no other directory is sent it.
-  const przemiennikiCalls = installFetch([
-    { match: "/przemienniki/meta", body: META_JSON },
-    { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
-  ]);
-  await dispatch(dom.channelImportPrzemiennikiEl, "click");
-  await chooseCountry(dom, "PL");
-  await dispatch(dom.repeaterQueryFormEl, "submit");
-  assert.equal(przemiennikiCalls.find((call) => !call.url.includes("/meta")).init.headers.Authorization, undefined);
 });
 
 test("switching away from RepeaterBook removes its Turnstile widget", async () => {
