@@ -373,6 +373,11 @@
       "url": null,
       "note": "Identical to the Radioddity GS-5B, for which only programming software and manuals are published, no firmware."
     },
+    "BTECH|UV-PRO": {
+      "status": "official",
+      "url": "https://baofengtech.com/uv-pro-firmware-changelog/",
+      "note": "BTECH publishes UV-PRO firmware release notes; the supported customer update path is the BTECH UV Programmer app."
+    },
     "Baofeng|BF-F8HP-PRO": {
       "status": "official",
       "url": "https://baofengtech.com/software/",

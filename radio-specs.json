@@ -2791,6 +2791,66 @@
       "caveat": "",
       "note": ""
     },
+    "BTECH|UV-PRO": {
+      "formFactor": "handheld",
+      "batteryMah": 2600,
+      "charging": [
+        "usb-c"
+      ],
+      "powerW": {
+        "min": 2,
+        "max": 7
+      },
+      "bands": [
+        {
+          "band": "Airband",
+          "rxMHz": [
+            108,
+            136
+          ],
+          "txMHz": null
+        },
+        {
+          "band": "VHF",
+          "rxMHz": [
+            136,
+            174
+          ],
+          "txMHz": [
+            136,
+            174
+          ]
+        },
+        {
+          "band": "UHF",
+          "rxMHz": [
+            400,
+            520
+          ],
+          "txMHz": [
+            400,
+            520
+          ]
+        }
+      ],
+      "modulations": [
+        "FM",
+        "AM"
+      ],
+      "display": true,
+      "inProduction": true,
+      "dualReceive": null,
+      "crossBandRepeater": null,
+      "aprs": true,
+      "gps": true,
+      "bluetoothProgramming": true,
+      "sources": [
+        "https://baofengtech.com/product/uv-pro/",
+        "https://baofengtech.com/wp-content/uploads/2024/08/BTECHpackaging_UVPRO_Manual_Rev3.pdf"
+      ],
+      "caveat": "7 W max. The 108–136 MHz airband is receive-only.",
+      "note": "The manual specifies 2/5/7W, 2600mAh and 136-174/400-520MHz; the current product page adds USB-C charging, 108-136MHz AM receive, GPS, APRS and Bluetooth programming. Dual watch does not establish two simultaneous receivers."
+    },
     "Bajeton|BJ7800": {
       "formFactor": "handheld",
       "batteryMah": null,
@@ -27885,6 +27945,67 @@
       ],
       "caveat": "Also sold as a 144–146/430–440 MHz version. 5 W VHF, 4 W UHF. Dual standby.",
       "note": "Also sold as 144-146/430-440 MHz version. 5W VHF, 4W UHF; low not stated. Dual standby."
+    },
+    "Wouxun|KG-WV50": {
+      "formFactor": "handheld",
+      "batteryMah": 2500,
+      "charging": [
+        "cradle"
+      ],
+      "powerW": {
+        "min": null,
+        "max": 5
+      },
+      "bands": [
+        {
+          "band": "FM broadcast",
+          "rxMHz": [
+            76,
+            108
+          ],
+          "txMHz": null
+        },
+        {
+          "band": "2 m",
+          "rxMHz": [
+            144,
+            148
+          ],
+          "txMHz": [
+            144,
+            148
+          ]
+        },
+        {
+          "band": "70 cm",
+          "rxMHz": [
+            430,
+            440
+          ],
+          "txMHz": [
+            430,
+            440
+          ]
+        }
+      ],
+      "modulations": [
+        "FM"
+      ],
+      "display": true,
+      "inProduction": null,
+      "dualReceive": true,
+      "crossBandRepeater": true,
+      "aprs": false,
+      "gps": "optional",
+      "bluetoothProgramming": false,
+      "sources": [
+        "https://www.wouxun.cn/pinxiang.aspx?pdquery=WV50",
+        "https://www.wouxun.cn/TiYan/KG-WV50.aspx",
+        "https://www.wouxun.cn/pinxiang.aspx?pdquery=dc",
+        "https://www.wouxun.cn/m/radio/charger.aspx"
+      ],
+      "caveat": "Wouxun's older specification lists 2.5 W VHF and 2 W UHF; its upgraded-version report lists 5 W VHF and 4 W UHF. GPS and 350 MHz operation vary by version.",
+      "note": "Current official materials cover old and upgraded variants. The product table supplies 144-148/430-440MHz and FM broadcast ranges; the later Wouxun report supplies upgraded power, and the accessory pages list a 2500mAh battery and charging cradle."
     },
     "Wouxun|KG-XS20G": {
       "formFactor": "mobile",

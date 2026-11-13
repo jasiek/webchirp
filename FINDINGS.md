@@ -5,7 +5,7 @@ external API, browser and platform behaviour, measurements, and the reasons behi
 Each entry starts with a **bold slug** (grep target; some are cited from code) and its discovery
 date. If a comment, test or CLAUDE.md already states it, it does not belong here.
 
-The CHIRP pin is `37585913` (2026-11-07). Corpus counts were measured at `29592824` or earlier
+The CHIRP pin is `d99bb227` (2026-11-13). Corpus counts were measured at `29592824` or earlier
 and drift on each bump.
 
 ## CHIRP / Pyodide runtime
