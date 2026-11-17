@@ -31,13 +31,22 @@ export function createRadioSession(ctx: UiContext) {
       return;
     }
     handle.closed = true;
-    handle.ready.then(
-      (sessionId) => requireRuntimeApi(state).closeRadioSession({ sessionId })
-        .catch((error) => {
-          log.logDebug(`RADIO SESSION close failed: ${error?.message || error}`);
-        }),
-      () => {},
-    );
+    handle.ready.then(closeInRuntime, () => {});
+  }
+
+  function closeInRuntime(sessionId: string): Promise<void> {
+    return requireRuntimeApi(state).closeRadioSession({ sessionId })
+      .then(() => {}, (error) => {
+        log.logDebug(`RADIO SESSION close failed: ${error?.message || error}`);
+      });
+  }
+
+  // Close a session the runtime opened that never became a handle: an image
+  // load's, when the import fails or is overtaken before adopting it.
+  function discard(sessionId: string) {
+    if (sessionId) {
+      void closeInRuntime(sessionId);
+    }
   }
 
   // Open a session for a radio, or adopt one the runtime already opened for it
@@ -153,5 +162,5 @@ export function createRadioSession(ctx: UiContext) {
     }
   }
 
-  return { open, close, current, isCurrent, idOf, currentId, markLoaded };
+  return { open, close, discard, current, isCurrent, idOf, currentId, markLoaded };
 }
