@@ -30,6 +30,7 @@ const COLUMNS = {
   Frequency: { kind: "freq", editable: true },
 };
 const RADIO = { vendor: "Acme", model: "One", module: "one", className: "OneRadio", key: "one:OneRadio", isLiveRadio: false };
+const OTHER_RADIO = { vendor: "Acme", model: "Two", module: "two", className: "TwoRadio", key: "two:TwoRadio", isLiveRadio: false };
 // The value the stand-in driver refuses, as the UV-5R's refuses 220 MHz
 // (tests/channels/row-edit-check.mjs).
 const REFUSED = "220.000000";
@@ -66,7 +67,7 @@ async function bootUi(t, rowCheckOptions = {}) {
   });
   const ui = createUiController();
   ui.setRuntimeApi(withRadioSessions({
-    listRadios: async () => ({ radios: [RADIO] }),
+    listRadios: async () => ({ radios: [RADIO, OTHER_RADIO] }),
     getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
     getDefaultSchema: async () => ({ headers: HEADERS }),
     getRadioMetadata: async () => ({ headers: HEADERS, columns: COLUMNS }),
@@ -207,6 +208,33 @@ for (const write of WRITES) {
     assert.deepEqual(writes[0].rows, preflights[0].rows);
   });
 }
+
+// The preflight waits for pending cells before it resolves the session's id.
+// A radio selected during that wait has closed the session, so the export is
+// cancelled as for any radio change, not reported as a failure.
+test("a radio selected while the export waits for a pending cell cancels the export", async (t) => {
+  const { document, preflights, writes, rowCheck } = await bootUi(t, { held: true });
+  commit(document, 0, "Frequency", "146.55");
+  await flushMicrotasks();
+
+  const click = dispatch(pageElement("exportBinaryEl"), "click");
+  await flushMicrotasks();
+  assert.equal(preflights.length, 0, "the preflight waits for the pending cell's answer");
+
+  selectRadioBySearch(document, "Acme Two");
+  await flushMicrotasks();
+  rowCheck.release();
+  await flushMicrotasks();
+  // The newly selected radio checks the grid's rows against its own rules.
+  rowCheck.release();
+  await click;
+
+  assert.equal(preflights.length, 0, "nothing is checked against the closed session");
+  assert.equal(writes.length, 0);
+  const debug = document.querySelector("#debug-output").value;
+  assert.match(debug, /STATUS Export cancelled: the selected radio changed\./);
+  assert.doesNotMatch(debug, /failed/i);
+});
 
 test("a grid that keeps changing under every preflight cancels the write", async (t) => {
   const { document, preflights, writes } = await bootUi(t);
