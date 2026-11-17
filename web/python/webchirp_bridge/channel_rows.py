@@ -74,6 +74,18 @@ def _blank_csv_radio(max_memory: int = 999) -> CSVRadio:
     return radio
 
 
+# DVMemory attribute -> the grid column that shows it. A D-STAR channel is a
+# chirp_common.DVMemory, and these four Memory.CSV_FORMAT columns are the only
+# place a row holds its routing, so they carry it both ways: read off the
+# driver's memory, and written back on the DVMemory the row becomes.
+DV_FIELD_HEADERS: dict[str, str] = {
+    "dv_urcall": "URCALL",
+    "dv_rpt1call": "RPT1CALL",
+    "dv_rpt2call": "RPT2CALL",
+    "dv_code": "DVCODE",
+}
+
+
 def _row_values_for_csv(mem: chirp_common.Memory) -> list[Any]:
     """Return ``CSV_FORMAT``-aligned values for a memory.
 
@@ -82,14 +94,36 @@ def _row_values_for_csv(mem: chirp_common.Memory) -> list[Any]:
     every column from RxDtcsCode on — the D-STAR mode string lands in
     RxDtcsCode and the row no longer parses. CHIRP never hits this because its
     CSV export forces a plain ``Memory`` (``import_mem(..., mem_cls=Memory)``);
-    do the same here. D-STAR call signs are dropped, exactly as CHIRP drops
-    them when exporting CSV.
+    do the same for the shared columns, then fill the D-STAR ones from the
+    memory itself. ``Memory.to_csv()`` leaves those blank, and a row that
+    dropped them was written back with the driver's default routing (issue
+    #317). The CSV export still blanks them, as CHIRP's does: it renders
+    through ``_csv_text_for_memories``, not this projection.
     """
-    if isinstance(mem, chirp_common.DVMemory):
-        plain = chirp_common.Memory()
-        plain.clone(mem)
-        mem = plain
-    return mem.to_csv()
+    if not isinstance(mem, chirp_common.DVMemory):
+        return mem.to_csv()
+    values = _without_dv_routing(mem).to_csv()
+    for field, header in DV_FIELD_HEADERS.items():
+        value = getattr(mem, field)
+        values[CSV_HEADERS.index(header)] = "%i" % value if field == "dv_code" else value
+    return values
+
+
+def _without_dv_routing(mem: chirp_common.Memory) -> chirp_common.Memory:
+    """``mem`` as a plain Memory, for a DVMemory whose routing nobody chose.
+
+    CHIRP's CSV parser makes every DV-mode line a DVMemory but never reads the
+    D-STAR columns (``CSVRadio.ATTR_MAP`` has none), so its routing is only
+    DVMemory's class defaults. Carried into the row, those would be written
+    as routing the file never held -- and a driver that looks calls up in its
+    call lists refuses a call it does not hold. Without them the row is a
+    DV-mode channel the driver converts its own way, as before.
+    """
+    if not isinstance(mem, chirp_common.DVMemory):
+        return mem
+    plain = chirp_common.Memory()
+    plain.clone(mem)
+    return plain
 
 
 def _row_text_values(mem: chirp_common.Memory) -> list[str]:
@@ -124,7 +158,7 @@ def parse_csv(csv_text: str, session_id: str = "") -> dict[str, Any]:
     for mem in radio.memories:
         if mem.empty:
             continue
-        row = _row_from_memory(mem)
+        row = _row_from_memory(_without_dv_routing(mem))
         label = _closest_power_label(row["Power"], levels)
         if label is not None:
             if row["Power"] not in own_levels:
@@ -180,7 +214,7 @@ def _memory_from_row_values(
     Parse the fields here instead and leave the final say to the driver's
     set_memory(), which is the component that actually knows what it supports.
     """
-    mem = chirp_common.Memory()
+    mem = _memory_for_row_values(vals)
     try:
         mem.number = int(str(vals[0]).strip())
     except Exception:
@@ -236,7 +270,57 @@ def _memory_from_row_values(
     mem.skip = str(vals[14] or "")
     mem.power = _resolve_power_level(vals[15], level_map or {})
     mem.comment = str(vals[16] or "")
+    if isinstance(mem, chirp_common.DVMemory):
+        _apply_row_dv_fields(mem, vals)
     return mem
+
+
+def _row_dv_values(vals: Sequence[Any]) -> dict[str, str]:
+    """A row's D-STAR cells by DVMemory attribute, blank where the row has none."""
+    out: dict[str, str] = {}
+    for field, header in DV_FIELD_HEADERS.items():
+        index = CSV_HEADERS.index(header)
+        out[field] = str(vals[index] or "") if index < len(vals) else ""
+    return out
+
+
+def _memory_for_row_values(vals: Sequence[Any]) -> chirp_common.Memory:
+    """The Memory class the driver gave this row: a DVMemory if it has routing.
+
+    A row carries D-STAR routing only when it was read off a DVMemory, whose
+    DVCODE ``_row_values_for_csv`` always fills, so the row goes back to
+    ``set_memory()`` as the class it came from. Handing a DVMemory back as a
+    plain Memory is not neutral: a driver resets its routing to defaults
+    (issue #317) or refuses a DV-mode plain Memory outright.
+
+    A row with no routing stays a plain Memory even when its Mode is DV -- a
+    channel the user just switched to DV, whose routing columns the grid does
+    not let them fill. That is what desktop CHIRP's grid hands the driver for
+    the same edit, and each driver converts it its own way: one with call
+    lists cannot take a DVMemory whose calls it does not hold.
+    """
+    if any(value.strip() for value in _row_dv_values(vals).values()):
+        return chirp_common.DVMemory()
+    return chirp_common.Memory()
+
+
+def _apply_row_dv_fields(mem: chirp_common.DVMemory, vals: Sequence[Any]) -> None:
+    """Set a DVMemory's routing from the row's D-STAR cells.
+
+    Every cell is taken exactly as the driver gave it, blank and padding
+    included: drivers that look a call up in their call lists need their own
+    spelling back, and one that pads with NULs would turn a trailing space it
+    read into a NUL if the space were stripped here.
+    """
+    values = _row_dv_values(vals)
+    mem.dv_urcall = values["dv_urcall"]
+    mem.dv_rpt1call = values["dv_rpt1call"]
+    mem.dv_rpt2call = values["dv_rpt2call"]
+    code = _row_int(values["dv_code"], 0, "DVCODE")
+    try:
+        mem.dv_code = code
+    except ValueError:
+        raise RuntimeUnsupportedError(f"DVCODE {code} is not valid")
 
 
 def _coerce_csv_vals_for_chirp(vals: Sequence[Any]) -> list[Any]:

@@ -15,7 +15,12 @@ from typing import TYPE_CHECKING
 
 from chirp import chirp_common
 
-from webchirp_bridge.channel_rows import CSV_HEADERS, _blank_csv_radio, _row_from_memory
+from webchirp_bridge.channel_rows import (
+    CSV_HEADERS,
+    DV_FIELD_HEADERS,
+    _blank_csv_radio,
+    _row_from_memory,
+)
 from webchirp_bridge.radio_files import _blank_radio_instance
 from webchirp_bridge.power_levels import _power_level_watts
 from webchirp_bridge.session import resolve_session
@@ -24,7 +29,7 @@ if TYPE_CHECKING:
     from typing import Any, Callable, Iterable, Optional
     from webchirp_bridge.session import RadioSession
 
-DV_ONLY_HEADERS = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"]
+DV_ONLY_HEADERS = list(DV_FIELD_HEADERS.values())
 
 
 def _memory_defaults() -> dict[str, str]:
