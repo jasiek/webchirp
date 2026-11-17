@@ -232,6 +232,96 @@ json.dumps({
   assert.ok(result.cachedSize > 0);
 });
 
+// Issue 318: the synthetic origin has to travel with the file, or saving an
+// offline export and opening it again turns zeroes nobody read from a radio
+// into a backing image the upload and settings gates accept. Two clone-mode
+// drivers with unrelated file handling (Icom's and Baofeng's) take the same
+// path, since nothing here may depend on the driver.
+for (const driver of [
+  { module: "id31", className: "ID31Radio" },
+  { module: "uv5r", className: "BaofengUV5RGeneric" },
+]) {
+  test(`a reopened offline export of ${driver.className} stays synthetic`, async () => {
+    const harness = await sharedHarness();
+    await ensureModule(harness, driver.module);
+    const opened = await harness.rpc("open_session", {
+      module_name: driver.module,
+      class_name: driver.className,
+    });
+    const parsed = await harness.rpc("parse_csv", {
+      csv_text: "Location,Name,Frequency,Mode\n14,RPT,438.500000,FM\n",
+      session_id: opened.sessionId,
+    });
+    const exported = await harness.rpc("export_image_base64", {
+      session_id: opened.sessionId,
+      rows: parsed.rows,
+      settings_groups: [],
+    });
+    await harness.rpc("close_session", { session_id: opened.sessionId });
+
+    const reopened = await harness.rpc("load_image_base64", { image_b64: exported.imageBase64 });
+    assert.equal(reopened.className, driver.className);
+    assert.deepEqual(
+      reopened.rows.map((row) => [row.Location, row.Name]),
+      [["14", "RPT"]],
+      "the reopened file still holds the exported channel",
+    );
+    assert.deepEqual(reopened.settings, [], "settings are not read from zeroes");
+
+    const result = await harness.runPythonJson(
+      `
+def _gates(session_id):
+    _session = resolve_session(session_id)
+    try:
+        _upload_selected_radio_sync(_session, [])
+        _refused = ""
+    except RuntimePreconditionError as _exc:
+        _refused = str(_exc)
+    return {
+        **_session.describe(),
+        "settingsRequireImage": bool(get_radio_settings(session_id).get("requiresImage")),
+        "uploadRefused": _refused,
+    }
+
+
+_reopened = _gates(_reopened_sid)
+close_session(_reopened_sid)
+
+# Desktop CHIRP opening the file and saving it again keeps what it does not
+# know in the metadata, so the file is still the same offline export.
+_cls = _import_radio_class(_module_name, _class_name)
+_resaved = _image_bytes_from_radio(_radio_from_image_bytes(_cls, base64.b64decode(_image_b64)))
+_resaved_sid = load_image_base64(base64.b64encode(_resaved).decode("ascii"))["sessionId"]
+_resaved_state = _gates(_resaved_sid)
+close_session(_resaved_sid)
+
+# An image CHIRP itself saved carries no WebCHIRP mark and opens as a file.
+_plain = _image_bytes_from_radio(_radio_from_image_bytes(_cls, bytes(_cls._memsize)))
+_plain_sid = load_image_base64(base64.b64encode(_plain).decode("ascii"))["sessionId"]
+_plain_state = resolve_session(_plain_sid).describe()
+close_session(_plain_sid)
+json.dumps({"reopened": _reopened, "resaved": _resaved_state, "plain": _plain_state})
+      `,
+      {
+        _reopened_sid: reopened.sessionId,
+        _image_b64: exported.imageBase64,
+        _module_name: driver.module,
+        _class_name: driver.className,
+      },
+    );
+
+    for (const key of ["reopened", "resaved"]) {
+      const state = result[key];
+      assert.equal(state.imageOrigin, "synthetic", `${key}: the export's origin survives the file`);
+      assert.equal(state.hasBackingImage, false, `${key}: zeroes never back an upload`);
+      assert.equal(state.settingsRequireImage, true, `${key}: settings still need a real image`);
+      assert.match(state.uploadRefused, /Download from radio first/, key);
+    }
+    assert.equal(result.plain.imageOrigin, "file");
+    assert.equal(result.plain.hasBackingImage, true);
+  });
+}
+
 test("undecodable channels protect the session that recorded them, and no other", async () => {
   const harness = await sharedHarness();
   await ensureModule(harness, "h777");

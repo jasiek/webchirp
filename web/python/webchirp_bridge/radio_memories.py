@@ -189,17 +189,22 @@ def _read_radio_payload(
 
     A driver whose ``get_settings()`` raises must not cost the user the
     channels that decoded fine: the settings helper logs it and answers with
-    none, which the UI reads as "no Settings tab".
+    none, which the UI reads as "no Settings tab". A reopened offline export
+    answers with none too: its settings are the zeroes it was built on, which
+    ``get_radio_settings`` refuses to parse for the same session
+    (FINDINGS: offline-export-is-not-a-radio-image).
     """
     session.record_radio(radio, origin)
     rows, unreadable, undeletable = _radio_rows_from_instance(radio)
     session.record_unreadable_channels(unreadable)
     session.record_undeletable_channels(undeletable)
-    settings_result = _validate_and_apply_radio_settings(radio, [], apply_changes=False)
+    settings: list[Any] = []
+    if session.has_backing_image:
+        settings = _validate_and_apply_radio_settings(radio, [], apply_changes=False)["settings"]
     return {
         "rows": rows,
         "headers": CSV_HEADERS,
-        "settings": settings_result["settings"],
+        "settings": settings,
         "unreadableChannels": unreadable,
     }
 
