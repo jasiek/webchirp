@@ -22,7 +22,7 @@ import {
   createSelectField,
   createTurnstileField,
 } from "./query-fields.ts";
-import { resolveTurnstileBypassToken, resolveTurnstileSiteKey } from "../turnstile.ts";
+import { resolveTurnstileSiteKey } from "../turnstile.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { QueryField, QueryGate } from "./query-fields.ts";
 import type { City, FieldOption } from "./query-fields.ts";
@@ -83,11 +83,7 @@ export function createRepeaterQuery(ctx: UiContext) {
   // a service failure is visible when the user tries it, rather than silently
   // removing the action.
   const endpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
-  const sources = createRepeaterSources(ctx, {
-    endpoints,
-    turnstileSiteKey: resolveTurnstileSiteKey(),
-    turnstileBypassToken: resolveTurnstileBypassToken(),
-  });
+  const sources = createRepeaterSources(ctx, { endpoints, turnstileSiteKey: resolveTurnstileSiteKey() });
   const sourceButtonTitles = new Map<string, string>();
   for (const source of sources) {
     sourceButtonTitles.set(source.key, dom[source.toolbarButton].title);

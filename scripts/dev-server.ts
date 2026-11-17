@@ -1,5 +1,5 @@
 // The development server: web/ as it is on disk, with the isolation headers
-// the app expects, plus one transform (two with the bypass token below). The sources are TypeScript, which no
+// the app expects, plus one transform. The sources are TypeScript, which no
 // browser loads, so a request for a .ts file is answered with that file
 // type-stripped by esbuild's transform API -- as JavaScript, with an inline
 // source map back to the .ts -- and everything else is served static. The
@@ -8,7 +8,8 @@
 // the URL a browser asks for is always the file on disk: nothing maps a .js
 // request onto a .ts file. scripts/build-dist.ts reads the same script tags
 // and hands the same entries to esbuild for dist/. With TURNSTILE_BYPASS_TOKEN
-// set, pages are also served with it filled in (scripts/dev-turnstile-bypass.ts).
+// set, the server also stands between the page and the repeater API, adding the
+// token to the requests that need it (scripts/dev-turnstile-bypass.ts).
 //
 // The same server also serves the built site for the browser tests
 // (tests/e2e): WEB_ROOT=dist serves that directory instead of web/, and
@@ -18,12 +19,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createServer } from "node:http";
-import type { ServerResponse } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
 import * as esbuild from "esbuild";
 
 import { defaultDevServerPort } from "./dev-server-port.ts";
-import { fillTurnstileBypassToken, readTurnstileBypassToken } from "./dev-turnstile-bypass.ts";
+import {
+  forwardApiRequest,
+  pointApiBaseAtProxy,
+  proxiedApiRoute,
+  readApiBase,
+  readTurnstileBypassToken,
+} from "./dev-turnstile-bypass.ts";
 
 const webRootDir = path.resolve(process.cwd(), process.env.WEB_ROOT || "web");
 // PORT wins; otherwise 8000 in the main checkout and a fixed port of its own
@@ -31,9 +38,30 @@ const webRootDir = path.resolve(process.cwd(), process.env.WEB_ROOT || "web");
 const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : defaultDevServerPort(process.cwd());
 const host = process.env.HOST || "127.0.0.1";
 const servesAsPages = process.env.SERVE_AS === "pages";
-// Written into the pages it serves (scripts/dev-turnstile-bypass.ts), never
-// into the built site the browser tests see.
+// Added to the API requests the server forwards (scripts/dev-turnstile-bypass.ts),
+// never written into a page; off for the built site the browser tests see.
 const turnstileBypassToken = servesAsPages ? "" : readTurnstileBypassToken(process.env);
+// Where the forwarded requests go: the API base index.html names, the one the
+// page would have queried itself.
+const proxiedApiBase = turnstileBypassToken ? readProxiedApiBase() : "";
+
+// The API base index.html names, failing at startup when it names none, since
+// there would be nothing to forward to.
+function readProxiedApiBase(): string {
+  const apiBase = readApiBase(fs.readFileSync(path.join(webRootDir, "index.html"), "utf8"));
+  if (!apiBase) {
+    throw new Error("TURNSTILE_BYPASS_TOKEN is set, but index.html names no repeater API base to forward to.");
+  }
+  return apiBase;
+}
+
+// The origin the browser reached this server at, which the proxied API base
+// must share: the page queries the proxy from that same origin. A Host header
+// that is not a plain host[:port] falls back to the address listened on.
+function requestOrigin(req: IncomingMessage): string {
+  const requestHost = String(req.headers.host || "");
+  return `http://${/^[\w.-]+(:\d+)?$|^\[[\da-f:]+\](:\d+)?$/i.test(requestHost) ? requestHost : `${host}:${port}`}`;
+}
 
 const MIME_BY_EXT: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
@@ -113,6 +141,16 @@ const server = createServer((req, res) => {
     return;
   }
 
+  const apiRoute = turnstileBypassToken ? proxiedApiRoute(req.url || "/") : null;
+  if (apiRoute !== null) {
+    applyIsolationHeaders(res);
+    forwardApiRequest(req, res, proxiedApiBase, apiRoute, turnstileBypassToken).catch((error) => {
+      console.error(error);
+      res.destroy();
+    });
+    return;
+  }
+
   const filePath = resolveRequestPath(req.url || "/");
   if (!filePath) {
     applyIsolationHeaders(res);
@@ -165,7 +203,7 @@ const server = createServer((req, res) => {
   }
   const contentType = MIME_BY_EXT[ext] || "application/octet-stream";
   if (ext === ".html" && turnstileBypassToken) {
-    const html = fillTurnstileBypassToken(fs.readFileSync(filePath, "utf8"), turnstileBypassToken);
+    const html = pointApiBaseAtProxy(fs.readFileSync(filePath, "utf8"), requestOrigin(req));
     applyIsolationHeaders(res);
     res.statusCode = 200;
     res.setHeader("Content-Type", contentType);
