@@ -127,6 +127,11 @@ export function createRepeaterQuery(ctx: UiContext) {
   // twice. An RSGB fan-out over 24 squares takes seconds, so the window is
   // wide enough to hit by double-clicking.
   let queryInFlight = false;
+  // The query the open modal is running, or null. Cancel and the backdrop
+  // close the modal without waiting for it, so the user can be in another
+  // directory's form by the time it answers; closing aborts it, and only the
+  // query still held here may insert rows, close the modal or free the button.
+  let currentQuery: AbortController | null = null;
   // Browser-reported connectivity only. Request failures do not change this;
   // web/js/ui/connectivity.ts updates it from online/offline events.
   let online = true;
@@ -567,6 +572,11 @@ export function createRepeaterQuery(ctx: UiContext) {
       schedulePreview();
     } else {
       // Nothing in flight may land on a closed modal, or on the next one.
+      if (currentQuery) {
+        currentQuery.abort();
+        currentQuery = null;
+        setQueryBusy(false);
+      }
       previewGeneration += 1;
       if (previewTimer) {
         clearTimeout(previewTimer);
@@ -726,6 +736,8 @@ export function createRepeaterQuery(ctx: UiContext) {
       if (queryInFlight || !online) {
         return;
       }
+      const query = new AbortController();
+      currentQuery = query;
       setQueryBusy(true);
       // Captured before the await, for the same reason the clone paths capture
       // the radio: Cancel and the backdrop close the modal without waiting for
@@ -739,9 +751,13 @@ export function createRepeaterQuery(ctx: UiContext) {
           setModalOpen(false);
           return;
         }
-        await source.runQuery(collectValues());
+        await source.runQuery(collectValues(), query.signal);
         recordFlow(FLOWS.REPEATER_QUERY, OUTCOMES.OK, { repeater_source: source.key });
-        setModalOpen(false);
+        // Cancelled while it ran: the modal is closed already, and may since
+        // have been reopened for a query this one must not close.
+        if (!query.signal.aborted) {
+          setModalOpen(false);
+        }
       } catch (error) {
         // The only place a failed directory lookup is reported at all: the
         // repeater_import event fires on success, so until now a proxy that
@@ -771,7 +787,10 @@ export function createRepeaterQuery(ctx: UiContext) {
           log.reportActionError(`${source.actionLabel} query`, error);
         }
       } finally {
-        setQueryBusy(false);
+        if (currentQuery === query) {
+          currentQuery = null;
+          setQueryBusy(false);
+        }
       }
     });
   }
