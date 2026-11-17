@@ -658,10 +658,22 @@ export function createSerialActions(ctx: UiContext) {
     };
   }
 
+  // The answer for a preflight whose radio was replaced: nothing is shown, and
+  // the write it guarded is cancelled.
+  function radioChanged(when: string): PreflightResult {
+    log.logDebug(`PREFLIGHT discarded: the selected radio changed ${when}.`);
+    return { valid: false, stale: true, issues: [], summary: "the selected radio changed", rows: [], settings: [] };
+  }
+
   // One preflight of the grid as it stands once no cell is pending. Null when
   // the grid or the settings changed before its answer came.
   async function runPreflightOnce(session: RadioSessionHandle | null): Promise<PreflightResult | null> {
     await ctx.table.rowChecksSettled();
+    // A radio selected while the cells settled has closed this session, and
+    // idOf() below would throw for it: that is a cancelled write, not a failure.
+    if (!ctx.session.isCurrent(session)) {
+      return radioChanged("while the channels were being checked");
+    }
     // Copies through JSON, which is also how the runtime call carries them.
     const rowsText = JSON.stringify(state.currentRows);
     const settingsText = JSON.stringify(ctx.settings.getGroups());
@@ -673,8 +685,7 @@ export function createSerialActions(ctx: UiContext) {
       requireRuntimeApi(state).validateRadioSettings({ settings: checkedSettings, sessionId }),
     ]);
     if (!ctx.session.isCurrent(session)) {
-      log.logDebug("PREFLIGHT discarded: the selected radio changed while it ran.");
-      return { valid: false, stale: true, issues: [], summary: "the selected radio changed", rows: [], settings: [] };
+      return radioChanged("while it ran");
     }
     if (JSON.stringify(state.currentRows) !== rowsText || JSON.stringify(ctx.settings.getGroups()) !== settingsText) {
       return null;
