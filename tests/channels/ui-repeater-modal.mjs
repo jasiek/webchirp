@@ -1642,7 +1642,11 @@ test("a cancelled query inserts nothing and leaves the next directory's dialog o
   }]);
   const pending = dispatch(dom.repeaterQueryFormEl, "submit");
   await flush();
-  assert.equal(calls.length, 1, "the query is on its way");
+  // Only RepeaterBook's requests count. Fetches an earlier test's map preview
+  // still has outstanding look up the current fetch when they start, so on a
+  // slow run some of them arrive at this gate too.
+  const queryCalls = calls.filter((call) => call.url.includes("/repeaterbook"));
+  assert.equal(queryCalls.length, 1, "the query is on its way");
   await dispatch(dom.repeaterQueryCancelEl, "click");
   assert.equal(query.isModalOpen(), false);
   assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "a cancelled query does not hold the button");
