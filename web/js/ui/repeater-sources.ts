@@ -147,7 +147,12 @@ export interface RepeaterSource {
   /** The filter dictionaries, by optionsKey; null when every option is static. */
   loadOptions: (() => Promise<Record<string, FieldOption[]>>) | null;
   previewQuery: (values: QueryValues) => Promise<PreviewSummary | null>;
-  runQuery: (values: QueryValues) => Promise<void>;
+  /**
+   * Fetch and insert what the values select. Inserts nothing once `signal`
+   * aborts: the modal shell aborts it when the user closes the modal on the
+   * query, and the answer must not land after that.
+   */
+  runQuery: (values: QueryValues, signal: AbortSignal) => Promise<void>;
   /**
    * What would answer Query API for these values now: "cached" a preview
    * already fetched, "pending" one still in flight, "request" a request of the
@@ -370,14 +375,17 @@ export function createRepeaterSources(
         const answer = await query(values, "preview");
         return answer ? summarizePreview(answer, values.position, radiusKm) : { points: [] };
       },
-      runQuery: async (values) => {
+      runQuery: async (values, signal) => {
         const answer = await query(values, "import");
-        if (!answer) {
+        if (!answer || signal.aborted) {
           return;
         }
         const built = await ctx.table.buildRows((hooks) => buildRepeaterRows(answer.records, hooks, {
           preferredModes: answer.preferredModes,
         }));
+        if (signal.aborted) {
+          return;
+        }
         const skipped = [...answer.unusable, ...built.skipped];
         // Repeaters the radio cannot express are dropped rather than written
         // as something they are not; a shorter list than the match count needs

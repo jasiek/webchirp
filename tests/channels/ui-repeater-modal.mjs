@@ -1619,6 +1619,48 @@ test("a second submit while a query is in flight is ignored, not duplicated", as
   assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API");
 });
 
+// Cancel closes the modal without waiting for the query, so the answer can
+// arrive after the user has moved on to another directory. It must neither
+// insert what was cancelled nor close the dialog that is open by then.
+test("a cancelled query inserts nothing and leaves the next directory's dialog open", async () => {
+  const { query, dom, log, table } = buildHarness();
+  installFetch([{ match: "/repeaterbook/meta", body: META_JSON }]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(dom, "PL");
+
+  // From here on every request waits for the test, so the query is caught
+  // in flight.
+  const { calls, release } = installGatedFetch([{
+    match: "/repeaterbook",
+    body: `
+      <rxf><perspective>radio</perspective><repeaters><repeater>
+        <qra>SR5WA</qra><mode>fm</mode>
+        <qrg type="rx">145.6</qrg><qrg type="tx">145</qrg>
+        <location><latitude>52.2297</latitude><longitude>21.0122</longitude></location>
+      </repeater></repeaters></rxf>
+    `,
+  }]);
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
+  await flush();
+  assert.equal(calls.length, 1, "the query is on its way");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  assert.equal(query.isModalOpen(), false);
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "a cancelled query does not hold the button");
+
+  installFetch([{ match: "/przemienniki/meta", body: META_JSON }]);
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  assert.equal(dom.repeaterQueryTitleEl.textContent, "Query przemienniki.net");
+
+  release();
+  await pending;
+  await flush();
+
+  assert.deepEqual(table.inserted, [], "the cancelled answer must not be inserted");
+  assert.equal(query.isModalOpen(), true, "the newer dialog must stay open");
+  assert.equal(dom.repeaterQueryTitleEl.textContent, "Query przemienniki.net");
+  assert.deepEqual(log.errors, []);
+});
+
 // --- Request deadline --------------------------------------------------------
 
 // A host that accepts the connection and then answers nothing used to leave the
