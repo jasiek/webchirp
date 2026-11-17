@@ -23,7 +23,8 @@ import {
 import { PORT_LOST_REASONS } from "../serial-bridge.ts";
 import { requireRuntimeApi } from "./state.ts";
 import type { UiContext } from "../types/ui-context.js";
-import type { CatalogRadio, RowIssue, SettingIssue } from "../runtime-rpc.ts";
+import type { CatalogRadio, RowIssue, SettingIssue, SettingNode } from "../runtime-rpc.ts";
+import type { ChannelRow } from "./channel-values.ts";
 import type { RadioSessionHandle } from "./state.ts";
 import type { ChosenPortDescription } from "../serial.ts";
 
@@ -63,13 +64,22 @@ const CLONE_FLOW_OUTCOMES: Readonly<Record<string, { flow: string; outcome: stri
 /** What the preflight before an upload or a binary export found. */
 export interface PreflightResult {
   valid: boolean;
-  // The selected radio changed while the check ran: nothing was shown, and
-  // the write it guarded must not go ahead.
+  // The selected radio changed while the check ran, or the grid kept changing
+  // under it: nothing was shown, and the write it guarded must not go ahead.
   stale: boolean;
   issues: Array<RowIssue | SettingIssue>;
-  // "2 invalid value(s) highlighted in red in channels", or "" with none.
+  // "2 invalid value(s) highlighted in red in channels", or "" with none; for
+  // a stale answer, why it is stale.
   summary: string;
+  // What the write sends: the rows and settings the check passed, never the
+  // grid read again after it, which an edit made meanwhile may have changed.
+  rows: ChannelRow[];
+  settings: SettingNode[];
 }
+
+// How many times the preflight runs, when an edit made while it ran keeps
+// superseding its answer, before it gives up on the write.
+const PREFLIGHT_ATTEMPTS = 3;
 
 // The cable behind a connect or a transfer, as the failure metric carries it:
 // the chip family and the USB ids that name a model of adapter. Nothing when
@@ -613,6 +623,13 @@ export function createSerialActions(ctx: UiContext) {
   // caller passes the session it will write to: a radio picked while the check
   // runs makes the answer stale, and a stale answer is neither shown nor
   // acted on. summary says how many values are highlighted and where.
+  //
+  // What is checked is a copy of the grid and the settings, taken once no
+  // cell is pending, and the caller writes that copy (rows, settings): what
+  // is written is what was checked. The grid is not locked while the check
+  // runs, so an edit committed meanwhile leaves the answer about rows the
+  // grid no longer holds; it is dropped and the check runs again on the grid
+  // as it now stands, up to PREFLIGHT_ATTEMPTS times.
   async function runUploadPreflight(session: RadioSessionHandle | null): Promise<PreflightResult> {
     if (!state.selectedRadio) {
       return {
@@ -620,37 +637,64 @@ export function createSerialActions(ctx: UiContext) {
         stale: false,
         issues: [{ rowIndex: -1, column: "", message: "No radio selected." }],
         summary: "",
+        rows: [],
+        settings: [],
       };
     }
+    for (let attempt = 1; attempt <= PREFLIGHT_ATTEMPTS; attempt += 1) {
+      const result = await runPreflightOnce(session);
+      if (result) {
+        return result;
+      }
+      log.logDebug("PREFLIGHT repeated: the channels or settings changed while it ran.");
+    }
+    return {
+      valid: false,
+      stale: true,
+      issues: [],
+      summary: "the channels kept changing while they were checked",
+      rows: [],
+      settings: [],
+    };
+  }
+
+  // One preflight of the grid as it stands once no cell is pending. Null when
+  // the grid or the settings changed before its answer came.
+  async function runPreflightOnce(session: RadioSessionHandle | null): Promise<PreflightResult | null> {
+    await ctx.table.rowChecksSettled();
+    // Copies through JSON, which is also how the runtime call carries them.
+    const rowsText = JSON.stringify(state.currentRows);
+    const settingsText = JSON.stringify(ctx.settings.getGroups());
+    const rows: ChannelRow[] = JSON.parse(rowsText);
+    const checkedSettings: SettingNode[] = JSON.parse(settingsText);
     const sessionId = await ctx.session.idOf(session);
     const [rowResult, settingsResult] = await Promise.all([
-      requireRuntimeApi(state).validateRowsForUpload({
-        rows: state.currentRows,
-        sessionId,
-      }),
-      requireRuntimeApi(state).validateRadioSettings({
-        settings: ctx.settings.getGroups(),
-        sessionId,
-      }),
+      requireRuntimeApi(state).validateRowsForUpload({ rows, sessionId }),
+      requireRuntimeApi(state).validateRadioSettings({ settings: checkedSettings, sessionId }),
     ]);
     if (!ctx.session.isCurrent(session)) {
       log.logDebug("PREFLIGHT discarded: the selected radio changed while it ran.");
-      return { valid: false, stale: true, issues: [], summary: "" };
+      return { valid: false, stale: true, issues: [], summary: "the selected radio changed", rows: [], settings: [] };
+    }
+    if (JSON.stringify(state.currentRows) !== rowsText || JSON.stringify(ctx.settings.getGroups()) !== settingsText) {
+      return null;
     }
     const result = rowResult;
     const settingsValidation = settingsResult
-      || { valid: true, issues: [], settings: ctx.settings.getGroups() };
+      || { valid: true, issues: [], settings: checkedSettings };
     // An unavailable reply says the runtime could not read settings, not that
     // the radio has none: keep the panel's tree, and say why in Debug Output.
+    let settings = checkedSettings;
     if (settingsResult && settingsResult.available === false) {
-      if (ctx.settings.getGroups().length > 0) {
+      if (checkedSettings.length > 0) {
         log.logDebug(
           `PREFLIGHT settings unavailable: ${settingsResult.message || "no reason given"}`
             + (settingsResult.error ? ` (${settingsResult.error})` : ""),
         );
       }
     } else {
-      ctx.settings.setGroups(settingsValidation.settings);
+      settings = settingsValidation.settings;
+      ctx.settings.setGroups(settings);
     }
     ctx.settings.ensureActiveTab();
     ctx.settings.clearInvalid();
@@ -679,6 +723,8 @@ export function createSerialActions(ctx: UiContext) {
       stale: false,
       issues: [...issues, ...settingIssues],
       summary: preflightSummary(issues.length, ctx.settings.invalidCount()),
+      rows,
+      settings,
     };
   }
 
@@ -820,7 +866,7 @@ export function createSerialActions(ctx: UiContext) {
       log.setStatus("Running upload preflight validation...");
       const preflight = await runUploadPreflight(session);
       if (preflight.stale) {
-        log.setStatus("Upload cancelled: the selected radio changed.");
+        log.setStatus(`Upload cancelled: ${preflight.summary}.`);
         return;
       }
       if (!preflight.valid) {
@@ -844,8 +890,8 @@ export function createSerialActions(ctx: UiContext) {
       beginCloneProgress(`Uploading to ${makeModelLabel(radio)}...`);
       const uploadResult = await requireRuntimeApi(state).uploadSelectedRadio({
         sessionId: await ctx.session.idOf(session),
-        rows: state.currentRows,
-        settings: ctx.settings.getGroups(),
+        rows: preflight.rows,
+        settings: preflight.settings,
       });
       // The radio was written either way. The settings it reports back belong
       // in the editor only while it still holds the session written from,

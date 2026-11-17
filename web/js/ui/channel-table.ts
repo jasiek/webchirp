@@ -74,6 +74,9 @@ export function createChannelTable(ctx: UiContext) {
   // How many checks are in flight per row, so a row rewritten while one is
   // can be checked again as it now stands (rowsRewritten).
   const checksInFlight = new WeakMap<ChannelRow, number>();
+  // Every checkRows() run not yet finished, so a write can wait until no cell
+  // is pending (rowChecksSettled).
+  const runningChecks = new Set<Promise<void>>();
   // How many runtime calls buildRows() may make before giving up on a builder
   // whose branches keep asking new questions. Each call answers every write a
   // run made, so a builder settles in one or two; this only stops a loop.
@@ -557,10 +560,21 @@ export function createChannelTable(ctx: UiContext) {
   // its traceback and settles the cells it was for: each keeps the value as
   // typed, is no longer pending, and says on hover that it was not checked,
   // so the upload preflight is what will judge it.
-  async function checkRows(rows: readonly ChannelRow[]): Promise<void> {
+  function checkRows(rows: readonly ChannelRow[]): Promise<void> {
     if (rows.length === 0) {
-      return;
+      return Promise.resolve();
     }
+    const run = runRowChecks(rows);
+    runningChecks.add(run);
+    const settle = () => {
+      runningChecks.delete(run);
+    };
+    run.then(settle, settle);
+    return run;
+  }
+
+  // checkRows() without the bookkeeping that lets rowChecksSettled() wait on it.
+  async function runRowChecks(rows: readonly ChannelRow[]): Promise<void> {
     const handle = state.radioSession;
     const versions = rows.map(rowVersion);
     const stillWaiting = () => rows.filter((row, index) => rowVersion(row) === versions[index]);
@@ -598,6 +612,15 @@ export function createChannelTable(ctx: UiContext) {
       }
     });
     renderRowWindow();
+  }
+
+  // Resolves once no row check is in flight, so no cell is pending: every
+  // value in the grid is the one the runtime stored. A check started while
+  // waiting is waited for too.
+  async function rowChecksSettled(): Promise<void> {
+    while (runningChecks.size > 0) {
+      await Promise.allSettled([...runningChecks]);
+    }
   }
 
   // Write edits into rows at once, as typed, and have the runtime check them.
@@ -1988,6 +2011,7 @@ export function createChannelTable(ctx: UiContext) {
     submitRowEdits,
     previewRowEdits,
     rowsRewritten,
+    rowChecksSettled,
     channelShortcutsActive,
     moveSelectedChannelRows,
     refreshVisibleRows: renderRowWindow,
