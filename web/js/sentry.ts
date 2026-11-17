@@ -1,4 +1,4 @@
-// Sentry error reporting.
+// Sentry error reporting, metrics and performance tracing.
 //
 // Shaped deliberately like web/js/analytics.ts, and for the same reasons: the
 // production-host gate, the vendor loader and the redaction rules all live in
@@ -37,6 +37,8 @@ export type SentrySdk = typeof import("@sentry/browser");
 // The SDK's own shapes for what its hooks are handed, from the npm package the
 // CDN build is the same version of (type-only: nothing is imported at runtime).
 type SentryEvent = Parameters<NonNullable<BrowserOptions["beforeSend"]>>[0];
+type SentryTransaction = Parameters<NonNullable<BrowserOptions["beforeSendTransaction"]>>[0];
+type SentrySpan = Parameters<NonNullable<BrowserOptions["beforeSendSpan"]>>[0];
 type SentryBreadcrumb = Parameters<NonNullable<BrowserOptions["beforeBreadcrumb"]>>[0];
 type SentryMetrics = NonNullable<SentrySdk["metrics"]>;
 type MetricOptions = Parameters<SentryMetrics["count"]>[2];
@@ -525,6 +527,120 @@ export function scrubEvent(event: SentryEvent): SentryEvent {
   return event;
 }
 
+// Origins whose request paths name files this app ships or pins, and so stay
+// in a span: the production deployment, the only place a span is recorded at
+// all (SENTRY_HOSTS), and jsDelivr, which serves every third-party file the
+// app runs from (web/js/cdn-urls.ts). Any other host keeps its origin and
+// loses its path, because there the path is the user's data: a map tile's is
+// a tile coordinate at street zoom (web/js/staticmap.ts), and a callsign
+// lookup's is the callsign (web/js/callsign-lookup.ts). A list of the hosts
+// that are safe, rather than of the paths that are not, so that a request
+// added later is redacted until someone decides otherwise.
+const SPAN_PATH_ORIGINS: readonly string[] = Object.freeze([
+  ...SENTRY_HOSTS.map((host) => `https://${host}`),
+  new URL(SENTRY_SDK_URL).origin,
+]);
+
+// One URL as a span may carry it. The query and the fragment always go: the
+// repeater directories, the place-name lookup and the page's own ?radio= put
+// what the user typed and where they are there. The path goes as well, down
+// to a "[path]" marker, unless the origin is one of SPAN_PATH_ORIGINS. A URL
+// with no scheme is relative, so it is the page's own and keeps its path.
+// Exported so the rules can be tested directly, like scrubText's.
+export function scrubSpanUrl(url: string): string {
+  const bare = url.replace(/[?#].*$/s, "");
+  let parsed: URL;
+  try {
+    parsed = new URL(bare);
+  } catch {
+    return bare;
+  }
+  if (SPAN_PATH_ORIGINS.includes(parsed.origin) || parsed.pathname === "/") {
+    return bare;
+  }
+  return `${parsed.origin === "null" ? parsed.protocol : parsed.origin}/[path]`;
+}
+
+// The URLs inside a span's free text: an absolute URL anywhere ("GET
+// https://..."), or a path at the start of a word, which is how the SDK names
+// a resource the page loaded from its own origin.
+const SPAN_TEXT_URL = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+|(?<!\S)\.{0,2}\/[^\s"'<>]*/gi;
+
+// Span attributes that hold one URL whole: url, http.url, url.full, lcp.url,
+// browser.script.source_url and the like.
+const SPAN_URL_ATTRIBUTE = /(?:^|[._])url(?:$|[._])/;
+
+// Span attributes the SDK fills with a request's query or fragment on its own,
+// beside the URL it came from: http.query and http.fragment, and the
+// OpenTelemetry names url.query and url.fragment.
+const SPAN_QUERY_ATTRIBUTE = /(?:^|\.)(?:query|fragment)$/;
+
+// Redact one string from a span: its URLs as scrubSpanUrl rewrites them, then
+// every rule scrubText applies to an error. A span's name is free text too --
+// an interaction span is named after the element's selector, title included.
+function scrubSpanText(value: string): string {
+  return scrubText(value.replace(SPAN_TEXT_URL, (url) => scrubSpanUrl(url)));
+}
+
+// Redact a span's attributes in place. A query or fragment attribute is
+// dropped outright, since it is nothing but the part of the URL that goes.
+function scrubSpanData(data: Record<string, unknown> | null | undefined): void {
+  if (!data || typeof data !== "object") {
+    return;
+  }
+  for (const [key, value] of Object.entries(data)) {
+    if (SPAN_QUERY_ATTRIBUTE.test(key)) {
+      delete data[key];
+    } else if (typeof value === "string") {
+      data[key] = SPAN_URL_ATTRIBUTE.test(key) ? scrubText(scrubSpanUrl(value)) : scrubSpanText(value);
+    } else if (Array.isArray(value)) {
+      data[key] = value.map((item) => (typeof item === "string" ? scrubSpanText(item) : item));
+    }
+  }
+}
+
+// Redact a span in place: its name and every attribute. The SDK hands each
+// span to beforeSendSpan on its own -- the page load's root span too, which it
+// converts for the call and merges back into the transaction -- and that
+// includes the web-vital spans it sends outside any transaction, which
+// beforeSendTransaction never sees.
+function scrubSpan(span: SentrySpan): SentrySpan {
+  if (!span || typeof span !== "object") {
+    return span;
+  }
+  if (typeof span.description === "string") {
+    span.description = scrubSpanText(span.description);
+  }
+  scrubSpanData(span.data);
+  return span;
+}
+
+// Redact a transaction event in place: the parts of it that are not a child
+// span. The SDK adds the page's address as request.url with its query and
+// fragment intact, and the previous page's as the Referer header. The root
+// span's name and attributes, which have been through scrubSpan already, are
+// redacted again here, so that this hook is a whole gate on its own.
+function scrubTransaction(event: SentryTransaction): SentryTransaction {
+  if (!event || typeof event !== "object") {
+    return event;
+  }
+  if (typeof event.transaction === "string") {
+    event.transaction = scrubSpanText(event.transaction);
+  }
+  scrubSpanData(event.contexts?.trace?.data);
+  for (const crumb of event.breadcrumbs || []) {
+    scrubBreadcrumb(crumb);
+  }
+  if (typeof event.request?.url === "string") {
+    event.request.url = scrubSpanUrl(event.request.url);
+  }
+  const headers = event.request?.headers;
+  if (headers && typeof headers.Referer === "string") {
+    headers.Referer = scrubSpanUrl(headers.Referer);
+  }
+  return event;
+}
+
 // Put the Python side of a runtime failure on its event, as a "python"
 // context. The event's own exception is the RuntimeCallError: its type is the
 // Python class and its value the one-line message, which is what Sentry titles
@@ -801,9 +917,10 @@ function drainPendingMetrics(client: SentrySdk) {
 // programming radios with no signal can fail more flows than that.
 export const OFFLINE_QUEUE_SIZE = 100;
 
-// The SDK's two transport factories initOptions() composes; the real SDK and
-// a test's fake both provide them.
-type TransportFactories = Pick<SentrySdk, "makeBrowserOfflineTransport" | "makeFetchTransport">;
+// What initOptions() composes from the SDK: its two transport factories and
+// its tracing integration. The real SDK provides all three; a test's fake may
+// provide any of them.
+type SdkFactories = Pick<SentrySdk, "makeBrowserOfflineTransport" | "makeFetchTransport" | "browserTracingIntegration">;
 // What the offline transport takes. The client spreads transportOptions into
 // the options it builds the transport with, but types the field as the plain
 // fetch transport's, so the offline ones are typed from the factory itself.
@@ -816,9 +933,10 @@ type OfflineTransportOptions = Partial<Parameters<ReturnType<SentrySdk["makeBrow
 // that cannot be sent -- the page was served from the service worker's cache,
 // or the network dropped mid-session -- is stored in IndexedDB and sent at the
 // next startup or when the browser comes back online, with the timestamp it
-// was captured at. Everything stored has already been through beforeSend or
-// beforeSendMetric, so IndexedDB never holds anything unredacted.
-export function initOptions(release: string | undefined, sdk?: TransportFactories | null): BrowserOptions {
+// was captured at. Everything stored has already been through beforeSend,
+// beforeSendTransaction, beforeSendSpan or beforeSendMetric, so IndexedDB
+// never holds anything unredacted.
+export function initOptions(release: string | undefined, sdk?: SdkFactories | null): BrowserOptions {
   const transportOptions: OfflineTransportOptions = { maxQueueSize: OFFLINE_QUEUE_SIZE, flushAtStartup: true };
   const offlineTransport = sdk?.makeBrowserOfflineTransport && sdk.makeFetchTransport
     ? { transport: sdk.makeBrowserOfflineTransport(sdk.makeFetchTransport), transportOptions }
@@ -831,9 +949,23 @@ export function initOptions(release: string | undefined, sdk?: TransportFactorie
     // No IP addresses, no cookies, no request headers. The default, set here
     // because it is the kind of default that must not change silently.
     sendDefaultPii: false,
-    // Errors only. Performance tracing would multiply the event volume for a
-    // browser app whose slow part is a CDN download nobody can act on.
-    tracesSampleRate: 0,
+    // One page load in ten is traced: the load itself, the files it fetches
+    // (this build's chunks, Pyodide, the CHIRP archive), its web vitals, and
+    // the long frames the runtime's boot holds the page in. This was off,
+    // because the slow part is a CDN download nobody here can speed up; but
+    // which download, how long the page then stays unresponsive, and whether
+    // a release made either worse are questions only spans answer. A tenth
+    // keeps a trace's dozens of spans to a few hundred traces a month at
+    // today's traffic, enough for a weekly percentile.
+    tracesSampleRate: 0.1,
+    integrations: sdk?.browserTracingIntegration ? [sdk.browserTracingIntegration()] : [],
+    // No request carries sentry-trace or baggage. The one server that could
+    // read them, api.webchirp.org, is cross-origin, so a header it does not
+    // expect turns every directory query into a CORS preflight its allowlist
+    // may refuse; GitHub Pages, the only same-origin server, ignores them, and
+    // so do jsDelivr and the map tiles. An empty list is the SDK's "none":
+    // left unset, it adds them to every same-origin request.
+    tracePropagationTargets: [],
     maxBreadcrumbs: 30,
     // Metrics default to on in the SDK; set explicitly for the same reason
     // sendDefaultPii is, because it is a decision rather than an inherited
@@ -870,6 +1002,12 @@ export function initOptions(release: string | undefined, sdk?: TransportFactorie
       }
       return scrubEvent(event);
     },
+    // Spans never pass through beforeSend either: a page load is a
+    // transaction, and its web vitals can be spans sent on their own. Each is
+    // redacted on its own way out (scrubSpan, scrubTransaction), so no span
+    // carries a search term, a position or a callsign out of a URL.
+    beforeSendSpan: (span) => scrubSpan(span),
+    beforeSendTransaction: (event) => scrubTransaction(event),
     // Metrics never pass through beforeSend, so the allowlist has to be applied
     // on their own way out. This runs after the SDK has added its own
     // attributes, which is what makes it the last word on what leaves.

@@ -21,6 +21,7 @@ import {
   scrubEvent,
   scrubMetric,
   scrubMetricAttributes,
+  scrubSpanUrl,
   scrubText,
   setContextProvider,
 } from "../../web/js/sentry.ts";
@@ -412,12 +413,16 @@ test("scrubMetric leaves the metric's own shape alone", () => {
   assert.deepEqual(metric.attributes, { flow: "radio_upload" });
 });
 
-test("init options disable tracing and PII, and drop console breadcrumbs", () => {
+test("init options trace one load in ten, send no PII, and drop console breadcrumbs", () => {
   const options = initOptions("webchirp@abc123");
   assert.equal(options.dsn, SENTRY_DSN);
   assert.equal(options.release, "webchirp@abc123");
   assert.equal(options.sendDefaultPii, false);
-  assert.equal(options.tracesSampleRate, 0);
+  assert.equal(options.tracesSampleRate, 0.1);
+  // No request carries sentry-trace or baggage: on api.webchirp.org an
+  // unexpected header is a CORS preflight its allowlist may refuse. An empty
+  // list, not an absent one, which the SDK reads as "same origin".
+  assert.deepEqual(options.tracePropagationTargets, []);
   // The debug panel exists to print full tracebacks; anything on the console
   // has already been through it.
   assert.equal(options.beforeBreadcrumb({ category: "console", message: "145.500000" }), null);
@@ -438,6 +443,145 @@ test("beforeSendMetric is the last gate, because beforeSend never sees a metric"
     attributes: { flow: "radio_download", "user.email": "someone@example.com" },
   });
   assert.deepEqual(metric.attributes, { flow: "radio_download" });
+});
+
+test("tracing is the loaded SDK's browser integration", () => {
+  const tracing = { name: "BrowserTracing" };
+  assert.deepEqual(initOptions("webchirp@abc123", { browserTracingIntegration: () => tracing }).integrations, [tracing]);
+  // An SDK without it (a test's fake) traces nothing rather than throwing.
+  assert.deepEqual(initOptions("webchirp@abc123", {}).integrations, []);
+});
+
+// The values a span must never carry, each as one of this app's requests puts
+// it in a URL: a place name typed into the gazetteer and the position it was
+// asked near, a directory query's centre, the callsign a map was hovered for,
+// and a map tile's coordinates at street zoom.
+const SPAN_SECRETS = ["Little", "Snoring", "52.86", "0.912", "51.5074", "-0.1278", "GB3WB", "16372", "10895"];
+const CITY_LOOKUP = "https://api.webchirp.org/cities?q=Little%20Snoring&lat=52.86&lon=0.912";
+
+function assertNoSpanSecrets(value) {
+  const sent = JSON.stringify(value);
+  for (const secret of SPAN_SECRETS) {
+    assert.equal(sent.includes(secret), false, `${secret} left in ${sent}`);
+  }
+}
+
+test("scrubSpanUrl drops every query and fragment, and every path off the app's own hosts", () => {
+  assert.equal(scrubSpanUrl(CITY_LOOKUP), "https://api.webchirp.org/[path]");
+  // The callsign lookup puts its search term in the path, and a map tile its
+  // position, so another host's path goes whatever it looks like.
+  assert.equal(scrubSpanUrl("https://api.webchirp.org/lookup/GB3WB"), "https://api.webchirp.org/[path]");
+  assert.equal(scrubSpanUrl("https://tile.openstreetmap.org/15/16372/10895.png"), "https://tile.openstreetmap.org/[path]");
+  // The app's own files and the CDN's keep their paths: which file was slow is
+  // the point of a resource span.
+  assert.equal(scrubSpanUrl("https://webchirp.org/?radio=uv5r#top"), "https://webchirp.org/");
+  assert.equal(
+    scrubSpanUrl("https://codeplug.org/chirp/chirp-7a4123ad.zip?v=2"),
+    "https://codeplug.org/chirp/chirp-7a4123ad.zip",
+  );
+  assert.equal(
+    scrubSpanUrl("https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.asm.wasm"),
+    "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.asm.wasm",
+  );
+  // Relative is the page's own origin.
+  assert.equal(scrubSpanUrl("./version.json?t=1"), "./version.json");
+  // Not a suffix match, for the same reason as the host gate.
+  assert.equal(scrubSpanUrl("https://evil-webchirp.org/IO82MM"), "https://evil-webchirp.org/[path]");
+});
+
+test("beforeSendSpan drops the query strings that carry search terms and coordinates", () => {
+  const { beforeSendSpan } = initOptions();
+  // A fetch span as the SDK builds one: the query rides in the URL attributes
+  // and again, on its own, in http.query.
+  const fetchSpan = beforeSendSpan({
+    description: `GET ${CITY_LOOKUP}`,
+    op: "http.client",
+    data: {
+      url: CITY_LOOKUP,
+      "http.url": CITY_LOOKUP,
+      "url.full": CITY_LOOKUP,
+      "http.query": "?q=Little%20Snoring&lat=52.86&lon=0.912",
+      "http.fragment": "#Little-Snoring",
+      "http.method": "GET",
+      "server.address": "api.webchirp.org",
+      "sentry.op": "http.client",
+    },
+  });
+  assertNoSpanSecrets(fetchSpan);
+  assert.equal(fetchSpan.description, "GET https://api.webchirp.org/[path]");
+  assert.equal(fetchSpan.data["url.full"], "https://api.webchirp.org/[path]");
+  assert.equal("http.query" in fetchSpan.data, false);
+  assert.equal("http.fragment" in fetchSpan.data, false);
+  // What the span is for survives: which host, which method, how it ran.
+  assert.equal(fetchSpan.data["server.address"], "api.webchirp.org");
+  assert.equal(fetchSpan.data["http.method"], "GET");
+  assert.equal(fetchSpan.data["sentry.op"], "http.client");
+
+  const directory = "https://api.webchirp.org/repeaterbook?country=United%20Kingdom&latitude=51.5074&longitude=-0.1278";
+  assertNoSpanSecrets(beforeSendSpan({ description: `GET ${directory}`, data: { url: directory } }));
+  assertNoSpanSecrets(beforeSendSpan({
+    description: "GET https://api.webchirp.org/lookup/GB3WB",
+    data: { url: "https://api.webchirp.org/lookup/GB3WB" },
+  }));
+
+  // A resource span names a file from the page's own origin by its path, and
+  // a map tile by its whole URL.
+  const own = beforeSendSpan({
+    description: "/chirp/chirp-7a4123ad.zip?lat=52.86#GB3WB",
+    op: "resource.fetch",
+    data: { "url.full": "https://webchirp.org/chirp/chirp-7a4123ad.zip?lat=52.86#GB3WB", "url.same_origin": true },
+  });
+  assert.equal(own.description, "/chirp/chirp-7a4123ad.zip");
+  assert.equal(own.data["url.full"], "https://webchirp.org/chirp/chirp-7a4123ad.zip");
+  assert.equal(own.data["url.same_origin"], true);
+  const tile = beforeSendSpan({
+    description: "https://tile.openstreetmap.org/15/16372/10895.png",
+    op: "resource.img",
+    data: { "url.full": "https://tile.openstreetmap.org/15/16372/10895.png" },
+  });
+  assertNoSpanSecrets(tile);
+  assert.equal(tile.description, "https://tile.openstreetmap.org/[path]");
+});
+
+test("beforeSendSpan redacts the page load and a span named by its element", () => {
+  const { beforeSendSpan } = initOptions();
+  // The page load's root span, which the SDK passes through beforeSendSpan
+  // too: url.full is the whole address bar.
+  const pageload = beforeSendSpan({
+    description: "/",
+    op: "pageload",
+    data: { "url.full": "https://webchirp.org/?radio=uv5r&lat=52.86#GB3WB", "url.path": "/" },
+  });
+  assertNoSpanSecrets(pageload);
+  assert.equal(pageload.data["url.full"], "https://webchirp.org/");
+  // An interaction span is named after the element's selector, attributes and
+  // all, which is the same text a click breadcrumb carries.
+  const click = beforeSendSpan({
+    description: 'body > td[title="GB3WB 145.500000"]',
+    op: "ui.interaction.click",
+    data: { "sentry.op": "ui.interaction.click", "lcp.element": "img.map[alt=\"52.86, 0.912\"]" },
+  });
+  assertNoSpanSecrets(click);
+  assert.equal(click.description, 'body > td[title="[value]"]');
+});
+
+test("beforeSendTransaction redacts the page's address, the referrer and the breadcrumbs", () => {
+  const event = initOptions().beforeSendTransaction({
+    type: "transaction",
+    transaction: "/",
+    contexts: { trace: { op: "pageload", data: { "url.full": "https://webchirp.org/?q=Little%20Snoring" } } },
+    request: {
+      url: "https://webchirp.org/?radio=uv5r&lat=52.86#GB3WB",
+      headers: { Referer: "https://forum.example.org/thread/GB3WB?lat=51.5074", "User-Agent": "Mozilla/5.0" },
+    },
+    breadcrumbs: [{ category: "fetch", data: { url: CITY_LOOKUP } }],
+  });
+  assertNoSpanSecrets(event);
+  assert.equal(event.request.url, "https://webchirp.org/");
+  assert.equal(event.request.headers.Referer, "https://forum.example.org/[path]");
+  assert.equal(event.request.headers["User-Agent"], "Mozilla/5.0");
+  assert.equal(event.contexts.trace.data["url.full"], "https://webchirp.org/");
+  assert.equal(event.contexts.trace.op, "pageload");
 });
 
 test("beforeSend stamps context tags and redacts events the SDK raised itself", () => {
