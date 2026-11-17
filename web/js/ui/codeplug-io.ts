@@ -185,6 +185,9 @@ export function createCodeplugIo(ctx: UiContext) {
   // CSV driver reporting its own RadioFeatures -- CHIRP has no "no radio"
   // state either, and an editor with nothing loaded is a CSVRadio there. A
   // radio selection replaces the whole thing with that driver's schema.
+  // The grid is already empty when the page starts, so this sets the schema
+  // and leaves the channels alone: Load works before startup ends, and a file
+  // loaded meanwhile is the user's, not something startup may clear.
   async function loadEmptySchema() {
     const defaults = await requireRuntimeApi(state).getDefaultSchema();
     // Only when nothing has claimed the schema yet: a radio restored from the
@@ -196,9 +199,6 @@ export function createCodeplugIo(ctx: UiContext) {
     state.currentHeaders = state.radioMetadata.headers?.length
       ? state.radioMetadata.headers
       : (defaults.headers || []);
-    state.currentRows = [];
-    ctx.table.clearInvalidHighlights();
-    ctx.table.resetRowSelection();
     ctx.table.render();
   }
 
