@@ -74,6 +74,38 @@ def _blank_csv_radio(max_memory: int = 999) -> CSVRadio:
     return radio
 
 
+class _StoredInFileOrder(list[chirp_common.Memory]):
+    """``CSVRadio.memories`` that also keeps every memory stored into it.
+
+    ``CSVRadio._load()`` stores each line it accepts at its Location
+    (``self.memories[mem.number] = mem``), so a later line naming the same
+    Location silently replaces an earlier one (issue #319). Watching those
+    stores keeps every accepted line, in file order, while the parsing, the
+    lines it skips and the errors it reports all stay CHIRP's own.
+    """
+
+    def __init__(self, memories: list[chirp_common.Memory]) -> None:
+        super().__init__(memories)
+        self.stored: list[chirp_common.Memory] = []
+
+    def __setitem__(self, index: Any, value: Any) -> None:
+        if not isinstance(index, slice):
+            self.stored.append(value)
+        super().__setitem__(index, value)
+
+
+def _parsed_csv_memories(radio: CSVRadio, csv_text: str) -> list[chirp_common.Memory]:
+    """Every memory the CSV driver accepts from ``csv_text``, none overwritten.
+
+    Ordered by Location as the driver's own list is; lines sharing a Location
+    keep the file's order, so the upload preflight flags the later one.
+    """
+    stores = _StoredInFileOrder(radio.memories)
+    radio.memories = stores
+    radio.load_from(csv_text)
+    return sorted(stores.stored, key=lambda mem: mem.number)
+
+
 # DVMemory attribute -> the grid column that shows it. A D-STAR channel is a
 # chirp_common.DVMemory, and these four Memory.CSV_FORMAT columns are the only
 # place a row holds its routing, so they carry it both ways: read off the
@@ -151,12 +183,11 @@ def parse_csv(csv_text: str, session_id: str = "") -> dict[str, Any]:
     # relabelled without counting as an adjustment.
     own_levels = _power_levels_by_label(levels)
     radio = _blank_csv_radio()
-    radio.load_from(csv_text)
     rows: Rows = []
     errors = [str(error) for error in radio.errors]
     power_adjusted = 0
 
-    for mem in radio.memories:
+    for mem in _parsed_csv_memories(radio, csv_text):
         if mem.empty:
             continue
         if mem.offset < 0:
