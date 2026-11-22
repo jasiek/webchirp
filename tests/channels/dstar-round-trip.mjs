@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { isPythonError } from "../../web/js/runtime-errors.ts";
 import { ensureModule, readImage, sharedHarness } from "../support/chirp.mjs";
 
 // A D-STAR channel is a chirp_common.DVMemory: a Memory plus the UR, RPT1 and
@@ -21,6 +22,7 @@ const DV_CHANNEL = {
 const FM_CHANNEL = DV_CHANNEL.number + 1;
 const ID31 = { module: "id31", className: "ID31Radio", image: "Icom_ID-31A.img" };
 const IC2200 = { module: "ic2200", className: "IC2200Radio", image: "Icom_IC-2200H.img" };
+const ID800 = { module: "id800", className: "ID800v2Radio", image: "Icom_ID-800H_v2.img" };
 const ROUTING = ["URCALL", "RPT1CALL", "RPT2CALL", "DVCODE"];
 
 // An upstream image from chirp/tests/images, opened with the pinned driver,
@@ -194,4 +196,34 @@ test("a DV line imported from CSV carries no routing the file did not hold", asy
   const parsed = await harness.runPythonJson("json.dumps(parse_csv(_csv))", { _csv: csvText });
   assert.equal(parsed.rows[0].Mode, "DV");
   assert.deepEqual(routingOf(parsed.rows[0]), ["", "", "", ""]);
+});
+
+test("an ID-800H refuses a channel switched to DV only when it is written", async () => {
+  // Pins an upstream defect, FINDINGS.md id800-refuses-a-plain-dv-memory
+  // (CHIRP d99bb227): id800's set_memory() raises InvalidDataError for a DV
+  // memory that is not a DVMemory, where other D-STAR drivers fill in their
+  // default routing. The grid sends the same plain Memory desktop CHIRP's does,
+  // and the per-row check never calls set_memory(), so the preflight passes
+  // and the export fails. This test fails once upstream accepts the edit:
+  // then the export reloads the channel as DV.
+  const harness = await sharedHarness();
+  const loaded = await harness.loadCodeplugBinary(await upstreamImage(harness, ID800));
+  assert.equal(loaded.className, ID800.className);
+
+  const fm = loaded.rows.find((row) => row.Mode === "FM");
+  assert.ok(fm, "the ID-800H image no longer holds an FM channel");
+  fm.Mode = "DV";
+
+  const preflight = await harness.rpc("validate_rows_for_upload", {
+    rows: loaded.rows,
+    session_id: loaded.sessionId,
+  });
+  assert.deepEqual(preflight.issues, [], "the preflight should not see the driver's refusal");
+
+  const error = await harness
+    .exportCodeplugBinary(ID800.module, ID800.className, loaded)
+    .then(() => null, (caught) => caught);
+  assert.ok(error, "the ID-800H driver now takes a plain DV Memory: drop this test");
+  assert.ok(isPythonError(error, "InvalidDataError"), `got ${error.name}: ${error.message}`);
+  assert.equal(error.message, "DV mode is not a DVMemory!");
 });
