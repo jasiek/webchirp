@@ -191,8 +191,7 @@ def _read_radio_payload(
     channels that decoded fine: the settings helper logs it and answers with
     none, which the UI reads as "no Settings tab". A reopened offline export
     answers with none too: its settings are the zeroes it was built on, which
-    ``get_radio_settings`` refuses to parse for the same session
-    (FINDINGS: offline-export-is-not-a-radio-image).
+    ``get_radio_settings`` refuses to parse for the same session.
     """
     session.record_radio(radio, origin)
     rows, unreadable, undeletable = _radio_rows_from_instance(radio)

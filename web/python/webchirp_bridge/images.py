@@ -100,7 +100,7 @@ def export_image_base64(
     bytes. That file is returned to the user, and recorded on the session as
     ``ImageOrigin.SYNTHETIC`` so the runtime can say what the last export was
     made from -- but it never becomes a backing image, so the upload and
-    settings gates stay closed (FINDINGS: offline-export-is-not-a-radio-image).
+    settings gates stay closed.
     The file says so too, in its metadata trailer, so opening it again
     restores that origin rather than reading it as a radio's image.
     """

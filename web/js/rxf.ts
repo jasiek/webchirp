@@ -88,7 +88,7 @@ export interface RxfEntry {
   longitude?: number;
 }
 
-/** Whose side an RXF feed names rx/tx from (FINDINGS.md **rxf-perspective-governs-ctcss-not-just-qrg**). */
+/** Whose side an RXF feed names rx/tx from: it governs the tones as well as the frequencies. */
 export type RxfPerspective = "radio" | "repeater";
 
 // Read one <repeater> element's fields.
