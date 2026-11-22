@@ -31,9 +31,10 @@ into a configuration that lists one invariant or property at a time.
 | Configuration | What it adds to the baseline |
 | --- | --- |
 | `SerialBridge.cfg` | The baseline: `reconfigure: "reopen"` (native Web Serial, WebUSB), every transport promise settles, a device that goes stays gone. |
-| `SerialBridgeUpdate.cfg` | `reconfigure: "update"` (WebBluetooth, node-serialport). |
+| `SerialBridgeBluetooth.cfg` | `reconfigure: "update"` as WebBluetooth does it: a pending reconfigure fails once the port's close starts, and `discardInput()` is absent. |
+| `SerialBridgeNode.cfg` | `reconfigure: "update"` as node-serialport may do it: a pending reconfigure can still resolve after the close starts (`ReconfigureOutlivesClose`), and `resetBuffers()` awaits a real flush (`Flushes`). |
 | `SerialBridgeReplug.cfg` | A device that went away can come back. |
-| `SerialBridgeIoHangs.cfg` | A close or a reader cancel may never settle (`SpecIoCanHang`). |
+| `SerialBridgeIoHangs.cfg` | A close or a reader cancel may never settle (`SpecIoCanHang`). In a state with a cancel that never settles, `Settled` is false, so NoSilentDrop and NoLeakedPort check nothing there: this configuration is for CallsReturn and LossReported. |
 
 What each configuration currently finds is recorded in `FINDINGS.md` under
 "Serial bridge".

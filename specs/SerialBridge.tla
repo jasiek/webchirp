@@ -34,11 +34,19 @@ CONSTANTS
     NoPort,          \* null
     MaxCalls,        \* how many bridge calls the caller makes
     Route,           \* the port's capabilities.reconfigure: "reopen" or "update"
-    DeviceCanReturn  \* whether a device that went away can come back
+    DeviceCanReturn, \* whether a device that went away can come back
+    Flushes,         \* port.discardInput() awaits I/O (node-serialport's flush)
+    ReconfigureOutlivesClose
+                     \* a pending in-place reconfigure() can still resolve once
+                     \* the port's close() has started. WebBluetooth's cannot:
+                     \* close() drops the GATT link, which its queued
+                     \* reconfigure checks.
 
 ASSUME NoPort \notin Ports
 ASSUME Route \in {"reopen", "update"}
 ASSUME DeviceCanReturn \in BOOLEAN
+ASSUME Flushes \in BOOLEAN
+ASSUME ReconfigureOutlivesClose \in BOOLEAN
 ASSUME MaxCalls \in Nat
 
 VARIABLES
@@ -352,8 +360,11 @@ Prepare ==
        THEN NotConnectedThrow
        ELSE Call("ab", "prep_reset", "rethrow") /\ KeepAllButStack
 
-\* await this.resetBuffers(): a microtask in the browser.
-PrepareReset == cpc = "prep_reset" /\ Goto("prep_sig")
+\* await this.resetBuffers(): port.discardInput() when a port is held. Only
+\* node-serialport's awaits I/O; everywhere else this is a microtask.
+PrepareReset ==
+    /\ cpc = "prep_reset"
+    /\ IF Flushes /\ port # NoPort THEN Goto("prep_flush") ELSE Goto("prep_sig")
 
 \* this.port.capabilities.signals, then await this.port.setSignals(...).
 PrepareSignals ==
@@ -409,7 +420,7 @@ Read ==
 
 \* The caller can take a step now (it is not waiting on I/O).
 CallerRunnable ==
-    /\ cpc \notin {"idle", "prep_settle"}
+    /\ cpc \notin {"idle", "prep_settle", "prep_flush"}
     /\ CASE cpc \in AwaitingTeardown -> tasks[ctask].st = "done"
          [] cpc \in {"open_wait", "rp_open"} -> opResult[cport] # "none"
          [] cpc = "rp_upd" -> reconf[cport] \in {"ok", "fail"}
@@ -481,6 +492,14 @@ PrepareSettled ==
     /\ Return /\ KeepAllButStack
     /\ resumed' = TRUE
 
+\* The flush settles: resetBuffers() returns, or rethrows the flush's error.
+FlushSettles ==
+    /\ ~Busy
+    /\ resumed' = FALSE
+    /\ cpc = "prep_flush"
+    /\ \/ Goto("prep_sig")
+       \/ Throw /\ KeepAllButStack
+
 OpenResolves(p) ==
     /\ ~Busy
     /\ resumed' = FALSE
@@ -505,7 +524,9 @@ ReconfigureResolves(p) ==
     /\ ~Busy
     /\ resumed' = FALSE
     /\ reconf[p] = "pending"
-    /\ \/ device = "present" /\ reconf' = [reconf EXCEPT ![p] = "ok"]
+    /\ \/ /\ device = "present"
+          /\ ReconfigureOutlivesClose \/ phys[p] = "open"
+          /\ reconf' = [reconf EXCEPT ![p] = "ok"]
        \/ reconf' = [reconf EXCEPT ![p] = "fail"]
     /\ UNCHANGED <<bridge, phys, armed, opResult, device, async, caller, ghost>>
 
@@ -554,15 +575,15 @@ CallerResumes ==
     /\ resumed' = FALSE
 
 Next ==
-    \/ CallerResumes \/ CallerContinues \/ PrepareSettled
+    \/ CallerResumes \/ CallerContinues \/ PrepareSettled \/ FlushSettles
     \/ TaskStep \/ LoopStep
     \/ \E p \in Ports : OpenResolves(p) \/ CloseResolves(p) \/ ReconfigureResolves(p)
     \/ \E g \in 1..Len(loops) : ReadSettles(g)
     \/ Unplug \/ Replug
 
-\* Code always runs on; open() and reconfigure() always settle.
+\* Code always runs on; open(), reconfigure() and a flush always settle.
 Fairness ==
-    /\ WF_vars(CallerContinues) /\ WF_vars(PrepareSettled)
+    /\ WF_vars(CallerContinues) /\ WF_vars(PrepareSettled) /\ WF_vars(FlushSettles)
     /\ WF_vars(TaskStep) /\ WF_vars(LoopStep)
     /\ WF_vars(\E p \in Ports : OpenResolves(p))
     /\ WF_vars(\E p \in Ports : ReconfigureResolves(p))

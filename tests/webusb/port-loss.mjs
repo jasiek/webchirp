@@ -237,10 +237,12 @@ test("ending the read loop itself is never reported as a loss", async (t) => {
   assert.equal(lost.length, 0);
 });
 
-// TLC's counterexample to NoNullDeref on specs/SerialBridgeUpdate.cfg, replayed
+// TLC's counterexample to NoNullDeref on specs/SerialBridgeNode.cfg, replayed
 // against the real bridge (FINDINGS.md:
 // serial-bridge-in-place-reconfigure-outlives-the-port). On a transport that
-// re-rates in place, the read loop stops while port.reconfigure() is pending:
+// re-rates in place and whose reconfigure() can still resolve once its close()
+// has started (node-serialport's may; WebBluetooth's cannot), the read loop
+// stops while port.reconfigure() is pending:
 // the bridge reports the loss and lets go of the port, then the reconfigure
 // resolves and _reopenPort() returns as if it had worked. Marked todo until
 // _reopenPort() checks it still holds its port after each await.
