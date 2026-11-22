@@ -153,11 +153,21 @@ def parse_csv(csv_text: str, session_id: str = "") -> dict[str, Any]:
     radio = _blank_csv_radio()
     radio.load_from(csv_text)
     rows: Rows = []
+    errors = [str(error) for error in radio.errors]
     power_adjusted = 0
 
     for mem in radio.memories:
         if mem.empty:
             continue
+        if mem.offset < 0:
+            # A signed Offset that CHIRP's CSV driver read wrongly (see
+            # _row_frequency); the row keeps it so the preflight marks it.
+            warning = (
+                f"Channel {mem.number}: Offset cannot be negative; "
+                "enter its size and set the direction in Duplex"
+            )
+            errors.append(warning)
+            _log_debug(f"CSV IMPORT {warning}")
         row = _row_from_memory(_without_dv_routing(mem))
         label = _closest_power_label(row["Power"], levels)
         if label is not None:
@@ -173,7 +183,7 @@ def parse_csv(csv_text: str, session_id: str = "") -> dict[str, Any]:
     return {
         "headers": CSV_HEADERS,
         "rows": rows,
-        "errors": list(radio.errors),
+        "errors": errors,
         "powerAdjusted": power_adjusted,
     }
 
@@ -200,6 +210,26 @@ def _row_int(text: Any, fallback: int, label: str) -> int:
         raise RuntimeUnsupportedError(f"{label} is not a valid number")
 
 
+def _row_frequency(text: Any, label: str) -> int:
+    """Parse a row's MHz text to Hz, refusing a negative value.
+
+    parse_freq(), not to_MHz(float(...)): the latter is what really_from_csv
+    used and it truncates, turning an 8.219000 MHz offset into 8218999 Hz. But
+    parse_freq() adds the fraction to a negative whole part, so "-5.600000"
+    would reach the driver as -4.4 MHz (FINDINGS parse-freq-negative-defect,
+    CHIRP d99bb227). A sign means nothing here anyway -- Duplex carries the
+    offset's direction -- so it is refused like the grid refuses it, and the
+    preflight marks the cell.
+    """
+    value = str(text if text is not None else "").strip()
+    if value.startswith("-"):
+        raise RuntimeUnsupportedError(f"{label} cannot be negative")
+    try:
+        return chirp_common.parse_freq(value)
+    except Exception:
+        raise RuntimeUnsupportedError(f"{label} is not a valid number")
+
+
 def _memory_from_row_values(
     vals: Sequence[Any], level_map: Optional[dict[str, chirp_common.PowerLevel]] = None
 ) -> chirp_common.Memory:
@@ -222,22 +252,14 @@ def _memory_from_row_values(
 
     mem.name = str(vals[1] or "")
 
-    # parse_freq(), not to_MHz(float(...)): the latter is what really_from_csv
-    # used and it truncates, turning an 8.219000 MHz offset into 8218999 Hz.
-    try:
-        mem.freq = chirp_common.parse_freq(str(vals[2]).strip())
-    except Exception:
-        raise RuntimeUnsupportedError("Frequency is not a valid number")
+    mem.freq = _row_frequency(vals[2], "Frequency")
 
     duplex = str(vals[3] or "").strip()
     if duplex not in DUPLEX_VALUES:
         raise RuntimeUnsupportedError(f"Duplex {duplex!r} is not valid")
     mem.duplex = duplex
 
-    try:
-        mem.offset = chirp_common.parse_freq(str(vals[4]).strip())
-    except Exception:
-        raise RuntimeUnsupportedError("Offset is not a valid number")
+    mem.offset = _row_frequency(vals[4], "Offset")
 
     tmode = str(vals[5] or "").strip()
     if tmode and tmode not in chirp_common.TONE_MODES:
