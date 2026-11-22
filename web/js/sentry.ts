@@ -962,8 +962,9 @@ export function initOptions(release: string | undefined, sdk?: SdkFactories | nu
     // No request carries sentry-trace or baggage. The one server that could
     // read them, api.webchirp.org, is cross-origin, so a header it does not
     // expect turns every directory query into a CORS preflight its allowlist
-    // may refuse; GitHub Pages, the only same-origin server, ignores them, and
-    // so do jsDelivr and the map tiles. An empty list is the SDK's "none":
+    // may refuse; Cloudflare Pages, the only same-origin server, ignores them,
+    // and so do jsDelivr, the map tiles and Cloudflare's page-view beacon. An
+    // empty list is the SDK's "none":
     // left unset, it adds them to every same-origin request.
     tracePropagationTargets: [],
     maxBreadcrumbs: 30,
