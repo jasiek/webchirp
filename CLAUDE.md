@@ -113,6 +113,10 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   runs (`rsgb-live` needs the network, `hw-radio` needs a radio on a serial
   port). `support` holds shared fixtures and the two harnesses, not tests.
 - `scripts/`: Build, coverage and CLI tooling only. No tests live here.
+- `specs/`: TLA+ models, checked by hand with TLC (`specs/README.md`), never by
+  `npm test`. `SerialBridge.tla` follows `serial-bridge.ts` await by await: a
+  change to where that file awaits, or to what it does between two awaits,
+  updates the model and reruns it in the same PR.
 - `scripts/build-dist.ts` (`npm run build:dist`) builds the Pages tree with
   esbuild (its header comment describes the output). A change to how outputs
   are named also changes `scripts/retain-deployed-assets.ts`, which knows both
