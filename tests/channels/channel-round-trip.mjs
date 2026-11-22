@@ -252,3 +252,49 @@ json.dumps({"level": str(_resolve_power_level("7.5W", _map))})
     /is not supported by this radio; valid values:/,
   );
 });
+
+// FINDINGS upstream-tests-skip-power (CHIRP pin d99bb227): upstream's
+// assertEqualMem (chirp/tests/base.py) skips power with a FIXME, so no CHIRP
+// test sees ftm7250d.FTM7250Radio encode its levels in the opposite order it
+// decodes them (_decode_power_level reads 1/2/3 as Low/Mid/Hi,
+// _encode_power_level writes Low/Mid/Hi as 3/2/1). An edited power level comes
+// back swapped, at the driver and through the grid. This test will fail once
+// upstream fixes the driver; then remove the example from the FINDINGS entry
+// (or the entry, if upstream also stops skipping power) and this test.
+test("upstream FTM-7250D swaps Hi and Low when a power level is written", async () => {
+  const harness = await sharedHarness();
+  const catalog = await readCatalog();
+  const name = "Yaesu_FTM-7250D_R.img";
+
+  for (const [written, readBack] of [["Hi", "Low"], ["Low", "Hi"], ["Mid", "Mid"]]) {
+    // A fresh load each time, and a channel that is not at the written level
+    // already, so the row is an edit the export has to encode.
+    const { match, loaded } = await loadImageFor(harness, catalog, name);
+    assert.equal(match.className, "FTM7250Radio");
+    const index = loaded.rows.findIndex((row) => row.Power !== written);
+    assert.ok(index >= 0, `${name} has no channel to set to ${written}`);
+    const rows = loaded.rows.map((row) => ({ ...row }));
+    rows[index].Power = written;
+    const exported = await harness.exportCodeplugBinary(
+      match.module,
+      match.className,
+      rows,
+      loaded.settings || [],
+    );
+    const reloaded = await harness.loadCodeplugBinary(exported.image);
+    assert.equal(reloaded.rows[index].Power, readBack, `${written} read back from the grid`);
+  }
+
+  const driver = await harness.runPythonJson(`
+_radio = _import_radio_class("ftm7250d", "FTM7250Radio")(None)
+_levels = _radio.get_features().valid_power_levels
+json.dumps({
+    "labels": [str(_level) for _level in _levels],
+    "decoded": [str(_radio._decode_power_level(type("_M", (), {"power": _raw})())) for _raw in (1, 2, 3)],
+    "encoded": [_radio._encode_power_level(type("_M", (), {"power": _level})()) for _level in _levels],
+})
+`);
+  assert.deepEqual(driver.labels, ["Low", "Mid", "Hi"]);
+  assert.deepEqual(driver.decoded, ["Low", "Mid", "Hi"], "raw 1/2/3 decode to Low/Mid/Hi");
+  assert.deepEqual(driver.encoded, [3, 2, 1], "Low/Mid/Hi encode to raw 3/2/1");
+});
