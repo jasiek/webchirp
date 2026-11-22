@@ -59,6 +59,49 @@ test("metadata-less image is undetectable until every driver is imported", async
   assert.ok(loaded.rows.length > 0, "expected channels to be populated");
 });
 
+// The other side of the UV-3R case above: since CHIRP 29592824
+// CloneModeRadio.match_model() claims nothing, so a driver that does not
+// implement it detects no image of its own once the trailer is gone. A
+// same-sized image opening as the wrong model is worse than no match, so
+// after the all-drivers sweep this one must still fail rather than be
+// claimed by some other driver.
+const UNMATCHABLE = { module: "baofeng_uv17Pro", className: "UV17Pro", image: "Baofeng_UV-17Pro.img" };
+
+test("metadata-less image of a driver without match_model stays undetected after the sweep", async () => {
+  // Every driver is imported here, the most any runtime can hold, so the
+  // shared one serves: more imports can only add claimants.
+  const harness = await sharedHarness();
+  await importAllDriverModules(harness, await listDriverModules(harness.pythonSource));
+  const withTrailer = await readImage(UNMATCHABLE.image);
+
+  const definers = await harness.runPythonJson(
+    `json.dumps([k.__module__ + "." + k.__name__
+                 for k in _import_radio_class(_m, _c).__mro__ if "match_model" in vars(k)])`,
+    { _m: UNMATCHABLE.module, _c: UNMATCHABLE.className },
+  );
+  assert.deepEqual(
+    definers,
+    ["chirp.chirp_common.CloneModeRadio"],
+    "the driver now detects legacy images itself: pick an image whose driver does not",
+  );
+
+  const loaded = await harness.loadCodeplugBinary(withTrailer);
+  assert.equal(loaded.className, UNMATCHABLE.className, "with its trailer the image is the driver's own");
+
+  const stripped = Buffer.from(
+    await harness.runPythonJson(
+      `json.dumps(base64.b64encode(bytes(
+    chirp_common.CloneModeRadio._strip_metadata(base64.b64decode(_b))[0])).decode())`,
+      { _b: withTrailer.toString("base64") },
+    ),
+    "base64",
+  );
+  assert.ok(stripped.length < withTrailer.length, "the image should have carried a trailer");
+  assert.equal((await imageMetadata(harness, stripped)).hasMetadata, false);
+
+  await assert.rejects(() => harness.loadCodeplugBinary(stripped), /Unable to detect radio from image/);
+});
+
 // The TS-480 image stores rclass "TS480Radio", which the catalog matcher
 // resolves to the live-mode driver of that name rather than the clone-mode
 // TS480_CRadio. Importing a live driver cannot help detection, because
