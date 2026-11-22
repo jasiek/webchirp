@@ -57,7 +57,7 @@ class ImageOrigin(str, Enum):
     are the origins an upload may write from and a settings panel may parse.
     A ``SYNTHETIC`` image is what an offline export builds from zeroes when
     there is nothing else -- a file the user may keep, never a base for a
-    hardware write (FINDINGS: offline-export-is-not-a-radio-image).
+    hardware write.
     """
 
     NONE = "none"
