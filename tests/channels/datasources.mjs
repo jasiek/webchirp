@@ -511,8 +511,7 @@ test("fetchCitySuggestions sends a position hint only when both halves are known
   const both = await withFetchStub(
     JSON.stringify({ results: [] }),
     () => fetchCitySuggestions("https://api.example.com/cities", "lond", {
-      latitude: 53.4,
-      longitude: -2.9,
+      near: { latitude: 53.4, longitude: -2.9 },
     }),
   );
   const hinted = new URL(both.seen[0]);
@@ -523,11 +522,37 @@ test("fetchCitySuggestions sends a position hint only when both halves are known
   // so half a position has to be sent as no position.
   const half = await withFetchStub(
     JSON.stringify({ results: [] }),
-    () => fetchCitySuggestions("https://api.example.com/cities", "lond", { latitude: 53.4 }),
+    () => fetchCitySuggestions("https://api.example.com/cities", "lond", { near: { latitude: 53.4 } }),
   );
   const unhinted = new URL(half.seen[0]);
   assert.equal(unhinted.searchParams.get("lat"), null);
   assert.equal(unhinted.searchParams.get("lon"), null);
+});
+
+test("fetchCitySuggestions restricts the lookup to the two-letter codes it is given", async () => {
+  const listed = await withFetchStub(
+    JSON.stringify({ results: [] }),
+    () => fetchCitySuggestions("https://api.example.com/cities", "spring", {
+      countries: ["us", " CA ", "US"],
+    }),
+  );
+  // One set of countries is one URL, whatever order or case it came in.
+  assert.equal(new URL(listed.seen[0]).searchParams.get("countries"), "CA,US");
+
+  // The endpoint answers 400 to the whole request over one bad code, so a
+  // malformed entry is dropped, and a list with nothing left is no filter.
+  const malformed = await withFetchStub(
+    JSON.stringify({ results: [] }),
+    () => fetchCitySuggestions("https://api.example.com/cities", "spring", {
+      countries: ["any", "", "GB"],
+    }),
+  );
+  assert.equal(new URL(malformed.seen[0]).searchParams.get("countries"), "GB");
+  const empty = await withFetchStub(
+    JSON.stringify({ results: [] }),
+    () => fetchCitySuggestions("https://api.example.com/cities", "spring", { countries: ["x"] }),
+  );
+  assert.equal(new URL(empty.seen[0]).searchParams.has("countries"), false);
 });
 
 test("fetchCitySuggestions makes no request for a blank query or a missing endpoint", async () => {

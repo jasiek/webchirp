@@ -1,4 +1,5 @@
-// Build dist/, the tree GitHub Pages serves (.github/workflows/pages.yml).
+// Build dist/, the tree .github/workflows/pages.yml deploys to Cloudflare
+// Pages.
 //
 // JavaScript and CSS go through esbuild. The entry points are whatever the
 // pages load -- every local <script type="module" src> and
@@ -24,7 +25,10 @@
 //     deriving the unhashed URLs the dev server serves.
 //   * The CHIRP archive and manifest (web/chirp/, scripts/build-chirp-bundle.ts)
 //     are named after the pin, so they are copied as they are, required, and
-//     listed in the asset manifest for retention.
+//     listed in the asset manifest for retention. Only the pinned pair is
+//     copied: web/chirp/ is ignored and never cleaned, so a checkout that has
+//     built other pins still holds theirs, and retention, not this build, is
+//     what carries an earlier pin into a deploy.
 //   * Everything else -- the web manifest and icons, the radio catalogs,
 //     version.json, sitemap.xml, robots.txt, favicon, .well-known/ -- is
 //     copied verbatim.
@@ -44,6 +48,14 @@
 // with the digest of each, every immutable name but the source maps, the
 // CDN files (OFFLINE_CDN_URLS), and optional groups: files only some hosts
 // use, cached best-effort and only there (OFFLINE_OPTIONAL_GROUPS).
+//
+// _headers is the response-header file Cloudflare Pages reads from the root of
+// a deploy. It marks
+// the directories and patterns in IMMUTABLE_PATHS cacheable for a year without
+// revalidation, and the build fails if any file it emits under them is not
+// one of its immutable names. Everything else keeps Cloudflare's default,
+// public, max-age=0, must-revalidate, which is what the pages, sw.js and the
+// fixed-name data files need.
 import { createHash } from "node:crypto";
 import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -143,6 +155,21 @@ const TURNSTILE_SITE_KEY = (process.env.TURNSTILE_SITE_KEY || "").trim();
 if (TURNSTILE_SITE_KEY && !/^[A-Za-z0-9_-]+$/.test(TURNSTILE_SITE_KEY)) {
   throw new Error("TURNSTILE_SITE_KEY is not a Turnstile site key");
 }
+// The paths _headers serves as immutable, in its pattern syntax: a "*" matches
+// any run of characters, slashes included. Each holds only content-hashed or
+// pin-named files: the bundle's JS and its maps, the hashed Python files, the
+// CHIRP archive and manifest, and the stylesheets (CSS only ever reaches dist/
+// through esbuild). Retained files from earlier deploys have the same shapes.
+const IMMUTABLE_PATHS = ["/js/*", "/python/*", "/chirp/*", "/*.css", "/*.css.map"];
+const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
+// Whether a _headers pattern covers a URL path as Cloudflare matches it, so
+// the build can check what each rule reaches before it ships.
+function headersPatternMatches(pattern: string, urlPath: string): boolean {
+  const re = pattern.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+  return new RegExp(`^${re}$`).test(urlPath);
+}
+
 // Source files that reach dist/ only through esbuild or the Python hashing, so
 // the verbatim copy skips them (as it skips type declarations, which only tsc
 // reads, and the pages, which are written once rewritten).
@@ -498,14 +525,19 @@ async function main() {
 
   // Everything esbuild and the Python hashing did not produce, as it is. A
   // source module no page reaches is left out like any other source module;
-  // it is named here so that leaving it out is never silent.
+  // it is named here so that leaving it out is never silent. Type stubs
+  // (.d.ts, and the .pyi pyright reads beside the Python) stay behind too.
   // File by file rather than one recursive copy, so a directory that held
-  // only source modules (web/js/ui/) does not reappear in dist/ empty.
+  // only source modules (web/js/ui/) does not reappear in dist/ empty. Of
+  // web/chirp/, only the pinned pair (see the header).
   for (const file of webFiles) {
-    if (BUILT_EXTS.has(path.extname(file)) || file.endsWith(".d.ts") || file.endsWith(".html")) {
+    const rel = toPosix(path.relative(WEB_DIR, file));
+    if (BUILT_EXTS.has(path.extname(file)) || file.endsWith(".d.ts") || file.endsWith(".pyi")
+      || file.endsWith(".html")
+      || (rel.startsWith(`${CHIRP_BUNDLE_DIR}/`) && !CHIRP_BUNDLE_FILES.includes(rel))) {
       continue;
     }
-    const target = path.join(DIST_DIR, path.relative(WEB_DIR, file));
+    const target = path.join(DIST_DIR, rel);
     await mkdir(path.dirname(target), { recursive: true });
     await copyFile(file, target);
   }
@@ -535,7 +567,13 @@ async function main() {
     const pageDir = path.dirname(page.replace(WEB_DIR, DIST_DIR));
     const edits: Array<{ attr: TagAttr; text: string }> = refs.map((ref) => {
       // Every ref's source was handed to esbuild as an entry, so it has an output.
-      let target = toPosix(path.relative(pageDir, entryOutputs.get(ref.source) as string));
+      const output = entryOutputs.get(ref.source) as string;
+      // A root-relative ref stays root-relative: 404.html is served at whatever
+      // path was missing, where a page-relative URL would resolve elsewhere.
+      if (ref.attr.value.startsWith("/")) {
+        return { attr: ref.attr, text: `/${toPosix(path.relative(DIST_DIR, output))}${ref.suffix}` };
+      }
+      let target = toPosix(path.relative(pageDir, output));
       if (!target.startsWith(".")) {
         target = `./${target}`;
       }
@@ -599,6 +637,23 @@ async function main() {
     `${JSON.stringify(manifest, null, 2)}\n`,
     "utf8",
   );
+
+  // A file served as immutable under a name that does not change with its
+  // bytes would keep its first version in every browser for a year.
+  const immutableNames = new Set(replacements.map(([, to]) => to.replace(/^\.?\//, "")));
+  for (const file of await walkFiles(DIST_DIR)) {
+    const rel = toPosix(path.relative(DIST_DIR, file));
+    const matching = IMMUTABLE_PATHS.filter((pattern) => headersPatternMatches(pattern, `/${rel}`));
+    if (matching.length > 0 && !immutableNames.has(rel)) {
+      throw new Error(`${rel} would be served as immutable, but its name does not change with its content`);
+    }
+    // Cloudflare joins a header two matching rules both set with a comma.
+    if (matching.length > 1) {
+      throw new Error(`${rel} matches more than one _headers rule: ${matching.join(", ")}`);
+    }
+  }
+  const headers = IMMUTABLE_PATHS.map((pattern) => `${pattern}\n  Cache-Control: ${IMMUTABLE_CACHE_CONTROL}\n`);
+  await writeFile(path.join(DIST_DIR, "_headers"), headers.join(""), "utf8");
 }
 
 main().catch((error) => {

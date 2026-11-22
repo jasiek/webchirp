@@ -1,18 +1,17 @@
 // Copy the currently-deployed generation of content-hashed assets into a
-// freshly built dist/. GitHub Pages serves everything with a fixed
-// `Cache-Control: max-age=600` and no header control, so for up to 10 minutes
-// after a deploy a cached index.html can still reference the previous build's
-// hashed asset names; without retention those names 404 and the app breaks
-// until the cache expires. Tabs also boot the runtime lazily, potentially days
-// after page load, so retain pinned archives and runtime assets for 30 days.
-// Hashed names are immutable (name == content), so
-// carrying the old files forward is always safe.
+// freshly built dist/. Cloudflare Pages revalidates HTML on every load
+// (`max-age=0, must-revalidate`, measured 2026-10-30), so only pages already
+// open hold the previous build's hashed asset names; without retention those
+// names 404 and the app breaks. A tab boots the runtime lazily, potentially
+// days after page load, so retain pinned archives and runtime assets for 30
+// days. Hashed names are immutable (name == content), so carrying the old
+// files forward is always safe.
 //
 // Usage: node scripts/retain-deployed-assets.ts [deployed-site-base-url]
-// Run in CI after `npm run build:dist`, before uploading the Pages artifact.
-// With no argument the host comes from ./CNAME, which is what Pages actually
-// serves the site as — passing it separately let the two drift for a week when
-// the CNAME changed.
+// Run in CI after `npm run build:dist`, before uploading the artifact.
+// With no argument the host comes from ./CNAME, the domain the site is served
+// as (webchirp-hosting gives Cloudflare Pages the same name) — passing it
+// separately let the two drift for a week when the CNAME changed.
 //
 // A site that serves fine but has no asset-manifest.json is a genuine first
 // deploy: warn and exit 0. A host that does not answer at all is a
@@ -20,11 +19,9 @@
 // looks identical to a successful run.
 //
 // That non-zero exit also catches a domain move, where the host in CNAME is
-// correct but not yet wired up. Pages serves one custom domain per repository
-// and only learns a new one from a deploy -- which this step runs before, so a
-// CNAME change landed on its own fails here and the deploy never happens. The
-// order that works is to point the Pages site at the new domain out of band
-// first (Settings -> Pages, or PUT /repos/:owner/:repo/pages), wait for its
+// correct but not yet wired up, so a CNAME change landed on its own fails here
+// and the deploy never happens. The order that works is to serve the new
+// domain from Cloudflare Pages through webchirp-hosting first, wait for its
 // certificate, and land the CNAME change afterwards; by then the new host is
 // serving the previous artifact and there is a real manifest to retain from.
 // The guard is deliberately not relaxed for this case: a host that answers
@@ -148,10 +145,11 @@ async function main() {
       throw new Error(
         `${baseUrl} does not serve a site — retention would silently do nothing. ` +
           "Check that the host matches CNAME and that Pages is serving it. " +
-          "If CNAME has just been pointed at a new domain, set that domain on " +
-          "the Pages site first and wait for its certificate, then land the " +
-          "CNAME change: Pages only learns a new domain from a deploy, and this " +
-          "step runs before it.",
+          "If CNAME has just been pointed at a new domain, serve that domain " +
+          "from the Cloudflare Pages project (webchirp-hosting) first and wait " +
+          "for its certificate, then land the CNAME change: this step reads " +
+          "the new domain before the deploy, so it must already serve the " +
+          "previous build.",
       );
     }
     console.warn(`No deployed asset manifest at ${baseUrl}; nothing to retain (first deploy?).`);
@@ -204,8 +202,10 @@ async function main() {
         continue;
       }
       const body = await fetchBytes(`${baseUrl}/${assetPath}`);
-      // The res.ok check is the integrity gate; Pages returns real 404s (no SPA
-      // fallback), so a miss can't smuggle an error page in here. Re-deriving the
+      // The res.ok check is the integrity gate; both hosts return real 404s
+      // (Cloudflare Pages answers a miss with index.html and a 200 only when the
+      // site has no 404.html, and web/404.html exists), so a miss can't smuggle
+      // an error page in here. Re-deriving the
       // name from the bytes would be tighter but is not possible for most of
       // them: esbuild's hash covers a chunk's content and the names of the
       // chunks it imports, not a digest anything here can recompute.

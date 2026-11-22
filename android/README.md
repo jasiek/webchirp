@@ -69,3 +69,42 @@ app signing key it holds (Play App Signing). Both stay out of the repository:
    `web/.well-known/assetlinks.json` (add the upload key's too, for test builds
    installed outside Play). Until that is deployed, the app opens with a URL
    bar.
+
+## Store listing
+
+The Play Store listing -- title, short and full description, phone
+screenshots -- lives in `fastlane/metadata/android/en-US/` and is uploaded
+with [fastlane supply](https://docs.fastlane.tools/actions/supply/). The
+screenshots are captured from the app by `npm run screenshots`, like the
+site's own; one queries RepeaterBook live, so the run needs the API's
+`TURNSTILE_BYPASS_TOKEN` (see the top-level README). The content rating, Data safety form and other declarations are
+not in it; change those in Play Console.
+
+1. Once, create a Google Cloud service account with a JSON key, invite its
+   email in Play Console under Users and permissions, and keep the key outside
+   the repository. Give it **Manage store presence** for this app: without it
+   the upload runs and then fails at "Validating all changes with Google Play"
+   with "The caller does not have permission".
+
+2. Upload the listing:
+
+   ```sh
+   brew install fastlane
+   PLAY_JSON_KEY_FILE=/path/to/key.json fastlane metadata
+   ```
+
+## Data safety
+
+The Data safety form lives in `fastlane/data-safety.csv`, in the format Play
+Console's Data safety page exports (Export to CSV) and imports. Its answers
+restate `web/privacy.html`, so a change to one changes the other in the same
+PR; `tests/build/data-safety.mjs` checks the form is complete and consistent,
+but not that it matches the policy. When Play adds questions, export the form
+again and carry the answers over.
+
+```sh
+PLAY_JSON_KEY_FILE=/path/to/key.json fastlane data_safety
+```
+
+The upload replaces the whole form and takes effect at once: unlike the
+listing, there is no edit to validate first.

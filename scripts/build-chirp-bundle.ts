@@ -6,7 +6,7 @@
 // from the submodule and served from our own origin, plus a small manifest
 // naming the pin, the driver modules inside and the archive's size. Both are
 // named after the pin rather than a content hash: the URL is immutable on
-// GitHub Pages (a pin bump is a new name) without the build having to learn a
+// either host (a pin bump is a new name) without the build having to learn a
 // new hashing rule, and the same pin always produces the same bytes -- the zip
 // carries no timestamps, so a rebuild of an unchanged submodule is
 // byte-identical.

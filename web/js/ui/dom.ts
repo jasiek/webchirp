@@ -69,6 +69,9 @@ export const REQUIRED_ELEMENTS = {
   exportMenuEl: "#export-menu",
   exportCsvEl: "#export-csv",
   exportBinaryEl: "#export-binary",
+  // The phone toolbar's fold: the toggle and the group it shows.
+  toolbarMoreToggleEl: "#toolbar-more-toggle",
+  toolbarMoreEl: "#toolbar-more",
   channelInsertEl: "#channel-insert",
   channelRemoveEl: "#channel-remove",
   channelMoveUpEl: "#channel-move-up",
@@ -171,6 +174,7 @@ export type UiElementTypes = {
   exportMenuToggleEl: HTMLButtonElement;
   exportCsvEl: HTMLButtonElement;
   exportBinaryEl: HTMLButtonElement;
+  toolbarMoreToggleEl: HTMLButtonElement;
   channelInsertEl: HTMLButtonElement;
   channelRemoveEl: HTMLButtonElement;
   channelMoveUpEl: HTMLButtonElement;

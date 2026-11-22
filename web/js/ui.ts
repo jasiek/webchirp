@@ -24,6 +24,7 @@ import { createRepeaterMap } from "./ui/repeater-map.ts";
 import { createCodeplugIo } from "./ui/codeplug-io.ts";
 import { createSerialActions } from "./ui/serial-actions.ts";
 import { createInstallButton } from "./ui/install-button.ts";
+import { createToolbarMenu } from "./ui/toolbar-menu.ts";
 import { createConnectivity } from "./ui/connectivity.ts";
 import {
   classifyErrorKind,
@@ -93,10 +94,11 @@ export function createUiController() {
   const codeplugIo = createCodeplugIo(ctx);
   const serial = createSerialActions(ctx);
   const installButton = createInstallButton(ctx);
+  const toolbarMenu = createToolbarMenu(ctx);
   const connectivity = createConnectivity(ctx);
   Object.assign(ctx, {
     session, settings, table, channelExtra, bulkEdit, catalog, repeaterQuery, repeaterMap,
-    codeplugIo, serial, installButton, connectivity,
+    codeplugIo, serial, installButton, toolbarMenu, connectivity,
   });
 
   exposeCurrentRowsForDebugging(state);
@@ -157,11 +159,13 @@ export function createUiController() {
     catalog.bindEvents();
     serial.bindEvents();
     installButton.bindEvents();
+    toolbarMenu.bindEvents();
     connectivity.bindEvents();
 
     // Escape closes the topmost open surface: a notice, which is shown over
     // whatever else is open, then the import prompt, then the channel extras
-    // editor, then the bulk editor, then the repeater modals and export menu.
+    // editor, then the bulk editor, then the repeater modals, the export menu
+    // and the phone toolbar's fold.
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         if (notice.isModalOpen()) {
@@ -191,6 +195,11 @@ export function createUiController() {
         if (codeplugIo.isExportMenuOpen()) {
           codeplugIo.closeExportMenu();
           dom.exportMenuToggleEl.focus();
+          return;
+        }
+        if (toolbarMenu.isOpen()) {
+          toolbarMenu.close();
+          dom.toolbarMoreToggleEl.focus();
         }
         return;
       }

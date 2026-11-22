@@ -138,6 +138,16 @@ class FakeAnyTone778UV {
     this.connected = false;
     this.reads = 0;
     this.baudRate = 0;
+    this.readCalls = 0;
+    this.stall = null;
+  }
+
+  // Hold up the atRead-th readBytes() from now for ms of wall-clock time,
+  // once, with the answer already on the line: from inside the driver, that
+  // is what the OS descheduling this process looks like.
+  stallBeforeRead(atRead, ms) {
+    this.readCalls = 0;
+    this.stall = { atRead, ms };
   }
 
   async open() {
@@ -169,6 +179,12 @@ class FakeAnyTone778UV {
   }
 
   async readBytes(count) {
+    this.readCalls += 1;
+    if (this.stall && this.readCalls === this.stall.atRead) {
+      const { ms } = this.stall;
+      this.stall = null;
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    }
     return this.rx.splice(0, Math.min(Math.max(0, Number(count || 0)), this.rx.length));
   }
 
@@ -244,6 +260,26 @@ test("an AnyTone 778UV clone reads the radio's memory through inWaiting()", asyn
   // Program two channels into CHIRP's blank AnyTone image and load the radio
   // up with the result, so the clone has something to get wrong.
   await harness.runPythonJson('ensure_radio_module("anytone778uv") or json.dumps({})');
+
+  // send_serial_command() gives every exchange 0.5 s of time.time(), polling
+  // inWaiting() and reading one byte per pass: 26 passes a block, 810 blocks a
+  // clone. This radio answers at once, so against the wall clock the deadline
+  // only measured whether the OS kept this process running, and one stall
+  // past 0.5 s under a full npm test cut a block short (FINDINGS:
+  // anytone-clone-deadline-is-wall-clock). A clock that ticks 1 ms per reading
+  // makes the deadline 500 passes: a block needs 26, and an inWaiting() stuck
+  // at 0 still spends all 500 and reads nothing. A custom bridge gets a
+  // runtime of its own, so no other test sees the patch.
+  await harness.runPython(`
+import types
+import chirp.drivers.anytone778uv as _at
+_passes = [0]
+def _pass_clock():
+    _passes[0] += 1
+    return _passes[0] / 1000
+_at.time = types.SimpleNamespace(time=_pass_clock)
+`);
+
   await harness.loadCodeplugBinary(fs.readFileSync(IMAGE_PATH));
   const programmed = await harness.exportCodeplugBinary(
     "anytone778uv",
@@ -270,7 +306,12 @@ json.dumps({
   assert.equal(handshake.inWaiting, 0, "the handshake must consume everything the radio sent");
 
   await harness.connect({ moduleName: "anytone778uv", className: "AnyTone778UV" });
+  // A stall longer than the whole deadline, 15 reads into block 400, so the
+  // clock above is checked on every run rather than only on a loaded machine:
+  // against the wall clock this fails exactly as the flake did.
+  radio.stallBeforeRead(400 * 26 + 15, 600);
   const downloaded = await harness.readCodeplug("anytone778uv", "AnyTone778UV");
+  assert.equal(radio.stall, null, "the clone never reached the stall");
   assert.equal(radio.reads, memory.length / 0x10, "clone did not read every memory block");
   assert.equal(radio.baudRate, 9600, "clone did not prepare the session at the driver rate");
 

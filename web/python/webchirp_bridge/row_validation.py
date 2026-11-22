@@ -19,6 +19,7 @@ from chirp import chirp_common
 from webchirp_bridge.channel_extra import _apply_row_extras_to_memory
 from webchirp_bridge.channel_rows import (
     CSV_HEADERS,
+    DV_FIELD_HEADERS,
     _coerce_csv_vals_for_chirp,
     _memory_from_row_values,
     _row_from_memory,
@@ -72,6 +73,7 @@ MEMORY_FIELD_HEADERS: dict[str, str] = {
     "skip": "Skip",
     "power": "Power",
     "comment": "Comment",
+    **DV_FIELD_HEADERS,
 }
 # The grid's synthetic column for driver extras, which every findings message
 # about them is reported against so the cell the button sits in is the one that
@@ -117,6 +119,7 @@ def _infer_csv_error_column(error_text: str) -> str:
         "power": "Power",
         "comment": "Comment",
         "name": "Name",
+        "dvcode": "DVCODE",
     }
     for token, column in keywords.items():
         if token in lowered:
@@ -236,11 +239,16 @@ def _erased_copy(existing: chirp_common.Memory) -> chirp_common.Memory:
 def _memory_row_changed(
     existing: chirp_common.Memory, new: chirp_common.Memory
 ) -> bool:
-    """Return whether any field represented by the channel grid changed."""
+    """Return whether any field represented by the channel grid changed.
+
+    The D-STAR fields exist only on a DVMemory, so a plain Memory on either
+    side reads them as absent: a channel that turns into or out of a DVMemory
+    has changed.
+    """
     fields = (*MEMORY_FIELD_HEADERS, "empty")
     for field in fields:
-        existing_value = getattr(existing, field)
-        new_value = getattr(new, field)
+        existing_value = getattr(existing, field, None)
+        new_value = getattr(new, field, None)
         if field == "power":
             # Rows carry only the driver's display label. Some drivers use the
             # same label for multiple wattages or return an unadvertised level,

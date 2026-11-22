@@ -185,8 +185,7 @@ def _upload_selected_radio_sync(
     """Apply rows onto the session's image and run its driver's sync_out."""
     _ensure_clone_mode_radio(session.radio_cls)
     # Only bytes read from the radio or a file may be written back: a synthetic
-    # offline export is stored on the session but is not a backing image
-    # (FINDINGS: offline-export-is-not-a-radio-image).
+    # offline export is stored on the session but is not a backing image.
     if not session.has_backing_image:
         raise RuntimePreconditionError(
             "No cached radio image for this model. Download from radio first, then upload."

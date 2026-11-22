@@ -373,6 +373,11 @@
       "url": null,
       "note": "Identical to the Radioddity GS-5B, for which only programming software and manuals are published, no firmware."
     },
+    "BTECH|UV-PRO": {
+      "status": "official",
+      "url": "https://baofengtech.com/uv-pro-firmware-changelog/",
+      "note": "BTECH publishes UV-PRO firmware release notes; the supported customer update path is the BTECH UV Programmer app."
+    },
     "Baofeng|BF-F8HP-PRO": {
       "status": "official",
       "url": "https://baofengtech.com/software/",
@@ -688,6 +693,11 @@
       "url": null,
       "note": ""
     },
+    "TYT|UVL-15W": {
+      "status": "official",
+      "url": "https://www.tyt888.com/download.html",
+      "note": "TYT lists its firmware with the CPS on the download page."
+    },
     "Yaesu|FT-1500M": {
       "status": "none",
       "url": "https://www.yaesu.com/product-detail.aspx?Model=FT-1500M&CatName=Legacy",
@@ -852,6 +862,11 @@
       "status": "official",
       "url": "https://www.yaesu.com/product-detail.aspx?Model=FT5DR&CatName=VHF%2FUHF%20Handhelds",
       "note": "The file and its PC update tool are on the model's Files tab at yaesu.com."
+    },
+    "Yaesu|FTM-150E": {
+      "status": "official",
+      "url": "https://www.yaesu.com/product-detail.aspx?Model=FTM-150R&CatName=VHF/UHF%20Mobile%20Transceivers",
+      "note": "One package covers the R and E versions; it is on the FTM-150R's Files tab at yaesu.com."
     },
     "Yaesu|FTM-300DR": {
       "status": "official",

@@ -22,7 +22,7 @@ import {
   createSelectField,
   createTurnstileField,
 } from "./query-fields.ts";
-import { resolveTurnstileSiteKey } from "../turnstile.ts";
+import { resolveTurnstileBypassToken, resolveTurnstileSiteKey } from "../turnstile.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { QueryField, QueryGate } from "./query-fields.ts";
 import type { City, FieldOption } from "./query-fields.ts";
@@ -83,7 +83,11 @@ export function createRepeaterQuery(ctx: UiContext) {
   // a service failure is visible when the user tries it, rather than silently
   // removing the action.
   const endpoints = buildRepeaterEndpoints(resolveRepeaterApiBase());
-  const sources = createRepeaterSources(ctx, { endpoints, turnstileSiteKey: resolveTurnstileSiteKey() });
+  const sources = createRepeaterSources(ctx, {
+    endpoints,
+    turnstileSiteKey: resolveTurnstileSiteKey(),
+    turnstileBypassToken: resolveTurnstileBypassToken(),
+  });
   const sourceButtonTitles = new Map<string, string>();
   for (const source of sources) {
     sourceButtonTitles.set(source.key, dom[source.toolbarButton].title);
@@ -102,6 +106,9 @@ export function createRepeaterQuery(ctx: UiContext) {
   let fieldInstances: QueryField[] = [];
   let positionField: ReturnType<typeof createPositionField> | null = null;
   let cityField: ReturnType<typeof createCityField> | null = null;
+  // Every country the open form's Country picker offers, so a Place name
+  // lookup with no country chosen still stays inside the directory's coverage.
+  let countryChoices: string[] = [];
   const positionState = { latitudeText: "", longitudeText: "" };
   // What the Place name box last settled on. Kept for the same reason
   // the coordinates are: it is where the user is, which does not change with
@@ -120,6 +127,11 @@ export function createRepeaterQuery(ctx: UiContext) {
   // twice. An RSGB fan-out over 24 squares takes seconds, so the window is
   // wide enough to hit by double-clicking.
   let queryInFlight = false;
+  // The query the open modal is running, or null. Cancel and the backdrop
+  // close the modal without waiting for it, so the user can be in another
+  // directory's form by the time it answers; closing aborts it, and only the
+  // query still held here may insert rows, close the modal or free the button.
+  let currentQuery: AbortController | null = null;
   // Browser-reported connectivity only. Request failures do not change this;
   // web/js/ui/connectivity.ts updates it from online/offline events.
   let online = true;
@@ -264,6 +276,7 @@ export function createRepeaterQuery(ctx: UiContext) {
     fieldInstances = [];
     positionField = null;
     cityField = null;
+    countryChoices = [];
     // Nodes a field wants at the foot of the grid rather than at its own place
     // in the config order. Only the position field's map preview uses this: it
     // pictures the whole query, range circle included, so it belongs after the
@@ -277,7 +290,8 @@ export function createRepeaterQuery(ctx: UiContext) {
           // The field contacts nothing itself. No position hint is sent: the
           // ranking it buys is not worth putting the form's location in a query
           // string on every keystroke. fetchCitySuggestions still takes it.
-          search: (query) => fetchCitySuggestions(endpoints.cities, query),
+          search: (query) => fetchCitySuggestions(endpoints.cities, query, { countries: cityCountries() }),
+          searchScope: () => cityCountries().join(","),
           // Not reportActionError: a failed suggestion is not a failed action
           // and must not take over the status line the real query uses.
           onError: (error) => log.logDebug(`CITY LOOKUP FAILED ${errorDetails(error)}`),
@@ -310,6 +324,7 @@ export function createRepeaterQuery(ctx: UiContext) {
           // position can be compared. Which source was open, never where the
           // drag landed — the coordinates stay in the form.
           onPan: () => trackEvent("repeater_map_panned", { repeater_source: activeSource.key }),
+          onRangeChange: (km) => setRangeFromMap(km),
         });
         positionField = field;
         instance = field;
@@ -325,9 +340,23 @@ export function createRepeaterQuery(ctx: UiContext) {
           : config.options;
         // Each factory reads the options of its own kind off the config.
         instance = (factory as (config: FieldConfig) => QueryField)({ ...config, options });
+        if (config.key === "country") {
+          countryChoices = (options || []).map((option) => option.value);
+        }
       }
-      for (const node of instance.nodes) {
-        dom.repeaterQueryGridEl.appendChild(node);
+      // A field that shares the previous one's row joins its control in a row
+      // of their own (.modal-inline-row in web/styles.css), label and all, so
+      // the grid still sees one label and one control.
+      const previousControl = dom.repeaterQueryGridEl.lastElementChild;
+      if ("sameRow" in config && config.sameRow && previousControl) {
+        const row = document.createElement("div");
+        row.className = "modal-inline-row";
+        previousControl.replaceWith(row);
+        row.append(previousControl, ...instance.nodes);
+      } else {
+        for (const node of instance.nodes) {
+          dom.repeaterQueryGridEl.appendChild(node);
+        }
       }
       tailNodes.push(...(instance.tailNodes || []));
       fieldInstances.push(instance);
@@ -341,9 +370,10 @@ export function createRepeaterQuery(ctx: UiContext) {
 
   // Feed the range filter's value to the position field, which draws it as a
   // circle on its map preview and frames the map around it. This runs after
-  // the build loop rather than inside it because the range field is declared
-  // after the position field it has to reach — and both are rebuilt on every
-  // open, so the listener is attached here rather than in bindEvents.
+  // the build loop rather than inside it because the two fields are built in
+  // config order, and whichever comes first cannot reach the other yet -- and
+  // both are rebuilt on every open, so the listener is attached here rather
+  // than in bindEvents.
   function bindRangeToPreview() {
     const range = fieldInstances.find((instance) => instance.key === RANGE_FIELD_KEY);
     const field = positionField;
@@ -355,6 +385,27 @@ export function createRepeaterQuery(ctx: UiContext) {
     const applyRange = () => field.setRangeKm(Number(range.value()));
     range.input.addEventListener("input", applyRange);
     applyRange();
+  }
+
+  // A pinch on the map preview asks for a radius. It is written into the range
+  // box within the box's own limits and step, and announced with the input
+  // event typing would fire, so the map, the directory preview and the submit
+  // state all follow it exactly as they follow a typed value. Answers with the
+  // radius the box now holds.
+  function setRangeFromMap(km: number): number {
+    const input = fieldInstances.find((instance) => instance.key === RANGE_FIELD_KEY)?.input;
+    if (!input || !Number.isFinite(km)) {
+      return Number.NaN;
+    }
+    const step = Number(input.step) || 1;
+    const min = input.min === "" ? step : Number(input.min);
+    const max = input.max === "" ? Number.POSITIVE_INFINITY : Number(input.max);
+    const next = Math.min(max, Math.max(min, Math.round(km / step) * step));
+    if (input.value !== String(next)) {
+      input.value = String(next);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    return next;
   }
 
   // Ask the active source what its current filters would return, and hand the
@@ -486,6 +537,15 @@ export function createRepeaterQuery(ctx: UiContext) {
     }, PREVIEW_QUERY_DEBOUNCE_MS);
   }
 
+  // The countries a Place name lookup is restricted to: the one the form's
+  // Country field holds, or while it holds none every country it offers -- a
+  // place outside them is a position the directory has no repeaters near. A
+  // form with no Country field, or an empty list, restricts nothing.
+  function cityCountries(): string[] {
+    const chosen = String(fieldInstances.find((instance) => instance.key === "country")?.value() ?? "").trim();
+    return chosen ? [chosen] : countryChoices;
+  }
+
   function collectValues(): QueryValues {
     const values: Record<string, unknown> = {};
     for (const instance of fieldInstances) {
@@ -512,6 +572,11 @@ export function createRepeaterQuery(ctx: UiContext) {
       schedulePreview();
     } else {
       // Nothing in flight may land on a closed modal, or on the next one.
+      if (currentQuery) {
+        currentQuery.abort();
+        currentQuery = null;
+        setQueryBusy(false);
+      }
       previewGeneration += 1;
       if (previewTimer) {
         clearTimeout(previewTimer);
@@ -671,6 +736,8 @@ export function createRepeaterQuery(ctx: UiContext) {
       if (queryInFlight || !online) {
         return;
       }
+      const query = new AbortController();
+      currentQuery = query;
       setQueryBusy(true);
       // Captured before the await, for the same reason the clone paths capture
       // the radio: Cancel and the backdrop close the modal without waiting for
@@ -684,9 +751,13 @@ export function createRepeaterQuery(ctx: UiContext) {
           setModalOpen(false);
           return;
         }
-        await source.runQuery(collectValues());
+        await source.runQuery(collectValues(), query.signal);
         recordFlow(FLOWS.REPEATER_QUERY, OUTCOMES.OK, { repeater_source: source.key });
-        setModalOpen(false);
+        // Cancelled while it ran: the modal is closed already, and may since
+        // have been reopened for a query this one must not close.
+        if (!query.signal.aborted) {
+          setModalOpen(false);
+        }
       } catch (error) {
         // The only place a failed directory lookup is reported at all: the
         // repeater_import event fires on success, so until now a proxy that
@@ -716,7 +787,10 @@ export function createRepeaterQuery(ctx: UiContext) {
           log.reportActionError(`${source.actionLabel} query`, error);
         }
       } finally {
-        setQueryBusy(false);
+        if (currentQuery === query) {
+          currentQuery = null;
+          setQueryBusy(false);
+        }
       }
     });
   }

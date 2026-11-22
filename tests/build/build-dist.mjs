@@ -330,6 +330,68 @@ test("the service worker ships unhashed at the root as a classic script", async 
   assert.match(sw, /addEventListener\("fetch"/);
 });
 
+// The rules Cloudflare Pages applies, parsed back from _headers.
+function headerRules(emitted) {
+  const rules = new Map();
+  let pattern = null;
+  for (const line of text(emitted, "_headers").split("\n").filter(Boolean)) {
+    if (line.startsWith(" ")) {
+      rules.get(pattern).push(line.trim());
+    } else {
+      pattern = line;
+      rules.set(pattern, []);
+    }
+  }
+  return rules;
+}
+
+function matchesHeaderPattern(pattern, rel) {
+  const re = pattern.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+  return new RegExp(`^${re}$`).test(`/${rel}`);
+}
+
+test("_headers marks every hashed output immutable and nothing else", async () => {
+  const emitted = await build(appTree("export const leaf = 1;\n"));
+  const rules = headerRules(emitted);
+  for (const headers of rules.values()) {
+    assert.deepEqual(headers, ["Cache-Control: public, max-age=31536000, immutable"]);
+  }
+  for (const rel of emitted.keys()) {
+    const matching = [...rules.keys()].filter((pattern) => matchesHeaderPattern(pattern, rel));
+    const immutable = HASHED_NAME_RE.test(path.basename(rel)) || CHIRP_BUNDLE_FILES.includes(rel);
+    assert.equal(matching.length, immutable ? 1 : 0, `${rel} matches ${matching.join(", ") || "no rule"}`);
+  }
+});
+
+test("an unhashed file where _headers promises immutability fails the build", async () => {
+  await withTempDir("build-dist-", async (dir) => {
+    await writeTree(path.join(dir, "web"), {
+      ...REQUIRED_FILES,
+      ...appTree("export const leaf = 1;\n"),
+      "python/notes.txt": "copied verbatim under a fixed name\n",
+    });
+    await assert.rejects(runBuild(dir), /python\/notes\.txt would be served as immutable/);
+  });
+});
+
+test("type stubs beside the Python stay out of dist", async () => {
+  const emitted = await build({ ...appTree("export const leaf = 1;\n"), "python/typings/js.pyi": "x: int\n" });
+  assert.ok(![...emitted.keys()].some((rel) => rel.endsWith(".pyi")));
+});
+
+// web/chirp/ is ignored and never cleaned, so a checkout that built the
+// previous pin still holds that pair beside the current one.
+test("another pin's CHIRP bundle left in web/chirp/ is not shipped", async () => {
+  const stalePin = "0".repeat(40);
+  const emitted = await build({
+    ...appTree("export const leaf = 1;\n"),
+    [`chirp/chirp-${stalePin}.zip`]: "an earlier pin's archive\n",
+    [`chirp/chirp-${stalePin}.json`]: "{}\n",
+  });
+  const shipped = [...emitted.keys()].filter((rel) => rel.startsWith("chirp/")).sort();
+  assert.deepEqual(shipped, [...CHIRP_BUNDLE_FILES].sort());
+});
+
 test("a missing offline file fails the build", async () => {
   await withTempDir("build-dist-", async (dir) => {
     const files = { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n") };
@@ -418,6 +480,17 @@ test("TURNSTILE_SITE_KEY fills the site-key meta tag and nothing else", async ()
   assert.ok(unkeyed.includes('<meta name="webchirp-turnstile-site-key" content="" />'), "unset leaves the tag blank");
 });
 
+test("TURNSTILE_BYPASS_TOKEN never reaches dist/", async () => {
+  // Only the dev server fills this tag (scripts/dev-turnstile-bypass.ts): a
+  // build run where the variable happens to be set must still ship it blank.
+  const page = "<!doctype html>\n"
+    + '<meta name="webchirp-turnstile-bypass-token" content="" />\n'
+    + '<script type="module" src="./js/app.js"></script>\n';
+  const files = { ...appTree("export const leaf = 1;\n"), "index.html": page };
+  const built = text(await build(files, { TURNSTILE_BYPASS_TOKEN: "0123456789abcdef0123456789abcdef" }), "index.html");
+  assert.ok(built.includes('<meta name="webchirp-turnstile-bypass-token" content="" />'), built);
+});
+
 test("a TURNSTILE_SITE_KEY that is not a site key fails the build", async () => {
   await withTempDir("build-dist-", async (dir) => {
     await writeTree(path.join(dir, "web"), { ...REQUIRED_FILES, ...appTree("export const leaf = 1;\n") });
@@ -443,8 +516,10 @@ test("nested pages resolve asset URLs from the web root and retain URL suffixes"
   const app = hashedNameOf(emitted, "js/app");
   const styles = hashedNameOf(emitted, "styles");
   const html = text(emitted, "radios/model.html");
-  assert.ok(html.includes('../' + app + '?version=1#entry'));
-  assert.ok(html.includes('../' + styles + '?theme=light#sheet'));
+  // A root-relative ref stays root-relative, so a page the host serves at
+  // another path (404.html) still finds it.
+  assert.ok(html.includes('"/' + app + '?version=1#entry"'));
+  assert.ok(html.includes('"/' + styles + '?theme=light#sheet"'));
   assert.match(text(emitted, app), /root entry/);
   assert.doesNotMatch(text(emitted, app), /wrong nested entry/);
   assert.match(text(emitted, styles), /color: red/);

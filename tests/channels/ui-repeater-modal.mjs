@@ -4,7 +4,6 @@ import path from "node:path";
 import test from "node:test";
 
 import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.ts";
-import { LOCATION_POLICY_URL } from "../../web/js/ui/query-fields.ts";
 import { createRepeaterQuery } from "../../web/js/ui/repeater-query.ts";
 import { REQUIRED_ELEMENTS } from "../../web/js/ui/dom.ts";
 import { installIndexPage } from "../support/index-page.mjs";
@@ -129,10 +128,15 @@ function buildHarness({
   // The Turnstile site key the deployment would build in; undefined keeps the
   // blank tag index.html ships, which leaves the check off.
   turnstileSiteKey = undefined,
+  // The bypass token npm run dev would fill in; undefined keeps the tag blank.
+  turnstileBypassToken = undefined,
 } = {}) {
   const { document } = installIndexPage();
   if (turnstileSiteKey !== undefined) {
     document.querySelector('meta[name="webchirp-turnstile-site-key"]').setAttribute("content", turnstileSiteKey);
+  }
+  if (turnstileBypassToken !== undefined) {
+    document.querySelector('meta[name="webchirp-turnstile-bypass-token"]').setAttribute("content", turnstileBypassToken);
   }
   // index.html ships the meta tag; undefined stands for a deployment without
   // one, so the tag is removed rather than blanked.
@@ -851,6 +855,49 @@ test("the preview draws the range filter's circle and follows edits to it", asyn
   assert.ok(zoomOf() < defaultZoom, "a wider range zooms the preview out");
 });
 
+test("the range shares the working-only row instead of taking one of its own", async () => {
+  const { dom } = buildHarness();
+  const sources = [
+    [dom.channelImportPrzemiennikiEl, () => installFetch([{ match: "/meta", body: META_JSON }])],
+    [dom.channelImportRsgbEl, () => installRsgbFetch({})],
+  ];
+  for (const [sourceButton, installSourceFetch] of sources) {
+    installSourceFetch();
+    await dispatch(sourceButton, "click");
+    const row = fieldByName(dom, "radius").parentElement;
+    assert.equal(row.className, "modal-inline-row");
+    assert.equal(row.parentElement, grid(dom), "the row is the grid cell beside the checkbox's label");
+    assert.equal(fieldByName(dom, "only").parentElement, row);
+    // Its own label rides in the row with it, so the grid still pairs one
+    // label with one control.
+    assert.ok(row.querySelector(`label[for="${fieldByName(dom, "radius").id}"]`));
+    await dispatch(dom.repeaterQueryCancelEl, "click");
+  }
+});
+
+test("a pinch on the map writes the radius into the range box, within its limits", async () => {
+  const { dom } = buildHarness();
+  installRsgbFetch({});
+  await openRsgb(dom);
+  await setPreviewPosition(dom);
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const canvas = previewCanvas(dom);
+  const range = fieldByName(dom, "radius");
+  const start = Number(range.value);
+
+  await dispatch(canvas, "pointerdown", { pointerId: 1, isPrimary: true, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(canvas, "pointerdown", { pointerId: 2, isPrimary: false, button: 0, clientX: 200, clientY: 100 });
+  // Fingers twice as far apart: the map is twice as close, the ring covers half.
+  await dispatch(canvas, "pointermove", { pointerId: 2, clientX: 300, clientY: 100 });
+  assert.equal(range.value, String(Math.round(start / 2)));
+  // Squeezed far past RSGB's 500 km cap: the box stops at it.
+  await dispatch(canvas, "pointermove", { pointerId: 2, clientX: 101, clientY: 100 });
+  assert.equal(range.value, "500");
+  await dispatch(canvas, "pointerup", { pointerId: 2 });
+  await dispatch(canvas, "pointerup", { pointerId: 1 });
+  assert.equal(fieldByName(dom, "latitude").value, String(PREVIEW_LAT), "a pinch never moves the position");
+});
+
 test("clearing the location empties the persisted position too", async () => {
   const { dom } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }]);
@@ -868,38 +915,6 @@ test("clearing the location empties the persisted position too", async () => {
   await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(fieldByName(dom, "latitude").value, "");
   assert.equal(fieldByName(dom, "locator").value, "");
-});
-
-test("every query says by the locate button where a position goes, and links to the policy", async () => {
-  // Google Play wants the disclosure where the user hands over a location, so
-  // each directory's form carries it on the geolocate button's own row.
-  const { dom } = buildHarness();
-  installFetch([
-    { match: "/przemienniki/meta", body: META_JSON },
-    { match: "/repeaterbook/meta", body: META_JSON },
-    { match: "/irts/meta", body: IRTS_META_JSON },
-  ]);
-  const sourceButtons = [
-    dom.channelImportPrzemiennikiEl,
-    dom.channelImportRepeaterbookEl,
-    dom.channelImportIrtsEl,
-    dom.channelImportRsgbEl,
-  ];
-  for (const sourceButton of sourceButtons) {
-    await dispatch(sourceButton, "click");
-    const note = descendants(grid(dom)).find((el) => el.classList?.contains("modal-geo-note"));
-    assert.ok(note, `${sourceButton.textContent.trim()} has no location note`);
-    assert.equal(note.parentElement, geolocateButton(dom).parentElement, "the note shares the locate button's row");
-    assert.match(note.textContent, /sent to the repeater directory/);
-    const link = note.querySelector("a");
-    assert.equal(link.getAttribute("href"), LOCATION_POLICY_URL);
-    // A new tab, so reading the policy cannot unload the channels being edited.
-    assert.equal(link.target, "_blank");
-    await dispatch(dom.repeaterQueryCancelEl, "click");
-  }
-  const policy = fs.readFileSync(path.join(repoRoot, "web", "privacy.html"), "utf8");
-  const [, fragment] = LOCATION_POLICY_URL.split("#");
-  assert.ok(policy.includes(`id="${fragment}"`), `privacy.html has no #${fragment} section for the note to open`);
 });
 
 test("geolocate fills the position fields and reports the locator", async () => {
@@ -1604,6 +1619,52 @@ test("a second submit while a query is in flight is ignored, not duplicated", as
   assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API");
 });
 
+// Cancel closes the modal without waiting for the query, so the answer can
+// arrive after the user has moved on to another directory. It must neither
+// insert what was cancelled nor close the dialog that is open by then.
+test("a cancelled query inserts nothing and leaves the next directory's dialog open", async () => {
+  const { query, dom, log, table } = buildHarness();
+  installFetch([{ match: "/repeaterbook/meta", body: META_JSON }]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(dom, "PL");
+
+  // From here on every request waits for the test, so the query is caught
+  // in flight.
+  const { calls, release } = installGatedFetch([{
+    match: "/repeaterbook",
+    body: `
+      <rxf><perspective>radio</perspective><repeaters><repeater>
+        <qra>SR5WA</qra><mode>fm</mode>
+        <qrg type="rx">145.6</qrg><qrg type="tx">145</qrg>
+        <location><latitude>52.2297</latitude><longitude>21.0122</longitude></location>
+      </repeater></repeaters></rxf>
+    `,
+  }]);
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
+  await flush();
+  // Only RepeaterBook's requests count. Fetches an earlier test's map preview
+  // still has outstanding look up the current fetch when they start, so on a
+  // slow run some of them arrive at this gate too.
+  const queryCalls = calls.filter((call) => call.url.includes("/repeaterbook"));
+  assert.equal(queryCalls.length, 1, "the query is on its way");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  assert.equal(query.isModalOpen(), false);
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "a cancelled query does not hold the button");
+
+  installFetch([{ match: "/przemienniki/meta", body: META_JSON }]);
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  assert.equal(dom.repeaterQueryTitleEl.textContent, "Query przemienniki.net");
+
+  release();
+  await pending;
+  await flush();
+
+  assert.deepEqual(table.inserted, [], "the cancelled answer must not be inserted");
+  assert.equal(query.isModalOpen(), true, "the newer dialog must stay open");
+  assert.equal(dom.repeaterQueryTitleEl.textContent, "Query przemienniki.net");
+  assert.deepEqual(log.errors, []);
+});
+
 // --- Request deadline --------------------------------------------------------
 
 // A host that accepts the connection and then answers nothing used to leave the
@@ -1773,6 +1834,48 @@ test("the chosen city persists across a reopen and a source switch", async () =>
   await dispatch(dom.channelImportRepeaterbookEl, "click");
   assert.equal(fieldByName(dom, "city").value, "Kraków, Lesser Poland, Poland");
   assert.equal(fieldByName(dom, "latitude").value, "50.061430");
+});
+
+// The countries= of every gazetteer request so far, in order.
+function cityLookupCountries(calls) {
+  return calls
+    .filter((call) => call.url.includes("/cities"))
+    .map((call) => new URL(call.url).searchParams.get("countries"));
+}
+
+async function typeCity(dom, text) {
+  const city = fieldByName(dom, "city");
+  city.value = text;
+  await dispatch(city, "input");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+test("a place name lookup is limited to the offered countries, then to the chosen one", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([{ match: "/meta", body: META_JSON }, { match: "/cities", body: KRAKOW_JSON }]);
+
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  // No country chosen: every country the picker lists, since a place outside
+  // them is somewhere the directory has nothing near.
+  await typeCity(dom, "krak");
+  const select = countrySelect(dom);
+  select.value = "PL";
+  await dispatch(select, "change");
+  // The same text again: the answer for every country is not the answer for
+  // one, so it is asked for rather than replayed from the field's cache.
+  await typeCity(dom, "krak");
+
+  assert.deepEqual(cityLookupCountries(calls), ["DE,PL", "PL"]);
+});
+
+test("an RSGB place name lookup stays in the UK", async () => {
+  const { dom } = buildHarness();
+  const calls = installFetch([{ match: "/cities", body: KRAKOW_JSON }]);
+
+  await dispatch(dom.channelImportRsgbEl, "click");
+  await typeCity(dom, "manch");
+
+  assert.deepEqual(cityLookupCountries(calls), ["GB"]);
 });
 
 test("restoring a city costs no lookup", async () => {
@@ -2336,6 +2439,43 @@ test("only RepeaterBook asks for a Turnstile token, and only when a site key is 
   await dispatch(unkeyed.dom.repeaterQueryFormEl, "submit");
   assert.equal(grid(unkeyed.dom).querySelector(".modal-turnstile"), null);
   assert.equal(unkeyedCalls.find((call) => !call.url.includes("/meta")).init.headers["CF-Turnstile-Response"], undefined);
+});
+
+test("with a bypass token, RepeaterBook sends it as a Bearer credential and renders no check", async () => {
+  const bypass = "0123456789abcdef0123456789abcdef";
+  // A site key as well, to show the token wins: the widget would only make
+  // the user wait for a token the request no longer needs.
+  const { dom, table } = buildHarness({ turnstileSiteKey: "0x4AAAAAAATestSiteKey", turnstileBypassToken: bypass });
+  const fake = installFakeTurnstile();
+  const calls = installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/repeaterbook", body: REPEATERBOOK_RXF },
+  ]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  assert.equal(grid(dom).querySelector(".modal-turnstile"), null);
+  await setPreviewPosition(dom);
+  await afterPreviewQuery();
+  await editField(dom, "radius", "50");
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false);
+  await dispatch(dom.repeaterQueryFormEl, "submit");
+
+  assert.deepEqual(fake.rendered, []);
+  const requests = calls.filter((call) => !call.url.includes("/meta"));
+  assert.equal(requests.length, 2, "a preview and the query");
+  for (const request of requests) {
+    assert.deepEqual(request.init.headers, { Authorization: `Bearer ${bypass}` });
+  }
+  assert.equal(table.inserted.length, 1);
+
+  // Only RepeaterBook's API asks for it, so no other directory is sent it.
+  const przemiennikiCalls = installFetch([
+    { match: "/przemienniki/meta", body: META_JSON },
+    { match: "/przemienniki", body: "<rxf><perspective>repeater</perspective></rxf>" },
+  ]);
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  await chooseCountry(dom, "PL");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
+  assert.equal(przemiennikiCalls.find((call) => !call.url.includes("/meta")).init.headers.Authorization, undefined);
 });
 
 test("switching away from RepeaterBook removes its Turnstile widget", async () => {

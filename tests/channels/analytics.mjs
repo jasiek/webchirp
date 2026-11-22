@@ -103,8 +103,8 @@ test("only the production deployment reports", () => {
 });
 
 test("the allowlist covers the domain the site is actually served from", () => {
-  // CNAME is what GitHub Pages serves the app on. If the domain ever moves and
-  // the allowlist is not moved with it, analytics goes silent — the failure
+  // CNAME is the domain the app is served on (webchirp-hosting points the same
+  // name at Cloudflare Pages). If the domain ever moves and the allowlist is not moved with it, analytics goes silent — the failure
   // that would otherwise take months to notice.
   const cname = fs.readFileSync(path.join(repoRoot, "CNAME"), "utf8").trim();
   assert.ok(ANALYTICS_HOSTS.includes(cname), `CNAME is ${cname}, which ANALYTICS_HOSTS does not include`);

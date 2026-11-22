@@ -60,7 +60,7 @@ export function parseLcov(text: string): Map<string, LcovFile> {
 }
 
 // Node's lcov emits a DA record for every physical line, comments and blanks
-// included (FINDINGS.md, v8-line-coverage-counts-comments-and-blanks), so a
+// included (see the report caveat in scripts/coverage.ts), so a
 // comment inside an untested function is reported as an uncovered line. Callers
 // use this to tell real gaps from prose. It is a heuristic -- it cannot see a
 // comment marker inside a string literal -- and it only ever moves a line out

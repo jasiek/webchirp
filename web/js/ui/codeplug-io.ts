@@ -185,6 +185,9 @@ export function createCodeplugIo(ctx: UiContext) {
   // CSV driver reporting its own RadioFeatures -- CHIRP has no "no radio"
   // state either, and an editor with nothing loaded is a CSVRadio there. A
   // radio selection replaces the whole thing with that driver's schema.
+  // The grid is already empty when the page starts, so this sets the schema
+  // and leaves the channels alone: Load works before startup ends, and a file
+  // loaded meanwhile is the user's, not something startup may clear.
   async function loadEmptySchema() {
     const defaults = await requireRuntimeApi(state).getDefaultSchema();
     // Only when nothing has claimed the schema yet: a radio restored from the
@@ -196,9 +199,6 @@ export function createCodeplugIo(ctx: UiContext) {
     state.currentHeaders = state.radioMetadata.headers?.length
       ? state.radioMetadata.headers
       : (defaults.headers || []);
-    state.currentRows = [];
-    ctx.table.clearInvalidHighlights();
-    ctx.table.resetRowSelection();
     ctx.table.render();
   }
 
@@ -276,8 +276,9 @@ export function createCodeplugIo(ctx: UiContext) {
   // FM and NFM) blocks it as a highlighted cell, rather than reaching the
   // runtime and coming back as an error with a traceback, which reads as a
   // defect and is reported to Sentry as one. The image is built for the
-  // session the rows were checked against; a radio picked while the check
-  // ran cancels the export rather than writing rows checked for another radio.
+  // session the rows were checked against, from the rows and settings the
+  // check passed; a radio picked while the check ran cancels the export
+  // rather than writing rows checked for another radio.
   async function exportBinaryCodeplug() {
     if (!state.selectedRadio) {
       log.setStatus("Search for and select a radio first.");
@@ -287,7 +288,7 @@ export function createCodeplugIo(ctx: UiContext) {
     log.setStatus("Running export preflight validation...");
     const preflight = await ctx.serial.runUploadPreflight(session);
     if (preflight.stale) {
-      log.setStatus("Export cancelled: the selected radio changed.");
+      log.setStatus(`Export cancelled: ${preflight.summary}.`);
       return;
     }
     if (!preflight.valid) {
@@ -297,8 +298,8 @@ export function createCodeplugIo(ctx: UiContext) {
     log.setStatus("Preparing CHIRP binary codeplug...");
     const result = await requireRuntimeApi(state).exportImage({
       sessionId: await ctx.session.idOf(session),
-      rows: state.currentRows,
-      settings: ctx.settings.getGroups(),
+      rows: preflight.rows,
+      settings: preflight.settings,
     });
     ctx.settings.setGroups(result.settings);
     ctx.settings.render();

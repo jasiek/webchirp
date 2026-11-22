@@ -7,7 +7,7 @@ import { createHttpStatusError } from "./http-errors.ts";
 // all match this revision; scripts/build-catalog.ts and the bundle build
 // enforce it at build time and the runtime rejects a mismatched static catalog
 // or bundle manifest.
-export const DEFAULT_CHIRP_REVISION = "ec452b25de84be125ce933a79115d5428f7f2ba8";
+export const DEFAULT_CHIRP_REVISION = "d99bb227093a0191a973ab9aa17276a0bee7b00a";
 export const DEFAULT_DRIVER_SET = "chirp";
 export const QUANSHENG_UNOFFICIAL_DRIVER_SET = "quansheng-unofficial";
 export const DRIVER_SETS = Object.freeze([
@@ -49,6 +49,12 @@ export const QUANSHENG_UNOFFICIAL_DRIVERS = Object.freeze([
     relPath: "extra_drivers/quansheng/f4hwn_v6_2_0.py",
     releases: ["v6.2.0"],
     sha256: "89334fcc60d1730bf41f35664609540896889100a7d90cc855c0450311a26008",
+  },
+  {
+    module: "f4hwn_v6_3_0",
+    relPath: "extra_drivers/quansheng/f4hwn_v6_3_0.py",
+    releases: ["v6.3.0"],
+    sha256: "a307886d90b6481b441c2cd34b622c8dacfc2080a34fc1e0ea2377054ee4ef96",
   },
 ]);
 export const EXTRA_DRIVER_RELATIVE_FILES = Object.freeze(
@@ -97,7 +103,7 @@ export const RUNTIME_PYTHON_FILES = Object.freeze([
 
 // Where the CHIRP archive lives under web/ (and so under dist/), and the two
 // files it consists of for a given pin. Named by the pin rather than by
-// content so the URL is immutable on GitHub Pages without scripts/build-dist.ts
+// content so the URL is immutable on either host without scripts/build-dist.ts
 // learning a new hashing rule; scripts/build-chirp-bundle.ts writes them and
 // scripts/retain-deployed-assets.ts carries the previous pin's pair forward.
 // The names are not hashed by the build, so unlike the runtime files above

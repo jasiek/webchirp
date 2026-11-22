@@ -25,6 +25,7 @@ import type { createRepeaterMap } from "../ui/repeater-map.ts";
 import type { createCodeplugIo } from "../ui/codeplug-io.ts";
 import type { createSerialActions } from "../ui/serial-actions.ts";
 import type { createInstallButton } from "../ui/install-button.ts";
+import type { createToolbarMenu } from "../ui/toolbar-menu.ts";
 import type { createConnectivity } from "../ui/connectivity.ts";
 
 // The cross-module registry web/js/ui.ts builds: calls that would otherwise
@@ -59,5 +60,6 @@ export interface UiContext {
   codeplugIo: ReturnType<typeof createCodeplugIo>;
   serial: ReturnType<typeof createSerialActions>;
   installButton: ReturnType<typeof createInstallButton>;
+  toolbarMenu: ReturnType<typeof createToolbarMenu>;
   connectivity: ReturnType<typeof createConnectivity>;
 }

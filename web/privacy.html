@@ -40,7 +40,7 @@
           <h1>Privacy Policy</h1>
           <a class="toolbar-link" href="./index.html">Back to App</a>
         </div>
-        <p class="privacy-effective">Effective 26 October 2026.</p>
+        <p class="privacy-effective">Effective 31 October 2026.</p>
         <p>
           This policy covers WebCHIRP: the website at
           <a href="https://webchirp.org/">webchirp.org</a> (formerly codeplug.org) and the
@@ -60,6 +60,10 @@
             banner. Error reports and performance traces go to Sentry, which sets no cookies.
             Both leave out file
             names, channel names, frequencies, search terms and coordinates.
+          </li>
+          <li>
+            Cloudflare counts page views on webchirp.org without cookies and without
+            identifying you.
           </li>
           <li>
             A position, as coordinates or a locator, leaves your device only when you search
@@ -164,6 +168,20 @@
           <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noreferrer">How Google uses information from sites or apps that use our services</a>.
         </p>
 
+        <h2 id="page-views">Page views (Cloudflare Web Analytics)</h2>
+        <p>
+          webchirp.org is served through Cloudflare, which adds its Web Analytics script to each
+          page. The script loads from <code>static.cloudflareinsights.com</code> and reports
+          to <code>cloudflareinsights.com</code> the page address, the referring page, your
+          browser, operating system and device type, and how long the page took to load.
+          Cloudflare uses your IP address to work out the country and does not store it. It
+          sets no cookies and keeps no identifier, so one visit cannot be linked to another,
+          and it runs whether or not you accept the cookie banner. See Cloudflare's
+          <a href="https://www.cloudflare.com/web-analytics/" target="_blank" rel="noreferrer">Web Analytics</a>
+          page and its
+          <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noreferrer">privacy policy</a>.
+        </p>
+
         <h2 id="errors">Error reports (Sentry)</h2>
         <p>
           On webchirp.org and codeplug.org the app reports errors to Sentry, a service run by
@@ -237,8 +255,9 @@
             does not see your IP address.
           </li>
           <li>
-            <strong>Place names:</strong> the text you type, and any position already set as a
-            hint, are sent to <code>api.webchirp.org</code>.
+            <strong>Place names:</strong> the text you type, any position already set as a
+            hint, and the country chosen in the query (or, with none chosen, every country the
+            directory covers) are sent to <code>api.webchirp.org</code>.
           </li>
           <li>
             <strong>RSGB:</strong> your browser asks the Radio Society of Great Britain's
@@ -278,8 +297,8 @@
           Cloudflare, Inc. receives your IP address and information about your browser and
           device. Each RepeaterBook search then carries a single-use token from Turnstile to
           <code>api.webchirp.org</code>, which checks it with Cloudflare. A page that never
-          opens the RepeaterBook query never contacts Cloudflare, and the other directories
-          need no check. See Cloudflare's
+          opens the RepeaterBook query never loads Turnstile, and the other directories need
+          no check. See Cloudflare's
           <a href="https://www.cloudflare.com/turnstile-privacy-policy/" target="_blank" rel="noreferrer">Turnstile Privacy Addendum</a>.
         </p>
 
@@ -335,9 +354,9 @@
         <h2 id="downloads">Hosting and downloads</h2>
         <ul>
           <li>
-            The website is hosted on GitHub Pages. GitHub receives your IP address with each page
-            request, under its
-            <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noreferrer">privacy statement</a>.
+            The website is hosted on Cloudflare Pages. Cloudflare receives your IP address and
+            browser with every page request, under its
+            <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noreferrer">privacy policy</a>.
           </li>
           <li>
             To run CHIRP's radio drivers, the app downloads Pyodide (Python for the browser) and
@@ -412,7 +431,8 @@
             Cookie settings at the bottom of the page and then Decline, to turn it off.
           </li>
           <li>
-            A content blocker that blocks Sentry stops it without stopping the app.
+            A content blocker that blocks Sentry or Cloudflare Web Analytics stops it without
+            stopping the app.
           </li>
           <li>You can refuse the location permission and type a position instead, or none.</li>
           <li>You can clear WebCHIRP's site data at any time, as described above.</li>

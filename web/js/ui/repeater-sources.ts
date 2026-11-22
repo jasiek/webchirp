@@ -115,6 +115,8 @@ export type FieldConfig =
     label: string;
     optionsKey?: string;
     options?: FieldOption[];
+    /** Shares the previous field's row, after its control, instead of taking its own. */
+    sameRow?: boolean;
     [option: string]: unknown;
   };
 
@@ -145,7 +147,12 @@ export interface RepeaterSource {
   /** The filter dictionaries, by optionsKey; null when every option is static. */
   loadOptions: (() => Promise<Record<string, FieldOption[]>>) | null;
   previewQuery: (values: QueryValues) => Promise<PreviewSummary | null>;
-  runQuery: (values: QueryValues) => Promise<void>;
+  /**
+   * Fetch and insert what the values select. Inserts nothing once `signal`
+   * aborts: the modal shell aborts it when the user closes the modal on the
+   * query, and the answer must not land after that.
+   */
+  runQuery: (values: QueryValues, signal: AbortSignal) => Promise<void>;
   /**
    * What would answer Query API for these values now: "cached" a preview
    * already fetched, "pending" one still in flight, "request" a request of the
@@ -239,6 +246,11 @@ export interface RepeaterSourceOptions {
    * (web/js/turnstile.ts); blank or absent leaves the check off.
    */
   turnstileSiteKey?: string;
+  /**
+   * The dev server's stand-in for a Turnstile token (web/js/turnstile.ts);
+   * when set, it replaces the check.
+   */
+  turnstileBypassToken?: string;
 }
 
 export function createRepeaterSources(
@@ -363,14 +375,17 @@ export function createRepeaterSources(
         const answer = await query(values, "preview");
         return answer ? summarizePreview(answer, values.position, radiusKm) : { points: [] };
       },
-      runQuery: async (values) => {
+      runQuery: async (values, signal) => {
         const answer = await query(values, "import");
-        if (!answer) {
+        if (!answer || signal.aborted) {
           return;
         }
         const built = await ctx.table.buildRows((hooks) => buildRepeaterRows(answer.records, hooks, {
           preferredModes: answer.preferredModes,
         }));
+        if (signal.aborted) {
+          return;
+        }
         const skipped = [...answer.unusable, ...built.skipped];
         // Repeaters the radio cannot express are dropped rather than written
         // as something they are not; a shorter list than the match count needs
@@ -395,7 +410,7 @@ export function createRepeaterSources(
 // invariants on its own (tests/channels/repeater-adapters.mjs).
 export function createRepeaterAdapters(
   ctx: UiContext,
-  { endpoints, turnstileSiteKey = "" }: RepeaterSourceOptions,
+  { endpoints, turnstileSiteKey = "", turnstileBypassToken = "" }: RepeaterSourceOptions,
 ): RepeaterDirectoryAdapter[] {
   const { log } = ctx;
 
@@ -503,7 +518,8 @@ export function createRepeaterAdapters(
     insertLabel,
     toolbarButton,
     sourceEndpoints,
-    turnstileSiteKey: siteKey = "",
+    turnstileSiteKey = "",
+    turnstileBypassToken: bypassToken = "",
     attribution,
   }: {
     key: string;
@@ -514,12 +530,25 @@ export function createRepeaterAdapters(
     sourceEndpoints: { apiUrl: string; metaUrl: string } | null | undefined;
     /** Puts a Turnstile check on the form when set. */
     turnstileSiteKey?: string;
+    /** Sent in place of a Turnstile token when set, so the form has no check. */
+    turnstileBypassToken?: string;
     attribution?: SourceAttribution;
   }): RepeaterDirectoryAdapter {
     // The preview below names its cache key "key", so the id is held apart.
     const adapterId = key;
     const apiUrl = sourceEndpoints?.apiUrl || "";
     const metaUrl = sourceEndpoints?.metaUrl || "";
+    const siteKey = bypassToken ? "" : turnstileSiteKey;
+
+    // What a directory request carries to get past the API's Turnstile check:
+    // the bypass token when there is one, otherwise a token from the form's
+    // widget, if it has one.
+    async function requestHeaders(values: QueryValues): Promise<Record<string, string>> {
+      if (bypassToken) {
+        return { Authorization: `Bearer ${bypassToken}` };
+      }
+      return turnstileHeaders(values);
+    }
 
     // The dictionary is fetched once and cached for the session; a failed
     // fetch clears the cache so the next open retries instead of staying
@@ -620,7 +649,7 @@ export function createRepeaterAdapters(
     }
 
     async function fetchPreviewBody(url: URL, values: QueryValues, rangeKm: number): Promise<RemotePreviewBody> {
-      const headers = await turnstileHeaders(values);
+      const headers = await requestHeaders(values);
       const text = await withRequestTimeout(`${label} preview`, async (signal) => {
         const response = await fetch(url.toString(), { headers, signal });
         if (!response.ok) {
@@ -722,13 +751,15 @@ export function createRepeaterAdapters(
         { kind: "checkboxGroup", key: "bands", label: "Band", name: "band", optionsKey: "bands", defaults: ["2m", "70cm"] },
         { kind: "checkboxGroup", key: "modes", label: "Mode", name: "mode", optionsKey: "modes", defaults: ["fm"] },
         { kind: "checkbox", key: "only", label: "Only working", checked: true },
+        // A short number, so it shares the checkbox's row rather than taking
+        // one of its own.
+        { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30, sameRow: true },
         // Above the coordinates because it is how most people know where they
         // are: picking a place fills latitude, longitude and the locator and
         // recentres the preview, so the two rows below read as the result of
         // this one rather than as something to fill in by hand.
         { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Warszawa" },
         { kind: "position", locatorPlaceholder: "e.g. JO91GG" },
-        { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30 },
         ...(siteKey ? [{ kind: "turnstile" as const, key: TURNSTILE_FIELD_KEY, siteKey }] : []),
       ],
       loadOptions: () => {
@@ -782,7 +813,7 @@ export function createRepeaterAdapters(
           // Both the request and the body read sit inside the deadline: the
           // error-path read of a failed response can stall exactly as the success
           // path can, and either one strands the submit button on "Querying...".
-          const headers = await turnstileHeaders(values);
+          const headers = await requestHeaders(values);
           const text = await withRequestTimeout(`${label} query`, async (signal) => {
             const response = await fetch(url.toString(), { headers, signal });
             if (!response.ok) {
@@ -1037,12 +1068,13 @@ export function createRepeaterAdapters(
       fields: [
         // The directory is UK-only, so the country is fixed rather than
         // chosen: a picker with one entry is a control that cannot do
-        // anything.
+        // anything. Its value is what keeps the Place name lookup in the UK.
         {
           kind: "fixed",
           key: "country",
           label: "Country",
           text: `${flagEmojiFromCountryCode(RSGB_COUNTRY_CODE)} ${RSGB_COUNTRY_LABEL}`,
+          value: RSGB_COUNTRY_CODE,
         },
         {
           kind: "checkboxGroup",
@@ -1072,12 +1104,6 @@ export function createRepeaterAdapters(
           defaults: RSGB_DEFAULT_MODES,
         },
         { kind: "checkbox", key: "only", label: "Only operational", checked: true },
-        // Above the coordinates because it is how most people know where they
-        // are: picking a place fills latitude, longitude and the locator and
-        // recentres the preview, so the two rows below read as the result of
-        // this one rather than as something to fill in by hand.
-        { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Manchester" },
-        { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
         {
           kind: "number",
           key: "radius",
@@ -1086,7 +1112,14 @@ export function createRepeaterAdapters(
           max: 500,
           step: 1,
           value: RSGB_DEFAULT_RADIUS_KM,
+          sameRow: true,
         },
+        // Above the coordinates because it is how most people know where they
+        // are: picking a place fills latitude, longitude and the locator and
+        // recentres the preview, so the two rows below read as the result of
+        // this one rather than as something to fill in by hand.
+        { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Manchester" },
+        { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
       ],
       loadOptions: null,
       query: (values, purpose) => {
@@ -1118,6 +1151,7 @@ export function createRepeaterAdapters(
       sourceEndpoints: endpoints?.repeaterbook,
       // The only directory whose API asks for a Turnstile token.
       turnstileSiteKey,
+      turnstileBypassToken,
       // RepeaterBook's terms ask that its data be credited where it is shown.
       attribution: { text: "Data courtesy of RepeaterBook.com", url: "https://www.repeaterbook.com/" },
     }),

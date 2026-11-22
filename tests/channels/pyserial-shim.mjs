@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { listRegisteredRadios, readImage, sharedHarness } from "../support/chirp.mjs";
+import { listRegisteredRadios, readCatalog, readImage, sharedHarness } from "../support/chirp.mjs";
 
 // Drivers that import pyserial at module scope. Without the serial shim in
 // runtime_bridge.py they raise ModuleNotFoundError in Pyodide and silently
@@ -35,6 +35,34 @@ test("TG-UV2+ registers and is listed by list_registered_radios", async () => {
   assert.ok(tguv2p, "tg_uv2p:QuanshengTGUV2P missing from registered radios");
   assert.equal(tguv2p.vendor, "Quansheng");
   assert.equal(tguv2p.model, "TG-UV2+");
+});
+
+// FINDINGS idrp-never-registers (CHIRP pin d99bb227): idrp.IDRPx000V has no
+// @directory.register upstream, so it is absent from desktop CHIRP's radio
+// list too. The shim makes the module import (above); nothing makes it
+// register, and the committed catalog has no entry for it. This test will fail
+// once upstream registers the class; then remove the FINDINGS entry and this
+// test, and regenerate the catalog.
+test("upstream idrp imports but never registers, so the catalog lacks it", async () => {
+  const harness = await sharedHarness();
+  const radios = await listRegisteredRadios(harness, ["idrp"]);
+  assert.deepEqual(radios, [], "idrp registered a radio with CHIRP's directory");
+  const directory = await harness.runPythonJson(`
+from chirp import directory as _directory
+_idrp = importlib.import_module("chirp.drivers.idrp")
+json.dumps({
+    "classDefined": isinstance(getattr(_idrp, "IDRPx000V", None), type),
+    "registered": _idrp.IDRPx000V in _directory.DRV_TO_RADIO.values(),
+})
+`);
+  assert.deepEqual(directory, { classDefined: true, registered: false });
+
+  const catalog = await readCatalog();
+  assert.deepEqual(
+    catalog.filter((radio) => radio.module === "idrp").map((radio) => radio.key),
+    [],
+    "web/radio-catalog.json lists an idrp radio",
+  );
 });
 
 test("upstream Quansheng TG-UV2+ image loads and detects its driver", async () => {

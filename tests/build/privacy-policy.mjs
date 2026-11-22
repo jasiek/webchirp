@@ -11,7 +11,7 @@ import path from "node:path";
 import { JSDOM } from "jsdom";
 
 import { moduleGraph, REQUIRED_FILES, runBuild, writeTree } from "../support/dist-build.mjs";
-import { webDir } from "../support/repo-paths.mjs";
+import { repoRoot, webDir } from "../support/repo-paths.mjs";
 import { withTempDir } from "../support/temp-dir.mjs";
 import { CUSTOM_DIMENSIONS } from "../../web/js/analytics.ts";
 import { PYODIDE_INDEX_URL } from "../../web/js/cdn-urls.ts";
@@ -69,6 +69,35 @@ test("the policy names every host a position, a bot check or a download goes to"
   ]
     .map((url) => new URL(url).host);
   for (const host of hosts) {
+    assert.ok(html.includes(`<code>${host}</code>`), `${POLICY} does not name ${host}`);
+  }
+});
+
+test("the policy names every host the site is deployed to", async () => {
+  // Every page request goes to the host, so a deploy job added to pages.yml is
+  // a new destination for every visitor, not only for one feature's users.
+  const html = await readPage(POLICY);
+  const workflow = await readFile(path.join(repoRoot, ".github", "workflows", "pages.yml"), "utf8");
+  // Matched on the action a deploy step uses, which is what every step has to
+  // name, rather than on its arguments.
+  const hosts = [
+    [/uses:\s*actions\/deploy-pages@/, "GitHub Pages"],
+    [/uses:\s*cloudflare\/wrangler-action@/, "Cloudflare Pages"],
+  ];
+  assert.ok(hosts.some(([step]) => step.test(workflow)), "pages.yml deploys to a host this test knows");
+  for (const [step, host] of hosts) {
+    if (step.test(workflow)) {
+      assert.ok(html.includes(host), `pages.yml deploys to ${host}, which ${POLICY} does not name`);
+    }
+  }
+});
+
+test("the policy names the hosts the edge-injected page-view beacon talks to", async () => {
+  // Cloudflare injects this script into every page at the edge (webchirp-hosting's
+  // analytics.tf), so nothing in this repository names these hosts for the test
+  // above to read.
+  const html = await readPage(POLICY);
+  for (const host of ["static.cloudflareinsights.com", "cloudflareinsights.com"]) {
     assert.ok(html.includes(`<code>${host}</code>`), `${POLICY} does not name ${host}`);
   }
 });

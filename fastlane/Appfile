@@ -1,0 +1,4 @@
+# The Play Developer API key is a service account's JSON key, kept outside the
+# repository like the signing keys: point PLAY_JSON_KEY_FILE at it.
+json_key_file(ENV["PLAY_JSON_KEY_FILE"])
+package_name("com.hf2j.webchirp")

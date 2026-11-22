@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page not found · WebCHIRP</title>
+    <!--
+      The host serves this for any path that names no file, at that path, so a
+      relative URL here would resolve against wherever the visitor mistyped
+      (/radios/no/such/page). Every local URL is root-relative for that reason.
+      Without this file Cloudflare Pages answers a missing path with
+      index.html and a 200, which a crawler indexes as a page of its own.
+    -->
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <meta name="theme-color" content="#0d5ea8" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="about-page">
+    <main class="about-shell">
+      <section class="about-card">
+        <div class="about-header">
+          <h1>Page not found</h1>
+          <a class="toolbar-link" href="/index.html">Back to App</a>
+        </div>
+        <p>
+          There is no page at this address. If you followed a link to a radio, the
+          <a href="/radios/index.html">list of supported radios</a> has every model WebCHIRP
+          knows.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

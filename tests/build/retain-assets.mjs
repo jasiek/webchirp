@@ -34,8 +34,8 @@ function withTempRepo(cname, fn) {
   });
 }
 
-// Serves a fixed route table to fn; every other path 404s, like Pages (no SPA
-// fallback). The server is closed once fn settles, however it settles.
+// Serves a fixed route table to fn; every other path 404s, like both hosts (no
+// SPA fallback). The server is closed once fn settles, however it settles.
 async function withSite(routes, fn) {
   const server = createServer((req, res) => {
     const body = routes[req.url.split("?")[0]];
@@ -121,7 +121,7 @@ test("the unreachable-host failure explains the domain-move ordering", async () 
     );
     assert.match(
       result.stderr,
-      /Pages only learns a new domain from a deploy/,
+      /must already serve the previous build/,
       "the failure must say why landing the CNAME change first cannot work",
     );
   }));
