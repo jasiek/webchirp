@@ -327,3 +327,97 @@ json.dumps({
     assert.equal(result.nativeMetadata.rclass, CLASS_NAME);
   });
 }
+
+// FINDINGS f4hwn-older-driver-drops-new-key-actions: v6.2.0 differs from
+// v6.1.0 only in its version string and a "TONE CALL" appended to
+// KEYACTIONS_LIST, yet v6.1.0's get_action clamps any index past its own list
+// to 0. A radio with a key set to TONE CALL therefore reads as NONE under
+// v6.1.0, and once any setting is edited, set_settings writes every key
+// action back, storing NONE (0). This pins why each release is bundled as its
+// own module rather than one driver standing in for its neighbours; it is
+// bundled driver behaviour, not an upstream defect awaiting a fix. An
+// unedited write leaves the byte alone, because set_settings runs only on an
+// edit (_validate_and_apply_radio_settings).
+const TONE_CALL_RELEASES = [
+  { module: "f4hwn_v6_1_0", release: "v6.1.0", reads: "NONE", afterEdit: "cleared" },
+  { module: "f4hwn_v6_2_0", release: "v6.2.0", reads: "TONE CALL", afterEdit: "kept" },
+];
+test("a TONE CALL key reads and writes back as NONE under the v6.1.0 driver only", async () => {
+  const results = {};
+  for (const { module: MODULE, release } of TONE_CALL_RELEASES) {
+    const harness = await sharedHarness({ driverSet: QUANSHENG_UNOFFICIAL_DRIVER_SET, isolated: true });
+    results[release] = await harness.runPythonJson(
+      `
+import copy
+import importlib
+import json
+import warnings
+from chirp import chirp_common, memmap
+
+warnings.simplefilter("ignore", FutureWarning)
+driver = importlib.import_module("chirp.drivers." + _module)
+# Releases share a registered id, so one runtime cannot import both. Each
+# plants the byte TONE CALL is stored as: its index where the list has it,
+# one past the last action where it does not (checked equal below).
+actions = list(driver.KEYACTIONS_LIST)
+tone_call = actions.index("TONE CALL") if "TONE CALL" in actions else len(actions)
+
+radio = getattr(driver, _class_name)(None)
+radio._mmap = memmap.MemoryMapBytes(bytes([0xFF]) * driver.MEM_SIZE)
+radio.process_mmap()
+radio._memobj.key1_shortpress_action = tone_call
+
+session = open_radio_session(_module, _class_name)
+payload = _read_radio_payload(session, radio, ImageOrigin.RADIO)
+settings = get_radio_settings(session.session_id)
+
+def setting_value(nodes, setting_id, replacement=None):
+    for node in nodes:
+        if node.get("kind") == "setting" and node.get("id") == setting_id:
+            if replacement is not None:
+                node["values"][0]["current"] = replacement
+            return node["values"][0]["current"]
+        found = setting_value(node.get("children") or [], setting_id, replacement)
+        if found is not None:
+            return found
+    return None
+
+def stored_key1(exported):
+    body, _metadata = chirp_common.CloneModeRadio._strip_metadata(
+        base64.b64decode(exported["imageBase64"]))
+    written = getattr(driver, _class_name)(memmap.MemoryMapBytes(body))
+    return int(written._memobj.key1_shortpress_action)
+
+unedited = export_image_base64(session.session_id, payload["rows"], settings["groups"])
+edited_groups = copy.deepcopy(settings["groups"])
+setting_value(edited_groups, "key2_shortpress_action", "FLASHLIGHT")
+edited = export_image_base64(session.session_id, payload["rows"], edited_groups)
+json.dumps({
+    "actions": actions,
+    "toneCall": tone_call,
+    "reads": setting_value(settings["groups"], "key1_shortpress_action"),
+    "unedited": stored_key1(unedited),
+    "edited": stored_key1(edited),
+})
+      `,
+      { _module: MODULE, _class_name: CLASS_NAME },
+    );
+  }
+
+  // v6.2.0's list is v6.1.0's with TONE CALL appended, so both runs planted
+  // the same byte.
+  const older = results["v6.1.0"].actions;
+  assert.deepEqual(results["v6.2.0"].actions, [...older, "TONE CALL"]);
+  const toneCall = older.length;
+  for (const { release, reads, afterEdit } of TONE_CALL_RELEASES) {
+    const result = results[release];
+    assert.equal(result.toneCall, toneCall);
+    assert.equal(result.reads, reads, `${release} shows the TONE CALL key as ${reads}`);
+    assert.equal(result.unedited, toneCall, `${release}: an unedited write keeps the byte`);
+    assert.equal(
+      result.edited,
+      afterEdit === "cleared" ? 0 : toneCall,
+      `${release}: editing another setting ${afterEdit} the TONE CALL key`,
+    );
+  }
+});
