@@ -41,7 +41,7 @@ export function inPageCall<A>(step: (arg: A) => unknown, arg?: A): string {
 
 // Whether the radio catalog has loaded and the search box is live: the point
 // from which a user can pick a radio. The catalog is static JSON, so this
-// comes well before the Python runtime, which boots on the first selection.
+// does not wait for the Python runtime, which boots at startup alongside it.
 export function radioCatalogLoaded(): boolean {
   const searchEl = document.querySelector("#radio-search") as HTMLInputElement | null;
   const debugOutput = document.querySelector("#debug-output") as HTMLTextAreaElement | null;
@@ -54,7 +54,7 @@ export function radioCatalogLoaded(): boolean {
 
 // Picks a radio through the search box -- type the query, take the first
 // suggestion with Enter -- and returns what the sidebar readout then names.
-// Selecting is also what boots the Python runtime.
+// Selecting also opens a runtime session for the radio's driver.
 export function selectRadioThroughSearch(query: string): string {
   const searchEl = document.querySelector("#radio-search") as HTMLInputElement | null;
   if (!searchEl) {

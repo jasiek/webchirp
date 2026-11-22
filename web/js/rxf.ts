@@ -236,7 +236,7 @@ export interface RxfRecords {
 // The RXF parser: one response body into RepeaterRecords. `source` is the
 // adapter id the records are stamped with. A bulk directory answer must say
 // whose side its rx/tx are named from, so a missing or unknown <perspective>
-// fails the query (FINDINGS.md **irts-api-mostly-matches-the-shared-rxf-contract**);
+// fails the query;
 // the per-callsign lookup passes `defaultPerspective`, because the hover map
 // compares a row against both frequencies and so does not depend on it.
 export function parseRxfRecords(
