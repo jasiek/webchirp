@@ -163,10 +163,35 @@ test("frequency text parses to hertz as the browser parsed it", async () => {
     [" 7.1 ", 7_100_000],
     ["abc", null],
     ["1e3", null],
+    // No sign: a negative value is not a frequency or an offset (the
+    // duplex column carries the direction), and upstream parse_freq() would
+    // misread it (see the next test).
+    ["-0.6", null],
+    ["-5.6", null],
   ];
   const python = await harness.runPythonJson(
     "json.dumps([parse_freq_to_hz(text) for text in json.loads(_inputs)])",
     { _inputs: JSON.stringify(cases.map(([text]) => text)) },
   );
   assert.deepEqual(python, cases.map(([, hz]) => hz));
+});
+
+// FINDINGS parse-freq-negative-defect (CHIRP pin d99bb227): upstream
+// chirp_common.parse_freq() parses the MHz part with its sign and always adds
+// the fractional part, so "-0.600000" comes out positive and "-5.600000" lands
+// 1.2 MHz short. to_MHz(float(...)) keeps the sign. This test will fail once
+// upstream fixes parse_freq(); then remove the FINDINGS entry and this test,
+// and keep the "-0.6" case above, which is our own rule.
+test("upstream parse_freq() misreads a negative value at the CHIRP pin", async () => {
+  const harness = await sharedHarness();
+  const parsed = await harness.runPythonJson(`
+json.dumps({
+    "minusZeroPointSix": chirp_common.parse_freq("-0.600000"),
+    "minusFivePointSix": chirp_common.parse_freq("-5.600000"),
+    "toMHz": chirp_common.to_MHz(float("-0.600000")),
+})
+`);
+  assert.equal(parsed.minusZeroPointSix, 600_000, "the sign of -0 is lost");
+  assert.equal(parsed.minusFivePointSix, -4_400_000, "-5 MHz plus 0.6 MHz");
+  assert.equal(parsed.toMHz, -600_000, "to_MHz(float()) keeps the sign");
 });
