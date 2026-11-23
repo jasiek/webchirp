@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   DEFAULT_REPEATER_API_BASE,
+  buildFrsRows,
+  buildGmrsRows,
   buildMursRows,
+  buildPmr446Rows,
   buildRepeaterEndpoints,
   fetchCitySuggestions,
   parseCitySuggestions,
@@ -564,16 +568,97 @@ test("fetchCitySuggestions makes no request for a blank query or a missing endpo
   assert.deepEqual(blank.result, [[], []]);
 });
 
-// A driver's own Mode and Power vocabulary, for the MURS band plan.
-function mursHooks(powerOptions) {
+// A driver's own Mode and Power vocabulary, for a band plan. optionWatts is
+// the column metadata's label -> wattage map.
+function mursHooks(powerOptions, optionWatts = {}) {
   return makeRowHooks({
     columns: ["Name", "Frequency", "Duplex", "Offset", "Tone", "CrossMode", "Mode", "Power"],
     optionsByColumn: { Mode: ["FM", "NFM", "AM"], Power: powerOptions },
+    optionWatts,
   });
 }
 
+// Each driver's power levels as the pinned CHIRP tree publishes them: label ->
+// wattage in the driver's order, the shape the grid's optionWatts has.
+const DRIVER_POWER_LEVELS = Object.entries(JSON.parse(readFileSync(
+  new URL("../../radio-features.json", import.meta.url),
+  "utf8",
+)).features)
+  .map(([driver, features]) => [driver, features.powerLevels ?? {}])
+  .filter(([, levels]) => Object.keys(levels).length > 0);
+
+function driverHooks(driver) {
+  const levels = Object.fromEntries(DRIVER_POWER_LEVELS)[driver];
+  assert.ok(levels, `${driver} publishes power levels`);
+  return mursHooks(Object.keys(levels), levels);
+}
+
+// The power limit of every channel a band-plan preset writes, in watts, or
+// null for one written at the radio's top tier (the GMRS repeater channels).
+const BAND_PLAN_LIMITS = [
+  ["PMR446", buildPmr446Rows, () => 0.5],
+  ["FRS", buildFrsRows, () => 0.5],
+  ["GMRS", buildGmrsRows, (row) => (/^GMRS (1[5-9]|2[0-2])/.test(row.Name) ? null : 0.5)],
+  ["MURS", buildMursRows, () => 2],
+];
+
+test("a band-plan preset writes a low tier whatever the driver calls it", () => {
+  // Drivers from the report: none spells its low tier "Low", and each lists its
+  // top tier first, so a lookup by label left every channel at full power.
+  const cases = [
+    ["ft2d:FT5D", { PMR446: "L1", MURS: "L2" }],
+    ["vx6:VX6Radio", { PMR446: "L1", MURS: "L2" }],
+    ["ga510:RadioddityGA510Radio", { PMR446: "L", MURS: "L" }],
+    ["radtel_rt490:RT490Radio", { PMR446: "L", MURS: "L" }],
+    ["ga510:RetevisRA85Radio", { PMR446: "L", MURS: "M" }],
+    ["ft2900:FT2900Radio", { PMR446: "Low1", MURS: "Low1" }],
+  ];
+  for (const [driver, expected] of cases) {
+    const hooks = driverHooks(driver);
+    assert.deepEqual(
+      [...new Set(buildPmr446Rows(hooks).map((row) => row.Power))],
+      [expected.PMR446],
+      `${driver} PMR446`,
+    );
+    assert.deepEqual(
+      [...new Set(buildMursRows(hooks).map((row) => row.Power))],
+      [expected.MURS],
+      `${driver} MURS`,
+    );
+  }
+});
+
+test("every driver's band-plan channels stay within the band's limit where it can", () => {
+  for (const [driver, levels] of DRIVER_POWER_LEVELS) {
+    const watts = Object.values(levels).map((value) => Number.parseFloat(value));
+    const hooks = driverHooks(driver);
+    for (const [plan, build, limitOf] of BAND_PLAN_LIMITS) {
+      for (const row of build(hooks)) {
+        const limit = limitOf(row);
+        if (limit === null) {
+          continue;
+        }
+        assert.ok(row.Power in levels, `${driver} ${plan} ${row.Name} has a power level, not ${JSON.stringify(row.Power)}`);
+        const chosen = Number.parseFloat(levels[row.Power]);
+        const within = watts.filter((value) => value <= limit);
+        const best = within.length > 0 ? Math.max(...within) : Math.min(...watts);
+        assert.equal(chosen, best, `${driver} ${plan} ${row.Name}: ${row.Power} (${levels[row.Power]})`);
+      }
+    }
+  }
+});
+
+test("a band-plan preset with no power levels to measure writes the limit as watts", () => {
+  // As with no radio selected, where findEnumOption takes the first choice and
+  // adoptPowerLevels later turns the figure into the radio's closest level.
+  const hooks = makeRowHooks({ columns: ["Name", "Frequency", "Power"] });
+  hooks.findEnumOption = (_column, choices) => choices[0];
+  assert.equal(buildPmr446Rows(hooks)[0].Power, "0.5W");
+  assert.equal(buildMursRows(hooks)[0].Power, "2.0W");
+});
+
 test("buildMursRows adds the five US MURS simplex channels, narrow on 151 MHz", () => {
-  const rows = buildMursRows(mursHooks(["High", "Low"]));
+  const rows = buildMursRows(mursHooks(["High", "Low"], { High: "5.0W", Low: "1.0W" }));
   assert.deepEqual(rows.map((row) => [row.Name, row.Frequency, row.Mode]), [
     ["MURS 1", "151.82000", "NFM"],
     ["MURS 2", "151.88000", "NFM"],
@@ -591,6 +676,6 @@ test("buildMursRows adds the five US MURS simplex channels, narrow on 151 MHz", 
 });
 
 test("buildMursRows picks a 2 W level, the MURS limit, over any other", () => {
-  const rows = buildMursRows(mursHooks(["5W", "Low", "2W", "0.5W"]));
+  const rows = buildMursRows(mursHooks(["5W", "Low", "2W", "0.5W"], { Low: "1.0W" }));
   assert.deepEqual(rows.map((row) => row.Power), Array(5).fill("2W"));
 });

@@ -6,6 +6,8 @@
 // differs only in which columns exist, which options each enum column offers,
 // and how strictly options are matched.
 
+import { powerOptionsOf } from "../../web/js/row-power.ts";
+
 // The columns a repeater row builder writes; wide enough to exercise every
 // field an RSGB record's row touches (buildRepeaterRows,
 // web/js/repeater-rows.ts), and the default when a test needs no others.
@@ -34,9 +36,13 @@ export const REPEATER_COLUMNS = [
 // the value is not one of the column's options. A column with no options
 // listed is not an enum, so anything can be written to it — matching the
 // runtime, which only validates against a non-empty option list.
+//   optionWatts     - Power label -> wattage, as the column metadata's
+//                     optionWatts carries it ({ L: "0.5W" }); powerOptions
+//                     reads it through the grid's own powerOptionsOf.
 export function makeRowHooks({
   columns = REPEATER_COLUMNS,
   optionsByColumn = {},
+  optionWatts = {},
   caseInsensitive = false,
   maxFrequencyMhz = Infinity,
 } = {}) {
@@ -76,5 +82,8 @@ export function makeRowHooks({
       }
       return "";
     },
+    powerOptions: () => (columns.includes("Power")
+      ? powerOptionsOf({ kind: "enum", options: optionsByColumn.Power, optionWatts })
+      : []),
   };
 }

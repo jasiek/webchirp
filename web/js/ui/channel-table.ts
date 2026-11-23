@@ -18,6 +18,7 @@ import { callsignFromName } from "../callsign-lookup.ts";
 import { radioEventParams, trackEvent } from "./analytics.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { ChannelRow, ColumnMeta, RadioMetadata } from "./channel-values.ts";
+import { powerOptionsOf } from "../row-power.ts";
 import type { RowBuilderHooks } from "../row-power.ts";
 import type {
   RowEdit,
@@ -748,6 +749,9 @@ export function createChannelTable(ctx: UiContext) {
           return true;
         },
         findEnumOption,
+        powerOptions: () => (state.currentHeaders.includes("Power")
+          ? powerOptionsOf(state.radioMetadata.columns?.Power)
+          : []),
       };
       const built = build(hooks);
       const asked = [...writes.values()].filter((record) => record.missed);
