@@ -183,11 +183,13 @@ def parse_csv(csv_text: str, session_id: str = "") -> dict[str, Any]:
     # relabelled without counting as an adjustment.
     own_levels = _power_levels_by_label(levels)
     radio = _blank_csv_radio()
+    # Parse before reading radio.errors: load_from() is what fills it.
+    memories = _parsed_csv_memories(radio, csv_text)
     rows: Rows = []
     errors = [str(error) for error in radio.errors]
     power_adjusted = 0
 
-    for mem in _parsed_csv_memories(radio, csv_text):
+    for mem in memories:
         if mem.empty:
             continue
         if mem.offset < 0:
