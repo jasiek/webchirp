@@ -28,6 +28,7 @@ from webchirp_bridge.channel_rows import (
     CSV_HEADERS,
     _coerce_csv_vals_for_chirp,
     _memory_from_row_values,
+    _read_memory,
     _row_from_memory,
 )
 from webchirp_bridge.jsbridge import _log_debug
@@ -99,20 +100,6 @@ def _log_grouped_channel_failures(
             f"{len(remainder)} further distinct failures are not shown, "
             f"affecting channels {_format_channel_numbers(affected)}"
         )
-
-
-def _read_memory(radio: chirp_common.Radio, number: int) -> chirp_common.Memory:
-    """Read one memory as CHIRP's editor sees it, external properties included.
-
-    Clone-mode radios keep comments outside driver memory, in the image
-    metadata; get_memory_extra is the post-read hook desktop CHIRP applies
-    so they appear on the memory like any other field. Raises whatever the
-    driver raises, so callers decide how a decode failure is recorded.
-    """
-    mem = radio.get_memory(number)
-    if isinstance(radio, chirp_common.ExternalMemoryProperties):
-        mem = radio.get_memory_extra(mem)
-    return mem
 
 
 def _erase_memory(radio: chirp_common.Radio, number: int) -> None:

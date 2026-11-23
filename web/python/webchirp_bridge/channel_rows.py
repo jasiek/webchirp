@@ -136,6 +136,20 @@ def _row_from_memory(mem: chirp_common.Memory) -> Row:
     return dict(zip(CSV_HEADERS, _row_text_values(mem)))
 
 
+def _read_memory(radio: chirp_common.Radio, number: int) -> chirp_common.Memory:
+    """Read one memory as CHIRP's editor sees it, external properties included.
+
+    Clone-mode radios keep comments outside driver memory, in the image
+    metadata; get_memory_extra is the post-read hook desktop CHIRP applies
+    so they appear on the memory like any other field. Raises whatever the
+    driver raises, so callers decide how a decode failure is recorded.
+    """
+    mem = radio.get_memory(number)
+    if isinstance(radio, chirp_common.ExternalMemoryProperties):
+        mem = radio.get_memory_extra(mem)
+    return mem
+
+
 def parse_csv(csv_text: str, session_id: str = "") -> dict[str, Any]:
     """RPC: parse CSV content with CHIRP's CSV driver and return row dictionaries.
 

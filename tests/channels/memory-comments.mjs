@@ -99,3 +99,60 @@ test("clone-image metadata comments survive load, edit, clear, and erase", async
   assert.equal(result.erasedRowPresent, false);
   assert.equal(result.erasedMetadataHasKey, false);
 });
+
+// A channel a legacy image holds out of today's bands, with a desktop comment
+// in the metadata trailer. The upload writes the memory together with that
+// comment, so the preflight and the per-edit check must compare the row with
+// it too (issue #344): left untouched the row is skipped, and clearing its
+// Comment is a write the driver will refuse.
+const OUT_OF_BAND_COMMENT_SEED = `
+import base64, json
+
+ensure_radio_module("uv5r")
+_clean = load_image_base64(_image_b64)
+_target = int(_clean["rows"][0]["Location"])
+_radio = _radio_from_image_bytes(
+    _import_radio_class(_clean["module"], _clean["className"]),
+    base64.b64decode(_image_b64),
+)
+_memory = _radio.get_memory(_target)
+_memory.freq = 600000000
+_radio.set_memory(_memory)
+_memory.comment = "desktop comment"
+_radio.set_memory_extra(_memory)
+json.dumps({
+    "target": _target,
+    "imageBase64": base64.b64encode(_image_bytes_from_radio(_radio)).decode("ascii"),
+})
+`;
+
+test("a metadata comment counts when checking a row the driver would refuse", async () => {
+  const harness = await sharedHarness();
+  const raw = await readImage("Baofeng_UV-5R.img");
+  const seed = await harness.runPythonJson(OUT_OF_BAND_COMMENT_SEED, {
+    _image_b64: raw.toString("base64"),
+  });
+  const { sessionId, rows } = await harness.rpc("load_image_base64", { image_b64: seed.imageBase64 });
+  const index = rows.findIndex((row) => Number(row.Location) === seed.target);
+  const row = rows[index];
+  assert.equal(row.Frequency, "600.000000");
+  assert.equal(row.Comment, "desktop comment");
+
+  const untouched = await harness.rpc("validate_rows_for_upload", { session_id: sessionId, rows });
+  assert.deepEqual(untouched.issues, []);
+  const untouchedEdit = await harness.rpc("normalize_and_validate_rows", {
+    session_id: sessionId,
+    rows: [{ row, edits: [] }],
+  });
+  assert.deepEqual(untouchedEdit.rows[0].issues, []);
+
+  const cleared = rows.map((candidate, at) => (at === index ? { ...candidate, Comment: "" } : candidate));
+  const clearedCheck = await harness.rpc("validate_rows_for_upload", { session_id: sessionId, rows: cleared });
+  assert.equal(clearedCheck.valid, false);
+  assert.ok(clearedCheck.issues.every((issue) => issue.rowIndex === index));
+  const clearedEdit = await harness.rpc("normalize_and_validate_rows", {
+    session_id: sessionId,
+    rows: [{ row, edits: [{ column: "Comment", value: "" }] }],
+  });
+  assert.notDeepEqual(clearedEdit.rows[0].issues, []);
+});
