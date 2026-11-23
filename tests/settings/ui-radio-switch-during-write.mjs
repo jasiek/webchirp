@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// Issue #351: a binary import, a binary export or an upload awaits the
-// runtime, and the radio can be changed while it does: by the radio search,
-// or, during an upload, by dropping in a .img. What comes back belongs to the
-// session the work
-// started on, so it is applied only while that session is still
-// state.radioSession: the settings an export or upload reports, the image's
-// settings and grid, and a SettingsRefusedError's refused paths, which marked
-// onto another radio's panel would flag a field that radio may not have and
-// keep Save to radio disabled.
+// Issue #351: a binary export or an upload awaits the runtime, and the radio
+// can be changed while it does: by the radio search, or, during an upload, by
+// dropping in a .img. What comes back belongs to the session the work started
+// on, so it is applied only while that session is still state.radioSession:
+// the settings an export reports, and a SettingsRefusedError's refused paths,
+// which marked onto another radio's panel would flag a field that radio may
+// not have and keep Save to radio disabled. (An image import overtaken the
+// same way is covered in tests/channels/radio-session.mjs.)
 import { installIndexPage } from "../support/index-page.mjs";
 import {
   createDeferred,
@@ -194,43 +193,4 @@ test("a setting refused by an upload is not marked on an image opened during it"
 
   assert.deepEqual(panelState(document).flaggedTabs, []);
   assert.equal(panelState(document).invalidFields, 0);
-});
-
-test("a radio picked while an image's schema loads cancels the import", async (t) => {
-  const imageSchema = createDeferred();
-  const { ui, window, document } = await bootUi(t, {
-    getRadioMetadata: async ({ module }) => (module === "alpha"
-      ? imageSchema.promise
-      : { headers: ["Location", "Name"], columns: {} }),
-    loadImage: async () => ({
-      module: "alpha",
-      className: "AlphaRadio",
-      vendor: "Acme",
-      model: "Alpha",
-      headers: ["Location", "Name"],
-      rows: [{ Location: "1", Name: "FromImg" }],
-      settings: settingGroups("FromImage"),
-    }),
-  });
-
-  const drop = emit(window, "drop", {
-    dataTransfer: {
-      types: ["Files"],
-      files: [{ name: "alpha.img", arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }],
-    },
-  });
-  await flushMicrotasks();
-  selectRadioBySearch(document, "Acme Bravo");
-  await flushMicrotasks();
-
-  imageSchema.resolve({ headers: ["Location", "Name"], columns: {} });
-  await drop;
-  await flushMicrotasks();
-
-  const state = panelState(document);
-  assert.ok(state.values.includes("Bravo"), "Bravo's settings stay in the panel");
-  assert.ok(!state.values.includes("FromImage"));
-  assert.ok(!ui.selectedRowsForOperations().some((row) => row.Name === "FromImg"), "the image's rows are not kept");
-  assert.match(debugText(document), /STATUS Import cancelled: the selected radio changed\./);
-  assert.doesNotMatch(debugText(document), /Loaded binary codeplug/);
 });

@@ -15,7 +15,8 @@ import { FLOWS, OUTCOMES, recordFlow } from "./metrics.ts";
 import { requireRuntimeApi } from "./state.ts";
 import type { UiContext } from "../types/ui-context.js";
 import type { RadioSessionHandle, UiState } from "./state.ts";
-import type { ParsedCsv } from "../runtime-rpc.ts";
+import type { CatalogRadio, ParsedCsv } from "../runtime-rpc.ts";
+import type { RadioMetadata } from "./channel-values.ts";
 
 const LOADABLE_FILE_KINDS = new Map([
   [".csv", "csv"],
@@ -326,50 +327,50 @@ export function createCodeplugIo(ctx: UiContext) {
     const raw = new Uint8Array(await file.arrayBuffer());
     const imageBase64 = bytesToBase64(raw);
     log.setStatus("Loading CHIRP binary codeplug...");
+    // The session the editor works on until this import is adopted. A
+    // selection made while the import is in flight replaces it, and the
+    // import then gives way rather than override what the user just picked.
+    const previousSession = ctx.session.current();
     const loaded = await requireRuntimeApi(state).loadImage({
       imageBase64,
       module: state.selectedRadio?.module,
       className: state.selectedRadio?.className,
     });
-    const selected = ctx.catalog.selectRadioByDetectedImage(loaded);
-    // The radio that selection made current, which names the image below.
-    const radio = state.selectedRadio;
-    if (!selected || !radio) {
-      throw new Error(
-        `Loaded image radio ${loaded.module}.${loaded.className} is not available in current radio catalog`,
-      );
-    }
-    // The session the selection just adopted: the one the load opened, which
-    // holds this image.
-    const imageSession = ctx.session.current();
-    // Rows first, then the schema built from them: the session holds this
-    // image, so the metadata call below reports the detected driver as the
-    // image configures it, and the row check it runs (adoptPowerLevels in
-    // web/js/ui/channel-table.ts) has to measure this file's channels rather
-    // than whatever the grid still held from before the import.
-    //
-    // Undone if that call fails, because everything that agrees with these rows
-    // -- the headers, the settings, the rendered grid -- is assigned after it,
-    // and runFileLoad reports a throw from here as a failed import without
-    // re-rendering. Rows left swapped behind a failure notice would show the
-    // user the old codeplug while an export or upload wrote the new one.
-    const previousRows = state.currentRows;
-    state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
+    // The load opened a session for the image's driver, holding the image.
+    // Until it is adopted the previous radio, its session, settings and rows
+    // stay the editor's, so everything the image's editor state needs is read
+    // first and a failure closes only this session: runFileLoad reports a
+    // throw from here as a failed import without re-rendering, and the
+    // editor it leaves must be the one it shows.
+    const imageSessionId = String(loaded.sessionId || "");
+    let radio: CatalogRadio | null;
+    let metadata: RadioMetadata;
     try {
-      await ctx.catalog.loadSelectedRadioMetadata();
+      radio = ctx.catalog.radioForImage(loaded);
+      if (!radio) {
+        throw new Error(
+          `Loaded image radio ${loaded.module}.${loaded.className} is not available in current radio catalog`,
+        );
+      }
+      // Read through the image's session, so it reports the detected driver
+      // as the image configures it.
+      metadata = await ctx.catalog.fetchSessionMetadata(imageSessionId);
     } catch (error) {
-      state.currentRows = previousRows;
+      ctx.session.discard(imageSessionId);
       throw error;
     }
-    // A radio picked while the schema loaded has closed the image's session:
-    // the import is abandoned like a failed one, and the grid goes back to the
-    // rows it held, rather than the image's state landing on the new radio.
-    if (!ctx.session.isCurrent(imageSession)) {
-      state.currentRows = previousRows;
-      ctx.table.render();
+    if (!ctx.session.isCurrent(previousSession)) {
+      ctx.session.discard(imageSessionId);
       log.setStatus("Import cancelled: the selected radio changed.");
       return;
     }
+    ctx.catalog.adoptImageRadio(radio, imageSessionId);
+    const imageSession = ctx.session.current();
+    // Rows before the schema: applying it runs the row check
+    // (adoptPowerLevels in web/js/ui/channel-table.ts), which has to measure
+    // this file's channels rather than whatever the grid held before.
+    state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
+    ctx.catalog.applyRadioMetadata(metadata);
     ctx.settings.replaceState({
       supported: Array.isArray(loaded.settings) && loaded.settings.length > 0,
       available: Array.isArray(loaded.settings) && loaded.settings.length > 0,
