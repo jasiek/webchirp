@@ -22,6 +22,7 @@ from webchirp_bridge.channel_rows import (
     DV_FIELD_HEADERS,
     _coerce_csv_vals_for_chirp,
     _memory_from_row_values,
+    _read_memory,
     _row_from_memory,
     _row_text_values,
 )
@@ -431,7 +432,7 @@ def _row_findings(
     if radio is None or location is None or not in_bounds:
         return errors, warnings
     try:
-        existing = radio.get_memory(location)
+        existing = _read_memory(radio, location)
         action, mem, row_warnings, row_errors = _prepare_row_change(
             radio, row, existing, mem
         )
