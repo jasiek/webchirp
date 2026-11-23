@@ -20,7 +20,6 @@
     "web/js/datasources.ts#buildPmr446Rows",
     "web/js/datasources.ts#buildFrsRows",
     "web/js/datasources.ts#findBandwidthMode",
-    "web/js/datasources.ts#findPowerTier",
     "web/js/datasources.ts#buildGmrsRows",
     "web/js/ftdi-webusb.ts#isFtdiDevice",
     "web/js/image-metadata.ts#identitiesFor",

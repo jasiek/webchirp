@@ -1,5 +1,5 @@
 import { withRequestTimeout } from "./request-timeout.ts";
-import { highestPowerOption } from "./row-power.ts";
+import { highestPowerOption, powerAtMost } from "./row-power.ts";
 import type { RowBuilderHooks } from "./row-power.ts";
 import type { ChannelRow } from "./ui/channel-values.ts";
 import type { City } from "./ui/query-fields.ts";
@@ -299,7 +299,7 @@ export function parsePrzemiennikiMetaJson(jsonText: string): {
   };
 }
 
-export function buildPmr446Rows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
+export function buildPmr446Rows({ createBlankRow, setRowValue, findEnumOption, powerOptions }: RowBuilderHooks): ChannelRow[] {
   return PMR446_FREQUENCIES_MHZ.map((frequency, idx) => {
     const row = createBlankRow();
     setRowValue(row, "Name", `PMR ${idx + 1}`);
@@ -312,7 +312,7 @@ export function buildPmr446Rows({ createBlankRow, setRowValue, findEnumOption }:
     if (modeValue) {
       setRowValue(row, "Mode", modeValue);
     }
-    const powerValue = findEnumOption("Power", ["0.5W", "500mW", "Low"], false);
+    const powerValue = powerAtMost({ powerOptions, findEnumOption }, 0.5);
     if (powerValue) {
       setRowValue(row, "Power", powerValue);
     }
@@ -320,7 +320,7 @@ export function buildPmr446Rows({ createBlankRow, setRowValue, findEnumOption }:
   });
 }
 
-export function buildFrsRows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
+export function buildFrsRows({ createBlankRow, setRowValue, findEnumOption, powerOptions }: RowBuilderHooks): ChannelRow[] {
   return FRS_FREQUENCIES_MHZ.map((frequency, idx) => {
     const row = createBlankRow();
     setRowValue(row, "Name", `FRS ${idx + 1}`);
@@ -333,7 +333,7 @@ export function buildFrsRows({ createBlankRow, setRowValue, findEnumOption }: Ro
     if (modeValue) {
       setRowValue(row, "Mode", modeValue);
     }
-    const powerValue = findEnumOption("Power", ["0.5W", "500mW", "Low"], false);
+    const powerValue = powerAtMost({ powerOptions, findEnumOption }, 0.5);
     if (powerValue) {
       setRowValue(row, "Power", powerValue);
     }
@@ -348,14 +348,19 @@ function findBandwidthMode(findEnumOption: RowBuilderHooks["findEnumOption"], ba
   return findEnumOption("Mode", ["FM", "Wide", "WFM"], true);
 }
 
-function findPowerTier(findEnumOption: RowBuilderHooks["findEnumOption"], powerTier: string): string {
+// The low tier is held to 0.5 W, the limit on GMRS 8-14 (47 CFR 95.1767); the
+// 5 W limit on GMRS 1-7 is not told apart, as the preset never has.
+function findPowerTier(
+  hooks: Pick<RowBuilderHooks, "findEnumOption" | "powerOptions">,
+  powerTier: string,
+): string {
   if (powerTier === "high") {
-    return highestPowerOption(findEnumOption);
+    return highestPowerOption(hooks.findEnumOption);
   }
-  return findEnumOption("Power", ["Low", "0.5W", "500mW", "2W", "2.0W", "5W", "5.0W"], true);
+  return powerAtMost(hooks, 0.5);
 }
 
-export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
+export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption, powerOptions }: RowBuilderHooks): ChannelRow[] {
   return GMRS_CHANNELS.map((channel) => {
     const row = createBlankRow();
     setRowValue(row, "Name", channel.name);
@@ -368,7 +373,7 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }: R
     if (modeValue) {
       setRowValue(row, "Mode", modeValue);
     }
-    const powerValue = findPowerTier(findEnumOption, channel.powerTier);
+    const powerValue = findPowerTier({ findEnumOption, powerOptions }, channel.powerTier);
     if (powerValue) {
       setRowValue(row, "Power", powerValue);
     }
@@ -377,9 +382,9 @@ export function buildGmrsRows({ createBlankRow, setRowValue, findEnumOption }: R
 }
 
 // The five US MURS simplex channels. MURS allows 2 W at most (47 CFR 95.2767),
-// so a driver that labels a 2 W level gets it, and one that labels only tiers
-// gets its lowest; a driver matching neither keeps its own default power.
-export function buildMursRows({ createBlankRow, setRowValue, findEnumOption }: RowBuilderHooks): ChannelRow[] {
+// so a channel gets the strongest level within 2 W, or the radio's weakest
+// when every level is stronger (powerAtMost).
+export function buildMursRows({ createBlankRow, setRowValue, findEnumOption, powerOptions }: RowBuilderHooks): ChannelRow[] {
   return MURS_CHANNELS.map((channel) => {
     const row = createBlankRow();
     setRowValue(row, "Name", channel.name);
@@ -392,7 +397,7 @@ export function buildMursRows({ createBlankRow, setRowValue, findEnumOption }: R
     if (modeValue) {
       setRowValue(row, "Mode", modeValue);
     }
-    const powerValue = findEnumOption("Power", ["2W", "2.0W", "Low", "1W", "1.0W", "0.5W", "500mW"], true);
+    const powerValue = powerAtMost({ powerOptions, findEnumOption }, 2);
     if (powerValue) {
       setRowValue(row, "Power", powerValue);
     }
