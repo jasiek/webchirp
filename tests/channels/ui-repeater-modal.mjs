@@ -4,9 +4,11 @@ import path from "node:path";
 import test from "node:test";
 
 import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.ts";
+import { initSentry, resetSentryForTests } from "../../web/js/sentry.ts";
 import { createRepeaterQuery } from "../../web/js/ui/repeater-query.ts";
 import { REQUIRED_ELEMENTS } from "../../web/js/ui/dom.ts";
 import { installIndexPage } from "../support/index-page.mjs";
+import { makeWindow } from "../support/fake-window.mjs";
 import { dispatch } from "../support/ui-interactions.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
@@ -1663,6 +1665,106 @@ test("a cancelled query inserts nothing and leaves the next directory's dialog o
   assert.equal(query.isModalOpen(), true, "the newer dialog must stay open");
   assert.equal(dom.repeaterQueryTitleEl.textContent, "Query przemienniki.net");
   assert.deepEqual(log.errors, []);
+});
+
+// The outcomes the repeater_query flow reports to Sentry metrics, in order,
+// from a stand-in SDK the test installs for itself.
+async function captureRepeaterOutcomes(t) {
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const metrics = [];
+  await initSentry(makeWindow(), { loadSdk: async () => ({
+    init() {},
+    withScope() {},
+    captureException() {},
+    metrics: {
+      count: (name, value, options) => metrics.push({ name, ...options }),
+      distribution() {},
+    },
+  }) });
+  return () => metrics
+    .filter((metric) => metric.name === "flow.completed" && metric.attributes.flow === "repeater_query")
+    .map((metric) => metric.attributes.outcome);
+}
+
+// A fetch for the RepeaterBook query that settles only when the test says so,
+// whatever its signal does: the cancelled query has to be quiet however the
+// request it started ends.
+function installHeldQueryFetch() {
+  const calls = [];
+  let settle;
+  const answer = new Promise((resolve, reject) => {
+    settle = { resolve, reject };
+  });
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: async (url, init) => {
+      calls.push({ url: String(url), init });
+      return answer;
+    },
+  });
+  return { calls, settle };
+}
+
+async function startRepeaterBookQueryAndCancel(dom) {
+  installFetch([{ match: "/repeaterbook/meta", body: META_JSON }]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(dom, "PL");
+  const held = installHeldQueryFetch();
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
+  await flush();
+  assert.equal(held.calls.filter((call) => call.url.includes("/repeaterbook")).length, 1, "the query is on its way");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  return { ...held, pending };
+}
+
+test("a cancelled query that then fails reports no error and no outcome", async (t) => {
+  const outcomes = await captureRepeaterOutcomes(t);
+  const { dom, log } = buildHarness();
+  const { settle, pending } = await startRepeaterBookQueryAndCancel(dom);
+
+  settle.reject(new TypeError("Failed to fetch"));
+  await pending;
+  await flush();
+
+  // The user walked away from this query: its failure is neither a defect
+  // for the error modal and Sentry nor a failed directory lookup.
+  assert.deepEqual(log.errors, []);
+  assert.deepEqual(log.rejected, []);
+  assert.deepEqual(outcomes(), []);
+  // It is still in the debug panel, traceback and all.
+  assert.ok(
+    log.debug.some((line) => line.startsWith("REPEATERBOOK QUERY CANCELLED") && line.includes("Failed to fetch")),
+    `the abandoned failure is logged: ${log.debug.join(" | ")}`,
+  );
+});
+
+test("a cancelled query whose answer still arrives records no ok outcome", async (t) => {
+  const outcomes = await captureRepeaterOutcomes(t);
+  const { dom, log, table } = buildHarness();
+  const { settle, pending } = await startRepeaterBookQueryAndCancel(dom);
+
+  settle.resolve({ ok: true, status: 200, text: async () => REPEATERBOOK_RXF });
+  await pending;
+  await flush();
+
+  assert.deepEqual(table.inserted, []);
+  assert.deepEqual(log.errors, []);
+  assert.deepEqual(outcomes(), []);
+});
+
+test("a query that runs to the end still records its outcome", async (t) => {
+  const outcomes = await captureRepeaterOutcomes(t);
+  const { dom } = buildHarness();
+  installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/repeaterbook", body: REPEATERBOOK_RXF },
+  ]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(dom, "PL");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
+
+  assert.deepEqual(outcomes(), ["ok"]);
 });
 
 // --- Request deadline --------------------------------------------------------

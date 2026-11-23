@@ -752,13 +752,25 @@ export function createRepeaterQuery(ctx: UiContext) {
           return;
         }
         await source.runQuery(collectValues(), query.signal);
-        recordFlow(FLOWS.REPEATER_QUERY, OUTCOMES.OK, { repeater_source: source.key });
         // Cancelled while it ran: the modal is closed already, and may since
-        // have been reopened for a query this one must not close.
-        if (!query.signal.aborted) {
-          setModalOpen(false);
+        // have been reopened for a query this one must not close. Nothing was
+        // inserted, so it did not end "ok" either; a query the user walked
+        // away from has no outcome to record.
+        if (query.signal.aborted) {
+          return;
         }
+        recordFlow(FLOWS.REPEATER_QUERY, OUTCOMES.OK, { repeater_source: source.key });
+        setModalOpen(false);
       } catch (error) {
+        // Whatever a cancelled query fails with afterwards -- its own aborted
+        // request, a Turnstile wait the next form's rebuild closed, a network
+        // error it would have hit anyway -- lands on a modal the user already
+        // closed on it. It is no defect for Sentry and no failed lookup for
+        // the metric, so it goes to the debug panel alone.
+        if (query.signal.aborted) {
+          log.logDebug(`${source.actionLabel.toUpperCase()} QUERY CANCELLED ${errorDetails(error)}`);
+          return;
+        }
         // The only place a failed directory lookup is reported at all: the
         // repeater_import event fires on success, so until now a proxy that
         // started returning errors looked exactly like nobody running a query.
