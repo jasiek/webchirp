@@ -150,6 +150,10 @@ export function createChannelTable(ctx: UiContext) {
   let measuredRowHeight = 0;
   let windowUpdateHandle = 0;
   let isRemeasuring = false;
+  // Set while the grid itself takes focus off an editor whose channel left the
+  // window, so the focusout that fires does not commit the value the recycled
+  // element now shows to the channel it now shows.
+  let isReleasingFocus = false;
 
   function sortedSelectedRowIndexes() {
     return Array.from(selectedRowIndexes)
@@ -1693,6 +1697,7 @@ export function createChannelTable(ctx: UiContext) {
     const editor = active as HTMLInputElement | HTMLSelectElement;
     return {
       ...cell,
+      editor,
       // Only a text editor carries an uncommitted draft; a select commits on
       // change, so there is nothing of its own to put back.
       draft: active.tagName === "INPUT" ? String(editor.value ?? "") : null,
@@ -1721,6 +1726,17 @@ export function createChannelTable(ctx: UiContext) {
         queueMicrotask(() => {
           void commitRawValue(captured, draft);
         });
+      }
+      // The element that had focus is still in the pool, now showing another
+      // channel: left focused, the next keystroke would edit that channel
+      // (issue #349). Take the keyboard off the grid instead.
+      if (captured.editor === globalThis.document?.activeElement) {
+        isReleasingFocus = true;
+        try {
+          captured.editor.blur();
+        } finally {
+          isReleasingFocus = false;
+        }
       }
       return;
     }
@@ -1907,7 +1923,7 @@ export function createChannelTable(ctx: UiContext) {
     dom.tableBody.addEventListener("focusout", (event) => {
       // Checked for INPUT below before it is read as one.
       const target = event.target as HTMLInputElement;
-      if (target?.tagName !== "INPUT") {
+      if (target?.tagName !== "INPUT" || isReleasingFocus) {
         return;
       }
       const cell = cellReferenceFor(event.target);
