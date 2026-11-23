@@ -320,6 +320,8 @@ export interface RsgbFetchOptions {
   onRequest?: (request: {locator: string, url: string, count: number}) => void;
   /** Per square. */
   timeoutMs?: number;
+  /** Aborts every square still in flight. */
+  signal?: AbortSignal;
 }
 /**
  * @returns Every record the squares hold.
@@ -330,6 +332,7 @@ export async function fetchRsgbRecords({
   baseUrl = RSGB_API_BASE,
   onRequest,
   timeoutMs = REPEATER_REQUEST_TIMEOUT_MS,
+  signal: cancel,
 }: RsgbFetchOptions = {}): Promise<RsgbRecord[]> {
   const doFetch = fetchImpl || globalThis.fetch;
   if (typeof doFetch !== "function") {
@@ -349,7 +352,7 @@ export async function fetchRsgbRecords({
       // Read inside the deadline: the response headers arriving is not the same
       // as the body arriving, and a proxy can stall between the two.
       return parseRsgbPayload(await response.json());
-    }, timeoutMs);
+    }, timeoutMs, cancel);
     if (typeof onRequest === "function") {
       onRequest({ locator, url, count: records.length });
     }

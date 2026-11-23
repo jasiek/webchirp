@@ -222,6 +222,26 @@ test("a stalled square times out with an error naming what did not answer", asyn
   assert.deepEqual(aborted, ["https://api-beta.rsgb.online/locator/JO01"]);
 });
 
+test("a cancelled fan-out aborts every square and is not reported as a timeout", async () => {
+  const aborted = [];
+  const cancel = new AbortController();
+  const pending = fetchRsgbRecords({
+    squares: ["JO01", "IO91"],
+    timeoutMs: 60000,
+    fetchImpl: stallingFetch(aborted),
+    signal: cancel.signal,
+  });
+  cancel.abort();
+  await assert.rejects(pending, (error) => {
+    assert.doesNotMatch(String(error?.message), /timed out/);
+    return true;
+  });
+  assert.deepEqual(aborted.sort(), [
+    "https://api-beta.rsgb.online/locator/IO91",
+    "https://api-beta.rsgb.online/locator/JO01",
+  ]);
+});
+
 test("the deadline covers the body read, not just the response headers", async () => {
   // fetch() resolves as soon as the headers arrive, so a host that answers 200
   // and then stalls mid-body would slip past a deadline that only wrapped the

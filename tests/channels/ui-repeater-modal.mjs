@@ -1753,6 +1753,49 @@ test("a cancelled query whose answer still arrives records no ok outcome", async
   assert.deepEqual(outcomes(), []);
 });
 
+// Cancel stops the transfer itself, not only what happens to its answer: a
+// directory that is slow to answer would otherwise keep downloading for the
+// rest of the request deadline after the user closed the modal on it.
+test("cancelling a query aborts the request it is waiting on", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { dom, log } = buildHarness();
+  installFetch([{ match: "/repeaterbook/meta", body: META_JSON }]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(dom, "PL");
+  const calls = installStalledFetch([{ match: "/repeaterbook", stall: true }]);
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
+  await flush();
+  const [request] = calls.filter((call) => call.url.includes("/repeaterbook"));
+  assert.ok(request, "the query is on its way");
+  assert.equal(request.init.signal.aborted, false);
+
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  assert.equal(request.init.signal.aborted, true, "Cancel aborts the request");
+  await pending;
+  assert.deepEqual(log.errors, []);
+});
+
+test("cancelling an RSGB query aborts every square it is waiting on", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { dom, log } = buildHarness();
+  installGeolocation(LONDON);
+  const calls = installStalledFetch([{ match: "api-beta.rsgb.online", stall: true }]);
+  await openRsgb(dom);
+  await dispatch(geolocateButton(dom), "click");
+  // The preview is debounced on the mocked clock, so every square requested
+  // from here on is the query's.
+  const before = calls.length;
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
+  await flush();
+  const squares = calls.slice(before);
+  assert.ok(squares.length > 0, "the squares are in flight");
+
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  assert.deepEqual(squares.filter((call) => !call.init.signal.aborted).map((call) => call.url), []);
+  await pending;
+  assert.deepEqual(log.errors, []);
+});
+
 test("a query that runs to the end still records its outcome", async (t) => {
   const outcomes = await captureRepeaterOutcomes(t);
   const { dom } = buildHarness();
