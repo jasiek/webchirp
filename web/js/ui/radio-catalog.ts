@@ -349,15 +349,20 @@ export function createRadioCatalog(ctx: UiContext) {
 
   // Shared side effects after the selected radio changes.
   function reloadForSelectedRadio() {
-    actions.updateSerialActionState();
     persistSelectedRadioCookie();
     ctx.table.clearInvalidHighlights();
-    ctx.settings.clearInvalid();
     // The session for the selection just committed. Reselecting the radio the
     // current session is for keeps that session (web/js/ui/radio-session.ts),
     // so one that has already loaded needs no new runtime calls and keeps the
     // user's edits, and one still loading will apply its result when it lands.
     const session = ctx.session.current();
+    // A loaded session keeps its settings panel as it is, red fields and all,
+    // so it keeps the invalid values those fields show (issue #348). Cleared
+    // before the serial actions repaint, which read them to block Save to radio.
+    if (!session?.loaded) {
+      ctx.settings.clearInvalid();
+    }
+    actions.updateSerialActionState();
     if (session?.loaded) {
       ctx.table.render();
       return;

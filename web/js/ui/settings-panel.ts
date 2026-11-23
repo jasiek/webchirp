@@ -93,17 +93,20 @@ export function createSettingsPanel(ctx: UiContext) {
       : (settingsState?.message || "This radio does not expose radio-wide settings");
   }
 
+  // Repaints Save to radio too, whether or not this radio has settings: one
+  // without any still has to lift the block an earlier radio's invalid values
+  // put on it (issue #348).
   function updateSummary() {
     const count = invalidKeys.size;
     dom.settingsSummaryEl.hidden = !radioHasSettings();
     dom.settingsSummaryEl.classList.toggle("has-invalid", count > 0);
     if (!radioHasSettings()) {
       dom.settingsSummaryEl.textContent = "";
-      return;
+    } else {
+      dom.settingsSummaryEl.textContent = count > 0
+        ? `Radio settings have ${count} invalid value${count === 1 ? "" : "s"}. Fix the highlighted fields before upload.`
+        : "Radio settings are ready to write. Immutable values are shown but disabled.";
     }
-    dom.settingsSummaryEl.textContent = count > 0
-      ? `Radio settings have ${count} invalid value${count === 1 ? "" : "s"}. Fix the highlighted fields before upload.`
-      : "Radio settings are ready to write. Immutable values are shown but disabled.";
     actions.updateSerialActionState();
   }
 
