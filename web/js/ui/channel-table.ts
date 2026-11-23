@@ -1763,11 +1763,16 @@ export function createChannelTable(ctx: UiContext) {
       // The channel being edited fell out of the rendered window, so there is
       // no element left to hold the draft. Commit it as a blur would rather
       // than dropping what was typed. After this render rather than inside
-      // it: a commit re-renders the window to mark the cell pending.
+      // it: a commit re-renders the window to mark the cell pending. The
+      // channel is looked up again then, since the list may change before
+      // the microtask runs.
       const draft = captured.draft;
       if (draft !== null) {
         queueMicrotask(() => {
-          void commitRawValue({ rowIdx, column: captured.column }, draft);
+          const currentIdx = state.currentRows.indexOf(captured.row);
+          if (currentIdx >= 0) {
+            void commitRawValue({ rowIdx: currentIdx, column: captured.column }, draft);
+          }
         });
       }
       releaseFocus(captured.editor);

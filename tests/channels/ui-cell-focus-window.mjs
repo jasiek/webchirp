@@ -14,6 +14,7 @@ import test from "node:test";
 import { installIndexPage } from "../support/index-page.mjs";
 import {
   channelRows,
+  clickLocationButton,
   domEvent,
   flushMicrotasks,
   importSampleCsv,
@@ -57,7 +58,9 @@ async function windowedGrid({ held = false, csvRows = SAMPLE_ROWS, importNow = t
     getDefaultSchema: async () => ({ headers: SCHEMA.headers }),
     getRadioMetadata: async () => SCHEMA,
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
-    parseCsv: async () => ({ headers: SCHEMA.headers, rows: csvRows.slice(), errors: [] }),
+    // Fresh objects each time: a committed edit writes into the row it is
+    // given, and that must not carry over into the next test's channels.
+    parseCsv: async () => ({ headers: SCHEMA.headers, rows: csvRows.map((row) => ({ ...row })), errors: [] }),
     normalizeAndValidateRows: rowCheck.normalizeAndValidateRows,
   }));
   // Ten rows tall: the grid keeps those plus its overscan in the DOM.
@@ -186,4 +189,23 @@ test("an editor whose channel an import replaced gives up focus", async () => {
   assert.ok(!document.querySelector("#mem-table tbody").contains(document.activeElement),
     "focus left the grid");
   assert.equal(calls.length, callsBefore, "nothing was committed");
+});
+
+test("a draft scrolled out of the window commits to its channel after the list shifts", async () => {
+  // The commit for a draft whose cell left the window runs in a microtask
+  // after the render. A channel removed before it runs shifts every index
+  // after it, so the commit has to find its channel by identity, not by the
+  // index the render saw.
+  const { document, viewport, calls } = await windowedGrid();
+  clickLocationButton(document, 0);
+  const input = renderedRow(document, 2).children[1].children[0];
+  input.focus();
+  input.value = "Draft";
+
+  scrollTo(document, viewport, 50);
+  document.querySelector("#channel-remove").dispatchEvent(domEvent({ type: "click" }));
+  await flushMicrotasks();
+
+  const committed = calls.flatMap(({ rows }) => rows.map(({ row, edits }) => [row.Location, edits]));
+  assert.deepEqual(committed, [["2", [{ column: "Name", value: "Draft" }]]]);
 });
