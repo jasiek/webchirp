@@ -150,10 +150,18 @@ export function createChannelTable(ctx: UiContext) {
   let measuredRowHeight = 0;
   let windowUpdateHandle = 0;
   let isRemeasuring = false;
-  // Set while the grid itself takes focus off an editor whose channel left the
-  // window, so the focusout that fires does not commit the value the recycled
-  // element now shows to the channel it now shows.
-  let isReleasingFocus = false;
+  // The value bindCellEditor last wrote into each text editor. Text that still
+  // equals it is the row's own value, not something the user typed.
+  const boundEditorValues = new WeakMap<Element, string>();
+  // The channel bindRowElement last bound each row element to. A render runs
+  // after the list has changed, so the element's row index may already name
+  // another channel by the time the focused cell is captured.
+  const boundRows = new WeakMap<Element, ChannelRow>();
+  // Set while restoreFocusedCell moves focus between recycled elements, or
+  // takes it off an editor whose channel is no longer shown: the focusout that
+  // fires on the element left behind is not the user leaving a cell, and that
+  // element already shows another channel.
+  let isMovingFocus = false;
 
   function sortedSelectedRowIndexes() {
     return Array.from(selectedRowIndexes)
@@ -1446,6 +1454,7 @@ export function createChannelTable(ctx: UiContext) {
     }
     if (editor.tagName !== "SELECT") {
       editor.value = value;
+      boundEditorValues.set(editor, value);
       return;
     }
     // Drop any option added for a previous occupant of this recycled element,
@@ -1494,6 +1503,7 @@ export function createChannelTable(ctx: UiContext) {
       return;
     }
     tr.dataset.rowIdx = String(rowIdx);
+    boundRows.set(tr, row);
     const isSelected = selectedRowIndexes.has(rowIdx);
     tr.classList.toggle("is-selected", isSelected);
     const pending = pendingEdits.get(row);
@@ -1690,21 +1700,44 @@ export function createChannelTable(ctx: UiContext) {
       return null;
     }
     const cell = cellReferenceFor(active);
-    if (!cell) {
+    const tr = active.closest("tr");
+    const row = tr ? boundRows.get(tr) : undefined;
+    if (!cell || !row) {
       return null;
     }
     // Narrowed by the tagName test above.
     const editor = active as HTMLInputElement | HTMLSelectElement;
+    const text = String(editor.value ?? "");
     return {
       ...cell,
+      // The channel the editor was showing, not its position: the list may
+      // have been replaced or reordered since.
+      row,
       editor,
       // Only a text editor carries an uncommitted draft; a select commits on
-      // change, so there is nothing of its own to put back.
-      draft: active.tagName === "INPUT" ? String(editor.value ?? "") : null,
+      // change, so there is nothing of its own to put back. Text the user has
+      // not changed since the cell was bound is the row's value, which this
+      // render may be about to replace (a settled check), not a draft.
+      draft: active.tagName === "INPUT" && text !== boundEditorValues.get(active) ? text : null,
       // A select has no caret: these read undefined there, as they always did.
       selectionStart: (editor as HTMLInputElement).selectionStart,
       selectionEnd: (editor as HTMLInputElement).selectionEnd,
     };
+  }
+
+  // The element that had focus is still in the pool, now showing another
+  // channel: left focused, the next keystroke would edit that channel
+  // (issue #349). Take the keyboard off the grid instead.
+  function releaseFocus(editor: HTMLInputElement | HTMLSelectElement): void {
+    if (editor !== globalThis.document?.activeElement) {
+      return;
+    }
+    isMovingFocus = true;
+    try {
+      editor.blur();
+    } finally {
+      isMovingFocus = false;
+    }
   }
 
   // Hand focus to whichever element now shows the row that had it, so typing
@@ -1713,9 +1746,16 @@ export function createChannelTable(ctx: UiContext) {
     if (!captured) {
       return;
     }
+    // The channel was replaced (a file loaded over it) or removed: what was
+    // typed went with it, and must not land on whatever row took its place.
+    const rowIdx = state.currentRows.indexOf(captured.row);
+    if (rowIdx < 0) {
+      releaseFocus(captured.editor);
+      return;
+    }
     // A cell's first child is the editor createCellEditor() built for it: a
     // text input, or a select, which has no caret to restore.
-    const editor = cellElement(captured.rowIdx, captured.column)?.children[0] as HTMLInputElement | undefined;
+    const editor = cellElement(rowIdx, captured.column)?.children[0] as HTMLInputElement | undefined;
     if (!editor) {
       // The channel being edited fell out of the rendered window, so there is
       // no element left to hold the draft. Commit it as a blur would rather
@@ -1724,20 +1764,10 @@ export function createChannelTable(ctx: UiContext) {
       const draft = captured.draft;
       if (draft !== null) {
         queueMicrotask(() => {
-          void commitRawValue(captured, draft);
+          void commitRawValue({ rowIdx, column: captured.column }, draft);
         });
       }
-      // The element that had focus is still in the pool, now showing another
-      // channel: left focused, the next keystroke would edit that channel
-      // (issue #349). Take the keyboard off the grid instead.
-      if (captured.editor === globalThis.document?.activeElement) {
-        isReleasingFocus = true;
-        try {
-          captured.editor.blur();
-        } finally {
-          isReleasingFocus = false;
-        }
-      }
+      releaseFocus(captured.editor);
       return;
     }
     // bindRowElement has just written the row's stored value into this
@@ -1749,7 +1779,12 @@ export function createChannelTable(ctx: UiContext) {
     }
     const refocused = editor !== globalThis.document?.activeElement;
     if (refocused) {
-      editor.focus?.({ preventScroll: true });
+      isMovingFocus = true;
+      try {
+        editor.focus?.({ preventScroll: true });
+      } finally {
+        isMovingFocus = false;
+      }
     }
     // Rewriting the value collapses the caret to the end, so the selection is
     // restored whenever either the text or the focus moved.
@@ -1923,7 +1958,7 @@ export function createChannelTable(ctx: UiContext) {
     dom.tableBody.addEventListener("focusout", (event) => {
       // Checked for INPUT below before it is read as one.
       const target = event.target as HTMLInputElement;
-      if (target?.tagName !== "INPUT" || isReleasingFocus) {
+      if (target?.tagName !== "INPUT" || isMovingFocus) {
         return;
       }
       const cell = cellReferenceFor(event.target);
