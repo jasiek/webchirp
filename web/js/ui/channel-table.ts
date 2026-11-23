@@ -1699,17 +1699,20 @@ export function createChannelTable(ctx: UiContext) {
     if (!dom.tableBody.contains?.(active)) {
       return null;
     }
-    const cell = cellReferenceFor(active);
+    // Not cellReferenceFor(): the element's row index may be past the end of a
+    // list that has just shrunk, and the channel it showed is what restoring
+    // goes by.
+    const column = active.closest<HTMLElement>("td[data-column]")?.dataset.column;
     const tr = active.closest("tr");
     const row = tr ? boundRows.get(tr) : undefined;
-    if (!cell || !row) {
+    if (!column || !row) {
       return null;
     }
     // Narrowed by the tagName test above.
     const editor = active as HTMLInputElement | HTMLSelectElement;
     const text = String(editor.value ?? "");
     return {
-      ...cell,
+      column,
       // The channel the editor was showing, not its position: the list may
       // have been replaced or reordered since.
       row,

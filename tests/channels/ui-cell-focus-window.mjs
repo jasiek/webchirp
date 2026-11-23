@@ -42,7 +42,7 @@ const SCHEMA = {
 // measures nothing, so the estimate is what it windows against).
 const ROW_HEIGHT = 30;
 
-async function windowedGrid({ held = false } = {}) {
+async function windowedGrid({ held = false, csvRows = SAMPLE_ROWS, importNow = true } = {}) {
   const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
@@ -57,7 +57,7 @@ async function windowedGrid({ held = false } = {}) {
     getDefaultSchema: async () => ({ headers: SCHEMA.headers }),
     getRadioMetadata: async () => SCHEMA,
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
-    parseCsv: async () => ({ headers: SCHEMA.headers, rows: SAMPLE_ROWS, errors: [] }),
+    parseCsv: async () => ({ headers: SCHEMA.headers, rows: csvRows.slice(), errors: [] }),
     normalizeAndValidateRows: rowCheck.normalizeAndValidateRows,
   }));
   // Ten rows tall: the grid keeps those plus its overscan in the DOM.
@@ -65,7 +65,9 @@ async function windowedGrid({ held = false } = {}) {
   setLayout(viewport, { clientHeight: 10 * ROW_HEIGHT, scrollTop: 0 });
   await ui.init(true);
   await selectRadioBySearch(document, "Acme One");
-  await importSampleCsv(document);
+  if (importNow) {
+    await importSampleCsv(document);
+  }
   return { document, viewport, calls: rowCheck.calls };
 }
 
@@ -156,4 +158,32 @@ test("taking focus off a recycled editor does not commit what it now shows", asy
   assert.ok(!document.querySelector("#mem-table tbody").contains(document.activeElement),
     "focus left the grid");
   assert.equal(calls.length, 1, "no second commit for the channel the editor now shows");
+});
+
+test("an editor whose channel an import replaced gives up focus", async () => {
+  // Blank inserted rows are not real channels, so a CSV dropped while one of
+  // their cells is focused replaces the list without asking. The list shrinks
+  // under the focused element, which stays in the pool showing an imported
+  // channel: it must not keep the keyboard, and the draft goes nowhere.
+  const csvRows = [];
+  const { document, viewport, calls } = await windowedGrid({ csvRows, importNow: false });
+  for (let idx = 0; idx < 60; idx += 1) {
+    document.querySelector("#channel-insert").dispatchEvent(domEvent({ type: "click" }));
+    await flushMicrotasks();
+  }
+  scrollTo(document, viewport, 32);
+  await flushMicrotasks();
+  const input = renderedRow(document, 40).children[1].children[0];
+  input.focus();
+  input.value = "Draft";
+  const callsBefore = calls.length;
+
+  csvRows.push(...SAMPLE_ROWS.slice(0, 30));
+  await importSampleCsv(document);
+
+  assert.ok(input.isConnected, "the focused element is still in the pool");
+  assert.notEqual(input.value, "Draft");
+  assert.ok(!document.querySelector("#mem-table tbody").contains(document.activeElement),
+    "focus left the grid");
+  assert.equal(calls.length, callsBefore, "nothing was committed");
 });
