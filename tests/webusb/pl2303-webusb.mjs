@@ -58,10 +58,12 @@ function makeFakeDevice({
       if (setup.requestType === "standard" && setup.request === 0x06) {
         return { status: "ok", data: new DataView(deviceDescriptorBytes(descriptor).buffer) };
       }
+      // HXN silicon stalls every legacy vendor read (bRequest 0x01). WebUSB
+      // reports a STALL by resolving with status "stall", not by rejecting.
+      if (setup.requestType === "vendor" && setup.request === 0x01 && !hxProbeSucceeds) {
+        return { status: "stall", data: new DataView(new ArrayBuffer(0)) };
+      }
       if (setup.requestType === "vendor" && setup.value === 0x8080) {
-        if (!hxProbeSucceeds) {
-          throw new Error("stall");
-        }
         return { status: "ok", data: new DataView(new Uint8Array([0]).buffer) };
       }
       return { status: "ok", data: new DataView(new Uint8Array(length || 1).buffer) };
@@ -100,6 +102,9 @@ test("detectPl2303Type follows the usb-serial-for-android ladder", () => {
   assert.equal(detectPl2303Type({ deviceClass: 0, maxPacketSize0: 64, usbVersion: 0x200, deviceVersion: 0x500, hxStatus: true }), PL2303_TYPE_T);
   // USB 2.0 chip that rejects the legacy register -> HXN family.
   assert.equal(detectPl2303Type({ deviceClass: 0, maxPacketSize0: 64, usbVersion: 0x200, deviceVersion: 0x100, hxStatus: false }), PL2303_TYPE_HXN);
+  // GT shares TA's bcdDevice 3.00 and GE shares TB's 5.00: the probe decides.
+  assert.equal(detectPl2303Type({ deviceClass: 0, maxPacketSize0: 64, usbVersion: 0x200, deviceVersion: 0x300, hxStatus: false }), PL2303_TYPE_HXN);
+  assert.equal(detectPl2303Type({ deviceClass: 0, maxPacketSize0: 64, usbVersion: 0x200, deviceVersion: 0x500, hxStatus: false }), PL2303_TYPE_HXN);
   // USB 1.1 -> classic HX.
   assert.equal(detectPl2303Type({ deviceClass: 0, maxPacketSize0: 64, usbVersion: 0x110, deviceVersion: 0x400, hxStatus: true }), PL2303_TYPE_HX);
 });
@@ -222,6 +227,27 @@ test("HXN open() skips the legacy startup and uses HXN registers", async () => {
   assert.ok(vendorWrites.some((t) => t.value === 0x07 && t.index === 0x03));
   assert.ok(vendorWrites.some((t) => t.value === 0x0a && t.index === 0xff));
 });
+
+// bcdDevice 3.00 is TA or GT and 5.00 is TB or GE on USB 2.0; only the legacy
+// 0x8080 probe tells them apart, as the kernel's pl2303_detect_type() does.
+for (const [chip, deviceVersion, hxProbeSucceeds, expected] of [
+  ["TA", 0x300, true, PL2303_TYPE_T],
+  ["GT", 0x300, false, PL2303_TYPE_HXN],
+  ["TB", 0x500, true, PL2303_TYPE_T],
+  ["GE", 0x500, false, PL2303_TYPE_HXN],
+]) {
+  test(`${chip} (bcdDevice 0x${deviceVersion.toString(16)}) open() probes the legacy register to pick its chip type`, async () => {
+    const { device, controlIn } = makeFakeDevice({
+      descriptor: { ...HXN_DESCRIPTOR, deviceVersion },
+      hxProbeSucceeds,
+    });
+    const port = new Pl2303SerialPort(device);
+    await port.open({ baudRate: 9600 });
+
+    assert.ok(controlIn.some((t) => t.requestType === "vendor" && t.value === 0x8080), "must probe 0x8080");
+    assert.equal(port.chipType, expected);
+  });
+}
 
 for (const [chip, descriptor, hxProbeSucceeds] of [
   ["HX", HX_DESCRIPTOR, true],
