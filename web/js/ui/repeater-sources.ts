@@ -202,9 +202,11 @@ export interface RepeaterDirectoryAdapter extends Omit<RepeaterSource, "key" | "
   /**
    * Fetch what the form describes and read it into records. Null means there
    * is nothing to ask the directory for, and the adapter has said why.
-   * Throws RepeaterInputError for a form the user can fix.
+   * Throws RepeaterInputError for a form the user can fix. `signal` aborts
+   * the requests an import is waiting on, once the user has closed the modal
+   * on it.
    */
-  query: (values: QueryValues, purpose: QueryPurpose) => Promise<DirectoryAnswer | null>;
+  query: (values: QueryValues, purpose: QueryPurpose, signal?: AbortSignal) => Promise<DirectoryAnswer | null>;
 }
 
 // What a source says when the form has not narrowed the search enough to run
@@ -376,7 +378,7 @@ export function createRepeaterSources(
         return answer ? summarizePreview(answer, values.position, radiusKm) : { points: [] };
       },
       runQuery: async (values, signal) => {
-        const answer = await query(values, "import");
+        const answer = await query(values, "import", signal);
         if (!answer || signal.aborted) {
           return;
         }
@@ -790,7 +792,7 @@ export function createRepeaterAdapters(
         }
         return optionsPromise;
       },
-      query: async (values, purpose) => {
+      query: async (values, purpose, signal) => {
         if (purpose === "preview") {
           return previewRemote(values);
         }
@@ -814,14 +816,14 @@ export function createRepeaterAdapters(
           // error-path read of a failed response can stall exactly as the success
           // path can, and either one strands the submit button on "Querying...".
           const headers = await requestHeaders(values);
-          const text = await withRequestTimeout(`${label} query`, async (signal) => {
-            const response = await fetch(url.toString(), { headers, signal });
+          const text = await withRequestTimeout(`${label} query`, async (requestSignal) => {
+            const response = await fetch(url.toString(), { headers, signal: requestSignal });
             if (!response.ok) {
               const body = await response.text();
               throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
             }
             return response.text();
-          });
+          }, undefined, signal);
           found = parseRxfRecords(text, { source: adapterId });
         }
         const fetched = found.records.length + found.unusable.length;
@@ -893,7 +895,10 @@ export function createRepeaterAdapters(
     // line per square however little of the plan cost a request this time.
     async function recordsForSquares(
       squares: string[],
-      { onSquare }: { onSquare?: (square: { locator: string; count: number; cached: boolean }) => void } = {},
+      { onSquare, signal }: {
+        onSquare?: (square: { locator: string; count: number; cached: boolean }) => void;
+        signal?: AbortSignal;
+      } = {},
     ) {
       const held = new Map<string, RsgbRecord[]>();
       const missing: string[] = [];
@@ -906,7 +911,7 @@ export function createRepeaterAdapters(
         }
       }
       if (missing.length > 0) {
-        const fetched = await fetchRsgbRecords({ squares: missing });
+        const fetched = await fetchRsgbRecords({ squares: missing, signal });
         // fetchRsgbRecords returns one flat list, so the records are put back
         // under the square they came from. A square that legitimately holds no
         // repeaters caches as an empty list, which is what stops it being
@@ -984,7 +989,7 @@ export function createRepeaterAdapters(
     }
 
     // The query the Query API button runs.
-    async function importRsgb(values: QueryValues): Promise<DirectoryAnswer | null> {
+    async function importRsgb(values: QueryValues, signal?: AbortSignal): Promise<DirectoryAnswer | null> {
       const position = values.position;
       if (!position) {
         throw new RepeaterInputError(POSITION_REQUIRED_MESSAGE);
@@ -1012,6 +1017,7 @@ export function createRepeaterAdapters(
       // Through the cache the preview fills, so pressing Query API after
       // watching the preview does not download every square a second time.
       const records = await recordsForSquares(plan.squares, {
+        signal,
         onSquare: ({ locator, count, cached }) => log.logDebug(
           `RSGB SQUARE ${locator} -> ${count}${cached ? " (cached)" : ""}`,
         ),
@@ -1122,11 +1128,11 @@ export function createRepeaterAdapters(
         { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
       ],
       loadOptions: null,
-      query: (values, purpose) => {
+      query: (values, purpose, signal) => {
         if (purpose === "preview" && values.position) {
           return previewRsgb(values, values.position);
         }
-        return importRsgb(values);
+        return importRsgb(values, signal);
       },
     };
   }
