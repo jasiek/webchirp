@@ -193,6 +193,31 @@ json.dumps({
     assert.match(result.csvText, /0\.000000/);
   });
 
+  // A driver whose valid_tuning_steps, valid_tones, valid_cross_modes or
+  // valid_dtcs_codes is empty gives those columns no default, so a new row
+  // leaves them blank (issue #343).
+  await t.test("blank tone, DTCS, cross mode and step cells export as Memory defaults", async () => {
+    const rows = makeChannelRows().map((row) => ({
+      ...row,
+      rToneFreq: "",
+      cToneFreq: "",
+      DtcsCode: "",
+      RxDtcsCode: "",
+      CrossMode: "",
+      TStep: "",
+    }));
+    const result = await harness.runPythonJson(
+      `
+_csv = normalize_rows(json.loads(_rows_json), _sid)
+json.dumps({"lines": _csv.splitlines()})
+      `,
+      { _rows_json: JSON.stringify(rows), _sid: sessionId },
+    );
+
+    const [first] = result.lines.slice(1);
+    assert.match(first, /^1,PMR01,446\.006250,,0\.000000,,88\.5,88\.5,023,NN,023,Tone->Tone,NFM,5\.00,/);
+  });
+
   await t.test("UI-style PMR frequencies are parseable from channel list values", async () => {
     const rows = makeChannelRows({ frequencies: PMR446_FREQS_5DP });
     const result = await harness.runPythonJson(
