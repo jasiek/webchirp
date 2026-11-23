@@ -20,6 +20,7 @@ import { ensureModule, sharedHarness } from "../support/chirp.mjs";
 import { installIndexPage } from "../support/index-page.mjs";
 import {
   createDeferred,
+  dispatch,
   emit,
   flushMicrotasks,
   selectRadioBySearch,
@@ -664,4 +665,147 @@ test("an image load hands its session to the selection it makes", async () => {
   await flushMicrotasks();
   assert.equal(metadataSessions.at(-1), imageSession);
   assert.equal(metadataSessions.filter((id) => id === imageSession).length, 1);
+});
+
+// An image the runtime loads but whose driver then cannot describe its
+// columns is a failed import, not half of one: the radio, its session and the
+// channels it holds stay together, and the session the load opened for the
+// image is closed rather than left behind the selection. Issue #320.
+test("an image import that fails after loading keeps the previous radio and its session", async () => {
+  const { document, window } = installIndexPage();
+  const { createUiController } = await import("../../web/js/ui.ts");
+  const ui = createUiController();
+  const closes = [];
+  const loadedSessions = [];
+  const preflightRadios = [];
+
+  const api = withRadioSessions({
+    listRadios: async () => ({ radios: CATALOG }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getRadioMetadata: async ({ module }) => {
+      if (module === "fast") {
+        throw new Error("metadata unavailable");
+      }
+      return { headers: ["Location", "Name", "Frequency"], columns: {} };
+    },
+    getRadioSettings: async () => EMPTY_SETTINGS,
+    parseCsv: async () => ({
+      headers: ["Location", "Name", "Frequency"],
+      rows: [{ Location: "1", Name: "FromCsv", Frequency: "145.500000" }],
+      errors: [],
+    }),
+    loadImage: async () => ({
+      module: "fast",
+      className: "FastRadio",
+      vendor: "FastCo",
+      model: "Fast",
+      headers: ["Location", "Name", "Frequency"],
+      rows: [{ Location: "1", Name: "FromImg", Frequency: "446.000000" }],
+      settings: [],
+    }),
+    // Records which radio the export's preflight checked, then stops the
+    // export there: what it would have written is not this test's concern.
+    validateRowsForUpload: async ({ module, rows }) => {
+      preflightRadios.push({ module, names: rows.map((row) => row.Name) });
+      return { valid: false, issues: [{ rowIndex: -1, column: "", message: "stop" }], warnings: [] };
+    },
+    validateRadioSettings: async () => ({ valid: true, issues: [], settings: [], available: false }),
+  });
+  const load = api.loadImage;
+  api.loadImage = async (payload) => {
+    const loaded = await load(payload);
+    loadedSessions.push(loaded.sessionId);
+    return loaded;
+  };
+  const close = api.closeRadioSession;
+  api.closeRadioSession = async (payload) => {
+    closes.push(payload.sessionId);
+    return close(payload);
+  };
+  ui.setRuntimeApi(api);
+  await ui.init(true);
+
+  selectRadioBySearch(document, "SlowCo Slow");
+  await flushMicrotasks();
+  const dropFile = (file) => emit(window, "drop", { dataTransfer: { types: ["Files"], files: [file] } });
+  await dropFile({ name: "channels.csv", text: async () => "" });
+  await flushMicrotasks();
+  assert.deepEqual(ui.selectedRowsForOperations().map((row) => row.Name), ["FromCsv"]);
+
+  await dropFile({ name: "codeplug.img", arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer });
+  await flushMicrotasks();
+
+  assert.match(document.querySelector("#debug-output").value, /File drop failed/);
+  assert.equal(document.querySelector("#radio-selection-name").textContent, "SlowCo Slow");
+  assert.deepEqual(ui.selectedRowsForOperations().map((row) => row.Name), ["FromCsv"]);
+  // Only the image's session was closed; the selected radio's is still open.
+  assert.equal(loadedSessions.length, 1);
+  assert.deepEqual(closes, loadedSessions);
+
+  // A write after the failure checks the channels shown against the radio
+  // they belong to.
+  await dispatch(document.querySelector("#export-binary"), "click");
+  assert.deepEqual(preflightRadios, [{ module: "slow", names: ["FromCsv"] }]);
+});
+
+// A radio picked while an image is still loading is the user's latest word:
+// the import gives way and closes the session it opened, rather than switch
+// the selection back under them.
+test("an image import gives way to a radio selected while it loads", async () => {
+  const { document, window } = installIndexPage();
+  const { createUiController } = await import("../../web/js/ui.ts");
+  const ui = createUiController();
+  const imageLoad = createDeferred();
+  const closes = [];
+  let imageSession = "";
+
+  const api = withRadioSessions({
+    listRadios: async () => ({ radios: CATALOG }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getRadioMetadata: async () => ({ headers: ["Location", "Name", "Frequency"], columns: {} }),
+    getRadioSettings: async () => EMPTY_SETTINGS,
+    loadImage: () => imageLoad.promise,
+  });
+  const load = api.loadImage;
+  api.loadImage = async (payload) => {
+    const loaded = await load(payload);
+    imageSession = loaded.sessionId;
+    return loaded;
+  };
+  const close = api.closeRadioSession;
+  api.closeRadioSession = async (payload) => {
+    closes.push(payload.sessionId);
+    return close(payload);
+  };
+  ui.setRuntimeApi(api);
+  await ui.init(true);
+
+  const drop = emit(window, "drop", {
+    dataTransfer: {
+      types: ["Files"],
+      files: [{ name: "codeplug.img", arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }],
+    },
+  });
+  await flushMicrotasks();
+  selectRadioBySearch(document, "FastCo Fast");
+  await flushMicrotasks();
+
+  imageLoad.resolve({
+    module: "slow",
+    className: "SlowRadio",
+    vendor: "SlowCo",
+    model: "Slow",
+    headers: ["Location", "Name", "Frequency"],
+    rows: [{ Location: "1", Name: "FromImg", Frequency: "146.000000" }],
+    settings: [],
+  });
+  await drop;
+  await flushMicrotasks();
+
+  assert.equal(document.querySelector("#radio-selection-name").textContent, "FastCo Fast");
+  assert.deepEqual(ui.selectedRowsForOperations(), []);
+  assert.match(imageSession, /^slow:SlowRadio#/);
+  assert.deepEqual(closes, [imageSession]);
 });
