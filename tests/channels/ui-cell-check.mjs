@@ -22,6 +22,7 @@ import {
   flushMicrotasks,
   importSampleCsv,
   selectRadioBySearch,
+  setLayout,
 } from "../support/ui-interactions.mjs";
 import { fakeRowCheck, withRadioSessions } from "../support/fake-runtime-api.mjs";
 
@@ -56,7 +57,7 @@ function nameVerdict(column, value, _previous, { payload }) {
     : { value, accepted: true };
 }
 
-async function grid(rowCheckOptions = {}) {
+async function grid(rowCheckOptions = {}, rows = SAMPLE_ROWS) {
   const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
@@ -67,7 +68,7 @@ async function grid(rowCheckOptions = {}) {
     getDefaultSchema: async () => ({ headers: HEADERS }),
     getRadioMetadata: async () => ({ headers: HEADERS, columns: COLUMNS }),
     getRadioSettings: async () => ({ supported: false, available: false, requiresImage: false, message: "", groups: [] }),
-    parseCsv: async () => ({ headers: HEADERS, rows: SAMPLE_ROWS.map((row) => ({ ...row })), errors: [] }),
+    parseCsv: async () => ({ headers: HEADERS, rows: rows.map((row) => ({ ...row })), errors: [] }),
     normalizeAndValidateRows: rowCheck.normalizeAndValidateRows,
   }));
   await ui.init(true);
@@ -113,6 +114,68 @@ test("a committed cell shows what was typed, pending, then what the runtime stor
   assert.equal(cell(document, 0, "Name").classList.contains("is-pending"), false);
   assert.equal(cell(document, 0, "Name").title, "Truncated to 5 characters");
   assert.match(document.querySelector("#debug-output").value, /ROW CHECK channel=0 column=Name: Truncated to 5 characters/);
+});
+
+test("an answer that settles while the user is back in the cell shows what the runtime stored", async () => {
+  // Issue #350: clicking back into a pending cell left the typed text in the
+  // editor, and the re-render that applied the answer took that text for a
+  // draft and put it back over the stored value.
+  const { document, rowCheck } = await grid({ held: true });
+
+  commit(document, 0, "Name", "LONGNAME");
+  await flushMicrotasks();
+  const editor = cell(document, 0, "Name").children[0];
+  editor.focus();
+
+  rowCheck.release();
+  await flushMicrotasks();
+
+  assert.equal(cell(document, 0, "Name").children[0].value, "LONGN");
+  assert.equal(document.activeElement, cell(document, 0, "Name").children[0]);
+  editor.blur();
+  await flushMicrotasks();
+  assert.equal(rowCheck.calls.length, 1, "leaving the settled cell asks nothing more");
+});
+
+test("focus following its channel across a scroll does not commit the row it leaves", async () => {
+  // Issue #350: the scroll hands the focused element to another channel and
+  // focus moves to the element now showing the focused one. The element left
+  // behind fires focusout, which committed the channel it had just been bound
+  // to and made that row's answer in flight stale.
+  const rows = Array.from({ length: 40 }, (_, index) => ({
+    Location: String(index), Name: `CH${index}`, Frequency: "146.520000",
+  }));
+  const { document, rowCheck } = await grid({ held: true }, rows);
+  const scrollEl = document.querySelector("#mem-table-scroll");
+  // A viewport two rows tall (rows are estimated at 30 px): the grid renders
+  // those and eight more either side.
+  setLayout(scrollEl, { clientHeight: 60, scrollTop: 0 });
+  scrollEl.dispatchEvent(domEvent({ type: "scroll" }));
+  const nameEditor = (rowIdx) => document
+    .querySelector(`#mem-table tbody tr[data-row-idx="${rowIdx}"]`)
+    .children[HEADERS.indexOf("Name")].children[0];
+
+  // Channel 11 has an edit in flight, and the user is in channel 9.
+  const pending = nameEditor(11);
+  pending.value = "LONGNAME";
+  pending.focus();
+  pending.blur();
+  await flushMicrotasks();
+  assert.equal(rowCheck.calls.length, 1);
+  const focused = nameEditor(9);
+  focused.focus();
+
+  // Two rows down: the element that showed channel 9 now shows channel 11.
+  scrollEl.scrollTop = 300;
+  scrollEl.dispatchEvent(domEvent({ type: "scroll" }));
+  await flushMicrotasks();
+
+  assert.equal(focused.closest("tr").dataset.rowIdx, "11");
+  assert.equal(document.activeElement, nameEditor(9));
+  assert.equal(rowCheck.calls.length, 1, "channel 11 is not sent again");
+  rowCheck.release();
+  await flushMicrotasks();
+  assert.equal(nameEditor(11).value, "LONGN");
 });
 
 test("leaving a cell without changing it asks the runtime nothing", async () => {

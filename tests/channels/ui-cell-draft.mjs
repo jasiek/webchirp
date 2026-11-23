@@ -45,8 +45,8 @@ function frequencyVerdict(column, value, previous) {
 }
 
 // Bring the grid up on a radio whose Frequency column really has bands, so the
-// band check the bug depended on is live.
-async function gridWithTwoChannels() {
+// band check the bug depended on is live, with no channels loaded yet.
+async function emptyGrid() {
   const { document } = installIndexPage();
   const { createUiController } = await import("../../web/js/ui.ts");
   const ui = createUiController();
@@ -65,6 +65,11 @@ async function gridWithTwoChannels() {
   }));
   await ui.init(true);
   await selectRadioBySearch(document, "Acme One");
+  return { document };
+}
+
+async function gridWithTwoChannels() {
+  const { document } = await emptyGrid();
   await importSampleCsv(document);
   return { document };
 }
@@ -129,4 +134,24 @@ test("an accepted edit committed on blur outlives the next re-render", async () 
   await flushMicrotasks();
 
   assert.equal(frequencyEditor(document, 1).value, "145.500000");
+});
+
+test("a draft in a blank row does not land on the channel a CSV import puts there", async () => {
+  // Issue #350: a blank inserted row is not a real channel, so a CSV dropped
+  // while its cell is still focused replaces the list without asking, and the
+  // re-render used to put the draft back by position -- over the imported
+  // channel 0, where leaving the cell then committed it.
+  const { document } = await emptyGrid();
+  document.querySelector("#channel-insert").dispatchEvent(domEvent({ type: "click" }));
+  await flushMicrotasks();
+  const editor = frequencyEditor(document, 0);
+  editor.focus();
+  editor.value = "145.";
+
+  await importSampleCsv(document);
+
+  assert.equal(frequencyEditor(document, 0).value, "146.520000");
+  frequencyEditor(document, 0).blur();
+  await flushMicrotasks();
+  assert.equal(frequencyEditor(document, 0).value, "146.520000");
 });
