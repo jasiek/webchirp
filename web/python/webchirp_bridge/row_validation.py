@@ -16,7 +16,11 @@ from typing import TYPE_CHECKING
 
 from chirp import chirp_common
 
-from webchirp_bridge.channel_extra import _apply_row_extras_to_memory
+from webchirp_bridge.channel_extra import (
+    ROW_EXTRA_KEY,
+    _apply_row_extras_to_memory,
+    _memory_once_written,
+)
 from webchirp_bridge.channel_rows import (
     CSV_HEADERS,
     DV_FIELD_HEADERS,
@@ -32,6 +36,7 @@ from webchirp_bridge.power_levels import (
     _level_map_for_radio,
     _valid_power_levels_for_driver,
 )
+from webchirp_bridge.radio_files import _scratch_copy
 from webchirp_bridge.row_normalization import CellOutcome, _rejected, normalize_cell
 from webchirp_bridge.session import resolve_optional_session
 
@@ -307,10 +312,46 @@ def _prepare_row_change(
     return "set", mem, warnings, validation_errors
 
 
+def _extras_target(
+    radio: chirp_common.Radio,
+    row: Row,
+    existing: chirp_common.Memory,
+    mem: chirp_common.Memory,
+    action: RowChangeAction,
+) -> chirp_common.Memory:
+    """The memory a row's extras will be replayed onto when it is written.
+
+    ``existing`` itself, except for a row written to a slot that is empty in
+    the image: most drivers build no extras for an empty slot, so the write
+    path replays the sidecar onto the memory read back after ``mem`` is
+    written (``_apply_row_extras``). The same write is made here, on a copy of
+    the radio, since ``radio`` may be the per-edit check's shared instance.
+    Only a row that carries a sidecar pays for the copy.
+    """
+    stored = row.get(ROW_EXTRA_KEY)
+    if (
+        action != "set"
+        or not existing.empty
+        or getattr(existing, "extra", None)
+        or not isinstance(stored, dict)
+        or not stored
+    ):
+        return existing
+    try:
+        return _memory_once_written(_scratch_copy(radio), mem.dupe())
+    except Exception:
+        _log_debug(
+            f"Channel {mem.number} extra settings could not be checked: writing "
+            f"it to a copy of the radio failed\n{traceback.format_exc()}"
+        )
+        return existing
+
+
 def _row_extra_findings(
     radio: chirp_common.Radio,
     row: Row,
     existing: chirp_common.Memory,
+    mem: chirp_common.Memory,
     action: RowChangeAction,
 ) -> tuple[list[str], list[str]]:
     """What a row's driver extras would do to the memory they land on.
@@ -335,7 +376,8 @@ def _row_extra_findings(
     """
     if action == "erase":
         return [], []
-    changed, rejected = _apply_row_extras_to_memory(existing, row)
+    target = _extras_target(radio, row, existing, mem, action)
+    changed, rejected = _apply_row_extras_to_memory(target, row)
     if not changed or action != "skip":
         return list(rejected), []
     try:
@@ -440,7 +482,7 @@ def _row_findings(
         # machinery above -- including for a row the change classification
         # skipped, which an extras-only edit always is.
         extra_errors, extra_warnings = _row_extra_findings(
-            radio, row, existing, action
+            radio, row, existing, mem, action
         )
         errors.extend((EXTRA_COLUMN, message) for message in extra_errors)
         warnings.extend((EXTRA_COLUMN, message) for message in extra_warnings)

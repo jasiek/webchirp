@@ -21,6 +21,8 @@ from __future__ import annotations
 import traceback
 from typing import TYPE_CHECKING
 
+from chirp import chirp_common
+
 from webchirp_bridge.jsbridge import _log_debug
 from webchirp_bridge.radio_settings import _serialize_setting_value
 from webchirp_bridge.session import resolve_session
@@ -28,10 +30,7 @@ from webchirp_bridge.session import resolve_session
 if TYPE_CHECKING:
     from typing import Any, Optional
 
-    from chirp import (
-        chirp_common,
-        settings as chirp_settings,
-    )
+    from chirp import settings as chirp_settings
     from webchirp_bridge.channel_rows import Row
 
 # Driver extras ride on channel rows under a key that is not a CSV header (the
@@ -148,6 +147,42 @@ def _apply_row_extras(radio: chirp_common.Radio, number: int, row: Row) -> None:
         radio.set_memory(memory)
 
 
+def _memory_once_written(
+    radio: chirp_common.Radio, memory: chirp_common.Memory
+) -> chirp_common.Memory:
+    """The memory the driver hands back for ``memory``'s slot once it is written.
+
+    Most drivers that build ``Memory.extra`` return from get_memory before
+    doing so when the slot is empty, so an empty slot says nothing about the
+    extras its channel gets the moment one is written there -- which the write
+    path then replays the row's sidecar onto (``_apply_row_extras``). Writing
+    the memory and reading it back is the only generic way to see them.
+
+    ``radio`` is written to, so it must be a throwaway instance.
+    """
+    radio.set_memory(memory)
+    return radio.get_memory(memory.number)
+
+
+def _placeholder_memory(radio: chirp_common.Radio, number: int) -> chirp_common.Memory:
+    """A channel the driver will store in slot ``number``, to read extras from.
+
+    The editor knows only the slot, not the row's values, and the extras a
+    driver builds do not depend on them: the lowest edge of its first band and
+    FM where it has FM.
+    """
+    features = radio.get_features()
+    memory = chirp_common.Memory()
+    memory.number = number
+    bands = [band for band in (features.valid_bands or []) if band[1] > band[0]]
+    if bands:
+        memory.freq = int(bands[0][0])
+    modes = list(features.valid_modes or [])
+    if modes and "FM" not in modes:
+        memory.mode = modes[0]
+    return memory
+
+
 def _extra_setting_field(
     setting: chirp_settings.RadioSetting,
 ) -> Optional[dict[str, Any]]:
@@ -194,6 +229,7 @@ def get_channel_extra(session_id: str, location: Any) -> dict[str, Any]:
     values. The values reported here are the ones the backing image holds; the
     editor overlays whatever the row already carries on top, so a channel the
     user has moved or edited shows its own settings rather than the slot's.
+    An empty slot reports the defaults a channel written there would get.
 
     Extras are per-memory in principle (a driver is free to expose different
     settings for different slots), so this resolves the memory the row names
@@ -219,6 +255,16 @@ def get_channel_extra(session_id: str, location: Any) -> dict[str, Any]:
             "This channel's extra settings could not be read. Download from the "
             "radio or load a codeplug image first.",
         )
+    if memory.empty and not getattr(memory, "extra", None):
+        # The radio is this call's own instance, so it can take the write.
+        try:
+            memory = _memory_once_written(radio, _placeholder_memory(radio, number))
+        except Exception as exc:
+            _log_debug(
+                f"Channel {number} is empty and a placeholder channel could not "
+                f"be written there to read its extra settings: {exc}\n"
+                f"{traceback.format_exc()}"
+            )
     extra = getattr(memory, "extra", None)
     if not extra:
         return _channel_extra_payload(
