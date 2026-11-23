@@ -25,7 +25,10 @@
 (* Left out: bytes, waiters and timeouts (readBytes and inWaiting are      *)
 (* modelled only by the port check they start with), option values, and   *)
 (* one physical device seen through two port objects: every port object    *)
-(* requestTransport() hands out is a fresh one.                            *)
+(* requestTransport() hands out is a fresh one. A standalone               *)
+(* resetBuffers() (serial_reset_input_buffer) is not a caller operation:   *)
+(* it reads nothing from this.port after its flush, and prepareClone()     *)
+(* already exercises that flush (Flushes).                                 *)
 (***************************************************************************)
 EXTENDS Naturals, Sequences
 

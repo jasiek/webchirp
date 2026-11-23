@@ -313,3 +313,43 @@ test(
     assert.equal(lost.length, 1);
   },
 );
+
+// Window (2) of the same finding: resetBuffers() awaits a real flush, and the
+// port can be lost while it is pending even when prepareClone() changes no
+// setting. Unlike window (1) this needs no reconfigure that outlives a close:
+// the flush completes before the teardown's close starts. A this.port !== port
+// check in _reopenPort() leaves it open, so it is replayed on its own.
+test(
+  "a port lost during prepareClone()'s input flush fails it as not connected",
+  { todo: "serial-bridge-in-place-reconfigure-outlives-the-port" },
+  async () => {
+    // Any re-rate route will do, since nothing is re-rated: the Web Serial one.
+    const port = makeRecordingPort({
+      capabilities: { framing: true, signals: true, reconfigure: "reopen" },
+    });
+    // The flush parks until the test settles it.
+    const flushes = [];
+    port.discardInput = () => new Promise((resolve) => {
+      flushes.push(resolve);
+    });
+    const bridge = new SerialBridge({ requestTransport: async () => port });
+    const lost = [];
+    bridge.onPortLost = (info) => lost.push(info);
+    await bridge.open(9600);
+
+    // The rate the port already has: no re-rate, straight to the flush.
+    const clone = bridge.prepareClone(true, true, 0, 9600);
+    await tick();
+    assert.equal(flushes.length, 1, "parked at await this.port.discardInput()");
+    port.failRead(new Error("The device has been lost."));
+    await tick();
+    await tick();
+    assert.equal(lost.length, 1);
+    assert.equal(bridge.port, null);
+    flushes[0]();
+    const error = await clone.then(() => null, (caught) => caught);
+
+    assert.ok(error, "prepareClone() succeeded on a port the bridge had dropped");
+    assert.notEqual(error.name, "TypeError", `prepareClone() dereferenced a null port: ${error.message}`);
+  },
+);
