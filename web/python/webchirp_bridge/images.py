@@ -125,10 +125,18 @@ def export_image_base64(
     # is the zeroed map of the driver's declared size the export starts from.
     radio = session.radio_instance()
     _apply_rows_to_radio_instance(radio, rows or [], session)
-    settings_result = _validate_and_apply_radio_settings(
-        radio, settings_groups or [], apply_changes=True
-    )
-    _raise_for_refused_settings(settings_result, "export")
+    # Settings are read from an image, and zeroes are none: an offline export
+    # neither applies settings nor parses any to echo back, as
+    # get_radio_settings refuses them for this session. Settings parsed from
+    # zeroes would come back with the next export and could name a channel
+    # that has since changed (issue 342).
+    settings: list[Any] = []
+    if origin is not ImageOrigin.SYNTHETIC:
+        settings_result = _validate_and_apply_radio_settings(
+            radio, settings_groups or [], apply_changes=True
+        )
+        _raise_for_refused_settings(settings_result, "export")
+        settings = settings_result["settings"]
     if origin is ImageOrigin.SYNTHETIC and isinstance(radio, chirp_common.CloneModeRadio):
         radio.metadata = {SYNTHETIC_IMAGE_METADATA_KEY: ImageOrigin.SYNTHETIC.value}
     image_data = session.record_radio(radio, origin)
@@ -137,7 +145,7 @@ def export_image_base64(
         "vendor": str(getattr(radio_cls, "VENDOR", "")),
         "model": str(getattr(radio_cls, "MODEL", "")),
         "variant": str(getattr(radio_cls, "VARIANT", "")),
-        "settings": settings_result["settings"],
+        "settings": settings,
     }
 
 

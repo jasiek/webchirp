@@ -322,6 +322,38 @@ json.dumps({"reopened": _reopened, "resaved": _resaved_state, "plain": _plain_st
   });
 }
 
+// Issue 342: an offline export's settings would be parsed from the zeroes it
+// was built on, so its reply carries none, as get_radio_settings answers for
+// the same session. The UI keeps what an export echoes back and sends it with
+// the next export, where settings read from zeroes can be refused once the
+// channels change -- with no Settings tab to clear them from.
+test("an offline export echoes back no settings, and the next export succeeds", async () => {
+  const harness = await sharedHarness();
+  await ensureModule(harness, "uv5r");
+  const opened = await harness.rpc("open_session", {
+    module_name: "uv5r",
+    class_name: "BaofengUV5RGeneric",
+  });
+  const row = (name) => ({ Location: "1", Name: name, Frequency: "146.520000", Mode: "FM" });
+  try {
+    const first = await harness.rpc("export_image_base64", {
+      session_id: opened.sessionId,
+      rows: [row("CHAN1")],
+      settings_groups: [],
+    });
+    assert.deepEqual(first.settings, [], "settings are not read from zeroes");
+    const second = await harness.rpc("export_image_base64", {
+      session_id: opened.sessionId,
+      rows: [row("CHAN2")],
+      settings_groups: first.settings,
+    });
+    assert.ok(second.size > 0, "the second offline export still produces a file");
+    assert.deepEqual(second.settings, []);
+  } finally {
+    await harness.rpc("close_session", { session_id: opened.sessionId });
+  }
+});
+
 test("undecodable channels protect the session that recorded them, and no other", async () => {
   const harness = await sharedHarness();
   await ensureModule(harness, "h777");

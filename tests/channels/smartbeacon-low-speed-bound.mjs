@@ -121,15 +121,22 @@ for (const fixture of FIXTURES) {
     assert.ok(!log.some((line) => FALLBACK_LINE.test(line)), "no bound getter raised");
   });
 
-  test(`${fixture.className}: a from-scratch binary export bounds the low speeds by their declared maximum`, async () => {
+  // An offline export no longer reads settings from its zeroes (issue 342),
+  // but a radio's own image can hold a high speed that never initialized
+  // too, so the settings are read here from a zeroed map directly.
+  test(`${fixture.className}: settings read from a zeroed map bound the low speeds by their declared maximum`, async () => {
     const harness = await sharedHarness();
     const sessionId = await blankSession(harness, fixture);
     try {
-      const { result: exported, log } = await withCapturedDebugLog(harness, () =>
-        harness.rpc("export_image_base64", { session_id: sessionId, rows: [], settings_groups: [] }),
+      const { result: settings, log } = await withCapturedDebugLog(harness, () =>
+        harness.runPythonJson(
+          `json.dumps(_validate_and_apply_radio_settings(
+    resolve_session(_session_id).radio_instance(), [], apply_changes=False
+)["settings"])`,
+          { _session_id: sessionId },
+        ),
       );
-      assert.ok(exported.imageBase64.length > 0, "the export should produce an image");
-      assert.deepEqual(serializedLowSpeedMaxima(exported.settings, fixture.prefix), DECLARED_MAXIMA);
+      assert.deepEqual(serializedLowSpeedMaxima(settings, fixture.prefix), DECLARED_MAXIMA);
       // The workaround answers for a high speed that never initialized, so the
       // serializer's generic fallback has nothing to catch.
       assert.ok(!log.some((line) => FALLBACK_LINE.test(line)), "no bound getter raised");
