@@ -158,11 +158,6 @@
     "scripts/retain-deployed-assets.ts#fetchBytes",
     "scripts/retain-deployed-assets.ts#resolveBaseUrl",
     "scripts/retain-deployed-assets.ts#main",
-    "scripts/update-screenshots.ts#findChromeBinary",
-    "scripts/update-screenshots.ts#startDevServer",
-    "scripts/update-screenshots.ts#launchChrome",
-    "scripts/update-screenshots.ts#evaluate",
-    "scripts/update-screenshots.ts#waitForAppReady",
     "scripts/update-screenshots.ts#captureShots",
     "scripts/update-screenshots.ts#main"
   ],

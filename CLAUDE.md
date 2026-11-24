@@ -28,7 +28,8 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
   `setting-fields` and `setting-values`), `radio-catalog`, `radio-session`,
   `repeater-query` (with `query-fields` and `repeater-sources`),
   `repeater-map` and `static-map-view` (the static OSM maps), `codeplug-io`,
-  `serial-actions`, `install-button` and `connectivity`, plus the shared `dom`,
+  `serial-actions`, `install-button`, `toolbar-menu` (the phone toolbar's fold) and
+  `connectivity`, plus the shared `dom`,
   `state`, `debug-log`, `progress`, `notice-modal`, `issue-report`, `format`,
   `analytics`, `metrics` and `channel-values` helpers. `radio-session` owns the
   runtime session handle behind the selected radio: selecting a radio opens a
@@ -214,7 +215,8 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - `web/privacy.html` is the privacy policy Google Play requires of the Android
   app. A change to what the app collects, stores on the device or sends, or to
   where it sends it, updates that page and its effective date in the same PR;
-  a new destination also goes into `tests/build/privacy-policy.mjs`.
+  a new destination also goes into `tests/build/privacy-policy.mjs`, and the
+  Data safety answers in `fastlane/data-safety.csv` change to match.
 - Avoid regressions in clone workflow:
   - Download should record the image on the selected radio's session.
   - Upload should use the session's image and fail clearly if the session holds
@@ -269,7 +271,7 @@ This repository hosts a browser-based CHIRP interface (`web/`) that executes CHI
 - Include clear commit messages that describe user-visible behavior or architectural impact.
 - If model is other than Anthropic/OpenAI, add a Co-Authored-By: <model name and parameters> at the end of the commit message
 - Never use backticks (`) anywhere in any generated command to execute.
-- When on master, update RELEASE_NOTES.md based on PRs which were merged in with current date. Each entry is a single line: the user-visible change plus the PR number, no multi-sentence detail. At the same time run `npm run screenshots` to regenerate images/screenshot.png, images/screenshot-for-opengraph.png, web/images/social-preview.png and the two install-dialog screenshots, web/images/screenshot-wide.png and web/images/screenshot-narrow.png, from the current version of the app. When you do this, also consolidate/update FINDINGS.md so that it is always up to date.
+- When on master, update RELEASE_NOTES.md based on PRs which were merged in with current date. Each entry is a single line: the user-visible change plus the PR number, no multi-sentence detail. At the same time run `npm run screenshots` to regenerate images/screenshot.png, images/screenshot-for-opengraph.png, web/images/social-preview.png and the two install-dialog screenshots, web/images/screenshot-wide.png and web/images/screenshot-narrow.png, and the Play Store phone screenshots in fastlane/metadata/android/en-US/images/phoneScreenshots/, from the current version of the app. When you do this, also consolidate/update FINDINGS.md so that it is always up to date.
 
 ## Code Review
 - If you are an OpenAI agent, use Astra Medium when performing code review.

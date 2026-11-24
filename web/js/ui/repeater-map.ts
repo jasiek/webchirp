@@ -288,6 +288,10 @@ export function createRepeaterMap(
       const button = (event.target as Element | null)?.closest?.(".channel-location-button");
       if (button && !button.contains(event.relatedTarget as Node | null)) {
         hoverButton = null;
+        // A map not drawn yet belongs to a cell the pointer has left: drawing
+        // it would cancel the hide below and leave it stuck over the grid.
+        // One already up is unaffected and keeps its grace period.
+        cancelPendingLookup();
         scheduleHideTooltip();
       }
     });

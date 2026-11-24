@@ -74,6 +74,9 @@ export function createChannelTable(ctx: UiContext) {
   // How many checks are in flight per row, so a row rewritten while one is
   // can be checked again as it now stands (rowsRewritten).
   const checksInFlight = new WeakMap<ChannelRow, number>();
+  // Every checkRows() run not yet finished, so a write can wait until no cell
+  // is pending (rowChecksSettled).
+  const runningChecks = new Set<Promise<void>>();
   // How many runtime calls buildRows() may make before giving up on a builder
   // whose branches keep asking new questions. Each call answers every write a
   // run made, so a builder settles in one or two; this only stops a loop.
@@ -147,6 +150,10 @@ export function createChannelTable(ctx: UiContext) {
   let measuredRowHeight = 0;
   let windowUpdateHandle = 0;
   let isRemeasuring = false;
+  // Set while the grid itself takes focus off an editor whose channel left the
+  // window, so the focusout that fires does not commit the value the recycled
+  // element now shows to the channel it now shows.
+  let isReleasingFocus = false;
 
   function sortedSelectedRowIndexes() {
     return Array.from(selectedRowIndexes)
@@ -557,10 +564,21 @@ export function createChannelTable(ctx: UiContext) {
   // its traceback and settles the cells it was for: each keeps the value as
   // typed, is no longer pending, and says on hover that it was not checked,
   // so the upload preflight is what will judge it.
-  async function checkRows(rows: readonly ChannelRow[]): Promise<void> {
+  function checkRows(rows: readonly ChannelRow[]): Promise<void> {
     if (rows.length === 0) {
-      return;
+      return Promise.resolve();
     }
+    const run = runRowChecks(rows);
+    runningChecks.add(run);
+    const settle = () => {
+      runningChecks.delete(run);
+    };
+    run.then(settle, settle);
+    return run;
+  }
+
+  // checkRows() without the bookkeeping that lets rowChecksSettled() wait on it.
+  async function runRowChecks(rows: readonly ChannelRow[]): Promise<void> {
     const handle = state.radioSession;
     const versions = rows.map(rowVersion);
     const stillWaiting = () => rows.filter((row, index) => rowVersion(row) === versions[index]);
@@ -598,6 +616,15 @@ export function createChannelTable(ctx: UiContext) {
       }
     });
     renderRowWindow();
+  }
+
+  // Resolves once no row check is in flight, so no cell is pending: every
+  // value in the grid is the one the runtime stored. A check started while
+  // waiting is waited for too.
+  async function rowChecksSettled(): Promise<void> {
+    while (runningChecks.size > 0) {
+      await Promise.allSettled([...runningChecks]);
+    }
   }
 
   // Write edits into rows at once, as typed, and have the runtime check them.
@@ -1670,6 +1697,7 @@ export function createChannelTable(ctx: UiContext) {
     const editor = active as HTMLInputElement | HTMLSelectElement;
     return {
       ...cell,
+      editor,
       // Only a text editor carries an uncommitted draft; a select commits on
       // change, so there is nothing of its own to put back.
       draft: active.tagName === "INPUT" ? String(editor.value ?? "") : null,
@@ -1698,6 +1726,17 @@ export function createChannelTable(ctx: UiContext) {
         queueMicrotask(() => {
           void commitRawValue(captured, draft);
         });
+      }
+      // The element that had focus is still in the pool, now showing another
+      // channel: left focused, the next keystroke would edit that channel
+      // (issue #349). Take the keyboard off the grid instead.
+      if (captured.editor === globalThis.document?.activeElement) {
+        isReleasingFocus = true;
+        try {
+          captured.editor.blur();
+        } finally {
+          isReleasingFocus = false;
+        }
       }
       return;
     }
@@ -1884,7 +1923,7 @@ export function createChannelTable(ctx: UiContext) {
     dom.tableBody.addEventListener("focusout", (event) => {
       // Checked for INPUT below before it is read as one.
       const target = event.target as HTMLInputElement;
-      if (target?.tagName !== "INPUT") {
+      if (target?.tagName !== "INPUT" || isReleasingFocus) {
         return;
       }
       const cell = cellReferenceFor(event.target);
@@ -1988,6 +2027,7 @@ export function createChannelTable(ctx: UiContext) {
     submitRowEdits,
     previewRowEdits,
     rowsRewritten,
+    rowChecksSettled,
     channelShortcutsActive,
     moveSelectedChannelRows,
     refreshVisibleRows: renderRowWindow,

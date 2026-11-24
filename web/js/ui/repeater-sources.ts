@@ -115,6 +115,8 @@ export type FieldConfig =
     label: string;
     optionsKey?: string;
     options?: FieldOption[];
+    /** Shares the previous field's row, after its control, instead of taking its own. */
+    sameRow?: boolean;
     [option: string]: unknown;
   };
 
@@ -145,7 +147,12 @@ export interface RepeaterSource {
   /** The filter dictionaries, by optionsKey; null when every option is static. */
   loadOptions: (() => Promise<Record<string, FieldOption[]>>) | null;
   previewQuery: (values: QueryValues) => Promise<PreviewSummary | null>;
-  runQuery: (values: QueryValues) => Promise<void>;
+  /**
+   * Fetch and insert what the values select. Inserts nothing once `signal`
+   * aborts: the modal shell aborts it when the user closes the modal on the
+   * query, and the answer must not land after that.
+   */
+  runQuery: (values: QueryValues, signal: AbortSignal) => Promise<void>;
   /**
    * What would answer Query API for these values now: "cached" a preview
    * already fetched, "pending" one still in flight, "request" a request of the
@@ -195,9 +202,11 @@ export interface RepeaterDirectoryAdapter extends Omit<RepeaterSource, "key" | "
   /**
    * Fetch what the form describes and read it into records. Null means there
    * is nothing to ask the directory for, and the adapter has said why.
-   * Throws RepeaterInputError for a form the user can fix.
+   * Throws RepeaterInputError for a form the user can fix. `signal` aborts
+   * the requests an import is waiting on, once the user has closed the modal
+   * on it.
    */
-  query: (values: QueryValues, purpose: QueryPurpose) => Promise<DirectoryAnswer | null>;
+  query: (values: QueryValues, purpose: QueryPurpose, signal?: AbortSignal) => Promise<DirectoryAnswer | null>;
 }
 
 // What a source says when the form has not narrowed the search enough to run
@@ -363,14 +372,17 @@ export function createRepeaterSources(
         const answer = await query(values, "preview");
         return answer ? summarizePreview(answer, values.position, radiusKm) : { points: [] };
       },
-      runQuery: async (values) => {
-        const answer = await query(values, "import");
-        if (!answer) {
+      runQuery: async (values, signal) => {
+        const answer = await query(values, "import", signal);
+        if (!answer || signal.aborted) {
           return;
         }
         const built = await ctx.table.buildRows((hooks) => buildRepeaterRows(answer.records, hooks, {
           preferredModes: answer.preferredModes,
         }));
+        if (signal.aborted) {
+          return;
+        }
         const skipped = [...answer.unusable, ...built.skipped];
         // Repeaters the radio cannot express are dropped rather than written
         // as something they are not; a shorter list than the match count needs
@@ -722,13 +734,15 @@ export function createRepeaterAdapters(
         { kind: "checkboxGroup", key: "bands", label: "Band", name: "band", optionsKey: "bands", defaults: ["2m", "70cm"] },
         { kind: "checkboxGroup", key: "modes", label: "Mode", name: "mode", optionsKey: "modes", defaults: ["fm"] },
         { kind: "checkbox", key: "only", label: "Only working", checked: true },
+        // A short number, so it shares the checkbox's row rather than taking
+        // one of its own.
+        { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30, sameRow: true },
         // Above the coordinates because it is how most people know where they
         // are: picking a place fills latitude, longitude and the locator and
         // recentres the preview, so the two rows below read as the result of
         // this one rather than as something to fill in by hand.
         { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Warszawa" },
         { kind: "position", locatorPlaceholder: "e.g. JO91GG" },
-        { kind: "number", key: "radius", label: "Range (km)", min: 1, step: 1, value: 30 },
         ...(siteKey ? [{ kind: "turnstile" as const, key: TURNSTILE_FIELD_KEY, siteKey }] : []),
       ],
       loadOptions: () => {
@@ -759,7 +773,7 @@ export function createRepeaterAdapters(
         }
         return optionsPromise;
       },
-      query: async (values, purpose) => {
+      query: async (values, purpose, signal) => {
         if (purpose === "preview") {
           return previewRemote(values);
         }
@@ -783,14 +797,14 @@ export function createRepeaterAdapters(
           // error-path read of a failed response can stall exactly as the success
           // path can, and either one strands the submit button on "Querying...".
           const headers = await turnstileHeaders(values);
-          const text = await withRequestTimeout(`${label} query`, async (signal) => {
-            const response = await fetch(url.toString(), { headers, signal });
+          const text = await withRequestTimeout(`${label} query`, async (requestSignal) => {
+            const response = await fetch(url.toString(), { headers, signal: requestSignal });
             if (!response.ok) {
               const body = await response.text();
               throw new Error(`${actionLabel} query failed: HTTP ${response.status}\n${body.slice(0, 800)}`);
             }
             return response.text();
-          });
+          }, undefined, signal);
           found = parseRxfRecords(text, { source: adapterId });
         }
         const fetched = found.records.length + found.unusable.length;
@@ -862,7 +876,10 @@ export function createRepeaterAdapters(
     // line per square however little of the plan cost a request this time.
     async function recordsForSquares(
       squares: string[],
-      { onSquare }: { onSquare?: (square: { locator: string; count: number; cached: boolean }) => void } = {},
+      { onSquare, signal }: {
+        onSquare?: (square: { locator: string; count: number; cached: boolean }) => void;
+        signal?: AbortSignal;
+      } = {},
     ) {
       const held = new Map<string, RsgbRecord[]>();
       const missing: string[] = [];
@@ -875,7 +892,7 @@ export function createRepeaterAdapters(
         }
       }
       if (missing.length > 0) {
-        const fetched = await fetchRsgbRecords({ squares: missing });
+        const fetched = await fetchRsgbRecords({ squares: missing, signal });
         // fetchRsgbRecords returns one flat list, so the records are put back
         // under the square they came from. A square that legitimately holds no
         // repeaters caches as an empty list, which is what stops it being
@@ -953,7 +970,7 @@ export function createRepeaterAdapters(
     }
 
     // The query the Query API button runs.
-    async function importRsgb(values: QueryValues): Promise<DirectoryAnswer | null> {
+    async function importRsgb(values: QueryValues, signal?: AbortSignal): Promise<DirectoryAnswer | null> {
       const position = values.position;
       if (!position) {
         throw new RepeaterInputError(POSITION_REQUIRED_MESSAGE);
@@ -981,6 +998,7 @@ export function createRepeaterAdapters(
       // Through the cache the preview fills, so pressing Query API after
       // watching the preview does not download every square a second time.
       const records = await recordsForSquares(plan.squares, {
+        signal,
         onSquare: ({ locator, count, cached }) => log.logDebug(
           `RSGB SQUARE ${locator} -> ${count}${cached ? " (cached)" : ""}`,
         ),
@@ -1073,12 +1091,6 @@ export function createRepeaterAdapters(
           defaults: RSGB_DEFAULT_MODES,
         },
         { kind: "checkbox", key: "only", label: "Only operational", checked: true },
-        // Above the coordinates because it is how most people know where they
-        // are: picking a place fills latitude, longitude and the locator and
-        // recentres the preview, so the two rows below read as the result of
-        // this one rather than as something to fill in by hand.
-        { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Manchester" },
-        { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
         {
           kind: "number",
           key: "radius",
@@ -1087,14 +1099,21 @@ export function createRepeaterAdapters(
           max: 500,
           step: 1,
           value: RSGB_DEFAULT_RADIUS_KM,
+          sameRow: true,
         },
+        // Above the coordinates because it is how most people know where they
+        // are: picking a place fills latitude, longitude and the locator and
+        // recentres the preview, so the two rows below read as the result of
+        // this one rather than as something to fill in by hand.
+        { kind: "city", key: "city", label: "Place name", placeholder: "e.g. Manchester" },
+        { kind: "position", locatorPlaceholder: "e.g. IO91WM" },
       ],
       loadOptions: null,
-      query: (values, purpose) => {
+      query: (values, purpose, signal) => {
         if (purpose === "preview" && values.position) {
           return previewRsgb(values, values.position);
         }
-        return importRsgb(values);
+        return importRsgb(values, signal);
       },
     };
   }

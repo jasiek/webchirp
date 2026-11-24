@@ -41,7 +41,12 @@ export function createSettingsPanel(ctx: UiContext) {
     message: "",
     groups: [],
   };
-  let activeTab = "";
+  // The open tab, by its group's position. Top-level group names need not
+  // be unique -- CHIRP's RadioSettings is a list, and some drivers give two
+  // groups the same name -- so the name alone cannot say which tab is open,
+  // and two tabs sharing it would both open the first group. The name is
+  // kept to find the same group again when a new tree replaces this one.
+  let activeTab = { index: 0, id: "" };
   const invalidKeys = new Set<string>();
   const invalidMessages = new Map<string, string>();
 
@@ -88,17 +93,20 @@ export function createSettingsPanel(ctx: UiContext) {
       : (settingsState?.message || "This radio does not expose radio-wide settings");
   }
 
+  // Repaints Save to radio too, whether or not this radio has settings: one
+  // without any still has to lift the block an earlier radio's invalid values
+  // put on it (issue #348).
   function updateSummary() {
     const count = invalidKeys.size;
     dom.settingsSummaryEl.hidden = !radioHasSettings();
     dom.settingsSummaryEl.classList.toggle("has-invalid", count > 0);
     if (!radioHasSettings()) {
       dom.settingsSummaryEl.textContent = "";
-      return;
+    } else {
+      dom.settingsSummaryEl.textContent = count > 0
+        ? `Radio settings have ${count} invalid value${count === 1 ? "" : "s"}. Fix the highlighted fields before upload.`
+        : "Radio settings are ready to write. Immutable values are shown but disabled.";
     }
-    dom.settingsSummaryEl.textContent = count > 0
-      ? `Radio settings have ${count} invalid value${count === 1 ? "" : "s"}. Fix the highlighted fields before upload.`
-      : "Radio settings are ready to write. Immutable values are shown but disabled.";
     actions.updateSerialActionState();
   }
 
@@ -144,8 +152,22 @@ export function createSettingsPanel(ctx: UiContext) {
     syncTabs();
   }
 
-  function findSettingsTabNode(tabId: string): SettingNode | null {
-    return settingsState.groups.find((group) => group.id === tabId) || null;
+  // Where the tab that was open sits in the current tree: the same position
+  // if the group there still has its name, else the first group of that name,
+  // else the first group.
+  function resolveActiveTab(): void {
+    const { groups } = settingsState;
+    let index = groups[activeTab.index]?.id === activeTab.id
+      ? activeTab.index
+      : groups.findIndex((group) => group.id === activeTab.id);
+    if (index < 0) {
+      index = 0;
+    }
+    activeTab = { index, id: groups[index]?.id || "" };
+  }
+
+  function selectTab(index: number): void {
+    activeTab = { index, id: settingsState.groups[index]?.id || "" };
   }
 
   function tabHasInvalidSettings(group: SettingNode | null): boolean {
@@ -320,19 +342,19 @@ export function createSettingsPanel(ctx: UiContext) {
     dom.settingsEmptyEl.hidden = true;
     dom.settingsContentEl.hidden = false;
 
-    const activeGroup = findSettingsTabNode(activeTab) || settingsState.groups[0];
+    resolveActiveTab();
+    const activeGroup = settingsState.groups[activeTab.index];
     if (!activeGroup) {
       dom.settingsEmptyEl.hidden = false;
       dom.settingsContentEl.hidden = true;
       return;
     }
-    activeTab = activeGroup.id;
 
-    settingsState.groups.forEach((group) => {
+    settingsState.groups.forEach((group, index) => {
       const tabButton = document.createElement("button");
       tabButton.type = "button";
       tabButton.className = "settings-tab";
-      tabButton.dataset.settingsTab = group.id;
+      tabButton.dataset.settingsTab = String(index);
       tabButton.textContent = group.label || group.id;
       tabButton.addEventListener("click", () => {
         // Group ids come from the driver's own settings tree, so this says
@@ -342,7 +364,7 @@ export function createSettingsPanel(ctx: UiContext) {
           ...radioEventParams(state.selectedRadio),
           tab: String(group.id || ""),
         });
-        openTab(group.id);
+        openTab(index);
       });
       dom.settingsTabsEl.appendChild(tabButton);
     });
@@ -354,9 +376,9 @@ export function createSettingsPanel(ctx: UiContext) {
   // which hold invalid values.
   function syncTabs(): void {
     dom.settingsTabsEl.querySelectorAll<HTMLElement>(".settings-tab").forEach((tabButton) => {
-      const groupId = tabButton.dataset.settingsTab || "";
-      tabButton.classList.toggle("is-active", groupId === activeTab);
-      tabButton.classList.toggle("has-invalid", tabHasInvalidSettings(findSettingsTabNode(groupId)));
+      const index = Number(tabButton.dataset.settingsTab);
+      tabButton.classList.toggle("is-active", index === activeTab.index);
+      tabButton.classList.toggle("has-invalid", tabHasInvalidSettings(settingsState.groups[index] || null));
     });
   }
 
@@ -364,9 +386,9 @@ export function createSettingsPanel(ctx: UiContext) {
   // pressed keeps keyboard focus (issue #96); only the open group's controls
   // are replaced. A group that is gone takes the full render(), which falls
   // back to the first one.
-  function openTab(groupId: string): void {
-    activeTab = groupId;
-    const group = findSettingsTabNode(groupId);
+  function openTab(index: number): void {
+    selectTab(index);
+    const group = settingsState.groups[index];
     if (!group) {
       render();
       return;
@@ -378,9 +400,7 @@ export function createSettingsPanel(ctx: UiContext) {
 
   // Keep the active tab pointing at a group that still exists.
   function ensureActiveTab() {
-    if (!activeTab || !settingsState.groups.some((group) => group.id === activeTab)) {
-      activeTab = settingsState.groups[0]?.id || "";
-    }
+    resolveActiveTab();
   }
 
   // The settings state for a session's radio, or the empty state for none. A
@@ -489,9 +509,18 @@ export function createSettingsPanel(ctx: UiContext) {
       return;
     }
     issues.forEach(markInvalid);
-    const tab = String(issues[0].path[0] ?? "");
-    if (findSettingsTabNode(tab)) {
-      activeTab = tab;
+    // Open the first group holding the refused value: a name two groups
+    // share does not say which one that is, the value's own key does. A
+    // value the tree lacks falls back to the group its path names.
+    const firstKey = settingKey(issues[0].path, issues[0].valueIndex);
+    const { groups } = settingsState;
+    let index = groups.findIndex((group) =>
+      flattenSettingsFields([group]).some((field) => settingKey(field.path, field.valueIndex) === firstKey));
+    if (index < 0) {
+      index = groups.findIndex((group) => group.id === String(issues[0].path[0] ?? ""));
+    }
+    if (index >= 0) {
+      selectTab(index);
     }
     render();
   }
@@ -530,7 +559,7 @@ export function createSettingsPanel(ctx: UiContext) {
     // disabled view, so it returns to Channels like applyLoadedState does.
     replaceState(nextState: SettingsState) {
       settingsState = nextState;
-      activeTab = settingsState.groups[0]?.id || "";
+      selectTab(0);
       if (!radioHasSettings() && state.currentEditorView === "settings") {
         actions.setEditorView("channels");
       }

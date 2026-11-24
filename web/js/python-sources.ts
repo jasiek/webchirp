@@ -7,7 +7,7 @@ import { createHttpStatusError } from "./http-errors.ts";
 // all match this revision; scripts/build-catalog.ts and the bundle build
 // enforce it at build time and the runtime rejects a mismatched static catalog
 // or bundle manifest.
-export const DEFAULT_CHIRP_REVISION = "0b4076d9b19a2a133d11f31546cff8153b39eb89";
+export const DEFAULT_CHIRP_REVISION = "d99bb227093a0191a973ab9aa17276a0bee7b00a";
 export const DEFAULT_DRIVER_SET = "chirp";
 export const QUANSHENG_UNOFFICIAL_DRIVER_SET = "quansheng-unofficial";
 export const DRIVER_SETS = Object.freeze([
@@ -55,6 +55,12 @@ export const QUANSHENG_UNOFFICIAL_DRIVERS = Object.freeze([
     relPath: "extra_drivers/quansheng/f4hwn_v6_3_0.py",
     releases: ["v6.3.0"],
     sha256: "a307886d90b6481b441c2cd34b622c8dacfc2080a34fc1e0ea2377054ee4ef96",
+  },
+  {
+    module: "f4hwn_v7_0_0",
+    relPath: "extra_drivers/quansheng/f4hwn_v7_0_0.py",
+    releases: ["v7.0.0"],
+    sha256: "8eb622ec4a4eeaa26cf77ef878022e066b3d674d9fa214bf99c889571b9f4f41",
   },
 ]);
 export const EXTRA_DRIVER_RELATIVE_FILES = Object.freeze(

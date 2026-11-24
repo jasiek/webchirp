@@ -1,4 +1,5 @@
 import { bt1adDriver } from "./webbluetooth/bt-1ad.ts";
+import { ffe0UartDriver } from "./webbluetooth/ffe0-uart.ts";
 import { createDisconnectNotifier } from "./serial-transport.ts";
 import type {
   DisconnectNotifier,
@@ -11,7 +12,7 @@ import type {
 
 /**
  * A matched adapter's UART protocol, as a profile's probe() returns it
- * (web/js/webbluetooth/bt-1ad.ts is the one there is).
+ * (web/js/webbluetooth/bt-1ad.ts and ffe0-uart.ts).
  */
 export interface BluetoothSerialProtocol {
   /** How the debug panel names the adapter. */
@@ -43,7 +44,7 @@ export interface BluetoothSerialDriver {
 }
 
 // Register adapter profiles here; chooser permissions and probing share this list.
-export const BLUETOOTH_SERIAL_DRIVERS: BluetoothSerialDriver[] = [bt1adDriver];
+export const BLUETOOTH_SERIAL_DRIVERS: BluetoothSerialDriver[] = [bt1adDriver, ffe0UartDriver];
 
 // Present the dongle as a serial transport (web/js/serial-transport.ts) so the
 // existing buffered bridge and every CHIRP driver retain ownership of radio

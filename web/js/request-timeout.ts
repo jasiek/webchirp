@@ -48,26 +48,41 @@ function describeDeadline(timeoutMs: number): string {
 // over a mocked clock. It also keeps the module working on Chrome 89-102, which
 // has Web Serial but not AbortSignal.timeout (Chrome 103).
 //
-// signal.aborted is true only when this deadline fired, so the caller's own
-// failures keep their own messages while a genuine timeout gets a sentence
-// naming what stalled. That sentence says "timed out" on purpose —
+// `cancel` is the caller's own way out -- the query modal aborts it when the
+// user closes the modal on the query -- and it aborts the same request. Only
+// the deadline's own abort is rewritten, so the caller's own failures, a
+// cancellation among them, keep their own errors while a genuine timeout gets
+// a sentence naming what stalled. That sentence says "timed out" on purpose —
 // classifyErrorKind() in web/js/ui/analytics.ts matches it to report the failure
 // as a timeout rather than "other".
 export async function withRequestTimeout<T>(
   label: string,
   run: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number = REPEATER_REQUEST_TIMEOUT_MS,
+  cancel?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    // A request the caller already cancelled has not timed out.
+    timedOut = !controller.signal.aborted;
+    controller.abort();
+  }, timeoutMs);
+  const onCancel = () => controller.abort(cancel?.reason);
+  if (cancel?.aborted) {
+    onCancel();
+  } else {
+    cancel?.addEventListener("abort", onCancel, { once: true });
+  }
   try {
     return await run(controller.signal);
   } catch (error) {
-    if (controller.signal.aborted) {
+    if (timedOut) {
       throw new Error(`${label} timed out after ${describeDeadline(timeoutMs)}: the server accepted the request but never answered.`);
     }
     throw error;
   } finally {
     clearTimeout(timer);
+    cancel?.removeEventListener("abort", onCancel);
   }
 }

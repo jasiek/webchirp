@@ -20,6 +20,7 @@ import { ensureModule, sharedHarness } from "../support/chirp.mjs";
 import { installIndexPage } from "../support/index-page.mjs";
 import {
   createDeferred,
+  dispatch,
   emit,
   flushMicrotasks,
   selectRadioBySearch,
@@ -230,6 +231,128 @@ json.dumps({
   assert.deepEqual(result.writtenFill, [0x5a], "what is written is the downloaded image");
   assert.equal(result.afterUpload.imageOrigin, "radio", "an upload keeps the image's origin");
   assert.ok(result.cachedSize > 0);
+});
+
+// Issue 318: the synthetic origin has to travel with the file, or saving an
+// offline export and opening it again turns zeroes nobody read from a radio
+// into a backing image the upload and settings gates accept. Two clone-mode
+// drivers with unrelated file handling (Icom's and Baofeng's) take the same
+// path, since nothing here may depend on the driver.
+for (const driver of [
+  { module: "id31", className: "ID31Radio" },
+  { module: "uv5r", className: "BaofengUV5RGeneric" },
+]) {
+  test(`a reopened offline export of ${driver.className} stays synthetic`, async () => {
+    const harness = await sharedHarness();
+    await ensureModule(harness, driver.module);
+    const opened = await harness.rpc("open_session", {
+      module_name: driver.module,
+      class_name: driver.className,
+    });
+    const parsed = await harness.rpc("parse_csv", {
+      csv_text: "Location,Name,Frequency,Mode\n14,RPT,438.500000,FM\n",
+      session_id: opened.sessionId,
+    });
+    const exported = await harness.rpc("export_image_base64", {
+      session_id: opened.sessionId,
+      rows: parsed.rows,
+      settings_groups: [],
+    });
+    await harness.rpc("close_session", { session_id: opened.sessionId });
+
+    const reopened = await harness.rpc("load_image_base64", { image_b64: exported.imageBase64 });
+    assert.equal(reopened.className, driver.className);
+    assert.deepEqual(
+      reopened.rows.map((row) => [row.Location, row.Name]),
+      [["14", "RPT"]],
+      "the reopened file still holds the exported channel",
+    );
+    assert.deepEqual(reopened.settings, [], "settings are not read from zeroes");
+
+    const result = await harness.runPythonJson(
+      `
+def _gates(session_id):
+    _session = resolve_session(session_id)
+    try:
+        _upload_selected_radio_sync(_session, [])
+        _refused = ""
+    except RuntimePreconditionError as _exc:
+        _refused = str(_exc)
+    return {
+        **_session.describe(),
+        "settingsRequireImage": bool(get_radio_settings(session_id).get("requiresImage")),
+        "uploadRefused": _refused,
+    }
+
+
+_reopened = _gates(_reopened_sid)
+close_session(_reopened_sid)
+
+# Desktop CHIRP opening the file and saving it again keeps what it does not
+# know in the metadata, so the file is still the same offline export.
+_cls = _import_radio_class(_module_name, _class_name)
+_resaved = _image_bytes_from_radio(_radio_from_image_bytes(_cls, base64.b64decode(_image_b64)))
+_resaved_sid = load_image_base64(base64.b64encode(_resaved).decode("ascii"))["sessionId"]
+_resaved_state = _gates(_resaved_sid)
+close_session(_resaved_sid)
+
+# An image CHIRP itself saved carries no WebCHIRP mark and opens as a file.
+_plain = _image_bytes_from_radio(_radio_from_image_bytes(_cls, bytes(_cls._memsize)))
+_plain_sid = load_image_base64(base64.b64encode(_plain).decode("ascii"))["sessionId"]
+_plain_state = resolve_session(_plain_sid).describe()
+close_session(_plain_sid)
+json.dumps({"reopened": _reopened, "resaved": _resaved_state, "plain": _plain_state})
+      `,
+      {
+        _reopened_sid: reopened.sessionId,
+        _image_b64: exported.imageBase64,
+        _module_name: driver.module,
+        _class_name: driver.className,
+      },
+    );
+
+    for (const key of ["reopened", "resaved"]) {
+      const state = result[key];
+      assert.equal(state.imageOrigin, "synthetic", `${key}: the export's origin survives the file`);
+      assert.equal(state.hasBackingImage, false, `${key}: zeroes never back an upload`);
+      assert.equal(state.settingsRequireImage, true, `${key}: settings still need a real image`);
+      assert.match(state.uploadRefused, /Download from radio first/, key);
+    }
+    assert.equal(result.plain.imageOrigin, "file");
+    assert.equal(result.plain.hasBackingImage, true);
+  });
+}
+
+// Issue 342: an offline export's settings would be parsed from the zeroes it
+// was built on, so its reply carries none, as get_radio_settings answers for
+// the same session. The UI keeps what an export echoes back and sends it with
+// the next export, where settings read from zeroes can be refused once the
+// channels change -- with no Settings tab to clear them from.
+test("an offline export echoes back no settings, and the next export succeeds", async () => {
+  const harness = await sharedHarness();
+  await ensureModule(harness, "uv5r");
+  const opened = await harness.rpc("open_session", {
+    module_name: "uv5r",
+    class_name: "BaofengUV5RGeneric",
+  });
+  const row = (name) => ({ Location: "1", Name: name, Frequency: "146.520000", Mode: "FM" });
+  try {
+    const first = await harness.rpc("export_image_base64", {
+      session_id: opened.sessionId,
+      rows: [row("CHAN1")],
+      settings_groups: [],
+    });
+    assert.deepEqual(first.settings, [], "settings are not read from zeroes");
+    const second = await harness.rpc("export_image_base64", {
+      session_id: opened.sessionId,
+      rows: [row("CHAN2")],
+      settings_groups: first.settings,
+    });
+    assert.ok(second.size > 0, "the second offline export still produces a file");
+    assert.deepEqual(second.settings, []);
+  } finally {
+    await harness.rpc("close_session", { session_id: opened.sessionId });
+  }
 });
 
 test("undecodable channels protect the session that recorded them, and no other", async () => {
@@ -542,4 +665,147 @@ test("an image load hands its session to the selection it makes", async () => {
   await flushMicrotasks();
   assert.equal(metadataSessions.at(-1), imageSession);
   assert.equal(metadataSessions.filter((id) => id === imageSession).length, 1);
+});
+
+// An image the runtime loads but whose driver then cannot describe its
+// columns is a failed import, not half of one: the radio, its session and the
+// channels it holds stay together, and the session the load opened for the
+// image is closed rather than left behind the selection. Issue #320.
+test("an image import that fails after loading keeps the previous radio and its session", async () => {
+  const { document, window } = installIndexPage();
+  const { createUiController } = await import("../../web/js/ui.ts");
+  const ui = createUiController();
+  const closes = [];
+  const loadedSessions = [];
+  const preflightRadios = [];
+
+  const api = withRadioSessions({
+    listRadios: async () => ({ radios: CATALOG }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getRadioMetadata: async ({ module }) => {
+      if (module === "fast") {
+        throw new Error("metadata unavailable");
+      }
+      return { headers: ["Location", "Name", "Frequency"], columns: {} };
+    },
+    getRadioSettings: async () => EMPTY_SETTINGS,
+    parseCsv: async () => ({
+      headers: ["Location", "Name", "Frequency"],
+      rows: [{ Location: "1", Name: "FromCsv", Frequency: "145.500000" }],
+      errors: [],
+    }),
+    loadImage: async () => ({
+      module: "fast",
+      className: "FastRadio",
+      vendor: "FastCo",
+      model: "Fast",
+      headers: ["Location", "Name", "Frequency"],
+      rows: [{ Location: "1", Name: "FromImg", Frequency: "446.000000" }],
+      settings: [],
+    }),
+    // Records which radio the export's preflight checked, then stops the
+    // export there: what it would have written is not this test's concern.
+    validateRowsForUpload: async ({ module, rows }) => {
+      preflightRadios.push({ module, names: rows.map((row) => row.Name) });
+      return { valid: false, issues: [{ rowIndex: -1, column: "", message: "stop" }], warnings: [] };
+    },
+    validateRadioSettings: async () => ({ valid: true, issues: [], settings: [], available: false }),
+  });
+  const load = api.loadImage;
+  api.loadImage = async (payload) => {
+    const loaded = await load(payload);
+    loadedSessions.push(loaded.sessionId);
+    return loaded;
+  };
+  const close = api.closeRadioSession;
+  api.closeRadioSession = async (payload) => {
+    closes.push(payload.sessionId);
+    return close(payload);
+  };
+  ui.setRuntimeApi(api);
+  await ui.init(true);
+
+  selectRadioBySearch(document, "SlowCo Slow");
+  await flushMicrotasks();
+  const dropFile = (file) => emit(window, "drop", { dataTransfer: { types: ["Files"], files: [file] } });
+  await dropFile({ name: "channels.csv", text: async () => "" });
+  await flushMicrotasks();
+  assert.deepEqual(ui.selectedRowsForOperations().map((row) => row.Name), ["FromCsv"]);
+
+  await dropFile({ name: "codeplug.img", arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer });
+  await flushMicrotasks();
+
+  assert.match(document.querySelector("#debug-output").value, /File drop failed/);
+  assert.equal(document.querySelector("#radio-selection-name").textContent, "SlowCo Slow");
+  assert.deepEqual(ui.selectedRowsForOperations().map((row) => row.Name), ["FromCsv"]);
+  // Only the image's session was closed; the selected radio's is still open.
+  assert.equal(loadedSessions.length, 1);
+  assert.deepEqual(closes, loadedSessions);
+
+  // A write after the failure checks the channels shown against the radio
+  // they belong to.
+  await dispatch(document.querySelector("#export-binary"), "click");
+  assert.deepEqual(preflightRadios, [{ module: "slow", names: ["FromCsv"] }]);
+});
+
+// A radio picked while an image is still loading is the user's latest word:
+// the import gives way and closes the session it opened, rather than switch
+// the selection back under them.
+test("an image import gives way to a radio selected while it loads", async () => {
+  const { document, window } = installIndexPage();
+  const { createUiController } = await import("../../web/js/ui.ts");
+  const ui = createUiController();
+  const imageLoad = createDeferred();
+  const closes = [];
+  let imageSession = "";
+
+  const api = withRadioSessions({
+    listRadios: async () => ({ radios: CATALOG }),
+    getRuntimeInfo: async () => ({ chirpRevision: "test-revision" }),
+    getDefaultSchema: async () => ({ headers: ["Location", "Name", "Frequency"] }),
+    getRadioMetadata: async () => ({ headers: ["Location", "Name", "Frequency"], columns: {} }),
+    getRadioSettings: async () => EMPTY_SETTINGS,
+    loadImage: () => imageLoad.promise,
+  });
+  const load = api.loadImage;
+  api.loadImage = async (payload) => {
+    const loaded = await load(payload);
+    imageSession = loaded.sessionId;
+    return loaded;
+  };
+  const close = api.closeRadioSession;
+  api.closeRadioSession = async (payload) => {
+    closes.push(payload.sessionId);
+    return close(payload);
+  };
+  ui.setRuntimeApi(api);
+  await ui.init(true);
+
+  const drop = emit(window, "drop", {
+    dataTransfer: {
+      types: ["Files"],
+      files: [{ name: "codeplug.img", arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }],
+    },
+  });
+  await flushMicrotasks();
+  selectRadioBySearch(document, "FastCo Fast");
+  await flushMicrotasks();
+
+  imageLoad.resolve({
+    module: "slow",
+    className: "SlowRadio",
+    vendor: "SlowCo",
+    model: "Slow",
+    headers: ["Location", "Name", "Frequency"],
+    rows: [{ Location: "1", Name: "FromImg", Frequency: "146.000000" }],
+    settings: [],
+  });
+  await drop;
+  await flushMicrotasks();
+
+  assert.equal(document.querySelector("#radio-selection-name").textContent, "FastCo Fast");
+  assert.deepEqual(ui.selectedRowsForOperations(), []);
+  assert.match(imageSession, /^slow:SlowRadio#/);
+  assert.deepEqual(closes, [imageSession]);
 });

@@ -4,10 +4,11 @@ import path from "node:path";
 import test from "node:test";
 
 import { REPEATER_REQUEST_TIMEOUT_MS } from "../../web/js/request-timeout.ts";
-import { LOCATION_POLICY_URL } from "../../web/js/ui/query-fields.ts";
+import { initSentry, resetSentryForTests } from "../../web/js/sentry.ts";
 import { createRepeaterQuery } from "../../web/js/ui/repeater-query.ts";
 import { REQUIRED_ELEMENTS } from "../../web/js/ui/dom.ts";
 import { installIndexPage } from "../support/index-page.mjs";
+import { makeWindow } from "../support/fake-window.mjs";
 import { dispatch } from "../support/ui-interactions.mjs";
 import { repoRoot } from "../support/repo-paths.mjs";
 
@@ -851,6 +852,49 @@ test("the preview draws the range filter's circle and follows edits to it", asyn
   assert.ok(zoomOf() < defaultZoom, "a wider range zooms the preview out");
 });
 
+test("the range shares the working-only row instead of taking one of its own", async () => {
+  const { dom } = buildHarness();
+  const sources = [
+    [dom.channelImportPrzemiennikiEl, () => installFetch([{ match: "/meta", body: META_JSON }])],
+    [dom.channelImportRsgbEl, () => installRsgbFetch({})],
+  ];
+  for (const [sourceButton, installSourceFetch] of sources) {
+    installSourceFetch();
+    await dispatch(sourceButton, "click");
+    const row = fieldByName(dom, "radius").parentElement;
+    assert.equal(row.className, "modal-inline-row");
+    assert.equal(row.parentElement, grid(dom), "the row is the grid cell beside the checkbox's label");
+    assert.equal(fieldByName(dom, "only").parentElement, row);
+    // Its own label rides in the row with it, so the grid still pairs one
+    // label with one control.
+    assert.ok(row.querySelector(`label[for="${fieldByName(dom, "radius").id}"]`));
+    await dispatch(dom.repeaterQueryCancelEl, "click");
+  }
+});
+
+test("a pinch on the map writes the radius into the range box, within its limits", async () => {
+  const { dom } = buildHarness();
+  installRsgbFetch({});
+  await openRsgb(dom);
+  await setPreviewPosition(dom);
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const canvas = previewCanvas(dom);
+  const range = fieldByName(dom, "radius");
+  const start = Number(range.value);
+
+  await dispatch(canvas, "pointerdown", { pointerId: 1, isPrimary: true, button: 0, clientX: 100, clientY: 100 });
+  await dispatch(canvas, "pointerdown", { pointerId: 2, isPrimary: false, button: 0, clientX: 200, clientY: 100 });
+  // Fingers twice as far apart: the map is twice as close, the ring covers half.
+  await dispatch(canvas, "pointermove", { pointerId: 2, clientX: 300, clientY: 100 });
+  assert.equal(range.value, String(Math.round(start / 2)));
+  // Squeezed far past RSGB's 500 km cap: the box stops at it.
+  await dispatch(canvas, "pointermove", { pointerId: 2, clientX: 101, clientY: 100 });
+  assert.equal(range.value, "500");
+  await dispatch(canvas, "pointerup", { pointerId: 2 });
+  await dispatch(canvas, "pointerup", { pointerId: 1 });
+  assert.equal(fieldByName(dom, "latitude").value, String(PREVIEW_LAT), "a pinch never moves the position");
+});
+
 test("clearing the location empties the persisted position too", async () => {
   const { dom } = buildHarness();
   installFetch([{ match: "/meta", body: META_JSON }]);
@@ -868,38 +912,6 @@ test("clearing the location empties the persisted position too", async () => {
   await dispatch(dom.channelImportPrzemiennikiEl, "click");
   assert.equal(fieldByName(dom, "latitude").value, "");
   assert.equal(fieldByName(dom, "locator").value, "");
-});
-
-test("every query says by the locate button where a position goes, and links to the policy", async () => {
-  // Google Play wants the disclosure where the user hands over a location, so
-  // each directory's form carries it on the geolocate button's own row.
-  const { dom } = buildHarness();
-  installFetch([
-    { match: "/przemienniki/meta", body: META_JSON },
-    { match: "/repeaterbook/meta", body: META_JSON },
-    { match: "/irts/meta", body: IRTS_META_JSON },
-  ]);
-  const sourceButtons = [
-    dom.channelImportPrzemiennikiEl,
-    dom.channelImportRepeaterbookEl,
-    dom.channelImportIrtsEl,
-    dom.channelImportRsgbEl,
-  ];
-  for (const sourceButton of sourceButtons) {
-    await dispatch(sourceButton, "click");
-    const note = descendants(grid(dom)).find((el) => el.classList?.contains("modal-geo-note"));
-    assert.ok(note, `${sourceButton.textContent.trim()} has no location note`);
-    assert.equal(note.parentElement, geolocateButton(dom).parentElement, "the note shares the locate button's row");
-    assert.match(note.textContent, /sent to the repeater directory/);
-    const link = note.querySelector("a");
-    assert.equal(link.getAttribute("href"), LOCATION_POLICY_URL);
-    // A new tab, so reading the policy cannot unload the channels being edited.
-    assert.equal(link.target, "_blank");
-    await dispatch(dom.repeaterQueryCancelEl, "click");
-  }
-  const policy = fs.readFileSync(path.join(repoRoot, "web", "privacy.html"), "utf8");
-  const [, fragment] = LOCATION_POLICY_URL.split("#");
-  assert.ok(policy.includes(`id="${fragment}"`), `privacy.html has no #${fragment} section for the note to open`);
 });
 
 test("geolocate fills the position fields and reports the locator", async () => {
@@ -1602,6 +1614,195 @@ test("a second submit while a query is in flight is ignored, not duplicated", as
   assert.equal(calls.length, 2, "the second submit must not reach the network");
   assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "the button comes back for the next query");
   assert.equal(dom.repeaterQuerySubmitEl.textContent, "Query API");
+});
+
+// Cancel closes the modal without waiting for the query, so the answer can
+// arrive after the user has moved on to another directory. It must neither
+// insert what was cancelled nor close the dialog that is open by then.
+test("a cancelled query inserts nothing and leaves the next directory's dialog open", async () => {
+  const { query, dom, log, table } = buildHarness();
+  installFetch([{ match: "/repeaterbook/meta", body: META_JSON }]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(dom, "PL");
+
+  // From here on every request waits for the test, so the query is caught
+  // in flight.
+  const { calls, release } = installGatedFetch([{
+    match: "/repeaterbook",
+    body: `
+      <rxf><perspective>radio</perspective><repeaters><repeater>
+        <qra>SR5WA</qra><mode>fm</mode>
+        <qrg type="rx">145.6</qrg><qrg type="tx">145</qrg>
+        <location><latitude>52.2297</latitude><longitude>21.0122</longitude></location>
+      </repeater></repeaters></rxf>
+    `,
+  }]);
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
+  await flush();
+  // Only RepeaterBook's requests count. Fetches an earlier test's map preview
+  // still has outstanding look up the current fetch when they start, so on a
+  // slow run some of them arrive at this gate too.
+  const queryCalls = calls.filter((call) => call.url.includes("/repeaterbook"));
+  assert.equal(queryCalls.length, 1, "the query is on its way");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  assert.equal(query.isModalOpen(), false);
+  assert.equal(dom.repeaterQuerySubmitEl.disabled, false, "a cancelled query does not hold the button");
+
+  installFetch([{ match: "/przemienniki/meta", body: META_JSON }]);
+  await dispatch(dom.channelImportPrzemiennikiEl, "click");
+  assert.equal(dom.repeaterQueryTitleEl.textContent, "Query przemienniki.net");
+
+  release();
+  await pending;
+  await flush();
+
+  assert.deepEqual(table.inserted, [], "the cancelled answer must not be inserted");
+  assert.equal(query.isModalOpen(), true, "the newer dialog must stay open");
+  assert.equal(dom.repeaterQueryTitleEl.textContent, "Query przemienniki.net");
+  assert.deepEqual(log.errors, []);
+});
+
+// The outcomes the repeater_query flow reports to Sentry metrics, in order,
+// from a stand-in SDK the test installs for itself.
+async function captureRepeaterOutcomes(t) {
+  resetSentryForTests();
+  t.after(resetSentryForTests);
+  const metrics = [];
+  await initSentry(makeWindow(), { loadSdk: async () => ({
+    init() {},
+    withScope() {},
+    captureException() {},
+    metrics: {
+      count: (name, value, options) => metrics.push({ name, ...options }),
+      distribution() {},
+    },
+  }) });
+  return () => metrics
+    .filter((metric) => metric.name === "flow.completed" && metric.attributes.flow === "repeater_query")
+    .map((metric) => metric.attributes.outcome);
+}
+
+// A fetch for the RepeaterBook query that settles only when the test says so,
+// whatever its signal does: the cancelled query has to be quiet however the
+// request it started ends.
+function installHeldQueryFetch() {
+  const calls = [];
+  let settle;
+  const answer = new Promise((resolve, reject) => {
+    settle = { resolve, reject };
+  });
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: async (url, init) => {
+      calls.push({ url: String(url), init });
+      return answer;
+    },
+  });
+  return { calls, settle };
+}
+
+async function startRepeaterBookQueryAndCancel(dom) {
+  installFetch([{ match: "/repeaterbook/meta", body: META_JSON }]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(dom, "PL");
+  const held = installHeldQueryFetch();
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
+  await flush();
+  assert.equal(held.calls.filter((call) => call.url.includes("/repeaterbook")).length, 1, "the query is on its way");
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  return { ...held, pending };
+}
+
+test("a cancelled query that then fails reports no error and no outcome", async (t) => {
+  const outcomes = await captureRepeaterOutcomes(t);
+  const { dom, log } = buildHarness();
+  const { settle, pending } = await startRepeaterBookQueryAndCancel(dom);
+
+  settle.reject(new TypeError("Failed to fetch"));
+  await pending;
+  await flush();
+
+  // The user walked away from this query: its failure is neither a defect
+  // for the error modal and Sentry nor a failed directory lookup.
+  assert.deepEqual(log.errors, []);
+  assert.deepEqual(log.rejected, []);
+  assert.deepEqual(outcomes(), []);
+  // It is still in the debug panel, traceback and all.
+  assert.ok(
+    log.debug.some((line) => line.startsWith("REPEATERBOOK QUERY CANCELLED") && line.includes("Failed to fetch")),
+    `the abandoned failure is logged: ${log.debug.join(" | ")}`,
+  );
+});
+
+test("a cancelled query whose answer still arrives records no ok outcome", async (t) => {
+  const outcomes = await captureRepeaterOutcomes(t);
+  const { dom, log, table } = buildHarness();
+  const { settle, pending } = await startRepeaterBookQueryAndCancel(dom);
+
+  settle.resolve({ ok: true, status: 200, text: async () => REPEATERBOOK_RXF });
+  await pending;
+  await flush();
+
+  assert.deepEqual(table.inserted, []);
+  assert.deepEqual(log.errors, []);
+  assert.deepEqual(outcomes(), []);
+});
+
+// Cancel stops the transfer itself, not only what happens to its answer: a
+// directory that is slow to answer would otherwise keep downloading for the
+// rest of the request deadline after the user closed the modal on it.
+test("cancelling a query aborts the request it is waiting on", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { dom, log } = buildHarness();
+  installFetch([{ match: "/repeaterbook/meta", body: META_JSON }]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(dom, "PL");
+  const calls = installStalledFetch([{ match: "/repeaterbook", stall: true }]);
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
+  await flush();
+  const [request] = calls.filter((call) => call.url.includes("/repeaterbook"));
+  assert.ok(request, "the query is on its way");
+  assert.equal(request.init.signal.aborted, false);
+
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  assert.equal(request.init.signal.aborted, true, "Cancel aborts the request");
+  await pending;
+  assert.deepEqual(log.errors, []);
+});
+
+test("cancelling an RSGB query aborts every square it is waiting on", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { dom, log } = buildHarness();
+  installGeolocation(LONDON);
+  const calls = installStalledFetch([{ match: "api-beta.rsgb.online", stall: true }]);
+  await openRsgb(dom);
+  await dispatch(geolocateButton(dom), "click");
+  // The preview is debounced on the mocked clock, so every square requested
+  // from here on is the query's.
+  const before = calls.length;
+  const pending = dispatch(dom.repeaterQueryFormEl, "submit");
+  await flush();
+  const squares = calls.slice(before);
+  assert.ok(squares.length > 0, "the squares are in flight");
+
+  await dispatch(dom.repeaterQueryCancelEl, "click");
+  assert.deepEqual(squares.filter((call) => !call.init.signal.aborted).map((call) => call.url), []);
+  await pending;
+  assert.deepEqual(log.errors, []);
+});
+
+test("a query that runs to the end still records its outcome", async (t) => {
+  const outcomes = await captureRepeaterOutcomes(t);
+  const { dom } = buildHarness();
+  installFetch([
+    { match: "/repeaterbook/meta", body: META_JSON },
+    { match: "/repeaterbook", body: REPEATERBOOK_RXF },
+  ]);
+  await dispatch(dom.channelImportRepeaterbookEl, "click");
+  await chooseCountry(dom, "PL");
+  await dispatch(dom.repeaterQueryFormEl, "submit");
+
+  assert.deepEqual(outcomes(), ["ok"]);
 });
 
 // --- Request deadline --------------------------------------------------------

@@ -1,5 +1,16 @@
 # Release Notes
 
+## 2026-11-14
+- Radios with a built-in FFE0/FFE1 Bluetooth UART, tested with the Baofeng UV-5R Mini, can now download and upload directly through Web Bluetooth without a separate adapter (#315).
+- Updated the bundled CHIRP to d99bb227, adding the Wouxun KG-WV50, Zastone ZT-D9000 and BTECH UV-PRO drivers plus the Wouxun KG-945G alias, and fixing FT-450D, IC-V80, Kenwood TK-8160/TK-8180 and Alinco DR-735T behaviour (#316).
+- On phones, the toolbar now folds behind one toggle, opens within the page header instead of covering it, and keeps the Offline badge clear of Load and Export (#312).
+- The repeater query modal now fills a phone screen, keeps its map centred and lets a pinch gesture set the search range (#313, #314).
+- Place-name suggestions are now limited to the countries supported by the selected repeater directory (#306).
+- The Serial Bridge warning and driver-set link now fold with the section and have a clear expand/collapse toggle (#308).
+- The Play Store listing, phone screenshots and Data safety answers now live in the repository and can be uploaded together through fastlane (#309).
+- webchirp.org is now served only by Cloudflare Pages, and the privacy policy names Cloudflare as its sole hosting provider (#307).
+- Deploys now give hashed assets immutable caching and ship only the active CHIRP bundle instead of leftover pins (#304).
+
 ## 2026-10-30
 - Added the Android app (`com.hf2j.webchirp`), a Trusted Web Activity that opens webchirp.org full-screen once the site's Digital Asset Links trust its Play signing key; the Install button is hidden inside it (#265, #268, #270, #301).
 - Google Analytics now loads and sets cookies only after Accept on a consent banner, and a privacy policy is linked from inside the app (#271, #272).

@@ -91,13 +91,15 @@ function buildFixture(rows) {
 const DEFAULT_ROWS = [{ Location: "0", Name: "GB3KI", Frequency: "145.637500" }];
 const DEFAULT_BODIES = { GB3KI: rxfResponse([rxfEntry()]) };
 
-async function bootMap({ rows = DEFAULT_ROWS, bodies = DEFAULT_BODIES, ...options } = {}) {
+// lookup: a stand-in for the whole callsign lookup, for a test that has to
+// decide when the answer arrives.
+async function bootMap({ rows = DEFAULT_ROWS, bodies = DEFAULT_BODIES, lookup: lookupOverride = null, ...options } = {}) {
   installMapDom(options);
   const fixture = buildFixture(rows);
   const { fetchImpl, requested } = installFakeLookupFetch(bodies);
   const { createCallsignLookup } = await import("../../web/js/callsign-lookup.ts");
   const { createRepeaterMap } = await import("../../web/js/ui/repeater-map.ts");
-  const { lookup } = createCallsignLookup("https://api.example.com/lookup", { fetchImpl });
+  const lookup = lookupOverride || createCallsignLookup("https://api.example.com/lookup", { fetchImpl }).lookup;
   const map = createRepeaterMap({ dom: fixture.dom, state: fixture.state }, { lookup });
   map.bindEvents();
   return { ...fixture, map, requested };
@@ -222,6 +224,42 @@ test("a reply that arrives after the pointer has gone draws nothing", async () =
   dispatch(dom.tableScrollEl, "scroll", {});
   await settle();
   assert.equal(dom.repeaterMapTooltipEl.classList.contains("hidden"), true);
+});
+
+test("leaving the cell before the map is drawn means it is never drawn", async () => {
+  const { dom, button } = await bootMap({ hoverCapable: true });
+  // The fixture's rows have only a Location cell; the issue is a pointer
+  // moving on into the next column, so the row gets a Name cell for it.
+  const nameCell = button.closest("tr").appendChild(document.createElement("td"));
+
+  // Left before the hover delay: the lookup must not start at all.
+  dispatch(button, "mouseover");
+  dispatch(button, "mouseout", { relatedTarget: nameCell });
+  dispatch(nameCell, "mouseover");
+  await settle(400);
+  assert.equal(dom.repeaterMapTooltipEl.classList.contains("hidden"), true, "a lookup the pointer left behind stays undrawn");
+});
+
+test("a lookup still in flight when the pointer leaves the cell draws nothing", async () => {
+  const { parseLookupXml } = await import("../../web/js/callsign-lookup.ts");
+  // A lookup that answers only when told to, so the pointer can leave while
+  // the request is out.
+  let answer = () => {};
+  const { dom, button } = await bootMap({
+    hoverCapable: true,
+    lookup: () => new Promise((resolve) => {
+      answer = () => resolve(parseLookupXml(DEFAULT_BODIES.GB3KI));
+    }),
+  });
+  const nameCell = button.closest("tr").appendChild(document.createElement("td"));
+
+  dispatch(button, "mouseover");
+  await settle();
+  dispatch(button, "mouseout", { relatedTarget: nameCell });
+  dispatch(nameCell, "mouseover");
+  answer();
+  await settle(400);
+  assert.equal(dom.repeaterMapTooltipEl.classList.contains("hidden"), true, "the late reply does not open the map");
 });
 
 test("the modal takes focus on open and hands it back on close", async () => {

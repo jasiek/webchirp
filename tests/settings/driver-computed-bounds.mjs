@@ -50,3 +50,23 @@ json.dumps({
   assert.match(integerLine, /sibling never initialized/, "with the driver's traceback");
   assert.ok(log.some((line) => line.includes("probe.float") && line.includes("get_min()")));
 });
+
+// FINDINGS upstream-get-max-defect (CHIRP pin d99bb227): at the pin,
+// RadioSettingValueFloat.get_max() in chirp/chirp/settings.py has a docstring
+// and no return, so it answers None however the value was built. That is why
+// the float maximum above falls back to the declared _max. This pins the
+// defect itself and will fail once upstream returns self._max; then remove the
+// FINDINGS entry and this test (the fallback test above stays).
+test("upstream RadioSettingValueFloat.get_max() returns None at the CHIRP pin", async () => {
+  const harness = await sharedHarness();
+  const result = await harness.runPythonJson(`
+from chirp import settings as _cs
+
+_float = _cs.RadioSettingValueFloat(0.5, 9.5, 1.0)
+json.dumps({"max": _float.get_max(), "declared": _float._max, "min": _float.get_min()})
+`);
+
+  assert.equal(result.max, null, "get_max() has no return statement upstream");
+  assert.equal(result.declared, 9.5, "the bound itself is stored on _max");
+  assert.equal(result.min, 0.5, "get_min() is not affected");
+});

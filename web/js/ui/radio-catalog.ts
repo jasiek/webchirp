@@ -349,15 +349,20 @@ export function createRadioCatalog(ctx: UiContext) {
 
   // Shared side effects after the selected radio changes.
   function reloadForSelectedRadio() {
-    actions.updateSerialActionState();
     persistSelectedRadioCookie();
     ctx.table.clearInvalidHighlights();
-    ctx.settings.clearInvalid();
     // The session for the selection just committed. Reselecting the radio the
     // current session is for keeps that session (web/js/ui/radio-session.ts),
     // so one that has already loaded needs no new runtime calls and keeps the
     // user's edits, and one still loading will apply its result when it lands.
     const session = ctx.session.current();
+    // A loaded session keeps its settings panel as it is, red fields and all,
+    // so it keeps the invalid values those fields show (issue #348). Cleared
+    // before the serial actions repaint, which read them to block Save to radio.
+    if (!session?.loaded) {
+      ctx.settings.clearInvalid();
+    }
+    actions.updateSerialActionState();
     if (session?.loaded) {
       ctx.table.render();
       return;
@@ -421,21 +426,6 @@ export function createRadioCatalog(ctx: UiContext) {
     actions.updateSerialActionState();
   }
 
-  // Select the catalog entry for a driver without going through the search box
-  // (used when a loaded image identifies its own driver, in which case the
-  // session the load opened for that driver is adopted along with it).
-  function selectRadioByDriver(moduleName: string, className: string, adoptedSessionId = ""): boolean {
-    const target = state.radioCatalog.find(
-      (r) => r.module === moduleName && r.className === className,
-    );
-    if (!target) {
-      return false;
-    }
-    commitSelectedRadio(target, adoptedSessionId);
-    persistSelectedRadioCookie();
-    return true;
-  }
-
   // Preselect the radio a ?radio=<catalog key> link names, so a per-model page
   // (web/radios/, built by scripts/build-model-pages.ts) can hand its visitor
   // an app already pointed at the radio the page is about. The key is the
@@ -462,31 +452,43 @@ export function createRadioCatalog(ctx: UiContext) {
     return true;
   }
 
-  // Select the radio a loaded image identified, adopting the session the load
-  // opened for it so the image it holds is the one the editor works on.
-  function selectRadioByDetectedImage(
-    loaded: Pick<LoadedImage, "sessionId" | "module" | "className" | "vendor" | "model">,
-  ) {
-    const sessionId = String(loaded.sessionId || "");
-    if (selectRadioByDriver(loaded.module, loaded.className, sessionId)) {
-      trackRadioSelected(state.selectedRadio, "image");
-      return true;
+  // The catalog entry a loaded image names: its driver class, or else the
+  // vendor and model it records under the same module. Null when the catalog
+  // has neither. Selects nothing; adoptImageRadio does that.
+  function radioForImage(
+    loaded: Pick<LoadedImage, "module" | "className" | "vendor" | "model">,
+  ): CatalogRadio | null {
+    const byDriver = state.radioCatalog.find(
+      (r) => r.module === loaded.module && r.className === loaded.className,
+    );
+    if (byDriver) {
+      return byDriver;
     }
     const vendor = String(loaded.vendor || "");
     const model = String(loaded.model || "");
-    const fallback = state.radioCatalog.find(
+    return state.radioCatalog.find(
       (r) =>
         r.module === loaded.module
         && r.vendor === vendor
         && r.model === model,
-    );
-    if (!fallback) {
-      return false;
-    }
-    commitSelectedRadio(fallback, sessionId);
-    trackRadioSelected(fallback, "image");
+    ) || null;
+  }
+
+  // Select the radio a loaded image identified, adopting the session the load
+  // opened for it so the image it holds is the one the editor works on. This
+  // closes the previous radio's session, so an import calls it only once it
+  // holds everything the image's editor state needs.
+  function adoptImageRadio(radio: CatalogRadio, sessionId: string): void {
+    commitSelectedRadio(radio, sessionId);
+    trackRadioSelected(radio, "image");
     persistSelectedRadioCookie();
-    return true;
+  }
+
+  // The column schema of a runtime session by id, which need not be adopted
+  // yet: an image import reads its session's schema before selecting it.
+  async function fetchSessionMetadata(sessionId: string): Promise<RadioMetadata> {
+    const metadata = await requireRuntimeApi(state).getRadioMetadata({ sessionId });
+    return metadata || { headers: [], columns: {} };
   }
 
   // The column schema for a session's radio, or the empty schema for none.
@@ -494,9 +496,7 @@ export function createRadioCatalog(ctx: UiContext) {
     if (!session) {
       return { headers: [], columns: {} };
     }
-    const sessionId = await ctx.session.idOf(session);
-    const metadata = await requireRuntimeApi(state).getRadioMetadata({ sessionId });
-    return metadata || { headers: [], columns: {} };
+    return fetchSessionMetadata(await ctx.session.idOf(session));
   }
 
   function applyRadioMetadata(metadata: RadioMetadata): void {
@@ -593,7 +593,10 @@ export function createRadioCatalog(ctx: UiContext) {
     restoreSelectedRadioCookie,
     selectRadioByLinkParam,
     setRadioSelectPlaceholder,
-    selectRadioByDetectedImage,
+    radioForImage,
+    adoptImageRadio,
+    fetchSessionMetadata,
+    applyRadioMetadata,
     loadSelectedRadioMetadata,
   };
 }

@@ -66,3 +66,59 @@ export function makeBluetoothDongle({ onOperation = async () => {}, echo = false
   } });
   return { device, tx, rx, baud, calls, characteristics, notify };
 }
+
+// Model a radio's own Bluetooth: service FFE0 with one FFE1 characteristic
+// that is written to and notifies back. Any other service is missing, as on
+// the radio, so dongle profiles probe it as a mismatch.
+// echo: true returns every written chunk as an FFE1 notification.
+export function makeBluetoothRadio({ onOperation = async () => {}, echo = false,
+  properties = { write: true, writeWithoutResponse: true, notify: true } } = {}) {
+  const calls = [];
+  let device;
+  async function record(operation, bytes) {
+    const call = { operation, ...(bytes ? { bytes: Array.from(bytes) } : {}) };
+    calls.push(call);
+    await onOperation(call);
+    if (echo && bytes && /^ffe1:(response|command)$/.test(operation)) {
+      setImmediate(() => {
+        if (device.gatt.connected) notify(new DataView(Uint8Array.from(call.bytes).buffer));
+      });
+    }
+  }
+  function notify(value) {
+    uart.value = value;
+    uart.emit("characteristicvaluechanged", { target: uart });
+  }
+  const uart = makeEmitter({
+    properties: { ...properties },
+    async startNotifications() { await record("ffe1:subscribe"); return uart; },
+    async writeValueWithResponse(bytes) { await record("ffe1:response", bytes); },
+    async writeValueWithoutResponse(bytes) { await record("ffe1:command", bytes); },
+  });
+  const characteristics = new Map([["ffe1", uart]]);
+  const service = {
+    async getCharacteristic(uuid) {
+      const short = uuid.slice(4, 8);
+      await record(`characteristic:${short}`);
+      if (!characteristics.has(short)) throw new DOMException("Missing characteristic", "NotFoundError");
+      return characteristics.get(short);
+    },
+  };
+  device = makeEmitter({ name: "walkie-talkie", gatt: {
+    connected: false,
+    async connect() { await record("connect"); this.connected = true; return this; },
+    async getPrimaryService(uuid) {
+      await record(`service:${uuid}`);
+      if (uuid !== "0000ffe0-0000-1000-8000-00805f9b34fb") throw new DOMException("Missing service", "NotFoundError");
+      return service;
+    },
+    disconnect() {
+      calls.push({ operation: "disconnect" });
+      if (this.connected) {
+        this.connected = false;
+        device.emit("gattserverdisconnected", { target: device });
+      }
+    },
+  } });
+  return { device, uart, calls, characteristics, notify };
+}

@@ -44,6 +44,24 @@ if TYPE_CHECKING:
     from typing import Any, Optional, Sequence
     from webchirp_bridge.channel_rows import Rows
 
+# The key WebCHIRP adds to CHIRP's own metadata trailer (the base64 JSON after
+# ``CloneModeRadio.MAGIC``) of an image it fabricated offline. The trailer is
+# the one part of a .img every clone-mode driver writes and reads the same way
+# (``save_mmap``/``load_mmap``), and CHIRP keeps keys it does not know when it
+# saves the image again, so the mark survives desktop CHIRP as well; the
+# image bytes themselves are untouched. Without it a reopened offline export
+# would be indistinguishable from a radio's codeplug (issue 318).
+SYNTHETIC_IMAGE_METADATA_KEY = "webchirp_origin"
+
+
+def _image_origin_from_metadata(raw_image: bytes) -> ImageOrigin:
+    """What a loaded file is evidence of: a synthetic export if it says so, else a file."""
+    _, metadata = chirp_common.CloneModeRadio._strip_metadata(raw_image)
+    if metadata.get(SYNTHETIC_IMAGE_METADATA_KEY) == ImageOrigin.SYNTHETIC.value:
+        return ImageOrigin.SYNTHETIC
+    return ImageOrigin.FILE
+
+
 def _decode_image_b64(image_b64: str) -> bytes:
     """Decode an image the browser sent as base64, refusing a malformed payload."""
     try:
@@ -82,7 +100,9 @@ def export_image_base64(
     bytes. That file is returned to the user, and recorded on the session as
     ``ImageOrigin.SYNTHETIC`` so the runtime can say what the last export was
     made from -- but it never becomes a backing image, so the upload and
-    settings gates stay closed (FINDINGS: offline-export-is-not-a-radio-image).
+    settings gates stay closed.
+    The file says so too, in its metadata trailer, so opening it again
+    restores that origin rather than reading it as a radio's image.
     """
     session = resolve_session(session_id)
     radio_cls = session.radio_cls
@@ -105,17 +125,27 @@ def export_image_base64(
     # is the zeroed map of the driver's declared size the export starts from.
     radio = session.radio_instance()
     _apply_rows_to_radio_instance(radio, rows or [], session)
-    settings_result = _validate_and_apply_radio_settings(
-        radio, settings_groups or [], apply_changes=True
-    )
-    _raise_for_refused_settings(settings_result, "export")
+    # Settings are read from an image, and zeroes are none: an offline export
+    # neither applies settings nor parses any to echo back, as
+    # get_radio_settings refuses them for this session. Settings parsed from
+    # zeroes would come back with the next export and could name a channel
+    # that has since changed (issue 342).
+    settings: list[Any] = []
+    if origin is not ImageOrigin.SYNTHETIC:
+        settings_result = _validate_and_apply_radio_settings(
+            radio, settings_groups or [], apply_changes=True
+        )
+        _raise_for_refused_settings(settings_result, "export")
+        settings = settings_result["settings"]
+    if origin is ImageOrigin.SYNTHETIC and isinstance(radio, chirp_common.CloneModeRadio):
+        radio.metadata = {SYNTHETIC_IMAGE_METADATA_KEY: ImageOrigin.SYNTHETIC.value}
     image_data = session.record_radio(radio, origin)
     return {
         **_image_payload(image_data),
         "vendor": str(getattr(radio_cls, "VENDOR", "")),
         "model": str(getattr(radio_cls, "MODEL", "")),
         "variant": str(getattr(radio_cls, "VARIANT", "")),
-        "settings": settings_result["settings"],
+        "settings": settings,
     }
 
 
@@ -150,9 +180,12 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     The image decides the driver, so the session is opened here rather than
     by the caller: the reply carries its ``sessionId`` for the browser to
     adopt in place of whatever radio was selected before the load, along with
-    the rows, settings and radio identity the image holds.
+    the rows, settings and radio identity the image holds. A file WebCHIRP
+    exported offline is reopened as the synthetic image it is, with no
+    settings and no backing image for an upload.
     """
     raw_image = _decode_image_b64(image_b64)
+    origin = _image_origin_from_metadata(raw_image)
 
     with _temp_image_path(raw_image, prefix="webchirp-") as image_path:
         try:
@@ -171,7 +204,7 @@ def load_image_base64(image_b64: str) -> dict[str, Any]:
     class_name = str(base_cls.__name__)
     session = open_radio_session(module_short, class_name)
     try:
-        payload = _read_radio_payload(session, radio, ImageOrigin.FILE)
+        payload = _read_radio_payload(session, radio, origin)
     except Exception:
         # The session is registered before the driver reads the image, but its
         # id only reaches the browser with a successful reply: a session left

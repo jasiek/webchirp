@@ -50,6 +50,18 @@ adding the token to RepeaterBook's; the page itself never receives it:
 TURNSTILE_BYPASS_TOKEN=0123456789abcdef0123456789abcdef npm run dev
 ```
 
+To try it on an Android phone, turn on USB debugging, plug the phone in and
+run:
+
+```bash
+npm run phone
+```
+
+It opens the dev server in Chrome on the phone over `adb reverse`, starting
+`npm run dev` first if nothing is running. Pass a page to open another one
+(`npm run phone -- serial-test.html`), and inspect the tab from desktop Chrome
+at chrome://inspect/#devices.
+
 The default and `?drivers=chirp` use the pinned upstream CHIRP drivers. Use
 `?drivers=quansheng-unofficial` to load only the bundled unofficial Quansheng
 F4HWN driver catalog. Choose the firmware release in the radio picker to load
