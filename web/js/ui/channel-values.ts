@@ -35,6 +35,11 @@ export interface ColumnMeta {
    * refuses to delete; absent when there are none.
    */
   undeletable?: number[];
+  /**
+   * Location: the memories the driver could not decode when the image was
+   * read, which the grid never offers as empty; absent when there are none.
+   */
+  unreadable?: number[];
   /** freq: [low, high) in Hz. */
   bands?: Array<[number, number]>;
   /** enum: the driver's values, in its order. */

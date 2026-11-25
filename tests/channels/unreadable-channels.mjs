@@ -52,6 +52,7 @@ try:
         _loaded = load_image_base64(_image_b64)
     finally:
         _cls.get_memory = _real_get_memory
+    _loaded_location = get_radio_column_metadata(_loaded["sessionId"])["columns"]["Location"]
     # The session the failing load opened is the one that recorded the slot;
     # exporting through it is what the browser's Export Binary does.
     _exported = export_image_base64(_loaded["sessionId"], _loaded["rows"], [])
@@ -73,6 +74,8 @@ json.dumps({
     "cleanFrequency": _clean_freq,
     "loadedRowCount": len(_loaded["rows"]),
     "loadedUnreadable": _loaded["unreadableChannels"],
+    "cleanLocationUnreadable": get_radio_column_metadata(_clean["sessionId"])["columns"]["Location"].get("unreadable"),
+    "loadedLocationUnreadable": _loaded_location.get("unreadable"),
     "survivedFrequency": None if _after_row is None else str(_after_row.get("Frequency", "")),
     "afterRowCount": len(_after["rows"]),
     "log": "\\n".join(_captured),
@@ -139,6 +142,11 @@ test("a channel that failed to decode survives export even when the failure does
     [result.target],
     "the failing channel should be reported as unreadable",
   );
+
+  // The grid learns it too, from the Location column, so its empty-memory
+  // rows never offer the slot as free.
+  assert.equal(result.cleanLocationUnreadable, null, "a clean read lists no unreadable memories");
+  assert.deepEqual(result.loadedLocationUnreadable, [result.target]);
 
   // The debug panel gets the traceback, not just a count.
   assert.match(result.log, /could not be decoded by the driver/);
