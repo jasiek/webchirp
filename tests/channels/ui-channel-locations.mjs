@@ -129,6 +129,29 @@ test("insert takes the first free memory from the selected channel and leaves ev
   assert.deepEqual(selectedNames(document), [""], "the new channel is the selection");
 });
 
+test("clicking the selected channel's number again clears the selection", async () => {
+  const { document } = await bootWithRows(SPARSE_ROWS);
+  clickLocationButton(document, 2);
+  assert.deepEqual(selectedNames(document), ["HTAC1"]);
+  clickLocationButton(document, 2);
+  assert.deepEqual(selectedNames(document), []);
+  assert.equal(document.querySelector("#channel-bulk-edit").disabled, true);
+
+  // One of several selected: the first click narrows to it, the second clears.
+  clickLocationButton(document, 1);
+  shiftClickLocationButton(document, 3);
+  assert.deepEqual(selectedNames(document), ["Bravo", "HTAC1", "HTAC2"]);
+  clickLocationButton(document, 2);
+  assert.deepEqual(selectedNames(document), ["HTAC1"]);
+  clickLocationButton(document, 2);
+  assert.deepEqual(selectedNames(document), []);
+
+  // With nothing selected, Insert goes back to the lowest free memory.
+  click(document, "#channel-insert");
+  await flushMicrotasks();
+  assert.deepEqual(tableLocations(document), ["0", "1", "2", "25", "26", "124"]);
+});
+
 test("insert with nothing selected takes the lowest free memory", async () => {
   const { document } = await bootWithRows(SPARSE_ROWS);
   click(document, "#channel-insert");

@@ -546,6 +546,11 @@ export function createChannelTable(ctx: UiContext) {
         selectedRowIndexes.add(rowIdx);
       }
       selectionAnchorIndex = rowIdx;
+    } else if (selectedRowIndexes.size === 1 && selectedRowIndexes.has(rowIdx)) {
+      // A second plain click on the one selected channel clears the
+      // selection. One of several selected narrows to it first, as before.
+      selectedRowIndexes = new Set();
+      selectionAnchorIndex = null;
     } else {
       selectedRowIndexes = new Set([rowIdx]);
       selectionAnchorIndex = rowIdx;
