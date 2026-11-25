@@ -114,6 +114,7 @@ async function gridFor(radio, { beforeAnswer = async () => {} } = {}) {
       tableBody: pageElement("tableBody"),
       tableScrollEl: pageElement("tableScrollEl"),
       channelEmptyStateEl: pageElement("channelEmptyStateEl"),
+      channelShowEmptyEl: pageElement("channelShowEmptyEl"),
     },
     state,
     log: { setStatus() {}, logDebug() {} },

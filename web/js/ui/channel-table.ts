@@ -30,11 +30,23 @@ import type { RadioSessionHandle } from "./state.ts";
 /** A grid cell's editor: a button (Location, Extra), a select or a text input. */
 type CellEditor = HTMLButtonElement | HTMLSelectElement | HTMLInputElement;
 
-/** Which channel and column a grid cell shows. */
+/**
+ * Which channel and column a grid cell shows. A cell of an empty memory's row
+ * has no channel: its rowIdx is -1 and slot is the memory number.
+ */
 interface CellReference {
   rowIdx: number;
   column: string;
+  slot?: number;
 }
+
+/**
+ * One line of the grid: a channel (by its index in state.currentRows), or a
+ * memory with no channel in it, which exists only while the grid draws.
+ */
+type DisplayEntry =
+  | { kind: "row"; rowIdx: number }
+  | { kind: "slot"; slot: number; unreadable: boolean };
 
 // The editable channel grid: rendering, row selection, the row operations
 // (insert/remove/move/copy/cut/paste), the band-plan presets, and the
@@ -155,6 +167,212 @@ export function createChannelTable(ctx: UiContext) {
   // element now shows to the channel it now shows.
   let isReleasingFocus = false;
 
+  // --- Empty memories -----------------------------------------------------
+  // A codeplug's rows are its occupied memories only: the runtime never sends
+  // an empty one (_radio_rows_from_instance), and an upload erases every
+  // memory without a row. The "Show empty memories" toggle adds a line for
+  // each unused memory between the radio's bounds without putting anything
+  // into state.currentRows, so upload, export, the row checks and the
+  // preflight never see them. The rows a user inserted and left blank are
+  // real rows and are always shown. Typing into an empty memory's line is
+  // what makes it a channel (fillEmptyMemory).
+  //
+  // Everything keyed by a row index -- the selection, the invalid-cell keys,
+  // tr.dataset.rowIdx -- still means the index in state.currentRows. Only the
+  // window is laid out over displayEntries, so with the toggle off the two
+  // coincide and nothing else changes.
+  const SHOW_EMPTY_KEY = "webchirp-show-empty-memories";
+  const SHOW_EMPTY_HINT = "Show empty memories: list this radio's unused memory slots as blank rows you can fill in";
+  const HIDE_EMPTY_HINT = "Hide empty memories: list only the slots that hold a channel";
+  const NO_RADIO_EMPTY_HINT = "Select a radio to show its empty memories";
+  const UNREADABLE_NOTE = "The driver could not read this memory, so it is left as it is on the radio.";
+  let showEmptyMemories = readShowEmptyPreference();
+  let displayEntries: DisplayEntry[] = [];
+  // state.currentRows index -> position in displayEntries, and memory number
+  // -> position for the empty ones.
+  let displayPositionOfRow: number[] = [];
+  let displayPositionOfSlot = new Map<number, number>();
+
+  // The window's localStorage, or null where it is missing, not a real
+  // Storage, or throws to read (blocked site data, some private modes): the
+  // toggle then starts off on every visit.
+  function preferenceStorage(): Pick<Storage, "getItem" | "setItem"> | null {
+    try {
+      const storage = globalThis.window?.localStorage;
+      return typeof storage?.getItem === "function" && typeof storage.setItem === "function" ? storage : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function readShowEmptyPreference(): boolean {
+    try {
+      return preferenceStorage()?.getItem(SHOW_EMPTY_KEY) === "true";
+    } catch {
+      return false;
+    }
+  }
+
+  function writeShowEmptyPreference(value: boolean): void {
+    try {
+      preferenceStorage()?.setItem(SHOW_EMPTY_KEY, String(value));
+    } catch {
+      // Remembering the choice is a nicety; the toggle still works this visit.
+    }
+  }
+
+  // Empty memories need a radio: without one the grid's schema is CHIRP's CSV
+  // driver, whose memory count is unbounded, so there is no last slot.
+  function emptyMemoriesAvailable(): boolean {
+    return Boolean(state.radioSession)
+      && state.currentHeaders.includes("Location")
+      && Number.isFinite(locationBounds().hi);
+  }
+
+  function emptyMemoriesShown(): boolean {
+    return showEmptyMemories && emptyMemoriesAvailable();
+  }
+
+  // Lay out the grid's lines: every row in its order, with a line for each
+  // free memory before the row whose Location follows it. A row whose
+  // Location is missing, duplicated or out of bounds keeps its place and
+  // claims no line of its own, as it does with the toggle off.
+  function buildDisplayEntries(): void {
+    const rows = state.currentRows;
+    const entries: DisplayEntry[] = [];
+    const rowPositions = new Array<number>(rows.length);
+    const slotPositions = new Map<number, number>();
+    if (!emptyMemoriesShown()) {
+      rows.forEach((_row, rowIdx) => {
+        rowPositions[rowIdx] = entries.length;
+        entries.push({ kind: "row", rowIdx });
+      });
+    } else {
+      const { lo, hi } = locationBounds();
+      const occupied = new Set<number>();
+      for (const row of rows) {
+        const location = parsedLocation(row);
+        if (location !== null) {
+          occupied.add(location);
+        }
+      }
+      const unreadable = new Set(state.radioMetadata.columns.Location?.unreadable ?? []);
+      let next = lo;
+      const addEmptyThrough = (last: number) => {
+        for (; next <= last; next += 1) {
+          if (!occupied.has(next)) {
+            slotPositions.set(next, entries.length);
+            entries.push({ kind: "slot", slot: next, unreadable: unreadable.has(next) });
+          }
+        }
+      };
+      rows.forEach((row, rowIdx) => {
+        const location = parsedLocation(row);
+        if (location !== null && location >= lo && location <= hi) {
+          addEmptyThrough(location - 1);
+          next = Math.max(next, location + 1);
+        }
+        rowPositions[rowIdx] = entries.length;
+        entries.push({ kind: "row", rowIdx });
+      });
+      addEmptyThrough(hi);
+    }
+    displayEntries = entries;
+    displayPositionOfRow = rowPositions;
+    displayPositionOfSlot = slotPositions;
+  }
+
+  // The toggle follows the radio: disabled without one, and shown released
+  // then whatever was chosen, which comes back with the next radio.
+  function renderShowEmptyToggle(): void {
+    const button = dom.channelShowEmptyEl;
+    const available = emptyMemoriesAvailable();
+    const shown = showEmptyMemories && available;
+    button.disabled = !available;
+    button.setAttribute("aria-pressed", shown ? "true" : "false");
+    const hint = !available ? NO_RADIO_EMPTY_HINT : shown ? HIDE_EMPTY_HINT : SHOW_EMPTY_HINT;
+    button.title = hint;
+    button.setAttribute("aria-label", hint.replace(/:.*$/, ""));
+  }
+
+  function toggleEmptyMemories(): void {
+    if (!emptyMemoriesAvailable()) {
+      return;
+    }
+    showEmptyMemories = !showEmptyMemories;
+    writeShowEmptyPreference(showEmptyMemories);
+    render();
+    log.setStatus(showEmptyMemories ? "Showing empty memories." : "Hiding empty memories.");
+  }
+
+  // Row-keyed state survives a change that moves rows within
+  // state.currentRows: the selection, its anchor and the per-cell findings
+  // follow their rows to where they now sit.
+  function preservingRowState(mutate: () => void): void {
+    const before = state.currentRows.slice();
+    mutate();
+    const after = new Map(state.currentRows.map((row, index) => [row, index]));
+    const moved = (index: number): number | undefined => {
+      const row = before[index];
+      return row ? after.get(row) : undefined;
+    };
+    selectedRowIndexes = new Set(
+      [...selectedRowIndexes].map(moved).filter((index) => index !== undefined),
+    );
+    selectionAnchorIndex = selectionAnchorIndex === null ? null : moved(selectionAnchorIndex) ?? null;
+    const rekey = (key: string): string | null => {
+      const colon = key.indexOf(":");
+      const index = moved(Number(key.slice(0, colon)));
+      return index === undefined ? null : `${index}${key.slice(colon)}`;
+    };
+    const invalid = [...invalidCellKeys];
+    invalidCellKeys.clear();
+    for (const key of invalid) {
+      const next = rekey(key);
+      if (next !== null) {
+        invalidCellKeys.add(next);
+      }
+    }
+    const notes = [...cellNotes];
+    cellNotes.clear();
+    for (const [key, note] of notes) {
+      const next = rekey(key);
+      if (next !== null) {
+        cellNotes.set(next, note);
+      }
+    }
+  }
+
+  // Typing into an empty memory's line makes it a channel: a blank row in
+  // that memory, written like any committed cell. Text that is still empty
+  // (a cell tabbed through) writes nothing, so passing over an empty memory
+  // never creates a row an upload would then write.
+  function fillEmptyMemory(slot: number, column: string, text: string): Promise<void> {
+    if (text.trim() === "" || !emptyMemoriesShown()) {
+      return Promise.resolve();
+    }
+    if (new Set(state.radioMetadata.columns.Location?.unreadable ?? []).has(slot)) {
+      log.setStatus(`Memory ${slot} could not be read from the radio; it is left as it is.`);
+      render();
+      return Promise.resolve();
+    }
+    const existing = state.currentRows.find((row) => parsedLocation(row) === slot);
+    if (existing) {
+      // Something claimed the memory since the line was drawn: the edit is
+      // for the channel now there.
+      return commitRawValue({ rowIdx: state.currentRows.indexOf(existing), column }, text);
+    }
+    const row = createBlankChannelRow();
+    row.Location = String(slot);
+    preservingRowState(() => {
+      state.currentRows.push(row);
+      sortRowsByLocation();
+    });
+    render();
+    log.setStatus(`Inserted new channel at memory ${slot}.`);
+    return submitRowEdits([{ row, edits: [{ column, value: text }] }]);
+  }
+
   function sortedSelectedRowIndexes() {
     return Array.from(selectedRowIndexes)
       .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < state.currentRows.length)
@@ -259,8 +477,8 @@ export function createChannelTable(ctx: UiContext) {
   // pick the class up from bindRowElement when they scroll back in.
   function applyRowSelectionVisuals() {
     rowElements.forEach((tr, offset) => {
-      const rowIdx = windowStart + offset;
-      const isSelected = selectedRowIndexes.has(rowIdx);
+      const entry = displayEntries[windowStart + offset];
+      const isSelected = entry?.kind === "row" && selectedRowIndexes.has(entry.rowIdx);
       tr.classList.toggle("is-selected", isSelected);
       const locationButton = locationButtonIn(tr);
       if (locationButton) {
@@ -1478,22 +1696,74 @@ export function createChannelTable(ctx: UiContext) {
       const td = document.createElement("td");
       td.dataset.column = String(column);
       const editor = createCellEditor(column);
-      // The title the editor was built with, for showCellNote to put back.
+      // The title the editor was built with, for showCellNote to put back,
+      // and whether it was built disabled, for an unreadable memory's line to
+      // put back when the element moves on to a channel.
       editor.dataset.ownTitle = editor.title;
+      editor.dataset.ownDisabled = String(editor.disabled);
       td.appendChild(editor);
       tr.appendChild(td);
     }
     return tr;
   }
 
+  // Point an existing row element at a line of the grid: a channel, or an
+  // empty memory. This is the whole per-row cost of a render.
+  function bindDisplayEntry(tr: HTMLTableRowElement, position: number): void {
+    const entry = displayEntries[position];
+    if (entry?.kind === "slot") {
+      bindEmptyMemory(tr, entry);
+      return;
+    }
+    if (entry) {
+      bindRowElement(tr, entry.rowIdx);
+    }
+  }
+
+  // An empty memory's line: its number, blank editors, nothing selected,
+  // pending or flagged. An unreadable one is locked, with the reason on hover.
+  // Its Extra button stays in the DOM, hidden by web/styles.css rather than
+  // removed, so the line is as tall as a channel's and the window's row
+  // height holds for both.
+  function bindEmptyMemory(tr: HTMLTableRowElement, entry: { slot: number; unreadable: boolean }): void {
+    delete tr.dataset.rowIdx;
+    tr.dataset.slot = String(entry.slot);
+    tr.classList.remove("is-selected");
+    tr.classList.add("is-empty-memory");
+    tr.classList.toggle("is-unreadable-memory", entry.unreadable);
+    const blank: ChannelRow = { Location: String(entry.slot) };
+    renderedColumns.forEach((column, columnIdx) => {
+      const td = tr.children[columnIdx] as HTMLElement;
+      td.classList.remove("is-invalid", "is-pending");
+      showCellNote(td, entry.unreadable ? UNREADABLE_NOTE : "");
+      const editor = td.children[0] as CellEditor;
+      editor.disabled = entry.unreadable || editor.dataset.ownDisabled === "true";
+      bindCellEditor(editor, blank, column);
+    });
+    const locationButton = locationButtonIn(tr);
+    if (locationButton) {
+      locationButton.setAttribute("aria-pressed", "false");
+      locationButton.classList.remove("has-callsign");
+    }
+  }
+
   // Point an existing row element at a model row: values, selection and
-  // invalid-cell classes. This is the whole per-row cost of a render.
+  // invalid-cell classes.
   function bindRowElement(tr: HTMLTableRowElement, rowIdx: number): void {
     const row = state.currentRows[rowIdx];
     if (!row) {
       return;
     }
     tr.dataset.rowIdx = String(rowIdx);
+    if (tr.dataset.slot !== undefined) {
+      // The element last showed an empty memory: undo what that changed.
+      delete tr.dataset.slot;
+      tr.classList.remove("is-empty-memory", "is-unreadable-memory");
+      for (const td of Array.from(tr.children)) {
+        const editor = td.children[0] as CellEditor;
+        editor.disabled = editor.dataset.ownDisabled === "true";
+      }
+    }
     const isSelected = selectedRowIndexes.has(rowIdx);
     tr.classList.toggle("is-selected", isSelected);
     const pending = pendingEdits.get(row);
@@ -1527,11 +1797,30 @@ export function createChannelTable(ctx: UiContext) {
   }
 
   function cellElement(rowIdx: number, column: string): Element | null {
-    const tr = rowElements[rowIdx - windowStart];
+    const tr = rowElements[(displayPositionOfRow[rowIdx] ?? -1) - windowStart];
     if (!tr || tr.dataset.rowIdx !== String(rowIdx)) {
       return null;
     }
     const columnIdx = renderedColumns.indexOf(column);
+    return columnIdx < 0 ? null : tr.children[columnIdx] || null;
+  }
+
+  // The cell a reference names now: a channel's, or an empty memory's. An
+  // empty memory that has since become a channel resolves to that channel.
+  function cellElementFor(cell: CellReference): Element | null {
+    if (cell.slot === undefined) {
+      return cellElement(cell.rowIdx, cell.column);
+    }
+    const position = displayPositionOfSlot.get(cell.slot);
+    if (position === undefined) {
+      const rowIdx = state.currentRows.findIndex((row) => parsedLocation(row) === cell.slot);
+      return rowIdx < 0 ? null : cellElement(rowIdx, cell.column);
+    }
+    const tr = rowElements[position - windowStart];
+    if (!tr || tr.dataset.slot !== String(cell.slot)) {
+      return null;
+    }
+    const columnIdx = renderedColumns.indexOf(cell.column);
     return columnIdx < 0 ? null : tr.children[columnIdx] || null;
   }
 
@@ -1606,7 +1895,7 @@ export function createChannelTable(ctx: UiContext) {
 
   // Which slice of the channel list has to exist in the DOM.
   function visibleRowRange() {
-    const total = state.currentRows.length;
+    const total = displayEntries.length;
     const viewportHeight = dom.tableScrollEl.clientHeight;
     // Headless callers have no layout to virtualize against: the unit tests
     // run on jsdom, which measures nothing, and tests/support/index-page.mjs
@@ -1652,7 +1941,7 @@ export function createChannelTable(ctx: UiContext) {
       return;
     }
     const rowHeight = measuredRowHeight || ESTIMATED_ROW_HEIGHT;
-    const below = Math.max(0, state.currentRows.length - start - count);
+    const below = Math.max(0, displayEntries.length - start - count);
     spacers.above.cell.style.height = `${Math.round(start * rowHeight)}px`;
     spacers.below.cell.style.height = `${Math.round(below * rowHeight)}px`;
   }
@@ -1715,7 +2004,7 @@ export function createChannelTable(ctx: UiContext) {
     }
     // A cell's first child is the editor createCellEditor() built for it: a
     // text input, or a select, which has no caret to restore.
-    const editor = cellElement(captured.rowIdx, captured.column)?.children[0] as HTMLInputElement | undefined;
+    const editor = cellElementFor(captured)?.children[0] as HTMLInputElement | undefined;
     if (!editor) {
       // The channel being edited fell out of the rendered window, so there is
       // no element left to hold the draft. Commit it as a blur would rather
@@ -1741,8 +2030,9 @@ export function createChannelTable(ctx: UiContext) {
       return;
     }
     // bindRowElement has just written the row's stored value into this
-    // element; put the in-progress text back over it.
-    const draft = captured.draft;
+    // element; put the in-progress text back over it. An empty memory's
+    // empty draft is not put over the channel the memory has since become.
+    const draft = captured.slot !== undefined && captured.draft === "" ? null : captured.draft;
     const restoredDraft = draft !== null && editor.tagName === "INPUT";
     if (restoredDraft) {
       editor.value = draft;
@@ -1764,11 +2054,12 @@ export function createChannelTable(ctx: UiContext) {
       return;
     }
     const focused = captureFocusedCell();
+    buildDisplayEntries();
     const { start, count } = visibleRowRange();
     syncRowElementCount(count);
     windowStart = start;
     for (let offset = 0; offset < count; offset += 1) {
-      bindRowElement(rowElements[offset], start + offset);
+      bindDisplayEntry(rowElements[offset], start + offset);
     }
     applySpacerHeights(start, count);
     if (measureRowHeight() && !isRemeasuring) {
@@ -1819,6 +2110,7 @@ export function createChannelTable(ctx: UiContext) {
       renderHeader();
       discardRowElements();
     }
+    renderShowEmptyToggle();
     renderEmptyState();
     renderRowWindow();
     notifySelectionChanged();
@@ -1849,7 +2141,12 @@ export function createChannelTable(ctx: UiContext) {
   // currently showing.
   function cellReferenceFor(target: EventTarget | null): CellReference | null {
     const td = (target as Element | null)?.closest?.<HTMLElement>("td[data-column]");
-    const rowIdx = Number((td?.parentNode as HTMLElement | null | undefined)?.dataset?.rowIdx);
+    const tr = td?.parentNode as HTMLElement | null | undefined;
+    if (td && tr?.dataset?.slot !== undefined) {
+      const slot = Number(tr.dataset.slot);
+      return Number.isInteger(slot) ? { rowIdx: -1, slot, column: td.dataset.column as string } : null;
+    }
+    const rowIdx = Number(tr?.dataset?.rowIdx);
     if (!td || !Number.isInteger(rowIdx) || !state.currentRows[rowIdx]) {
       return null;
     }
@@ -1864,7 +2161,10 @@ export function createChannelTable(ctx: UiContext) {
   // text rather than the editor because a draft rescued from a recycled row
   // element has no element left; the re-render that applies the answer
   // writes the value back to whichever element shows the row by then.
-  function commitRawValue({ rowIdx, column }: CellReference, text: string): Promise<void> {
+  function commitRawValue({ rowIdx, column, slot }: CellReference, text: string): Promise<void> {
+    if (slot !== undefined) {
+      return fillEmptyMemory(slot, column, text);
+    }
     const row = state.currentRows[rowIdx];
     if (!row || (String(row[column] ?? "") === text && !pendingEdits.get(row)?.has(column))) {
       return Promise.resolve();
@@ -1884,7 +2184,7 @@ export function createChannelTable(ctx: UiContext) {
       const target = event.target as HTMLElement;
       const extraButton = target?.closest?.(".channel-extra-button") as HTMLButtonElement | null;
       const extraCell = extraButton && cellReferenceFor(extraButton);
-      if (extraCell) {
+      if (extraCell && extraCell.slot === undefined) {
         // The button travels with the call so the editor can hand the keyboard
         // back to it on close.
         actions.openChannelExtra(extraCell.rowIdx, extraButton);
@@ -1892,7 +2192,8 @@ export function createChannelTable(ctx: UiContext) {
       }
       const button = target?.closest?.(".channel-location-button");
       const cell = button && cellReferenceFor(button);
-      if (cell) {
+      // An empty memory has no channel to select.
+      if (cell && cell.slot === undefined) {
         updateRowSelectionFromLocationClick(event, cell.rowIdx);
       }
     });
@@ -1900,7 +2201,7 @@ export function createChannelTable(ctx: UiContext) {
     dom.tableBody.addEventListener("input", (event) => {
       const target = event.target as HTMLElement;
       const cell = cellReferenceFor(target);
-      if (cell) {
+      if (cell && cell.slot === undefined) {
         clearInvalidCell(cell.rowIdx, cell.column);
       }
     });
@@ -1913,7 +2214,9 @@ export function createChannelTable(ctx: UiContext) {
       }
       const cell = cellReferenceFor(event.target);
       if (cell) {
-        clearInvalidCell(cell.rowIdx, cell.column);
+        if (cell.slot === undefined) {
+          clearInvalidCell(cell.rowIdx, cell.column);
+        }
         void commitCellValue(cell, target);
       }
     });
@@ -1945,6 +2248,9 @@ export function createChannelTable(ctx: UiContext) {
 
   function bindEvents() {
     bindGridEvents();
+    dom.channelShowEmptyEl.addEventListener("click", () => {
+      toggleEmptyMemories();
+    });
     dom.channelInsertEl.addEventListener("click", () => {
       insertNewChannelRow();
     });

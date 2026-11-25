@@ -71,6 +71,7 @@ function renderGridWithPowerColumn(columns) {
     tableBody: pageElement("tableBody"),
     tableScrollEl: pageElement("tableScrollEl"),
     channelEmptyStateEl: pageElement("channelEmptyStateEl"),
+    channelShowEmptyEl: pageElement("channelShowEmptyEl"),
   };
   const state = {
     currentHeaders: ["Location", "Power"],

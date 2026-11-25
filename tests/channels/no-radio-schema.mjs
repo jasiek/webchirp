@@ -56,6 +56,7 @@ async function tableWithMetadata(columns, rows = [], runtimeApi = null, { sessio
     tableBody: pageElement("tableBody"),
     tableScrollEl: pageElement("tableScrollEl"),
     channelEmptyStateEl: pageElement("channelEmptyStateEl"),
+    channelShowEmptyEl: pageElement("channelShowEmptyEl"),
   };
   const state = {
     currentHeaders: CSV_FORMAT_HEADERS.slice(),

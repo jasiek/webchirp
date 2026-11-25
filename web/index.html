@@ -343,6 +343,23 @@
                 </svg>
                 Edit in bulk
               </button>
+              <!--
+                The toolbar's one toggle (web/js/ui/channel-table.ts keeps
+                aria-pressed, the title and the disabled state): numbered rows,
+                the middle one with a number and nothing else. Starts disabled
+                and off; the grid enables it once a radio is selected.
+              -->
+              <button
+                id="channel-show-empty"
+                type="button"
+                class="channel-toolbar-icon"
+                title="Select a radio to show its empty memories"
+                aria-label="Show empty memories"
+                aria-pressed="false"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2M9.5 6H20M4 12h2M4 18h2M9.5 18H20" /></svg>
+              </button>
               <span class="channel-toolbar-divider" role="separator" aria-orientation="vertical"></span>
               <button id="channel-cut" type="button" class="channel-toolbar-icon" title="Cut the selected channels to the clipboard" aria-label="Cut selected channels">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
