@@ -159,27 +159,35 @@ test("insert with nothing selected takes the lowest free memory", async () => {
   assert.deepEqual(tableLocations(document), ["0", "1", "2", "25", "26", "124"]);
 });
 
-test("a band plan starts at the selected channel's memory and flows around channels already there", async () => {
+test("a band plan overwrites consecutive memories from the selected channel's, after asking", async () => {
   const { document } = await bootWithRows(SPARSE_ROWS);
+  let confirmed = "";
+  window.confirm = (message) => {
+    confirmed = message;
+    return true;
+  };
   clickLocationButton(document, 0);
   click(document, "#channel-add-gmrs");
   await flushMicrotasks();
 
-  // 30 GMRS channels from memory 0 on: Alpha and Bravo keep 0 and 1, the
-  // block fills 2-24, steps over HTAC1 and HTAC2 at 25-26, and ends at 33.
-  const locations = tableLocations(document).map(Number);
-  const expected = [
-    ...Array.from({ length: 23 }, (_, n) => n + 2),
-    ...Array.from({ length: 7 }, (_, n) => n + 27),
-  ];
-  assert.deepEqual(locations, [0, 1, ...expected.slice(0, 23), 25, 26, ...expected.slice(23), 124]);
+  // 30 GMRS channels on memories 0-29, Alpha, Bravo, HTAC1 and HTAC2 among
+  // the ones they replace; VCALL at 124 is past the block and untouched.
+  assert.match(confirmed, /The GMRS channels will overwrite channels 0, 1, 25, 26/);
+  assert.deepEqual(tableLocations(document).map(Number), [...Array.from({ length: 30 }, (_, n) => n), 124]);
   const names = tableNames(document);
-  assert.deepEqual(
-    [names[0], names[1], names[25], names[26], names.at(-1)],
-    ["Alpha", "Bravo", "HTAC1", "HTAC2", "VCALL"],
-    "no existing channel was moved or overwritten",
-  );
+  assert.equal(names.at(-1), "VCALL");
+  assert.ok(!names.some((name) => ["Alpha", "Bravo", "HTAC1", "HTAC2"].includes(name)));
   assert.equal(selectedNames(document).length, 30, "the added channels are the selection");
+});
+
+test("declining the overwrite adds nothing", async () => {
+  const { document } = await bootWithRows(SPARSE_ROWS);
+  window.confirm = () => false;
+  clickLocationButton(document, 0);
+  click(document, "#channel-add-murs");
+  await flushMicrotasks();
+  assert.deepEqual(tableLocations(document), ["0", "1", "25", "26", "124"]);
+  assert.deepEqual(tableNames(document), ["Alpha", "Bravo", "HTAC1", "HTAC2", "VCALL"]);
 });
 
 test("a band plan lands on a selected blank channel rather than after it", async () => {
@@ -200,12 +208,14 @@ test("a band plan lands on a selected blank channel rather than after it", async
 
 test("a band plan that runs past the last memory continues in the lowest free ones", async () => {
   const { document } = await bootWithRows(SPARSE_ROWS);
+  window.confirm = () => true;
   clickLocationButton(document, 4);
   click(document, "#channel-add-murs");
   await flushMicrotasks();
-  // VCALL holds 124: 125-127 take three channels, the other two go to the
-  // lowest free memories, 2 and 3.
-  assert.deepEqual(tableLocations(document), ["0", "1", "2", "3", "25", "26", "124", "125", "126", "127"]);
+  // From VCALL's 124, which the first channel overwrites, through 127; the
+  // fifth goes to the lowest free memory, 2.
+  assert.deepEqual(tableLocations(document), ["0", "1", "2", "25", "26", "124", "125", "126", "127"]);
+  assert.ok(!tableNames(document).includes("VCALL"));
 });
 
 test("an inserted channel sorts into its memory rather than onto the end", async () => {

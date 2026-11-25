@@ -288,12 +288,19 @@ test("Insert and the band plans fill the selected empty memory itself", async ()
 
   clickNumber(document, window, 2);
   await flushMicrotasks();
+  let confirmed = "";
+  window.confirm = (message) => {
+    confirmed = message;
+    return true;
+  };
   await dispatch(document.querySelector("#channel-add-murs"), "click");
   await flushMicrotasks();
-  // The five MURS channels from memory 2: 2 and 3, over Delta at 4, then 5
-  // (a blank channel, which a band plan fills), 6 and 7.
-  assert.deepEqual(await heldLocations(), ["0", "1", "2", "3", "4", "5", "6", "7", "8"]);
-  assert.deepEqual(gridLines(document), ["0", "1", "2", "3", "4", "5", "6", "7", "8", "(9)"]);
+  // The five MURS channels on memories 2-6: the selected empty memory, 3,
+  // Delta's 4 (the one overwrite worth asking about), the blank at 5 and 6.
+  assert.match(confirmed, /overwrite channel 4\./);
+  assert.deepEqual(await heldLocations(), ["0", "1", "2", "3", "4", "5", "6", "8"]);
+  assert.deepEqual(gridLines(document), ["0", "1", "2", "3", "4", "5", "6", "(7)", "8", "(9)"]);
+  assert.ok(!tableNames(document).includes("Delta"));
 });
 
 test("an unreadable memory's number adds nothing", async () => {

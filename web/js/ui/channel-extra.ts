@@ -280,6 +280,7 @@ export function createChannelExtra(ctx: UiContext) {
       log.setStatus(`No extra settings were changed for channel ${location || "?"}.`);
       return;
     }
+    ctx.table.recordUndoStep(`Edit the extra settings of channel ${location || "?"}`);
     setRowExtras(row, values);
     // The driver judges a channel with its extras, so a check in flight for
     // this row answers for one that no longer exists.
