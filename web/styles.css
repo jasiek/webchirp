@@ -2869,9 +2869,14 @@ button:disabled {
 }
 
 /* A memory with no channel in it, listed by Show empty memories
-   (web/js/ui/channel-table.ts): its number muted, and nothing to select. */
-#mem-table tbody tr.is-empty-memory .channel-location-button,
-#mem-table tbody tr.is-empty-memory .channel-location-button:hover {
+   (web/js/ui/channel-table.ts): its number muted until hovered. Clicking it
+   adds a channel there, so it keeps the selection handle's hover. */
+#mem-table tbody tr.is-empty-memory .channel-location-button {
+  color: var(--muted);
+}
+
+#mem-table tbody tr.is-unreadable-memory .channel-location-button,
+#mem-table tbody tr.is-unreadable-memory .channel-location-button:hover {
   color: var(--muted);
   text-decoration: none;
   cursor: default;

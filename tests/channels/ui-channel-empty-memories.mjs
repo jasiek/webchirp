@@ -5,7 +5,8 @@ import test from "node:test";
 // A codeplug's rows are its occupied memories only, so the toggle adds a line
 // for each unused memory between the radio's bounds without adding anything
 // to the rows: upload, export and the row checks must see exactly what they
-// saw before. Typing into an empty memory's line is what makes it a channel.
+// saw before. Typing into an empty memory's line, or clicking its number, is
+// what makes it a channel.
 import { installIndexPage } from "../support/index-page.mjs";
 import {
   channelRows,
@@ -185,19 +186,44 @@ test("passing through an empty memory without typing writes nothing", async () =
   assert.ok(emptyMemoryLine(document, 5), "memory 5 is still empty");
 });
 
-test("an empty memory cannot be selected, so row operations never reach one", async () => {
+test("clicking an empty memory's number adds a channel there and selects it, as Insert does", async () => {
   const { document, window, heldLocations } = await boot();
   await clickToggle(document);
-  const line = emptyMemoryLine(document, 2);
-  line.children[0].children[0].dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-  assert.equal(line.classList.contains("is-selected"), false);
-  assert.equal(document.querySelector("#channel-bulk-edit").disabled, true);
+  const number = emptyMemoryLine(document, 6).children[0].children[0];
+  assert.match(number.title, /click to add a channel here/);
+  number.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  await flushMicrotasks();
 
-  // Removing a channel leaves its memory empty, and listed as such.
-  clickLocationButton(document, 2);
+  assert.equal(lastStatus(document), "Inserted new channel at memory 6.");
+  assert.equal(emptyMemoryLine(document, 6), undefined, "memory 6 is a channel now");
+  const selected = channelRows(document).filter((tr) => tr.classList.contains("is-selected"));
+  assert.deepEqual(selected.map((tr) => tr.children[0].children[0].textContent), ["6"]);
+  // A selected channel like any other: the bulk editor offers itself.
+  assert.equal(document.querySelector("#channel-bulk-edit").disabled, false);
+  assert.deepEqual(await heldLocations(), ["0", "1", "4", "6", "8"]);
+
+  // Ctrl-click adds a second empty memory to the selection.
+  emptyMemoryLine(document, 9).children[0].children[0]
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true, ctrlKey: true }));
+  await flushMicrotasks();
+  const both = channelRows(document).filter((tr) => tr.classList.contains("is-selected"));
+  assert.deepEqual(both.map((tr) => tr.children[0].children[0].textContent), ["6", "9"]);
+
+  // And Remove takes them out again, leaving the memories empty.
   await dispatch(document.querySelector("#channel-remove"), "click");
-  assert.deepEqual(await heldLocations(), ["0", "1", "8"]);
-  assert.deepEqual(gridLines(document), ["0", "1", "(2)", "(3)", "(4)", "(5)", "(6)", "(7)", "8", "(9)"]);
+  assert.deepEqual(await heldLocations(), ["0", "1", "4", "8"]);
+  assert.deepEqual(gridLines(document), ["0", "1", "(2)", "(3)", "4", "(5)", "(6)", "(7)", "8", "(9)"]);
+});
+
+test("an unreadable memory's number adds nothing", async () => {
+  const { document, window, heldLocations } = await boot({ location: { unreadable: [6] } });
+  await clickToggle(document);
+  const number = emptyMemoryLine(document, 6).children[0].children[0];
+  // Disabled, so a real click never fires; a dispatched one is still refused.
+  number.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  await flushMicrotasks();
+  assert.ok(emptyMemoryLine(document, 6));
+  assert.deepEqual(await heldLocations(), ["0", "1", "4", "8"]);
 });
 
 test("moving a channel still swaps it with the next channel, past empty memories", async () => {

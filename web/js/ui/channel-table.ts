@@ -186,6 +186,7 @@ export function createChannelTable(ctx: UiContext) {
   const HIDE_EMPTY_HINT = "Hide empty memories: list only the slots that hold a channel";
   const NO_RADIO_EMPTY_HINT = "Select a radio to show its empty memories";
   const UNREADABLE_NOTE = "The driver could not read this memory, so it is left as it is on the radio.";
+  const EMPTY_MEMORY_HINT = "Empty memory: click to add a channel here, or type into any cell";
   let showEmptyMemories = readShowEmptyPreference();
   let displayEntries: DisplayEntry[] = [];
   // state.currentRows index -> position in displayEntries, and memory number
@@ -343,24 +344,19 @@ export function createChannelTable(ctx: UiContext) {
     }
   }
 
-  // Typing into an empty memory's line makes it a channel: a blank row in
-  // that memory, written like any committed cell. Text that is still empty
-  // (a cell tabbed through) writes nothing, so passing over an empty memory
-  // never creates a row an upload would then write.
-  function fillEmptyMemory(slot: number, column: string, text: string): Promise<void> {
-    if (text.trim() === "" || !emptyMemoriesShown()) {
-      return Promise.resolve();
-    }
+  // Make an empty memory a channel: the blank row Insert (+) would add, in
+  // this memory rather than the lowest free one. Returns the channel's row --
+  // the one already there if something claimed the memory since its line was
+  // drawn -- or null for a memory the driver could not read, which is left as
+  // it is. The caller renders.
+  function claimEmptyMemory(slot: number): ChannelRow | null {
     if (new Set(state.radioMetadata.columns.Location?.unreadable ?? []).has(slot)) {
       log.setStatus(`Memory ${slot} could not be read from the radio; it is left as it is.`);
-      render();
-      return Promise.resolve();
+      return null;
     }
     const existing = state.currentRows.find((row) => parsedLocation(row) === slot);
     if (existing) {
-      // Something claimed the memory since the line was drawn: the edit is
-      // for the channel now there.
-      return commitRawValue({ rowIdx: state.currentRows.indexOf(existing), column }, text);
+      return existing;
     }
     const row = createBlankChannelRow();
     row.Location = String(slot);
@@ -368,9 +364,45 @@ export function createChannelTable(ctx: UiContext) {
       state.currentRows.push(row);
       sortRowsByLocation();
     });
-    render();
     log.setStatus(`Inserted new channel at memory ${slot}.`);
-    return submitRowEdits([{ row, edits: [{ column, value: text }] }]);
+    return row;
+  }
+
+  // Typing into an empty memory's line makes it a channel, written like any
+  // committed cell. Text that is still empty (a cell tabbed through) writes
+  // nothing, so passing over an empty memory never creates a row an upload
+  // would then write.
+  function fillEmptyMemory(slot: number, column: string, text: string): Promise<void> {
+    if (text.trim() === "" || !emptyMemoriesShown()) {
+      return Promise.resolve();
+    }
+    const row = claimEmptyMemory(slot);
+    render();
+    if (!row) {
+      return Promise.resolve();
+    }
+    return commitRawValue({ rowIdx: state.currentRows.indexOf(row), column }, text);
+  }
+
+  // Clicking an empty memory's number selects it the way a channel's number
+  // does, which first makes it a channel: a selection is of channels, and
+  // everything that acts on one -- Edit in bulk, Remove, Copy, Paste --
+  // then works on it as on a row Insert (+) added.
+  function selectEmptyMemory(
+    event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey">,
+    slot: number,
+  ): void {
+    if (!emptyMemoriesShown()) {
+      return;
+    }
+    const row = claimEmptyMemory(slot);
+    if (!row) {
+      return;
+    }
+    // Before render() lays the grid out again, so the selection it paints
+    // already holds the new channel.
+    updateRowSelectionFromLocationClick(event, state.currentRows.indexOf(row));
+    render();
   }
 
   function sortedSelectedRowIndexes() {
@@ -1735,7 +1767,7 @@ export function createChannelTable(ctx: UiContext) {
     renderedColumns.forEach((column, columnIdx) => {
       const td = tr.children[columnIdx] as HTMLElement;
       td.classList.remove("is-invalid", "is-pending");
-      showCellNote(td, entry.unreadable ? UNREADABLE_NOTE : "");
+      showCellNote(td, entry.unreadable ? UNREADABLE_NOTE : column === "Location" ? EMPTY_MEMORY_HINT : "");
       const editor = td.children[0] as CellEditor;
       editor.disabled = entry.unreadable || editor.dataset.ownDisabled === "true";
       bindCellEditor(editor, blank, column);
@@ -2192,8 +2224,9 @@ export function createChannelTable(ctx: UiContext) {
       }
       const button = target?.closest?.(".channel-location-button");
       const cell = button && cellReferenceFor(button);
-      // An empty memory has no channel to select.
-      if (cell && cell.slot === undefined) {
+      if (cell?.slot !== undefined) {
+        selectEmptyMemory(event, cell.slot);
+      } else if (cell) {
         updateRowSelectionFromLocationClick(event, cell.rowIdx);
       }
     });
