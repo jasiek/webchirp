@@ -150,12 +150,16 @@ export function createCodeplugIo(ctx: UiContext) {
     state.currentHeaders = headersFromMeta.length ? headersFromMeta : parsedHeaders;
     const imported = parsed.rows || [];
     if (mode === "merge") {
+      // An edit of the grid like any other, so Undo takes the merge back.
+      ctx.table.recordUndoStep(`Merge ${imported.length} imported channel(s)`);
       state.currentRows = state.currentRows.concat(imported);
       state.codeplugSource = "mixed";
       // Merging is an edit: imported channels have to be given somewhere to
       // live that the loaded ones are not already using.
       ctx.table.reconcileLocations();
     } else {
+      // Another codeplug: nothing recorded about the last one applies.
+      ctx.table.resetUndoHistory();
       state.currentRows = imported;
       state.codeplugSource = csvSource;
       // Replacing is not. The file's Locations are the user's data, so they
@@ -365,6 +369,7 @@ export function createCodeplugIo(ctx: UiContext) {
     // Rows before the schema: applying it runs the row check
     // (adoptPowerLevels in web/js/ui/channel-table.ts), which has to measure
     // this file's channels rather than whatever the grid held before.
+    ctx.table.resetUndoHistory();
     state.currentRows = Array.isArray(loaded.rows) ? loaded.rows : [];
     ctx.catalog.applyRadioMetadata(metadata);
     ctx.settings.replaceState({

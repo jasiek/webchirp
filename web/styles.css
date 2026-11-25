@@ -1296,6 +1296,14 @@ button:disabled {
   display: none;
 }
 
+/* The toolbar's one toggle, Show empty memories, while it is on: held down
+   in the control's pressed colours, with the accent border hover gives. */
+.channel-toolbar button[aria-pressed="true"]:not(:disabled) {
+  background: linear-gradient(180deg, var(--control-active-top) 0%, var(--control-active-bottom) 100%);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
 /* Icon-only buttons are squares matching the toolbar height. */
 .channel-toolbar button.channel-toolbar-icon {
   width: 2rem;
@@ -2858,6 +2866,32 @@ button:disabled {
 
 #mem-table tbody tr.is-selected td {
   background: var(--selected-bg);
+}
+
+/* A memory with no channel in it, listed by Show empty memories
+   (web/js/ui/channel-table.ts): its number muted until hovered. Clicking it
+   adds a channel there, so it keeps the selection handle's hover. */
+#mem-table tbody tr.is-empty-memory .channel-location-button {
+  color: var(--muted);
+}
+
+#mem-table tbody tr.is-unreadable-memory .channel-location-button,
+#mem-table tbody tr.is-unreadable-memory .channel-location-button:hover {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: default;
+}
+
+/* An empty memory has no driver settings to edit. Hidden without giving up
+   its box: the window lays every line out at one measured height. */
+#mem-table tbody tr.is-empty-memory .channel-extra-button {
+  visibility: hidden;
+}
+
+/* An empty memory the driver could not read: locked, and shaded so it does
+   not pass for a free slot. */
+#mem-table tbody tr.is-unreadable-memory td {
+  background: var(--surface-muted);
 }
 
 #mem-table td.is-invalid {

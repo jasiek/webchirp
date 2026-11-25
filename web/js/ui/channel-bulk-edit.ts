@@ -543,6 +543,7 @@ export function createChannelBulkEdit(ctx: UiContext) {
     // across the whole grid, and one bulk edit is no reason to stop showing the
     // ones it did not touch. Cleared before the answers are applied, which put
     // back whatever the driver says about the rows as they now stand.
+    ctx.table.recordUndoStep(`Edit ${rows.length} channel(s) in bulk`);
     ctx.table.clearInvalidHighlightsForCells(rows, columnWrites.map(({ column }) => column));
     if (preview && !preview.apply()) {
       setModalOpen(false);

@@ -4,7 +4,8 @@ Derived from the driver's ``RadioFeatures``: which columns apply, the valid
 choices for each enumerated one, the memory bounds and the power levels with
 their wattages, so the grid can constrain edits before the upload preflight
 ever runs. The Location column also lists the channels of the session's image
-the driver will not erase, so the grid can refuse to delete them.
+the driver will not erase, so the grid can refuse to delete them, and the
+memories it could not decode, so the grid never offers one as empty.
 """
 
 from __future__ import annotations
@@ -242,6 +243,14 @@ def _column_metadata_for_session(session: Optional[RadioSession]) -> dict[str, A
         # recorded when its rows were read (_read_radio_payload).
         metadata["columns"]["Location"]["undeletable"] = sorted(
             session.undeletable_channels
+        )
+    if session.unreadable_channels:
+        # The memories get_memory raised on when the image was read: absent
+        # from the rows, but not empty, and an upload leaves them as they are
+        # (_apply_rows_to_radio_instance). The grid's empty-memory rows must
+        # not offer one of them as a free slot to type into.
+        metadata["columns"]["Location"]["unreadable"] = sorted(
+            session.unreadable_channels
         )
     return metadata
 

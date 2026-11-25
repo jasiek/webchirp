@@ -203,6 +203,11 @@ export function createUiController() {
         }
         return;
       }
+      // Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z undo and redo the channel grid; the
+      // table decides when the browser's own undo of a cell's typing wins.
+      if (table.handleUndoKey(event)) {
+        return;
+      }
       if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
         if (!table.channelShortcutsActive(event)) {
           return;

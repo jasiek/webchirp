@@ -788,6 +788,8 @@ export function createSerialActions(ctx: UiContext) {
       // another codeplug by the time the outcome is reported (see below).
       const downloaded = codeplugParams({ currentRows: result.rows, codeplugSource: "radio" });
       if (ctx.session.isCurrent(session)) {
+        // The radio's codeplug replaces the grid's: no undoing back past it.
+        ctx.table.resetUndoHistory();
         state.currentRows = result.rows;
       }
       // The schema comes after the rows, and only now: the download just put

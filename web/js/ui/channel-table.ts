@@ -30,11 +30,23 @@ import type { RadioSessionHandle } from "./state.ts";
 /** A grid cell's editor: a button (Location, Extra), a select or a text input. */
 type CellEditor = HTMLButtonElement | HTMLSelectElement | HTMLInputElement;
 
-/** Which channel and column a grid cell shows. */
+/**
+ * Which channel and column a grid cell shows. A cell of an empty memory's row
+ * has no channel: its rowIdx is -1 and slot is the memory number.
+ */
 interface CellReference {
   rowIdx: number;
   column: string;
+  slot?: number;
 }
+
+/**
+ * One line of the grid: a channel (by its index in state.currentRows), or a
+ * memory with no channel in it, which exists only while the grid draws.
+ */
+type DisplayEntry =
+  | { kind: "row"; rowIdx: number }
+  | { kind: "slot"; slot: number; unreadable: boolean };
 
 // The editable channel grid: rendering, row selection, the row operations
 // (insert/remove/move/copy/cut/paste), the band-plan presets, and the
@@ -155,6 +167,423 @@ export function createChannelTable(ctx: UiContext) {
   // element now shows to the channel it now shows.
   let isReleasingFocus = false;
 
+  // --- Empty memories -----------------------------------------------------
+  // A codeplug's rows are its occupied memories only: the runtime never sends
+  // an empty one (_radio_rows_from_instance), and an upload erases every
+  // memory without a row. The "Show empty memories" toggle adds a line for
+  // each unused memory between the radio's bounds without putting anything
+  // into state.currentRows, so upload, export, the row checks and the
+  // preflight never see them. The rows a user inserted and left blank are
+  // real rows and are always shown. Typing into an empty memory's line is
+  // what makes it a channel (fillEmptyMemory).
+  //
+  // Everything keyed by a row index -- the selection, the invalid-cell keys,
+  // tr.dataset.rowIdx -- still means the index in state.currentRows. Only the
+  // window is laid out over displayEntries, so with the toggle off the two
+  // coincide and nothing else changes.
+  const SHOW_EMPTY_KEY = "webchirp-show-empty-memories";
+  const SHOW_EMPTY_HINT = "Show empty memories: list this radio's unused memory slots as blank rows you can fill in";
+  const HIDE_EMPTY_HINT = "Hide empty memories: list only the slots that hold a channel";
+  const NO_RADIO_EMPTY_HINT = "Select a radio to show its empty memories";
+  const UNREADABLE_NOTE = "The driver could not read this memory, so it is left as it is on the radio.";
+  const EMPTY_MEMORY_HINT = "Empty memory: click to add a channel here, or type into any cell";
+  let showEmptyMemories = readShowEmptyPreference();
+  // The blank channels selecting an empty memory made, with the row version
+  // each had then. Such a channel stands for the empty memory only while it is
+  // selected: deselected before anything was written to it, it is taken out
+  // again and the memory is empty as it was (releaseUnselectedClaims).
+  const selectionClaims = new WeakMap<ChannelRow, number>();
+
+  // --- Undo and redo ------------------------------------------------------
+  // Each edit of the grid records what the rows were just before it:
+  // recordUndoStep() at the top of every operation that writes rows (a
+  // committed cell, Paste, Cut, Remove, Move, Insert, a band plan or
+  // repeater import, Edit in bulk, the Extra editor). Undo puts the last
+  // record back and keeps what it replaced for Redo; a new edit drops the
+  // redo side. A record is a deep copy, so later edits to the live rows never
+  // reach it, and restoring copies it again, so the same record can be
+  // restored twice. A different codeplug or radio (resetUndoHistory) makes
+  // every record meaningless, so those clear the history.
+  interface UndoRecord {
+    label: string;
+    rows: ChannelRow[];
+    selected: number[];
+    session: unknown;
+  }
+  const UNDO_LIMIT = 100;
+  const undoStack: UndoRecord[] = [];
+  const redoStack: UndoRecord[] = [];
+
+  function copyRows(rows: readonly ChannelRow[]): ChannelRow[] {
+    return rows.map((row) => structuredClone(row));
+  }
+
+  // The rows as an edit should be able to return to. An untouched claim
+  // stands for an empty memory, so it is left out: undoing back to it gives
+  // the empty memory, not a permanent blank channel.
+  function captureUndoRecord(label: string): UndoRecord {
+    const rows = state.currentRows.filter((row) => !isUntouchedClaim(row));
+    const selected = new Set(selectedChannelRows());
+    return {
+      label,
+      rows: copyRows(rows),
+      selected: rows.flatMap((row, index) => (selected.has(row) ? [index] : [])),
+      session: state.radioSession,
+    };
+  }
+
+  function recordUndoStep(label: string): void {
+    undoStack.push(captureUndoRecord(label));
+    if (undoStack.length > UNDO_LIMIT) {
+      undoStack.shift();
+    }
+    redoStack.length = 0;
+  }
+
+  function resetUndoHistory(): void {
+    undoStack.length = 0;
+    redoStack.length = 0;
+  }
+
+  function restoreUndoRecord(record: UndoRecord): void {
+    state.currentRows = copyRows(record.rows);
+    clearInvalidHighlights();
+    selectedRowIndexes = new Set(record.selected);
+    selectionAnchorIndex = record.selected[0] ?? null;
+    render();
+    // The restored rows are new objects, so whatever the driver said about
+    // their earlier selves is gone with them: one call asks again.
+    void checkRows(state.currentRows);
+  }
+
+  // Undo (direction -1) or redo (+1) one edit.
+  function stepUndoHistory(direction: -1 | 1): void {
+    const from = direction < 0 ? undoStack : redoStack;
+    const to = direction < 0 ? redoStack : undoStack;
+    const verb = direction < 0 ? "Undo" : "Redo";
+    const record = from.pop();
+    if (!record) {
+      log.setStatus(direction < 0 ? "Nothing to undo." : "Nothing to redo.");
+      return;
+    }
+    if (record.session !== state.radioSession) {
+      // Belt and braces: the radio changed without the history being cleared.
+      resetUndoHistory();
+      log.setStatus(direction < 0 ? "Nothing to undo." : "Nothing to redo.");
+      return;
+    }
+    to.push(captureUndoRecord(record.label));
+    restoreUndoRecord(record);
+    log.setStatus(`${verb}: ${record.label}.`);
+  }
+
+  // Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z (Cmd on a Mac), from ui.ts's keydown. A
+  // grid cell holding text not yet committed keeps the browser's own undo,
+  // which takes back the typing; once the cell's value is committed (or in
+  // any other cell) the keys undo the grid. Returns whether it handled the
+  // event.
+  function handleUndoKey(event: KeyboardEvent): boolean {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+      return false;
+    }
+    const key = event.key.toLowerCase();
+    const direction = key === "z" ? (event.shiftKey ? 1 : -1) : key === "y" && !event.shiftKey ? 1 : 0;
+    if (direction === 0 || state.currentEditorView !== "channels" || actions.isAnyModalOpen()) {
+      return false;
+    }
+    const target = event.target;
+    if (target instanceof Element && target.closest("input, select, textarea, [contenteditable='true'], [contenteditable='']")) {
+      const cell = cellReferenceFor(target);
+      if (!cell || hasUncommittedText(cell, target)) {
+        return false;
+      }
+      // The editor is about to be rebound to the restored row; let go of it
+      // first so its focusout cannot commit what it showed before.
+      releaseFocusFrom(target);
+    }
+    event.preventDefault();
+    stepUndoHistory(direction);
+    return true;
+  }
+
+  // Blur a grid editor without its focusout committing the value it shows:
+  // the value is about to be replaced, and the render that does it would
+  // otherwise put the editor's old text back over the new value as a draft.
+  function releaseFocusFrom(target: Element): void {
+    isReleasingFocus = true;
+    try {
+      (target as HTMLElement).blur?.();
+    } finally {
+      isReleasingFocus = false;
+    }
+  }
+
+  function hasUncommittedText(cell: CellReference, target: Element): boolean {
+    if (!(target instanceof HTMLInputElement) || target.type === "button") {
+      return false;
+    }
+    if (cell.slot !== undefined) {
+      return target.value !== "";
+    }
+    const row = state.currentRows[cell.rowIdx];
+    return Boolean(row) && target.value !== String(row?.[cell.column] ?? "");
+  }
+  let displayEntries: DisplayEntry[] = [];
+  // state.currentRows index -> position in displayEntries, and memory number
+  // -> position for the empty ones.
+  let displayPositionOfRow: number[] = [];
+  let displayPositionOfSlot = new Map<number, number>();
+
+  // The window's localStorage, or null where it is missing, not a real
+  // Storage, or throws to read (blocked site data, some private modes): the
+  // toggle then starts off on every visit.
+  function preferenceStorage(): Pick<Storage, "getItem" | "setItem"> | null {
+    try {
+      const storage = globalThis.window?.localStorage;
+      return typeof storage?.getItem === "function" && typeof storage.setItem === "function" ? storage : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function readShowEmptyPreference(): boolean {
+    try {
+      return preferenceStorage()?.getItem(SHOW_EMPTY_KEY) === "true";
+    } catch {
+      return false;
+    }
+  }
+
+  function writeShowEmptyPreference(value: boolean): void {
+    try {
+      preferenceStorage()?.setItem(SHOW_EMPTY_KEY, String(value));
+    } catch {
+      // Remembering the choice is a nicety; the toggle still works this visit.
+    }
+  }
+
+  // Empty memories need a radio: without one the grid's schema is CHIRP's CSV
+  // driver, whose memory count is unbounded, so there is no last slot.
+  function emptyMemoriesAvailable(): boolean {
+    return Boolean(state.radioSession)
+      && state.currentHeaders.includes("Location")
+      && Number.isFinite(locationBounds().hi);
+  }
+
+  function emptyMemoriesShown(): boolean {
+    return showEmptyMemories && emptyMemoriesAvailable();
+  }
+
+  // Lay out the grid's lines: every row in its order, with a line for each
+  // free memory before the row whose Location follows it. A row whose
+  // Location is missing, duplicated or out of bounds keeps its place and
+  // claims no line of its own, as it does with the toggle off.
+  function buildDisplayEntries(): void {
+    const rows = state.currentRows;
+    const entries: DisplayEntry[] = [];
+    const rowPositions = new Array<number>(rows.length);
+    const slotPositions = new Map<number, number>();
+    if (!emptyMemoriesShown()) {
+      rows.forEach((_row, rowIdx) => {
+        rowPositions[rowIdx] = entries.length;
+        entries.push({ kind: "row", rowIdx });
+      });
+    } else {
+      const { lo, hi } = locationBounds();
+      const occupied = new Set<number>();
+      for (const row of rows) {
+        const location = parsedLocation(row);
+        if (location !== null) {
+          occupied.add(location);
+        }
+      }
+      const unreadable = new Set(state.radioMetadata.columns.Location?.unreadable ?? []);
+      let next = lo;
+      const addEmptyThrough = (last: number) => {
+        for (; next <= last; next += 1) {
+          if (!occupied.has(next)) {
+            slotPositions.set(next, entries.length);
+            entries.push({ kind: "slot", slot: next, unreadable: unreadable.has(next) });
+          }
+        }
+      };
+      rows.forEach((row, rowIdx) => {
+        const location = parsedLocation(row);
+        if (location !== null && location >= lo && location <= hi) {
+          addEmptyThrough(location - 1);
+          next = Math.max(next, location + 1);
+        }
+        rowPositions[rowIdx] = entries.length;
+        entries.push({ kind: "row", rowIdx });
+      });
+      addEmptyThrough(hi);
+    }
+    displayEntries = entries;
+    displayPositionOfRow = rowPositions;
+    displayPositionOfSlot = slotPositions;
+  }
+
+  // The toggle follows the radio: disabled without one, and shown released
+  // then whatever was chosen, which comes back with the next radio.
+  function renderShowEmptyToggle(): void {
+    const button = dom.channelShowEmptyEl;
+    const available = emptyMemoriesAvailable();
+    const shown = showEmptyMemories && available;
+    button.disabled = !available;
+    button.setAttribute("aria-pressed", shown ? "true" : "false");
+    const hint = !available ? NO_RADIO_EMPTY_HINT : shown ? HIDE_EMPTY_HINT : SHOW_EMPTY_HINT;
+    button.title = hint;
+    button.setAttribute("aria-label", hint.replace(/:.*$/, ""));
+  }
+
+  function toggleEmptyMemories(): void {
+    if (!emptyMemoriesAvailable()) {
+      return;
+    }
+    showEmptyMemories = !showEmptyMemories;
+    writeShowEmptyPreference(showEmptyMemories);
+    render();
+    log.setStatus(showEmptyMemories ? "Showing empty memories." : "Hiding empty memories.");
+  }
+
+  // Row-keyed state survives a change that moves rows within
+  // state.currentRows: the selection, its anchor and the per-cell findings
+  // follow their rows to where they now sit.
+  function preservingRowState(mutate: () => void): void {
+    const before = state.currentRows.slice();
+    mutate();
+    const after = new Map(state.currentRows.map((row, index) => [row, index]));
+    const moved = (index: number): number | undefined => {
+      const row = before[index];
+      return row ? after.get(row) : undefined;
+    };
+    selectedRowIndexes = new Set(
+      [...selectedRowIndexes].map(moved).filter((index) => index !== undefined),
+    );
+    selectionAnchorIndex = selectionAnchorIndex === null ? null : moved(selectionAnchorIndex) ?? null;
+    const rekey = (key: string): string | null => {
+      const colon = key.indexOf(":");
+      const index = moved(Number(key.slice(0, colon)));
+      return index === undefined ? null : `${index}${key.slice(colon)}`;
+    };
+    const invalid = [...invalidCellKeys];
+    invalidCellKeys.clear();
+    for (const key of invalid) {
+      const next = rekey(key);
+      if (next !== null) {
+        invalidCellKeys.add(next);
+      }
+    }
+    const notes = [...cellNotes];
+    cellNotes.clear();
+    for (const [key, note] of notes) {
+      const next = rekey(key);
+      if (next !== null) {
+        cellNotes.set(next, note);
+      }
+    }
+  }
+
+  // Make an empty memory a channel: the blank row Insert (+) would add, in
+  // this memory rather than the lowest free one. Returns the channel's row --
+  // the one already there if something claimed the memory since its line was
+  // drawn -- or null for a memory the driver could not read, which is left as
+  // it is. The caller renders.
+  function claimEmptyMemory(slot: number): ChannelRow | null {
+    if (new Set(state.radioMetadata.columns.Location?.unreadable ?? []).has(slot)) {
+      log.setStatus(`Memory ${slot} could not be read from the radio; it is left as it is.`);
+      return null;
+    }
+    const existing = state.currentRows.find((row) => parsedLocation(row) === slot);
+    if (existing) {
+      return existing;
+    }
+    const row = createBlankChannelRow();
+    row.Location = String(slot);
+    preservingRowState(() => {
+      state.currentRows.push(row);
+      sortRowsByLocation();
+    });
+    log.setStatus(`Inserted new channel at memory ${slot}.`);
+    return row;
+  }
+
+  // A channel selecting an empty memory made, and nothing has written to it
+  // since: no edit (typed, pasted, bulk), no move, no answer pending.
+  function isUntouchedClaim(row: ChannelRow | undefined): boolean {
+    if (!row) {
+      return false;
+    }
+    const claimed = selectionClaims.get(row);
+    return claimed !== undefined
+      && claimed === rowVersion(row)
+      && (pendingEdits.get(row)?.size ?? 0) === 0
+      && !rowLooksNonEmpty(row);
+  }
+
+  function unselectedClaims(): ChannelRow[] {
+    const selected = new Set(selectedChannelRows());
+    return state.currentRows.filter((row) => isUntouchedClaim(row) && !selected.has(row));
+  }
+
+  // Give the memories of untouched, deselected claims back: their channels
+  // leave the rows, and the memories are empty again. Runs at every render,
+  // which every change of selection reaches.
+  function releaseUnselectedClaims(): void {
+    const released = new Set(unselectedClaims());
+    if (released.size === 0) {
+      return;
+    }
+    preservingRowState(() => {
+      state.currentRows = state.currentRows.filter((row) => !released.has(row));
+    });
+  }
+
+  // Typing into an empty memory's line makes it a channel, written like any
+  // committed cell. Text that is still empty (a cell tabbed through) writes
+  // nothing, so passing over an empty memory never creates a row an upload
+  // would then write.
+  function fillEmptyMemory(slot: number, column: string, text: string): Promise<void> {
+    if (text.trim() === "" || !emptyMemoriesShown()) {
+      return Promise.resolve();
+    }
+    // Recorded before the memory becomes a channel, so undoing the edit
+    // gives the empty memory back rather than a blank channel.
+    recordUndoStep(`Edit ${column} of channel ${slot}`);
+    const row = claimEmptyMemory(slot);
+    render();
+    if (!row) {
+      return Promise.resolve();
+    }
+    return submitRowEdits([{ row, edits: [{ column, value: text }] }]);
+  }
+
+  // Clicking an empty memory's number selects it the way a channel's number
+  // does, which first makes it a channel: a selection is of channels, and
+  // everything that acts on one -- Edit in bulk, Remove, Copy, Paste --
+  // then works on it as on a row Insert (+) added. Until something writes to
+  // it, the channel is a claim, released again when it is deselected.
+  function selectEmptyMemory(
+    event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey">,
+    slot: number,
+  ): void {
+    if (!emptyMemoriesShown()) {
+      return;
+    }
+    const existed = state.currentRows.some((row) => parsedLocation(row) === slot);
+    const row = claimEmptyMemory(slot);
+    if (!row) {
+      return;
+    }
+    if (!existed) {
+      selectionClaims.set(row, rowVersion(row));
+    }
+    // Before render() lays the grid out again, so the selection it paints
+    // already holds the new channel.
+    updateRowSelectionFromLocationClick(event, state.currentRows.indexOf(row));
+    render();
+  }
+
   function sortedSelectedRowIndexes() {
     return Array.from(selectedRowIndexes)
       .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < state.currentRows.length)
@@ -259,8 +688,8 @@ export function createChannelTable(ctx: UiContext) {
   // pick the class up from bindRowElement when they scroll back in.
   function applyRowSelectionVisuals() {
     rowElements.forEach((tr, offset) => {
-      const rowIdx = windowStart + offset;
-      const isSelected = selectedRowIndexes.has(rowIdx);
+      const entry = displayEntries[windowStart + offset];
+      const isSelected = entry?.kind === "row" && selectedRowIndexes.has(entry.rowIdx);
       tr.classList.toggle("is-selected", isSelected);
       const locationButton = locationButtonIn(tr);
       if (locationButton) {
@@ -296,11 +725,21 @@ export function createChannelTable(ctx: UiContext) {
         selectedRowIndexes.add(rowIdx);
       }
       selectionAnchorIndex = rowIdx;
+    } else if (selectedRowIndexes.size === 1 && selectedRowIndexes.has(rowIdx)) {
+      // A second plain click on the one selected channel clears the
+      // selection. One of several selected narrows to it first, as before.
+      selectedRowIndexes = new Set();
+      selectionAnchorIndex = null;
     } else {
       selectedRowIndexes = new Set([rowIdx]);
       selectionAnchorIndex = rowIdx;
     }
 
+    if (unselectedClaims().length > 0) {
+      // A claim was deselected: render() gives its memory back.
+      render();
+      return;
+    }
     applyRowSelectionVisuals();
     notifySelectionChanged();
   }
@@ -860,6 +1299,8 @@ export function createChannelTable(ctx: UiContext) {
    *   is replacing.
    */
   async function adoptPowerLevels(previous: RadioMetadata | null | undefined): Promise<number> {
+    // Another radio: the recorded rows were written to the last one's rules.
+    resetUndoHistory();
     if (!state.currentHeaders.includes("Power")) {
       return 0;
     }
@@ -903,15 +1344,140 @@ export function createChannelTable(ctx: UiContext) {
     });
   }
 
+  // The memory a selection asks new channels to start from: the first
+  // selected channel's own, or null with nothing selected (or no usable
+  // Location on it), when they take the lowest free memories as before.
+  function selectedStartMemory(): number | null {
+    const [first] = sortedSelectedRowIndexes();
+    return first === undefined || !state.currentHeaders.includes("Location")
+      ? null
+      : parsedLocation(state.currentRows[first]);
+  }
+
+  // Put a block of new channels on consecutive memories from `start`,
+  // replacing whatever channel each one lands on: Paste, the band plans and
+  // the repeater imports all write this way. When that would overwrite a
+  // channel with something in it (a frequency or a name; a blank channel or
+  // an untouched claim is no loss), the user is asked first, and declining
+  // changes nothing and returns false. beforeWrite runs once the block is
+  // going in and before anything changes, which is where the caller records
+  // the undo step. Channels past the last memory keep no Location, for
+  // reconcileLocations() to place in the lowest free ones.
+  function placeBlockFrom(
+    rows: readonly ChannelRow[],
+    start: number,
+    what: string,
+    beforeWrite: () => void,
+  ): boolean {
+    const { hi } = locationBounds();
+    const rowByLocation = new Map<number, ChannelRow>();
+    for (const row of state.currentRows) {
+      const location = parsedLocation(row);
+      if (location !== null) {
+        rowByLocation.set(location, row);
+      }
+    }
+    const targetLocations = rows.map((_row, offset) => {
+      const location = start + offset;
+      return location <= hi ? location : null;
+    });
+    const overwriteLocations: string[] = [];
+    for (const location of targetLocations) {
+      const target = location === null ? undefined : rowByLocation.get(location);
+      if (target && rowLooksNonEmpty(target)) {
+        overwriteLocations.push(String(location));
+      }
+    }
+    if (overwriteLocations.length > 0) {
+      const summary =
+        overwriteLocations.length === 1
+          ? `channel ${overwriteLocations[0]}`
+          : overwriteLocations.length > 10
+            ? `${overwriteLocations.length} existing channels`
+            : `channels ${overwriteLocations.join(", ")}`;
+      if (!window.confirm(`${what} will overwrite ${summary}. Continue?`)) {
+        return false;
+      }
+    }
+    beforeWrite();
+    rows.forEach((row, offset) => {
+      const location = targetLocations[offset];
+      if (location === null) {
+        row.Location = "";
+        state.currentRows.push(row);
+        return;
+      }
+      // The new channel takes the memory it lands on rather than any it came
+      // with: pasting between codeplugs must not drag the source's numbering
+      // across.
+      row.Location = String(location);
+      const target = rowByLocation.get(location);
+      const at = target ? state.currentRows.indexOf(target) : -1;
+      if (at >= 0) {
+        state.currentRows[at] = row;
+      } else {
+        state.currentRows.push(row);
+      }
+    });
+    return true;
+  }
+
+  // Give Insert's new channel the first memory from `start` up that no
+  // channel holds -- an untouched claim stands for an empty memory, so it
+  // counts as free and is replaced -- or no Location when none is left, for
+  // reconcileLocations() to place. Returns the claims replaced; the caller
+  // removes them.
+  function placeRowsFrom(rows: readonly ChannelRow[], start: number): Set<ChannelRow> {
+    const { lo, hi } = locationBounds();
+    const held = new Map<number, ChannelRow>();
+    for (const row of state.currentRows) {
+      const location = parsedLocation(row);
+      if (location !== null) {
+        held.set(location, row);
+      }
+    }
+    const replaced = new Set<ChannelRow>();
+    const isFree = (location: number) => {
+      const holder = held.get(location);
+      return !holder || (!replaced.has(holder) && isUntouchedClaim(holder));
+    };
+    let next = Math.max(start, lo);
+    for (const row of rows) {
+      while (next <= hi && !isFree(next)) {
+        next += 1;
+      }
+      if (next > hi) {
+        row.Location = "";
+        continue;
+      }
+      const holder = held.get(next);
+      if (holder) {
+        replaced.add(holder);
+      }
+      row.Location = String(next);
+      next += 1;
+    }
+    return replaced;
+  }
+
   function insertNewChannelRow() {
     if (!state.currentHeaders.length) {
       log.setStatus("No channel schema loaded yet.");
       return;
     }
 
-    // Where the row is spliced no longer decides anything: it takes the
-    // lowest free memory and then sorts into place by that.
+    // With a channel selected the new one takes the first free memory from
+    // the selected channel's on; with none, the lowest free memory. Either
+    // way it then sorts into place by that memory.
+    recordUndoStep("Insert channel");
     const inserted = createBlankChannelRow();
+    const start = selectedStartMemory();
+    if (start !== null) {
+      const replaced = placeRowsFrom([inserted], start);
+      if (replaced.size > 0) {
+        state.currentRows = state.currentRows.filter((row) => !replaced.has(row));
+      }
+    }
     state.currentRows.push(inserted);
     reconcileLocations();
     clearInvalidHighlights();
@@ -930,7 +1496,21 @@ export function createChannelTable(ctx: UiContext) {
       log.setStatus(`No ${label} entries to insert.`);
       return false;
     }
-    state.currentRows.push(...rowsToInsert);
+    // On consecutive memories from the selected channel's, overwriting what
+    // is there (after asking, when that is a channel with something in it);
+    // with nothing selected, in the lowest free memories, as
+    // reconcileLocations() assigns them.
+    const undoLabel = `Add ${rowsToInsert.length} ${label} channel(s)`;
+    const start = selectedStartMemory();
+    if (start !== null) {
+      if (!placeBlockFrom(rowsToInsert, start, `The ${label} channels`, () => recordUndoStep(undoLabel))) {
+        log.setStatus(`Adding ${label} channels cancelled.`);
+        return false;
+      }
+    } else {
+      recordUndoStep(undoLabel);
+      state.currentRows.push(...rowsToInsert);
+    }
     // Every bulk insert lands here — repeater queries, RSGB queries, band-plan
     // presets — and each one makes the codeplug no longer purely whatever it
     // was read from. Reporting an upload of that as "radio" would answer the
@@ -959,6 +1539,10 @@ export function createChannelTable(ctx: UiContext) {
   // pending. Returns how many rows were actually removed.
   function removeChannelRows(rowsToRemove: Iterable<ChannelRow>): number {
     const identity = new Set(rowsToRemove);
+    const toRemove = state.currentRows.filter((row) => identity.has(row)).length;
+    if (toRemove > 0) {
+      recordUndoStep(`Remove ${toRemove} channel(s)`);
+    }
     const firstIndex = state.currentRows.findIndex((row) => identity.has(row));
     const before = state.currentRows.length;
     state.currentRows = state.currentRows.filter((row) => !identity.has(row));
@@ -1041,6 +1625,7 @@ export function createChannelTable(ctx: UiContext) {
       );
       return;
     }
+    recordUndoStep(`Move ${selectedIndexes.length} channel(s) ${direction < 0 ? "up" : "down"}`);
     const locationsByPosition = state.currentRows.map((row) => row.Location);
     const movedRows = selectedIndexes.map((idx) => state.currentRows[idx]);
     state.currentRows = order.map((idx) => state.currentRows[idx]);
@@ -1222,72 +1807,17 @@ export function createChannelTable(ctx: UiContext) {
     // a pasted block across the radio and clobber distant channels it never
     // named. With nothing selected there is no anchor, so the block goes to
     // the lowest free memories instead.
-    const selectedIndexes = sortedSelectedRowIndexes();
-    const keepsLocation = state.currentHeaders.includes("Location");
-    const { hi } = locationBounds();
-    const anchorLocation =
-      keepsLocation && selectedIndexes.length > 0
-        ? parsedLocation(state.currentRows[selectedIndexes[0]])
-        : null;
-    const rowByLocation = new Map();
-    if (anchorLocation !== null) {
-      for (const row of state.currentRows) {
-        const location = parsedLocation(row);
-        if (location !== null) {
-          rowByLocation.set(location, row);
-        }
-      }
-    }
-    // Target memory per pasted row, or null where the block runs past the end
-    // of the radio and reconcileLocations() has to find somewhere for it.
-    const targetLocations = rows.map((_row, offset) => {
-      if (anchorLocation === null) {
-        return null;
-      }
-      const location = anchorLocation + offset;
-      return location <= hi ? location : null;
-    });
-    const overwriteLocations: string[] = [];
-    targetLocations.forEach((location) => {
-      if (location === null) {
-        return;
-      }
-      const target = rowByLocation.get(location);
-      if (target && rowLooksNonEmpty(target)) {
-        overwriteLocations.push(String(location));
-      }
-    });
-    if (overwriteLocations.length > 0) {
-      const summary =
-        overwriteLocations.length === 1
-          ? `channel ${overwriteLocations[0]}`
-          : overwriteLocations.length > 10
-            ? `${overwriteLocations.length} existing channels`
-            : `channels ${overwriteLocations.join(", ")}`;
-      if (!window.confirm(`Pasted channels will overwrite ${summary}. Continue?`)) {
+    const undoLabel = `Paste ${rows.length} channel(s)`;
+    const start = selectedStartMemory();
+    if (start !== null) {
+      if (!placeBlockFrom(rows, start, "Pasted channels", () => recordUndoStep(undoLabel))) {
         log.setStatus("Paste cancelled.");
         return;
       }
+    } else {
+      recordUndoStep(undoLabel);
+      state.currentRows.push(...rows);
     }
-    rows.forEach((row, offset) => {
-      const location = targetLocations[offset];
-      if (location === null) {
-        // No anchor, or past the last memory: reconcileLocations() places it.
-        state.currentRows.push(row);
-        return;
-      }
-      // The pasted channel takes the memory it lands on rather than the one it
-      // was copied from — pasting between codeplugs must not drag the source's
-      // numbering across.
-      row.Location = String(location);
-      const target = rowByLocation.get(location);
-      const at = target ? state.currentRows.indexOf(target) : -1;
-      if (at >= 0) {
-        state.currentRows[at] = row;
-      } else {
-        state.currentRows.push(row);
-      }
-    });
     reconcileLocations();
     clearInvalidHighlights();
 
@@ -1478,22 +2008,74 @@ export function createChannelTable(ctx: UiContext) {
       const td = document.createElement("td");
       td.dataset.column = String(column);
       const editor = createCellEditor(column);
-      // The title the editor was built with, for showCellNote to put back.
+      // The title the editor was built with, for showCellNote to put back,
+      // and whether it was built disabled, for an unreadable memory's line to
+      // put back when the element moves on to a channel.
       editor.dataset.ownTitle = editor.title;
+      editor.dataset.ownDisabled = String(editor.disabled);
       td.appendChild(editor);
       tr.appendChild(td);
     }
     return tr;
   }
 
+  // Point an existing row element at a line of the grid: a channel, or an
+  // empty memory. This is the whole per-row cost of a render.
+  function bindDisplayEntry(tr: HTMLTableRowElement, position: number): void {
+    const entry = displayEntries[position];
+    if (entry?.kind === "slot") {
+      bindEmptyMemory(tr, entry);
+      return;
+    }
+    if (entry) {
+      bindRowElement(tr, entry.rowIdx);
+    }
+  }
+
+  // An empty memory's line: its number, blank editors, nothing selected,
+  // pending or flagged. An unreadable one is locked, with the reason on hover.
+  // Its Extra button stays in the DOM, hidden by web/styles.css rather than
+  // removed, so the line is as tall as a channel's and the window's row
+  // height holds for both.
+  function bindEmptyMemory(tr: HTMLTableRowElement, entry: { slot: number; unreadable: boolean }): void {
+    delete tr.dataset.rowIdx;
+    tr.dataset.slot = String(entry.slot);
+    tr.classList.remove("is-selected");
+    tr.classList.add("is-empty-memory");
+    tr.classList.toggle("is-unreadable-memory", entry.unreadable);
+    const blank: ChannelRow = { Location: String(entry.slot) };
+    renderedColumns.forEach((column, columnIdx) => {
+      const td = tr.children[columnIdx] as HTMLElement;
+      td.classList.remove("is-invalid", "is-pending");
+      showCellNote(td, entry.unreadable ? UNREADABLE_NOTE : column === "Location" ? EMPTY_MEMORY_HINT : "");
+      const editor = td.children[0] as CellEditor;
+      editor.disabled = entry.unreadable || editor.dataset.ownDisabled === "true";
+      bindCellEditor(editor, blank, column);
+    });
+    const locationButton = locationButtonIn(tr);
+    if (locationButton) {
+      locationButton.setAttribute("aria-pressed", "false");
+      locationButton.classList.remove("has-callsign");
+    }
+  }
+
   // Point an existing row element at a model row: values, selection and
-  // invalid-cell classes. This is the whole per-row cost of a render.
+  // invalid-cell classes.
   function bindRowElement(tr: HTMLTableRowElement, rowIdx: number): void {
     const row = state.currentRows[rowIdx];
     if (!row) {
       return;
     }
     tr.dataset.rowIdx = String(rowIdx);
+    if (tr.dataset.slot !== undefined) {
+      // The element last showed an empty memory: undo what that changed.
+      delete tr.dataset.slot;
+      tr.classList.remove("is-empty-memory", "is-unreadable-memory");
+      for (const td of Array.from(tr.children)) {
+        const editor = td.children[0] as CellEditor;
+        editor.disabled = editor.dataset.ownDisabled === "true";
+      }
+    }
     const isSelected = selectedRowIndexes.has(rowIdx);
     tr.classList.toggle("is-selected", isSelected);
     const pending = pendingEdits.get(row);
@@ -1527,11 +2109,30 @@ export function createChannelTable(ctx: UiContext) {
   }
 
   function cellElement(rowIdx: number, column: string): Element | null {
-    const tr = rowElements[rowIdx - windowStart];
+    const tr = rowElements[(displayPositionOfRow[rowIdx] ?? -1) - windowStart];
     if (!tr || tr.dataset.rowIdx !== String(rowIdx)) {
       return null;
     }
     const columnIdx = renderedColumns.indexOf(column);
+    return columnIdx < 0 ? null : tr.children[columnIdx] || null;
+  }
+
+  // The cell a reference names now: a channel's, or an empty memory's. An
+  // empty memory that has since become a channel resolves to that channel.
+  function cellElementFor(cell: CellReference): Element | null {
+    if (cell.slot === undefined) {
+      return cellElement(cell.rowIdx, cell.column);
+    }
+    const position = displayPositionOfSlot.get(cell.slot);
+    if (position === undefined) {
+      const rowIdx = state.currentRows.findIndex((row) => parsedLocation(row) === cell.slot);
+      return rowIdx < 0 ? null : cellElement(rowIdx, cell.column);
+    }
+    const tr = rowElements[position - windowStart];
+    if (!tr || tr.dataset.slot !== String(cell.slot)) {
+      return null;
+    }
+    const columnIdx = renderedColumns.indexOf(cell.column);
     return columnIdx < 0 ? null : tr.children[columnIdx] || null;
   }
 
@@ -1606,7 +2207,7 @@ export function createChannelTable(ctx: UiContext) {
 
   // Which slice of the channel list has to exist in the DOM.
   function visibleRowRange() {
-    const total = state.currentRows.length;
+    const total = displayEntries.length;
     const viewportHeight = dom.tableScrollEl.clientHeight;
     // Headless callers have no layout to virtualize against: the unit tests
     // run on jsdom, which measures nothing, and tests/support/index-page.mjs
@@ -1652,7 +2253,7 @@ export function createChannelTable(ctx: UiContext) {
       return;
     }
     const rowHeight = measuredRowHeight || ESTIMATED_ROW_HEIGHT;
-    const below = Math.max(0, state.currentRows.length - start - count);
+    const below = Math.max(0, displayEntries.length - start - count);
     spacers.above.cell.style.height = `${Math.round(start * rowHeight)}px`;
     spacers.below.cell.style.height = `${Math.round(below * rowHeight)}px`;
   }
@@ -1715,7 +2316,7 @@ export function createChannelTable(ctx: UiContext) {
     }
     // A cell's first child is the editor createCellEditor() built for it: a
     // text input, or a select, which has no caret to restore.
-    const editor = cellElement(captured.rowIdx, captured.column)?.children[0] as HTMLInputElement | undefined;
+    const editor = cellElementFor(captured)?.children[0] as HTMLInputElement | undefined;
     if (!editor) {
       // The channel being edited fell out of the rendered window, so there is
       // no element left to hold the draft. Commit it as a blur would rather
@@ -1741,8 +2342,9 @@ export function createChannelTable(ctx: UiContext) {
       return;
     }
     // bindRowElement has just written the row's stored value into this
-    // element; put the in-progress text back over it.
-    const draft = captured.draft;
+    // element; put the in-progress text back over it. An empty memory's
+    // empty draft is not put over the channel the memory has since become.
+    const draft = captured.slot !== undefined && captured.draft === "" ? null : captured.draft;
     const restoredDraft = draft !== null && editor.tagName === "INPUT";
     if (restoredDraft) {
       editor.value = draft;
@@ -1764,11 +2366,12 @@ export function createChannelTable(ctx: UiContext) {
       return;
     }
     const focused = captureFocusedCell();
+    buildDisplayEntries();
     const { start, count } = visibleRowRange();
     syncRowElementCount(count);
     windowStart = start;
     for (let offset = 0; offset < count; offset += 1) {
-      bindRowElement(rowElements[offset], start + offset);
+      bindDisplayEntry(rowElements[offset], start + offset);
     }
     applySpacerHeights(start, count);
     if (measureRowHeight() && !isRemeasuring) {
@@ -1811,6 +2414,7 @@ export function createChannelTable(ctx: UiContext) {
 
   // Render the editable channel table using current rows and metadata rules.
   function render() {
+    releaseUnselectedClaims();
     const columns = gridColumns();
     if (schemaChanged(columns)) {
       renderedColumns = columns;
@@ -1819,6 +2423,7 @@ export function createChannelTable(ctx: UiContext) {
       renderHeader();
       discardRowElements();
     }
+    renderShowEmptyToggle();
     renderEmptyState();
     renderRowWindow();
     notifySelectionChanged();
@@ -1849,7 +2454,12 @@ export function createChannelTable(ctx: UiContext) {
   // currently showing.
   function cellReferenceFor(target: EventTarget | null): CellReference | null {
     const td = (target as Element | null)?.closest?.<HTMLElement>("td[data-column]");
-    const rowIdx = Number((td?.parentNode as HTMLElement | null | undefined)?.dataset?.rowIdx);
+    const tr = td?.parentNode as HTMLElement | null | undefined;
+    if (td && tr?.dataset?.slot !== undefined) {
+      const slot = Number(tr.dataset.slot);
+      return Number.isInteger(slot) ? { rowIdx: -1, slot, column: td.dataset.column as string } : null;
+    }
+    const rowIdx = Number(tr?.dataset?.rowIdx);
     if (!td || !Number.isInteger(rowIdx) || !state.currentRows[rowIdx]) {
       return null;
     }
@@ -1864,11 +2474,15 @@ export function createChannelTable(ctx: UiContext) {
   // text rather than the editor because a draft rescued from a recycled row
   // element has no element left; the re-render that applies the answer
   // writes the value back to whichever element shows the row by then.
-  function commitRawValue({ rowIdx, column }: CellReference, text: string): Promise<void> {
+  function commitRawValue({ rowIdx, column, slot }: CellReference, text: string): Promise<void> {
+    if (slot !== undefined) {
+      return fillEmptyMemory(slot, column, text);
+    }
     const row = state.currentRows[rowIdx];
     if (!row || (String(row[column] ?? "") === text && !pendingEdits.get(row)?.has(column))) {
       return Promise.resolve();
     }
+    recordUndoStep(`Edit ${column} of channel ${row.Location || "?"}`);
     return submitRowEdits([{ row, edits: [{ column, value: text }] }]);
   }
 
@@ -1884,7 +2498,7 @@ export function createChannelTable(ctx: UiContext) {
       const target = event.target as HTMLElement;
       const extraButton = target?.closest?.(".channel-extra-button") as HTMLButtonElement | null;
       const extraCell = extraButton && cellReferenceFor(extraButton);
-      if (extraCell) {
+      if (extraCell && extraCell.slot === undefined) {
         // The button travels with the call so the editor can hand the keyboard
         // back to it on close.
         actions.openChannelExtra(extraCell.rowIdx, extraButton);
@@ -1892,7 +2506,9 @@ export function createChannelTable(ctx: UiContext) {
       }
       const button = target?.closest?.(".channel-location-button");
       const cell = button && cellReferenceFor(button);
-      if (cell) {
+      if (cell?.slot !== undefined) {
+        selectEmptyMemory(event, cell.slot);
+      } else if (cell) {
         updateRowSelectionFromLocationClick(event, cell.rowIdx);
       }
     });
@@ -1900,7 +2516,7 @@ export function createChannelTable(ctx: UiContext) {
     dom.tableBody.addEventListener("input", (event) => {
       const target = event.target as HTMLElement;
       const cell = cellReferenceFor(target);
-      if (cell) {
+      if (cell && cell.slot === undefined) {
         clearInvalidCell(cell.rowIdx, cell.column);
       }
     });
@@ -1913,7 +2529,9 @@ export function createChannelTable(ctx: UiContext) {
       }
       const cell = cellReferenceFor(event.target);
       if (cell) {
-        clearInvalidCell(cell.rowIdx, cell.column);
+        if (cell.slot === undefined) {
+          clearInvalidCell(cell.rowIdx, cell.column);
+        }
         void commitCellValue(cell, target);
       }
     });
@@ -1945,6 +2563,9 @@ export function createChannelTable(ctx: UiContext) {
 
   function bindEvents() {
     bindGridEvents();
+    dom.channelShowEmptyEl.addEventListener("click", () => {
+      toggleEmptyMemories();
+    });
     dom.channelInsertEl.addEventListener("click", () => {
       insertNewChannelRow();
     });
@@ -2031,5 +2652,8 @@ export function createChannelTable(ctx: UiContext) {
     channelShortcutsActive,
     moveSelectedChannelRows,
     refreshVisibleRows: renderRowWindow,
+    recordUndoStep,
+    resetUndoHistory,
+    handleUndoKey,
   };
 }

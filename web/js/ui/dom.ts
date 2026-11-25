@@ -81,6 +81,8 @@ export const REQUIRED_ELEMENTS = {
   channelPasteEl: "#channel-paste",
   // Opens the bulk editor; disabled until the grid has a selection.
   channelBulkEditEl: "#channel-bulk-edit",
+  // Lists the radio's unused memories as blank rows; disabled without a radio.
+  channelShowEmptyEl: "#channel-show-empty",
   channelAddGmrsEl: "#channel-add-gmrs",
   channelAddFrsEl: "#channel-add-frs",
   channelAddMursEl: "#channel-add-murs",
@@ -183,6 +185,7 @@ export type UiElementTypes = {
   channelCutEl: HTMLButtonElement;
   channelPasteEl: HTMLButtonElement;
   channelBulkEditEl: HTMLButtonElement;
+  channelShowEmptyEl: HTMLButtonElement;
   channelAddGmrsEl: HTMLButtonElement;
   channelAddFrsEl: HTMLButtonElement;
   channelAddMursEl: HTMLButtonElement;
