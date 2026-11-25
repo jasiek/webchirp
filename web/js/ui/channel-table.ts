@@ -1153,15 +1153,71 @@ export function createChannelTable(ctx: UiContext) {
     });
   }
 
+  // The memory a selection asks new channels to start from: the first
+  // selected channel's own, or null with nothing selected (or no usable
+  // Location on it), when they take the lowest free memories as before.
+  function selectedStartMemory(): number | null {
+    const [first] = sortedSelectedRowIndexes();
+    return first === undefined || !state.currentHeaders.includes("Location")
+      ? null
+      : parsedLocation(state.currentRows[first]);
+  }
+
+  // Give new rows memories counting up from `start`: each takes the next
+  // memory no channel holds, so a block flows around the channels already
+  // there and never overwrites one. With replaceBlank, a blank channel (no
+  // frequency, no name -- what Insert or clicking an empty memory leaves)
+  // counts as free and is replaced, which is what lets a band plan land on
+  // the empty memory just selected. Rows left over when the radio runs out
+  // of memories keep no Location, for reconcileLocations() to place in the
+  // lowest free ones. Returns the channels replaced; the caller removes them.
+  function placeRowsFrom(rows: readonly ChannelRow[], start: number, replaceBlank: boolean): Set<ChannelRow> {
+    const { lo, hi } = locationBounds();
+    const held = new Map<number, ChannelRow>();
+    for (const row of state.currentRows) {
+      const location = parsedLocation(row);
+      if (location !== null) {
+        held.set(location, row);
+      }
+    }
+    const replaced = new Set<ChannelRow>();
+    const isFree = (location: number) => {
+      const holder = held.get(location);
+      return !holder || (replaceBlank && !rowLooksNonEmpty(holder) && !replaced.has(holder));
+    };
+    let next = Math.max(start, lo);
+    for (const row of rows) {
+      while (next <= hi && !isFree(next)) {
+        next += 1;
+      }
+      if (next > hi) {
+        row.Location = "";
+        continue;
+      }
+      const holder = held.get(next);
+      if (holder) {
+        replaced.add(holder);
+      }
+      row.Location = String(next);
+      next += 1;
+    }
+    return replaced;
+  }
+
   function insertNewChannelRow() {
     if (!state.currentHeaders.length) {
       log.setStatus("No channel schema loaded yet.");
       return;
     }
 
-    // Where the row is spliced no longer decides anything: it takes the
-    // lowest free memory and then sorts into place by that.
+    // With a channel selected the new one takes the first free memory from
+    // the selected channel's on; with none, the lowest free memory. Either
+    // way it then sorts into place by that memory.
     const inserted = createBlankChannelRow();
+    const start = selectedStartMemory();
+    if (start !== null) {
+      placeRowsFrom([inserted], start, false);
+    }
     state.currentRows.push(inserted);
     reconcileLocations();
     clearInvalidHighlights();
@@ -1179,6 +1235,17 @@ export function createChannelTable(ctx: UiContext) {
     if (!Array.isArray(rowsToInsert) || rowsToInsert.length === 0) {
       log.setStatus(`No ${label} entries to insert.`);
       return false;
+    }
+    // From the selected channel's memory upward when one is selected, filling
+    // free memories and blank channels and leaving every other channel where
+    // it is; otherwise from the lowest free memory, as reconcileLocations()
+    // assigns it.
+    const start = selectedStartMemory();
+    if (start !== null) {
+      const replaced = placeRowsFrom(rowsToInsert, start, true);
+      if (replaced.size > 0) {
+        state.currentRows = state.currentRows.filter((row) => !replaced.has(row));
+      }
     }
     state.currentRows.push(...rowsToInsert);
     // Every bulk insert lands here — repeater queries, RSGB queries, band-plan

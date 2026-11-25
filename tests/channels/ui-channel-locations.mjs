@@ -114,17 +114,75 @@ test("loading never rewrites the Locations a file gave, however wrong", async ()
   assert.deepEqual(tableNames(document), ["A", "Bdup", "Coob"]);
 });
 
-test("insert takes the lowest free memory and leaves every other channel in place", async () => {
+test("insert takes the first free memory from the selected channel and leaves every other channel in place", async () => {
   const { document } = await bootWithRows(SPARSE_ROWS);
   clickLocationButton(document, 2);
   click(document, "#channel-insert");
   await flushMicrotasks();
 
-  // The blank row claims memory 2 — the first one free — and appears between
-  // Bravo and HTAC1, where memory 2 belongs. Before the fix this renumbered
-  // the list to 0-5, moving HTAC1 off 25 and dropping VCALL from 124.
+  // HTAC1 (memory 25) is selected and HTAC2 holds 26, so the blank row
+  // claims 27, the first memory free from the selection on, and sorts in
+  // after HTAC2. Before the fix this renumbered the list to 0-5, moving
+  // HTAC1 off 25 and dropping VCALL from 124.
+  assert.deepEqual(tableLocations(document), ["0", "1", "25", "26", "27", "124"]);
+  assert.deepEqual(tableNames(document), ["Alpha", "Bravo", "HTAC1", "HTAC2", "", "VCALL"]);
+  assert.deepEqual(selectedNames(document), [""], "the new channel is the selection");
+});
+
+test("insert with nothing selected takes the lowest free memory", async () => {
+  const { document } = await bootWithRows(SPARSE_ROWS);
+  click(document, "#channel-insert");
+  await flushMicrotasks();
   assert.deepEqual(tableLocations(document), ["0", "1", "2", "25", "26", "124"]);
-  assert.deepEqual(tableNames(document), ["Alpha", "Bravo", "", "HTAC1", "HTAC2", "VCALL"]);
+});
+
+test("a band plan starts at the selected channel's memory and flows around channels already there", async () => {
+  const { document } = await bootWithRows(SPARSE_ROWS);
+  clickLocationButton(document, 0);
+  click(document, "#channel-add-gmrs");
+  await flushMicrotasks();
+
+  // 30 GMRS channels from memory 0 on: Alpha and Bravo keep 0 and 1, the
+  // block fills 2-24, steps over HTAC1 and HTAC2 at 25-26, and ends at 33.
+  const locations = tableLocations(document).map(Number);
+  const expected = [
+    ...Array.from({ length: 23 }, (_, n) => n + 2),
+    ...Array.from({ length: 7 }, (_, n) => n + 27),
+  ];
+  assert.deepEqual(locations, [0, 1, ...expected.slice(0, 23), 25, 26, ...expected.slice(23), 124]);
+  const names = tableNames(document);
+  assert.deepEqual(
+    [names[0], names[1], names[25], names[26], names.at(-1)],
+    ["Alpha", "Bravo", "HTAC1", "HTAC2", "VCALL"],
+    "no existing channel was moved or overwritten",
+  );
+  assert.equal(selectedNames(document).length, 30, "the added channels are the selection");
+});
+
+test("a band plan lands on a selected blank channel rather than after it", async () => {
+  const { document } = await bootWithRows(SPARSE_ROWS);
+  // Select Bravo (1), insert: a blank channel at 2, now selected -- the same
+  // blank channel clicking an empty memory's number leaves.
+  clickLocationButton(document, 1);
+  click(document, "#channel-insert");
+  await flushMicrotasks();
+  assert.deepEqual(tableLocations(document).slice(0, 3), ["0", "1", "2"]);
+
+  click(document, "#channel-add-murs");
+  await flushMicrotasks();
+  // The five MURS channels take 2-6, the first replacing the blank one.
+  assert.deepEqual(tableLocations(document), ["0", "1", "2", "3", "4", "5", "6", "25", "26", "124"]);
+  assert.ok(tableNames(document).slice(2, 7).every((name) => name !== ""), "no blank channel is left");
+});
+
+test("a band plan that runs past the last memory continues in the lowest free ones", async () => {
+  const { document } = await bootWithRows(SPARSE_ROWS);
+  clickLocationButton(document, 4);
+  click(document, "#channel-add-murs");
+  await flushMicrotasks();
+  // VCALL holds 124: 125-127 take three channels, the other two go to the
+  // lowest free memories, 2 and 3.
+  assert.deepEqual(tableLocations(document), ["0", "1", "2", "3", "25", "26", "124", "125", "126", "127"]);
 });
 
 test("an inserted channel sorts into its memory rather than onto the end", async () => {
