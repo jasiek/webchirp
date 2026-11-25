@@ -188,6 +188,11 @@ export function createChannelTable(ctx: UiContext) {
   const UNREADABLE_NOTE = "The driver could not read this memory, so it is left as it is on the radio.";
   const EMPTY_MEMORY_HINT = "Empty memory: click to add a channel here, or type into any cell";
   let showEmptyMemories = readShowEmptyPreference();
+  // The blank channels selecting an empty memory made, with the row version
+  // each had then. Such a channel stands for the empty memory only while it is
+  // selected: deselected before anything was written to it, it is taken out
+  // again and the memory is empty as it was (releaseUnselectedClaims).
+  const selectionClaims = new WeakMap<ChannelRow, number>();
   let displayEntries: DisplayEntry[] = [];
   // state.currentRows index -> position in displayEntries, and memory number
   // -> position for the empty ones.
@@ -368,6 +373,37 @@ export function createChannelTable(ctx: UiContext) {
     return row;
   }
 
+  // A channel selecting an empty memory made, and nothing has written to it
+  // since: no edit (typed, pasted, bulk), no move, no answer pending.
+  function isUntouchedClaim(row: ChannelRow | undefined): boolean {
+    if (!row) {
+      return false;
+    }
+    const claimed = selectionClaims.get(row);
+    return claimed !== undefined
+      && claimed === rowVersion(row)
+      && (pendingEdits.get(row)?.size ?? 0) === 0
+      && !rowLooksNonEmpty(row);
+  }
+
+  function unselectedClaims(): ChannelRow[] {
+    const selected = new Set(selectedChannelRows());
+    return state.currentRows.filter((row) => isUntouchedClaim(row) && !selected.has(row));
+  }
+
+  // Give the memories of untouched, deselected claims back: their channels
+  // leave the rows, and the memories are empty again. Runs at every render,
+  // which every change of selection reaches.
+  function releaseUnselectedClaims(): void {
+    const released = new Set(unselectedClaims());
+    if (released.size === 0) {
+      return;
+    }
+    preservingRowState(() => {
+      state.currentRows = state.currentRows.filter((row) => !released.has(row));
+    });
+  }
+
   // Typing into an empty memory's line makes it a channel, written like any
   // committed cell. Text that is still empty (a cell tabbed through) writes
   // nothing, so passing over an empty memory never creates a row an upload
@@ -387,7 +423,8 @@ export function createChannelTable(ctx: UiContext) {
   // Clicking an empty memory's number selects it the way a channel's number
   // does, which first makes it a channel: a selection is of channels, and
   // everything that acts on one -- Edit in bulk, Remove, Copy, Paste --
-  // then works on it as on a row Insert (+) added.
+  // then works on it as on a row Insert (+) added. Until something writes to
+  // it, the channel is a claim, released again when it is deselected.
   function selectEmptyMemory(
     event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey">,
     slot: number,
@@ -395,9 +432,13 @@ export function createChannelTable(ctx: UiContext) {
     if (!emptyMemoriesShown()) {
       return;
     }
+    const existed = state.currentRows.some((row) => parsedLocation(row) === slot);
     const row = claimEmptyMemory(slot);
     if (!row) {
       return;
+    }
+    if (!existed) {
+      selectionClaims.set(row, rowVersion(row));
     }
     // Before render() lays the grid out again, so the selection it paints
     // already holds the new channel.
@@ -556,6 +597,11 @@ export function createChannelTable(ctx: UiContext) {
       selectionAnchorIndex = rowIdx;
     }
 
+    if (unselectedClaims().length > 0) {
+      // A claim was deselected: render() gives its memory back.
+      render();
+      return;
+    }
     applyRowSelectionVisuals();
     notifySelectionChanged();
   }
@@ -1170,12 +1216,12 @@ export function createChannelTable(ctx: UiContext) {
 
   // Give new rows memories counting up from `start`: each takes the next
   // memory no channel holds, so a block flows around the channels already
-  // there and never overwrites one. With replaceBlank, a blank channel (no
-  // frequency, no name -- what Insert or clicking an empty memory leaves)
-  // counts as free and is replaced, which is what lets a band plan land on
-  // the empty memory just selected. Rows left over when the radio runs out
-  // of memories keep no Location, for reconcileLocations() to place in the
-  // lowest free ones. Returns the channels replaced; the caller removes them.
+  // there and never overwrites one. An untouched claim (selectionClaims)
+  // stands for an empty memory, so it counts as free and is replaced. With
+  // replaceBlank, so does any blank channel (no frequency, no name -- what
+  // Insert leaves). Rows left over when the radio runs out of memories keep
+  // no Location, for reconcileLocations() to place in the lowest free ones.
+  // Returns the channels replaced; the caller removes them.
   function placeRowsFrom(rows: readonly ChannelRow[], start: number, replaceBlank: boolean): Set<ChannelRow> {
     const { lo, hi } = locationBounds();
     const held = new Map<number, ChannelRow>();
@@ -1188,7 +1234,8 @@ export function createChannelTable(ctx: UiContext) {
     const replaced = new Set<ChannelRow>();
     const isFree = (location: number) => {
       const holder = held.get(location);
-      return !holder || (replaceBlank && !rowLooksNonEmpty(holder) && !replaced.has(holder));
+      return !holder
+        || (!replaced.has(holder) && (isUntouchedClaim(holder) || (replaceBlank && !rowLooksNonEmpty(holder))));
     };
     let next = Math.max(start, lo);
     for (const row of rows) {
@@ -1221,7 +1268,10 @@ export function createChannelTable(ctx: UiContext) {
     const inserted = createBlankChannelRow();
     const start = selectedStartMemory();
     if (start !== null) {
-      placeRowsFrom([inserted], start, false);
+      const replaced = placeRowsFrom([inserted], start, false);
+      if (replaced.size > 0) {
+        state.currentRows = state.currentRows.filter((row) => !replaced.has(row));
+      }
     }
     state.currentRows.push(inserted);
     reconcileLocations();
@@ -2206,6 +2256,7 @@ export function createChannelTable(ctx: UiContext) {
 
   // Render the editable channel table using current rows and metadata rules.
   function render() {
+    releaseUnselectedClaims();
     const columns = gridColumns();
     if (schemaChanged(columns)) {
       renderedColumns = columns;

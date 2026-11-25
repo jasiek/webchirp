@@ -215,6 +215,87 @@ test("clicking an empty memory's number adds a channel there and selects it, as 
   assert.deepEqual(gridLines(document), ["0", "1", "(2)", "(3)", "4", "(5)", "(6)", "(7)", "8", "(9)"]);
 });
 
+function clickNumber(document, window, slot, init = {}) {
+  const line = emptyMemoryLine(document, slot)
+    ?? channelRows(document).find((tr) => tr.children[0].children[0].textContent === String(slot));
+  line.children[0].children[0].dispatchEvent(new window.MouseEvent("click", { bubbles: true, ...init }));
+}
+
+test("an empty memory selected and deselected untouched is empty again", async () => {
+  const { document, window, heldLocations } = await boot();
+  await clickToggle(document);
+  clickNumber(document, window, 6);
+  await flushMicrotasks();
+  assert.equal(emptyMemoryLine(document, 6), undefined, "selected, memory 6 holds a blank channel");
+
+  clickNumber(document, window, 6);
+  await flushMicrotasks();
+  assert.ok(emptyMemoryLine(document, 6), "deselected, it is an empty memory again");
+  assert.deepEqual(await heldLocations(), ["0", "1", "4", "8"]);
+});
+
+test("several selected empty memories each go back when deselected", async () => {
+  const { document, window, heldLocations } = await boot();
+  await clickToggle(document);
+  clickNumber(document, window, 3);
+  clickNumber(document, window, 6, { ctrlKey: true });
+  clickNumber(document, window, 9, { ctrlKey: true });
+  await flushMicrotasks();
+  assert.deepEqual(await heldLocations(), ["0", "1", "3", "4", "6", "8", "9"]);
+
+  // Ctrl-click takes one out of the selection: that one alone goes back.
+  clickNumber(document, window, 6, { ctrlKey: true });
+  await flushMicrotasks();
+  assert.ok(emptyMemoryLine(document, 6));
+  assert.deepEqual(await heldLocations(), ["0", "1", "3", "4", "8", "9"]);
+
+  // Selecting a channel instead releases the rest.
+  clickNumber(document, window, 4);
+  await flushMicrotasks();
+  assert.deepEqual(gridLines(document), ["0", "1", "(2)", "(3)", "4", "(5)", "(6)", "(7)", "8", "(9)"]);
+  assert.deepEqual(await heldLocations(), ["0", "1", "4", "8"]);
+});
+
+test("a selected empty memory written to stays a channel when deselected", async () => {
+  const { document, window, heldLocations } = await boot();
+  await clickToggle(document);
+  clickNumber(document, window, 6);
+  await flushMicrotasks();
+  const name = channelRows(document).find((tr) => tr.children[0].children[0].textContent === "6").children[1].children[0];
+  name.focus();
+  name.value = "Golf";
+  name.blur();
+  await flushMicrotasks();
+
+  clickNumber(document, window, 6);
+  await flushMicrotasks();
+  assert.equal(emptyMemoryLine(document, 6), undefined);
+  assert.deepEqual(await heldLocations(), ["0", "1", "4", "6", "8"]);
+});
+
+test("Insert and the band plans fill the selected empty memory itself", async () => {
+  const { document, window, heldLocations } = await boot();
+  await clickToggle(document);
+  clickNumber(document, window, 5);
+  await flushMicrotasks();
+  await dispatch(document.querySelector("#channel-insert"), "click");
+  await flushMicrotasks();
+  assert.equal(lastStatus(document), "Inserted new channel at memory 5.");
+  // Insert's own blank channel is a channel: deselecting keeps it.
+  clickNumber(document, window, 5);
+  await flushMicrotasks();
+  assert.deepEqual(await heldLocations(), ["0", "1", "4", "5", "8"]);
+
+  clickNumber(document, window, 2);
+  await flushMicrotasks();
+  await dispatch(document.querySelector("#channel-add-murs"), "click");
+  await flushMicrotasks();
+  // The five MURS channels from memory 2: 2 and 3, over Delta at 4, then 5
+  // (a blank channel, which a band plan fills), 6 and 7.
+  assert.deepEqual(await heldLocations(), ["0", "1", "2", "3", "4", "5", "6", "7", "8"]);
+  assert.deepEqual(gridLines(document), ["0", "1", "2", "3", "4", "5", "6", "7", "8", "(9)"]);
+});
+
 test("an unreadable memory's number adds nothing", async () => {
   const { document, window, heldLocations } = await boot({ location: { unreadable: [6] } });
   await clickToggle(document);
