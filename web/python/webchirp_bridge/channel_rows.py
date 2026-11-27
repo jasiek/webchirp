@@ -378,6 +378,20 @@ def _apply_row_dv_fields(mem: chirp_common.DVMemory, vals: Sequence[Any]) -> Non
         raise RuntimeUnsupportedError(f"DVCODE {code} is not valid")
 
 
+# Columns CHIRP's CSV parser cannot take blank (float(""), parse_cross_mode(""),
+# or a None DTCS code that Memory.to_csv() then cannot format). The grid leaves
+# them blank when the driver's matching valid_* list is empty, so they get the
+# value a blank Memory() carries, as _memory_from_row_values() keeps it.
+_BLANK_MEMORY_DEFAULT_COLUMNS = (
+    "rToneFreq",
+    "cToneFreq",
+    "DtcsCode",
+    "RxDtcsCode",
+    "CrossMode",
+    "TStep",
+)
+
+
 def _coerce_csv_vals_for_chirp(vals: Sequence[Any]) -> list[Any]:
     """Patch CSV fields CHIRP treats as required numerics."""
     out = list(vals)
@@ -387,6 +401,11 @@ def _coerce_csv_vals_for_chirp(vals: Sequence[Any]) -> list[Any]:
     offset_text = str(out[offset_idx] or "").strip()
     if freq_text and not offset_text:
         out[offset_idx] = "0.000000"
+    defaults = chirp_common.Memory().to_csv()
+    for header in _BLANK_MEMORY_DEFAULT_COLUMNS:
+        index = CSV_HEADERS.index(header)
+        if index < len(out) and not str(out[index] or "").strip():
+            out[index] = defaults[index]
     return out
 
 
