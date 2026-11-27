@@ -927,7 +927,11 @@ export function createSerialActions(ctx: UiContext) {
         ...codeplugParams(state),
         ...cloneFailureParams(error, stage),
       });
-      ctx.settings.markRefused(error);
+      // A refusal names the written session's settings, which mean nothing
+      // on the panel of an image opened during the write.
+      if (ctx.session.isCurrent(session)) {
+        ctx.settings.markRefused(error);
+      }
       log.reportActionError("Upload", error);
       log.logSerial(`ERROR ${errorSummary(error)}`);
     } finally {

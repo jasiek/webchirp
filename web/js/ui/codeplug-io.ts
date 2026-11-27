@@ -279,13 +279,15 @@ export function createCodeplugIo(ctx: UiContext) {
   // defect and is reported to Sentry as one. The image is built for the
   // session the rows were checked against, from the rows and settings the
   // check passed; a radio picked while the check ran cancels the export
-  // rather than writing rows checked for another radio.
-  async function exportBinaryCodeplug() {
-    if (!state.selectedRadio) {
+  // rather than writing rows checked for another radio. One picked while the
+  // image is built still gets the file it asked for, but the settings the
+  // runtime reports back are that session's, not the new radio's.
+  async function exportBinaryCodeplug(session: RadioSessionHandle | null) {
+    const radio = state.selectedRadio;
+    if (!radio) {
       log.setStatus("Search for and select a radio first.");
       return;
     }
-    const session = ctx.session.current();
     log.setStatus("Running export preflight validation...");
     const preflight = await ctx.serial.runUploadPreflight(session);
     if (preflight.stale) {
@@ -302,17 +304,19 @@ export function createCodeplugIo(ctx: UiContext) {
       rows: preflight.rows,
       settings: preflight.settings,
     });
-    ctx.settings.setGroups(result.settings);
-    ctx.settings.render();
+    if (ctx.session.isCurrent(session)) {
+      ctx.settings.setGroups(result.settings);
+      ctx.settings.render();
+    }
     const bytes = base64ToBytes(result.imageBase64 || "");
     const fileName = buildExportFileName(
-      result.vendor || state.selectedRadio.vendor,
-      result.model || state.selectedRadio.model,
+      result.vendor || radio.vendor,
+      result.model || radio.model,
       "img",
     );
     downloadBlob(fileName, new Blob([bytes], { type: "application/octet-stream" }));
     trackEvent("codeplug_export", {
-      ...radioEventParams(state.selectedRadio),
+      ...radioEventParams(radio),
       ...codeplugParams(state),
       format: "img",
     });
@@ -609,10 +613,15 @@ export function createCodeplugIo(ctx: UiContext) {
 
     dom.exportBinaryEl.addEventListener("click", async () => {
       closeExportMenu();
+      // The session the export is for: a refusal names its settings, which
+      // mean nothing on another radio's panel.
+      const session = ctx.session.current();
       try {
-        await exportBinaryCodeplug();
+        await exportBinaryCodeplug(session);
       } catch (error) {
-        ctx.settings.markRefused(error);
+        if (ctx.session.isCurrent(session)) {
+          ctx.settings.markRefused(error);
+        }
         log.reportActionError("Binary export", error);
       }
     });
