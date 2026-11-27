@@ -12,8 +12,9 @@
 // Each shot starts from a freshly loaded page, so none inherits another's
 // radio, channels or folded section. The RepeaterBook shot queries the real
 // directory through api.webchirp.org, which needs the API's Turnstile bypass
-// token: the dev server reads TURNSTILE_BYPASS_TOKEN and hands it to the page
-// in place of the bot check (scripts/dev-turnstile-bypass.ts).
+// token: the dev server reads TURNSTILE_BYPASS_TOKEN and adds it to the
+// RepeaterBook requests it forwards, in place of the bot check
+// (scripts/dev-turnstile-bypass.ts).
 
 import fs from "node:fs";
 import path from "node:path";

@@ -43,7 +43,8 @@ Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/).
 
 RepeaterBook queries against `api.webchirp.org` need a Cloudflare Turnstile
 token, which the dev page cannot get. Set `TURNSTILE_BYPASS_TOKEN` to the API's
-token of that name and the dev page sends it in place of one:
+token of that name and the dev server forwards the page's API requests,
+adding the token to RepeaterBook's; the page itself never receives it:
 
 ```bash
 TURNSTILE_BYPASS_TOKEN=0123456789abcdef0123456789abcdef npm run dev

@@ -40,7 +40,9 @@
       requests from https://webchirp.org, so forks hosted elsewhere should
       point this at their own proxy. Setting content="" hides the two
       proxy-dependent query sources; IRTS remains on the built-in default.
-      Removing this tag falls back to that default for every source.
+      Removing this tag falls back to that default for every source. npm run dev
+      with TURNSTILE_BYPASS_TOKEN set serves it pointed at the dev server, which
+      forwards to this API (scripts/dev-turnstile-bypass.ts).
     -->
     <meta name="webchirp-repeater-api-base" content="https://api.webchirp.org" />
     <!--
@@ -50,12 +52,6 @@
       renders no check and sends no token.
     -->
     <meta name="webchirp-turnstile-site-key" content="" />
-    <!--
-      The API's TURNSTILE_BYPASS_TOKEN, sent as a Bearer token in place of a
-      Turnstile token. Always blank here and in dist/: only npm run dev fills
-      it, from the same environment variable (scripts/dev-turnstile-bypass.ts).
-    -->
-    <meta name="webchirp-turnstile-bypass-token" content="" />
     <title>WebCHIRP | Browser-based CHIRP radio programming</title>
     <meta
       name="description"
