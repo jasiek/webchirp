@@ -84,3 +84,12 @@ def _image_bytes_from_radio(radio: chirp_common.Radio) -> bytes:
         radio.save_mmap(image_path)
         with open(image_path, "rb") as image_file:
             return image_file.read()
+
+
+def _scratch_copy(radio: chirp_common.Radio) -> chirp_common.Radio:
+    """A copy of ``radio`` that can be written to and thrown away.
+
+    Round-tripped through the same file path a saved image takes, so the copy
+    is what reloading ``radio``'s image would give and shares no state with it.
+    """
+    return _radio_from_image_bytes(type(radio), _image_bytes_from_radio(radio))

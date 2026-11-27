@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadImageFor, readCatalog, sharedHarness } from "../support/chirp.mjs";
+import { ensureModule, loadImageFor, readCatalog, sharedHarness } from "../support/chirp.mjs";
 
 // The editor behind the grid's Extra column (web/js/ui/channel-extra.ts) needs
 // two things the row sidecar cannot give it: what type each driver extra is,
@@ -232,4 +232,67 @@ test("an extras-only edit is still put through the driver's validation", async (
   });
   assert.equal(result.valid, true, JSON.stringify(result.issues));
   assert.deepEqual(extraIssues(result), []);
+});
+
+// Most drivers that hang extras off a channel (uv5r, h777, btech, anytone...)
+// return from get_memory before building Memory.extra when the slot is empty
+// in the image. A channel the user adds to an empty slot, or any channel on a
+// radio picked without an image, still gets those settings once written, so
+// the editor has to describe them for it too.
+test("an empty slot describes the extras its channel will get once written", async () => {
+  const harness = await sharedHarness();
+  await harness.runPythonJson(SETUP);
+  // SETUP fills slots 1 and 2 only.
+  const payload = await harness.runPythonJson(DESCRIBE, { _location: "3" });
+  assert.equal(payload.available, true, payload.message);
+  assert.ok(fieldNamed(payload, "bcl"), "the empty slot's Busy Channel Lockout was not described");
+});
+
+// h777 reads a zeroed memory as empty, so a blank instance has no occupied
+// slot at all to read extras from.
+test("a radio picked without an image describes its channels' extras", async () => {
+  const harness = await sharedHarness();
+  await ensureModule(harness, "h777");
+  const payload = await harness.runPythonJson(`
+import json
+_blank = open_radio_session("h777", "H777Radio")
+try:
+    _payload = get_channel_extra(_blank.session_id, "10")
+finally:
+    close_session(_blank.session_id)
+json.dumps(_payload)
+`);
+  assert.equal(payload.available, true, payload.message);
+  assert.ok(fieldNamed(payload, "bcl"), "the Busy Channel Lockout extra was not described");
+});
+
+// The preflight half of the same gap: the empty memory a moved row was checked
+// against had no extras, so a value the driver refuses passed, and the write
+// path then dropped it silently.
+test("a refused extra on a row moved to an empty slot blocks the upload", async () => {
+  const harness = await sharedHarness();
+  const catalog = await readCatalog();
+  const { loaded } = await loadImageFor(harness, catalog, "Baofeng_UV-5R.img");
+  const source = loaded.rows.findIndex((row) => row.__extra?.pttid !== undefined);
+  assert.ok(source >= 0, "the UV-5R image should carry PTT ID on its channels");
+  const used = new Set(loaded.rows.map((row) => Number(row.Location)));
+  const empty = Array.from({ length: 128 }, (_, index) => index).find((n) => !used.has(n));
+  assert.ok(empty !== undefined, "the UV-5R image should have an empty slot");
+
+  const edited = loaded.rows.map((row) => ({ ...row }));
+  edited[source] = {
+    ...edited[source],
+    Location: String(empty),
+    __extra: { ...edited[source].__extra, pttid: "Telepathy" },
+  };
+
+  const result = await harness.runPythonJson(
+    `import json\njson.dumps(validate_rows_for_upload(json.loads(_rows_json), _sid))`,
+    { _rows_json: JSON.stringify(edited), _sid: loaded.sessionId },
+  );
+  const issues = extraIssues(result);
+  assert.equal(result.valid, false, "a refused extra must fail the preflight");
+  assert.equal(issues.length, 1, JSON.stringify(result.issues));
+  assert.equal(issues[0].rowIndex, source);
+  assert.match(issues[0].message, /PTT ID/);
 });
