@@ -115,8 +115,10 @@ export function pickPl2303BaudRate(baudRate: number): number {
 }
 
 // Chip-generation detection ladder, following usb-serial-for-android's
-// ProlificSerialDriver.setDeviceType(). `hxStatus` is the result of probing
-// the legacy vendor-read register 0x8080 (HXN chips reject that request).
+// ProlificSerialDriver.setDeviceType() and the kernel's pl2303_detect_type().
+// `hxStatus` is the result of probing the legacy vendor-read register 0x8080
+// (HXN chips reject that request). On USB 2.0, bcdDevice 3.00 is TA or GT and
+// 5.00 is TB or GE, so there only the probe tells legacy from HXN.
 export function detectPl2303Type({ deviceClass, maxPacketSize0, usbVersion, deviceVersion, hxStatus }: {
   deviceClass?: number;
   maxPacketSize0?: number;
@@ -128,14 +130,14 @@ export function detectPl2303Type({ deviceClass, maxPacketSize0, usbVersion, devi
   if (Number(deviceClass) === 0x02 || Number(maxPacketSize0) !== 64) {
     return PL2303_TYPE_01;
   }
+  if (Number(usbVersion) === 0x200 && !hxStatus) {
+    return PL2303_TYPE_HXN;
+  }
   if (Number(deviceVersion) === 0x300 && Number(usbVersion) === 0x200) {
     return PL2303_TYPE_T; // TA
   }
   if (Number(deviceVersion) === 0x500) {
     return PL2303_TYPE_T; // TB
-  }
-  if (Number(usbVersion) === 0x200 && !hxStatus) {
-    return PL2303_TYPE_HXN;
   }
   return PL2303_TYPE_HX;
 }
@@ -223,17 +225,19 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
   }
 
   // Probe the legacy vendor-read register: succeeds on HX-family chips,
-  // rejected by HXN silicon. Used only for chip-type detection.
+  // rejected by HXN silicon. Used only for chip-type detection. WebUSB
+  // resolves a STALL with status "stall" rather than rejecting, so the
+  // status decides.
   async _probeHxStatus() {
     try {
-      await this.device.controlTransferIn({
+      const result = await this.device.controlTransferIn({
         requestType: "vendor",
         recipient: "device",
         request: VENDOR_READ_REQUEST,
         value: 0x8080,
         index: 0,
       }, 1);
-      return true;
+      return result?.status === "ok";
     } catch {
       return false;
     }
@@ -366,9 +370,7 @@ export class Pl2303SerialPort extends WebUsbTransport implements SerialTransport
       const needsProbe =
         Number(descriptor.deviceClass) !== 0x02
         && Number(descriptor.maxPacketSize0) === 64
-        && Number(descriptor.usbVersion) === 0x200
-        && Number(descriptor.deviceVersion) !== 0x300
-        && Number(descriptor.deviceVersion) !== 0x500;
+        && Number(descriptor.usbVersion) === 0x200;
       const hxStatus = needsProbe ? await this._probeHxStatus() : true;
       this.chipType = detectPl2303Type({ ...descriptor, hxStatus });
 
