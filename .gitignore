@@ -73,3 +73,7 @@ coverage/
 # Written by every fastlane run.
 /fastlane/report.xml
 /fastlane/README.md
+
+# TLC output (specs/README.md)
+specs/states/
+specs/*_TTrace_*

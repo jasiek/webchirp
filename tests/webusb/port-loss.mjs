@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BrowserSerialBridge } from "../../web/js/serial.ts";
+import { SerialBridge } from "../../web/js/serial-bridge.ts";
 import { makeEmitter, makeRecordingPort } from "../support/fake-serial.mjs";
 import { tick, withNavigator } from "../support/globals.mjs";
 
@@ -235,3 +236,120 @@ test("ending the read loop itself is never reported as a loss", async (t) => {
 
   assert.equal(lost.length, 0);
 });
+
+// TLC's counterexample to NoNullDeref on specs/SerialBridgeNode.cfg, replayed
+// against the real bridge (FINDINGS.md:
+// serial-bridge-in-place-reconfigure-outlives-the-port). On a transport that
+// re-rates in place and whose reconfigure() can still resolve once its close()
+// has started (node-serialport's may; WebBluetooth's cannot), the read loop
+// stops while port.reconfigure() is pending:
+// the bridge reports the loss and lets go of the port, then the reconfigure
+// resolves and _reopenPort() returns as if it had worked. Marked todo until
+// _reopenPort() checks it still holds its port after each await.
+async function openInPlaceBridge() {
+  const port = makeRecordingPort({
+    capabilities: { framing: true, signals: true, reconfigure: "update" },
+  });
+  // Each reconfigure() parks until the test settles it, which is the window
+  // the model found.
+  const reconfigures = [];
+  port.reconfigure = (options) => new Promise((resolve, reject) => {
+    reconfigures.push({ options, resolve, reject });
+  });
+  const bridge = new SerialBridge({ requestTransport: async () => port });
+  const lost = [];
+  bridge.onPortLost = (info) => lost.push(info);
+  await bridge.open(9600);
+  return { bridge, port, lost, reconfigures };
+}
+
+// Steps 11-14 of the trace: the read fails, the loop gives up the port, the
+// teardown closes it, and only then does the reconfigure resolve.
+async function loseThePortMidReconfigure({ port, lost, bridge, reconfigures }) {
+  await tick();
+  assert.equal(reconfigures.length, 1, "parked at await port.reconfigure()");
+  port.failRead(new Error("The device has been lost."));
+  await tick();
+  await tick();
+  assert.deepEqual(lost, [{ deviceName: "USB VID:PID 0x0403:0x6015", reason: "read-stopped" }]);
+  assert.equal(bridge.port, null);
+  reconfigures[0].resolve();
+}
+
+test(
+  "a port lost during an in-place re-rate fails prepareClone() as not connected",
+  { todo: "serial-bridge-in-place-reconfigure-outlives-the-port" },
+  async () => {
+    const session = await openInPlaceBridge();
+    const { bridge, lost } = session;
+
+    const clone = bridge.prepareClone(true, true, 0, 19200);
+    await loseThePortMidReconfigure(session);
+    const error = await clone.then(() => null, (caught) => caught);
+
+    assert.ok(error, "prepareClone() succeeded on a port the bridge had dropped");
+    assert.notEqual(error.name, "TypeError", `prepareClone() dereferenced a null port: ${error.message}`);
+    assert.equal(bridge.portOptions, null);
+    assert.equal(lost.length, 1);
+  },
+);
+
+test(
+  "a port lost during an in-place re-rate is never answered as connected",
+  { todo: "serial-bridge-in-place-reconfigure-outlives-the-port" },
+  async () => {
+    const session = await openInPlaceBridge();
+    const { bridge, lost } = session;
+
+    // open() at another rate on a held port takes the reuse path.
+    const reopened = bridge.open(19200);
+    await loseThePortMidReconfigure(session);
+    const outcome = await reopened.then((result) => result, (caught) => caught);
+
+    assert.equal(bridge.getPortInfo().connected, false);
+    assert.notEqual(outcome.connected, true, `open() answered "${outcome.message}" holding no port`);
+    // The UI heard of the loss once; the next call must not tell it again.
+    await assert.rejects(() => bridge.prepareClone(true, true, 0, 9600), /Port is not connected/);
+    assert.equal(lost.length, 1);
+  },
+);
+
+// Window (2) of the same finding: resetBuffers() awaits a real flush, and the
+// port can be lost while it is pending even when prepareClone() changes no
+// setting. Unlike window (1) this needs no reconfigure that outlives a close:
+// the flush completes before the teardown's close starts. A this.port !== port
+// check in _reopenPort() leaves it open, so it is replayed on its own.
+test(
+  "a port lost during prepareClone()'s input flush fails it as not connected",
+  { todo: "serial-bridge-in-place-reconfigure-outlives-the-port" },
+  async () => {
+    // Any re-rate route will do, since nothing is re-rated: the Web Serial one.
+    const port = makeRecordingPort({
+      capabilities: { framing: true, signals: true, reconfigure: "reopen" },
+    });
+    // The flush parks until the test settles it.
+    const flushes = [];
+    port.discardInput = () => new Promise((resolve) => {
+      flushes.push(resolve);
+    });
+    const bridge = new SerialBridge({ requestTransport: async () => port });
+    const lost = [];
+    bridge.onPortLost = (info) => lost.push(info);
+    await bridge.open(9600);
+
+    // The rate the port already has: no re-rate, straight to the flush.
+    const clone = bridge.prepareClone(true, true, 0, 9600);
+    await tick();
+    assert.equal(flushes.length, 1, "parked at await this.port.discardInput()");
+    port.failRead(new Error("The device has been lost."));
+    await tick();
+    await tick();
+    assert.equal(lost.length, 1);
+    assert.equal(bridge.port, null);
+    flushes[0]();
+    const error = await clone.then(() => null, (caught) => caught);
+
+    assert.ok(error, "prepareClone() succeeded on a port the bridge had dropped");
+    assert.notEqual(error.name, "TypeError", `prepareClone() dereferenced a null port: ${error.message}`);
+  },
+);
